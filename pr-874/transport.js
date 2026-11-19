@@ -28708,6 +28708,9 @@ function runLinkFields({
 }, evaluated2) {
   return { sessionId: session, action: action2, declaration, evaluated: evaluated2 };
 }
+function configWriteEffect(verb, session, role, ...payload) {
+  return { verb, args: [session, role, ...payload] };
+}
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -45684,6 +45687,40 @@ function notifyListeners(listenable, change) {
   }
   untrackedEnd(prevU);
 }
+function makeObservable(target, annotations, options) {
+  initObservable(() => {
+    const adm = asObservableObject(target, options)[$mobx];
+    ownKeys2(annotations).forEach((key) => make_(adm, key, annotations[key]));
+  });
+  return target;
+}
+function make_(adm, key, annotation) {
+  if (annotation === true) {
+    annotation = adm.defaultAnnotation_;
+  }
+  if (annotation === false) {
+    return;
+  }
+  assertAnnotable(adm, annotation, key);
+  if (!(key in adm.target_)) {
+    die(1, annotation.annotationType_, `${adm.name_}.${key.toString()}`);
+  }
+  let source = adm.target_;
+  while (source && source !== objectPrototype) {
+    const descriptor = getDescriptor(source, key);
+    if (descriptor) {
+      const outcome = annotation.make_(adm, key, descriptor, source);
+      if (outcome === 0) {
+        return;
+      }
+      if (outcome === 1) {
+        break;
+      }
+    }
+    source = Object.getPrototypeOf(source);
+  }
+  recordAnnotationApplied(adm, annotation, key);
+}
 var SPLICE = "splice";
 var UPDATE = "update";
 var MAX_SPLICE_SIZE = 1e4;
@@ -56983,13 +57020,17 @@ init_globals();
 // src/config/layer-role.ts
 init_globals();
 var LAYER_ROLES = ["user", "project", "local"];
+var DEFAULT_WRITE_LAYER = "user";
 function layerFlags(roles) {
-  return Object.fromEntries(
-    LAYER_ROLES.map((role) => [role, roles.includes(role)])
-  );
+  const [user, project, local] = LAYER_ROLES;
+  return {
+    [user]: roles.includes(user),
+    [project]: roles.includes(project),
+    [local]: roles.includes(local)
+  };
 }
 function layerRoleOf(raw) {
-  return LAYER_ROLES.includes(raw) ? raw : null;
+  return LAYER_ROLES.find((role) => role === raw) ?? null;
 }
 
 // src/config/action.ts
@@ -57017,6 +57058,13 @@ var LAYER_CHOICES = {
   themeDefault: LAYER_ROLES,
   save: [...LAYER_ROLES, "ask"]
 };
+var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
+function resolveActionLayer(action2) {
+  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
+  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
+    return { ...action2, layer: defaultLayer(action2.layer) };
+  return action2;
+}
 function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
@@ -70831,10 +70879,3066 @@ function repoQuestions(question, sessionId2) {
   });
 }
 
-// src/dsl/parts.ts
+// src/renderer/render-cache.ts
 init_globals();
 
-// src/var-system/sources.ts
+// src/renderer/setting-drafts.ts
+init_globals();
+
+// src/config/loader/globals.ts
+init_globals();
+var LIVE_GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
+);
+function retired(spec, description) {
+  return {
+    ...spec,
+    json: { ...spec.json, deprecated: true, description },
+    parse(ctx, path31, field, raw) {
+      spec.parse(ctx, path31, field, raw);
+      return void 0;
+    }
+  };
+}
+var GLOBALS_FIELDS = {
+  ...LIVE_GLOBALS_FIELDS,
+  updateNotice: retired(
+    optionalBooleanSpec(),
+    "Obsolete in-bar update notice."
+  ),
+  experimentalBand: retired(
+    optionalBooleanSpec(),
+    "Obsolete Claude Code band mod."
+  ),
+  experimentalTmuxStatus: retired(
+    optionalBooleanSpec(),
+    "Obsolete tmux status renderer."
+  ),
+  renderer: retired(
+    optionalEnumSpec(["claude", "tmux"]),
+    "Obsolete tmux status renderer."
+  )
+};
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row) {
+  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
+}
+function fragmentRejection(description, message2) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path31, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: message2(`${path31}.${field}`),
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why2) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path31, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path31 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path31,
+        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path31, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path31, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path31, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(LIVE_GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor3);
+  }
+  return seeds;
+}
+
+// src/config/loader/persist-target.ts
+init_globals();
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
+}
+
+// src/renderer/bundled-presets.ts
+init_globals();
+
+// src/config/default-dsl-config.ts
+init_globals();
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/dsl-loader.ts
+init_globals();
+var import_node_path28 = __toESM(require_path_browserify(), 1);
+
+// src/config/loader/layout.ts
+init_globals();
+
+// src/config/loader/reserved-namespace.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+function ident(name) {
+  return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+var ESCAPE = "Z";
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
+
+// src/config/loader/reserved-namespace.ts
+function reservedNamespaceOf(name) {
+  const collapsed = ident(name);
+  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
+}
+function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
+  for (const section of ["variables", "actions", "segments"]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(ns)) {
+        ctx.issues.push({
+          path: `${section}.${name}`,
+          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+      }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const at = () => ({
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      });
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at(),
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
+        });
+        continue;
+      }
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        ...at(),
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
+      });
+    }
+  }
+}
+var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+function payloadDeclarationNotices(filePath2, source, declared) {
+  const lineOf = keyLocator(source);
+  return declared.filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+  });
+}
+function isPayloadInput(name) {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
+}
+
+// src/config/loader/layout.ts
+var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
+var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
+var EMPTY_VERTICAL_NODE = {
+  kind: "container",
+  direction: "vertical",
+  children: []
+};
+function literalSpec(value) {
+  return { required: true, json: { const: value }, parse: () => value };
+}
+function segmentNameSpec() {
+  return {
+    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
+    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path31}.${field}`,
+        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return "";
+    }
+  };
+}
+function directionSpec() {
+  return {
+    // Mandatory in the schema (a missing/invalid direction pushes an issue →
+    // throw); the parse recovers to "vertical", a no-op for `fields`. See
+    // `cellsSegmentsSpec`.
+    required: true,
+    json: { enum: [...DIRECTIONS] },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && DIRECTIONS.includes(v)) {
+        return v;
+      }
+      ctx.issues.push({
+        path: `${path31}.${field}`,
+        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return "vertical";
+    }
+  };
+}
+function childrenSpec(node) {
+  return {
+    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
+    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    // [LAW:one-source-of-truth] The recursive field points at the node definition
+    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
+    // self-reference. The runtime recursion and the schema recursion break the
+    // same cycle, declared in one place.
+    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (!Array.isArray(v)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `a container must have a "children" array of layout nodes, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return [];
+      }
+      return v.map((child, i2) => node(ctx, `${path31}.${field}[${i2}]`, child));
+    }
+  };
+}
+var SEGMENT_NODE_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("segment"),
+    name: segmentNameSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
+  }
+};
+var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
+var CONTAINER_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("container"),
+    direction: directionSpec(),
+    children: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+function segArmSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path31}.${field}`,
+        message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path31.split("."), field])
+      });
+      return "";
+    }
+  };
+}
+var SEG_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    seg: segArmSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
+  }
+};
+var H_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    h: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var V_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    v: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var validateRoot = (ctx, path31, raw) => {
+  if (typeof raw === "string") {
+    if (raw.length === 0) {
+      ctx.issues.push({
+        path: path31,
+        message: `a bare-string layout node must be a non-empty segment name`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return EMPTY_VERTICAL_NODE;
+    }
+    return { kind: "segment", name: raw };
+  }
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "container") {
+    return record(ctx, CONTAINER_SCHEMA, path31, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "segment") {
+    return record(ctx, SEGMENT_NODE_SCHEMA, path31, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "cells") {
+    ctx.issues.push({
+      path: path31,
+      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
+  Old: { kind: "cells", segments: ["seg1", "seg2"] }
+  New: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "group") {
+    const group = record(ctx, GROUP_SCHEMA, path31, raw);
+    if (group === null) return EMPTY_VERTICAL_NODE;
+    ctx.groups.push({
+      name: group.name,
+      label: group.label,
+      ...group.open !== void 0 && { open: group.open },
+      ...group.direction !== void 0 && { direction: group.direction },
+      ...group.key !== void 0 && { key: group.key },
+      ...group.bg !== void 0 && { bg: group.bg },
+      ...group.fg !== void 0 && { fg: group.fg },
+      ...group.when !== void 0 && { when: group.when },
+      path: path31
+    });
+    return lowerGroup(group);
+  }
+  const hasH = "h" in raw;
+  const hasV = "v" in raw;
+  const hasSeg = "seg" in raw;
+  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
+  if (armCount > 1) {
+    const present = ["seg", "h", "v"].filter((k) => k in raw);
+    ctx.issues.push({
+      path: path31,
+      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (hasSeg) {
+    const arm2 = record(ctx, SEG_ARM_SCHEMA, path31, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "segment",
+      name: arm2.seg,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.id !== void 0 && { id: arm2.id },
+      ...arm2.settings !== void 0 && { settings: arm2.settings }
+    };
+  }
+  if (hasH) {
+    const arm2 = record(ctx, H_ARM_SCHEMA, path31, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: arm2.h,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
+  }
+  if (hasV) {
+    const arm2 = record(ctx, V_ARM_SCHEMA, path31, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "vertical",
+      children: arm2.v,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
+  }
+  ctx.issues.push({
+    path: `${path31}.kind`,
+    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
+    line: findKeyLine(ctx.source, ["root"])
+  });
+  return EMPTY_VERTICAL_NODE;
+};
+function rowsSpec() {
+  return {
+    required: true,
+    json: {
+      type: "object",
+      propertyNames: { pattern: ROW_NAME_RE.source },
+      additionalProperties: { $ref: LAYOUT_NODE_REF }
+    },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (!isPlainObject2(v)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+        return {};
+      }
+      const rows = {};
+      for (const [name, node] of Object.entries(v)) {
+        if (!ROW_NAME_RE.test(name)) {
+          ctx.issues.push({
+            path: `${path31}.${field}.${name}`,
+            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
+            line: findKeyLine(ctx.source, [...path31.split("."), field, name])
+          });
+          continue;
+        }
+        rows[name] = validateRoot(ctx, `${path31}.${field}.${name}`, node);
+      }
+      return rows;
+    }
+  };
+}
+var ROWS_SCHEMA = {
+  noun: "root key",
+  fields: {
+    rows: rowsSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+function validateRootFragment(ctx, path31, raw) {
+  if (isPlainObject2(raw) && "rows" in raw) {
+    return record(ctx, ROWS_SCHEMA, path31, raw) ?? { rows: {} };
+  }
+  return validateRoot(ctx, path31, raw);
+}
+var INSERT_SCHEMA = {
+  noun: "insert key",
+  fields: {
+    seg: segArmSpec(),
+    id: placementIdSpec(),
+    before: optionalStringSpec(),
+    after: optionalStringSpec()
+  }
+};
+function validateInsert(ctx, raw, file) {
+  if (!Array.isArray(raw)) {
+    ctx.issues.push({
+      path: "insert",
+      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["insert"])
+    });
+    return [];
+  }
+  return raw.flatMap((entry, i2) => {
+    const path31 = `insert.${i2}`;
+    const arm2 = record(ctx, INSERT_SCHEMA, path31, entry);
+    if (arm2 === null) return [];
+    const sides = ["before", "after"].filter(
+      (side) => arm2[side] !== void 0
+    );
+    if (sides.length !== 1) {
+      ctx.issues.push({
+        path: path31,
+        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
+        line: findKeyLine(ctx.source, path31.split("."))
+      });
+      return [];
+    }
+    if (isReservedName(arm2.seg)) {
+      ctx.issues.push({
+        path: `${path31}.seg`,
+        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
+        line: findKeyLine(ctx.source, [...path31.split("."), "seg"])
+      });
+      return [];
+    }
+    const relation = sides[0];
+    const anchor = arm2[relation];
+    if (isReservedName(anchor)) {
+      ctx.issues.push({
+        path: `${path31}.${relation}`,
+        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
+        line: findKeyLine(ctx.source, [...path31.split("."), relation])
+      });
+      return [];
+    }
+    return [
+      {
+        seg: arm2.seg,
+        ...arm2.id !== void 0 && { id: arm2.id },
+        anchor,
+        relation,
+        by: { file, entry: path31 }
+      }
+    ];
+  });
+}
+function groupNameSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: ROW_NAME_RE.source },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function groupKeySpec() {
+  return {
+    required: false,
+    json: { type: "string", minLength: 1 },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "string" || v === "" || v.includes("/")) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function groupLabelSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^[^\\n\\r]*$" },
+    parse: (ctx, path31, field, raw) => {
+      const s = requireString(ctx, path31, raw, field);
+      if (s === null) return void 0;
+      if (/[\n\r]/.test(s)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${path31}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+        return void 0;
+      }
+      return s;
+    }
+  };
+}
+var GROUP_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("group"),
+    name: groupNameSpec(),
+    label: groupLabelSpec(),
+    open: optionalBooleanSpec(),
+    direction: optionalEnumSpec(DIRECTIONS),
+    key: groupKeySpec(),
+    bg: optionalStringSpec(),
+    fg: optionalStringSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec(),
+    children: childrenSpec(lazy(() => validateRoot))
+  }
+};
+function groupStateKey(g) {
+  return g.key ?? GROUP_NS + g.name;
+}
+function lowerGroup(g) {
+  const ref = GROUP_NS + g.name;
+  return disclosureNode(
+    ref,
+    { variable: ref, key: groupStateKey(g), member: g.name },
+    {
+      kind: "container",
+      direction: g.direction ?? "vertical",
+      children: g.children,
+      ...g.distribution !== void 0 && { distribution: g.distribution }
+    },
+    "drop",
+    g.when
+  );
+}
+function groupIssue(ctx, path31, message2) {
+  ctx.issues.push({
+    path: path31,
+    message: message2,
+    line: findKeyLine(ctx.source, ["root"])
+  });
+}
+function synthesizeGroupDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
+  const groups = ctx.groups;
+  if (groups.length === 0) return;
+  const seen = /* @__PURE__ */ new Set();
+  for (const g of groups) {
+    if (seen.has(g.name)) {
+      groupIssue(
+        ctx,
+        g.path,
+        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
+      );
+    }
+    seen.add(g.name);
+  }
+  for (const inner of groups) {
+    for (const outer of groups) {
+      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
+        groupIssue(
+          ctx,
+          inner.path,
+          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
+        );
+      }
+    }
+  }
+  const defaultByKey = /* @__PURE__ */ new Map();
+  for (const g of groups) {
+    const key = groupStateKey(g);
+    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
+    if (g.open === true) {
+      const prior = defaultByKey.get(key);
+      if (prior !== DISCLOSURE_CLOSED) {
+        groupIssue(
+          ctx,
+          g.path,
+          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
+        );
+      }
+      defaultByKey.set(key, g.name);
+    }
+  }
+  const variables = {};
+  const actions = {};
+  const segments = {};
+  for (const g of groups) {
+    const name = GROUP_NS + g.name;
+    const key = groupStateKey(g);
+    const depth = groups.filter(
+      (other) => other !== g && g.path.startsWith(other.path + ".")
+    ).length;
+    const indent2 = "  ".repeat(depth);
+    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
+    actions[name] = disclosureCycleAction(key, g.name);
+    segments[name] = {
+      template: disclosureTrigger(
+        name,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
+      ),
+      ...g.bg !== void 0 && { bg: g.bg },
+      ...g.fg !== void 0 && { fg: g.fg }
+    };
+  }
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+  out.segments = { ...out.segments ?? {}, ...segments };
+}
+
+// src/config/loader/menu-synth.ts
+init_globals();
+
+// src/config/menu-keys.ts
+init_globals();
+var PAGE_HOLDING_CURRENT = "-1";
+function menuMember(applyName) {
+  return applyName;
+}
+function menuStateKey(placementId2, applyName, sharedKey) {
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
+}
+function sharedMenuStateKey(sharedKey) {
+  return MENU_NS + ident(sharedKey);
+}
+function menuActionName(stateKey, member) {
+  return stateKey + "." + member;
+}
+function menuPageKey(stateKey) {
+  return MENU_PAGE_NS + stateKey;
+}
+var MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution"
+];
+var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
+var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
+function parseMenuOptions(entries) {
+  for (const name of Object.keys(entries)) {
+    if (!isMenuOptionName(name)) {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
+      );
+    }
+  }
+  const bool = (name, def) => {
+    const v = entries[name];
+    if (v === void 0) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== void 0 && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
+    );
+  }
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
+    );
+  }
+  const distribution = entries["distribution"];
+  if (distribution !== void 0 && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+    distribution: placedBy(distribution)
+  };
+}
+
+// src/config/loader/menu-synth.ts
+var MENU_FUNC = "menu";
+var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
+var isDictCall = (e) => e.kind === "call" && e.name === "dict";
+var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
+var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
+function analyzeMenuCall(call) {
+  const issue3 = (message2) => ({ kind: "issue", message: message2 });
+  const [applyArg, ...tail] = call.argExprs;
+  if (applyArg === void 0) {
+    return issue3(
+      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
+    return issue3(
+      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  const last2 = tail[tail.length - 1];
+  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
+  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
+  if (displays.some(isDictCall)) {
+    return issue3(
+      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
+    );
+  }
+  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
+    return issue3(
+      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
+    );
+  }
+  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
+  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
+  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
+  if (entries === null) {
+    return issue3(
+      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
+    );
+  }
+  let options;
+  try {
+    options = parseMenuOptions(entries);
+  } catch (e) {
+    return issue3(`with invalid options \u2014 ${e.message}`);
+  }
+  const sharedKey = options.key;
+  if (sharedKey !== void 0) {
+    const reserved = reservedNamespaceOf(sharedKey);
+    if (reserved !== void 0) {
+      return issue3(
+        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
+      );
+    }
+  }
+  return { kind: "ok", apply: applyArg.value, options };
+}
+function parseCalls(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
+  } catch {
+    return "parse-failed";
+  }
+}
+function hostedMenus(template, placement) {
+  const calls = parseCalls(template);
+  return calls === "parse-failed" ? [] : calls.flatMap(
+    (call) => call.kind === "ok" ? [
+      {
+        key: menuStateKey(placement, call.apply, call.options.key),
+        member: menuMember(call.apply)
+      }
+    ] : []
+  );
+}
+function segmentReferencesMenu(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
+  } catch {
+    return false;
+  }
+}
+function menuIssue(ctx, path31, message2) {
+  ctx.issues.push({ path: path31, message: message2, line: findKeyLine(ctx.source, ["root"]) });
+}
+function checkMenuDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
+  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
+  for (const [name, body] of Object.entries(out.helpers ?? {})) {
+    if (segmentReferencesMenu(body)) {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
+        line: findKeyLine(ctx.source, ["helpers", name])
+      });
+    }
+  }
+  const segments = out.segments ?? {};
+  for (const [segName, seg2] of Object.entries(segments)) {
+    for (const field of ["bg", "fg", "when"]) {
+      const tpl = seg2[field];
+      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}.${field}`,
+          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
+        );
+      }
+    }
+    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
+      if (segmentReferencesMenu(body)) {
+        ctx.issues.push({
+          path: `segments.${segName}.partials.${name}`,
+          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
+          line: findKeyLine(ctx.source, [
+            "segments",
+            segName,
+            "partials",
+            name
+          ])
+        });
+      }
+    }
+  }
+  if (out.root !== void 0) {
+    for (const node of walkNodes(fragmentNode(out.root))) {
+      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
+        menuIssue(
+          ctx,
+          "root",
+          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
+        );
+      }
+    }
+  }
+  for (const [segName, { template }] of Object.entries(segments)) {
+    if (template === void 0 || !segmentReferencesMenu(template)) continue;
+    const calls = parseCalls(template);
+    if (calls === "parse-failed") continue;
+    for (const call of calls) {
+      const message2 = call.kind === "issue" ? call.message : identityIssue(call.apply);
+      if (message2 !== void 0) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} ${message2}.`
+        );
+      }
+    }
+  }
+}
+function identityIssue(apply) {
+  if (apply === "") {
+    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
+  }
+  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
+  }
+  return void 0;
+}
+function synthesizePlacementMenus(config, issues) {
+  const variables = {};
+  const actions = {};
+  const callsOf = /* @__PURE__ */ new Map();
+  const reported = /* @__PURE__ */ new Set();
+  const issue3 = (segName, message2) => {
+    const path31 = `segments.${segName}`;
+    if (reported.has(`${path31}\0${message2}`)) return;
+    reported.add(`${path31}\0${message2}`);
+    issues.push({ path: path31, message: message2 });
+  };
+  for (const preset of presetNames(config.presets)) {
+    const ownerBySynthKey = /* @__PURE__ */ new Map();
+    const claimed = /* @__PURE__ */ new Map();
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const seg2 = config.segments[node.name];
+      if (seg2 === void 0) continue;
+      if (!callsOf.has(node.name)) {
+        callsOf.set(node.name, parseCalls(seg2.template));
+      }
+      const calls = callsOf.get(node.name);
+      if (calls === "parse-failed") continue;
+      const id2 = placementId(node);
+      for (const [index, call] of calls.entries()) {
+        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
+          continue;
+        }
+        const { apply, options } = call;
+        const member = menuMember(apply);
+        const stateKey = menuStateKey(id2, apply, options.key);
+        const pageKey = menuPageKey(stateKey);
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const clashKey = [stateKey, pageKey].find((k) => {
+          const prior2 = ownerBySynthKey.get(k);
+          return prior2 !== void 0 && prior2 !== owner;
+        });
+        if (clashKey !== void 0) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
+          );
+          continue;
+        }
+        ownerBySynthKey.set(stateKey, owner);
+        ownerBySynthKey.set(pageKey, owner);
+        const identity2 = menuActionName(stateKey, member);
+        const claimant = `${node.name}\0${index}`;
+        const prior = claimed.get(identity2);
+        if (prior !== void 0 && prior !== claimant) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+          );
+          continue;
+        }
+        claimed.set(identity2, claimant);
+        actions[identity2] = disclosureCycleAction(stateKey, member);
+        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
+        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+        actions[pageKey] = { set: pageKey, int: true };
+      }
+    }
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...variables },
+    actions: { ...config.actions, ...actions }
+  };
+}
+
+// src/config/loader/edit-mode.ts
+init_globals();
+var EDIT_MODE_KEY = "edit.mode";
+var EDIT_CONFIGURE_KEY = "edit.configure";
+var EDIT_TOGGLE_ACTION = "edit.toggle";
+var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+var EDIT_MODE_ARRANGE = "arrange";
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+function configureMember(preset, id2) {
+  return `${escapedIdent(preset)}:${id2}`;
+}
+var EDIT_MODE_REF = {
+  variable: EDIT_MODE_KEY,
+  key: EDIT_MODE_KEY,
+  member: EDIT_MODE_ARRANGE
+};
+var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
+function referencesEditToggle(template) {
+  try {
+    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
+  } catch {
+    return false;
+  }
+}
+function fileWantsEditMode(out) {
+  if (Object.values(out.actions ?? {}).some(
+    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+  )) {
+    return true;
+  }
+  for (const seg2 of Object.values(out.segments ?? {})) {
+    const fields2 = [
+      seg2.template,
+      seg2.bg,
+      seg2.fg,
+      ...Object.values(seg2.partials ?? {})
+    ];
+    for (const field of fields2) {
+      if (typeof field === "string" && referencesEditToggle(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function synthesizeEditModeToggle(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
+  if (!fileWantsEditMode(out)) return;
+  const { variables, actions } = editModeArtifacts();
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+}
+function editModeArtifacts() {
+  return {
+    variables: {
+      // Arranging lives inside the door: closing the menu leaves edit mode
+      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
+      // close the main menu").
+      [EDIT_MODE_KEY]: {
+        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+        within: [SETTINGS_REF]
+      },
+      // Configuring is a level inside arranging, so leaving edit mode by any
+      // control closes it (src/config/disclosure-nest.ts).
+      [EDIT_CONFIGURE_KEY]: {
+        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
+        within: [EDIT_MODE_REF]
+      }
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED
+      }
+    }
+  };
+}
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+
+// src/config/option-domain.ts
+init_globals();
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
+  }
+  return palette;
+}
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function basePaletteFor(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) return null;
+  baseCache.set(name, palette);
+  return palette;
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named2 = namedTheme(name);
+  if (named2 !== null) return named2;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
+}
+
+// src/config/option-domain.ts
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve2, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
+
+// src/config/setting-control.ts
+init_globals();
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function controlDomainAdmits(domain, value, perConfigDomains) {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    ).members.includes(value);
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function describeControlDomain(domain, perConfigDomains) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
+    const quoted2 = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
+    const named2 = typeof from === "string" ? ` "${from}"` : "";
+    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/help.ts
+init_globals();
+var HELP_GLYPH_CLOSED = "(?)";
+function declareHelp(name, lines2, within3, out) {
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...within3.length > 0 && { within: within3 }
+  };
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
+  out.segments[name] = {
+    template: disclosureTrigger(
+      name,
+      HELP_GLYPH_CLOSED,
+      DISCLOSURE_GLYPH_CLOSE
+    ),
+    // The trigger is visible wherever its host surface is. An unnested `(?)`
+    // (`within` empty) is always visible, and declares no `when` at all.
+    ...gateOf(within3)
+  };
+  const children2 = lines2.map((line, i2) => {
+    const lineName = `${name}.${i2}`;
+    out.segments[lineName] = { template: line };
+    return { kind: "segment", name: lineName };
+  });
+  return disclosureNode(
+    name,
+    self2,
+    { kind: "container", direction: "horizontal", children: children2 },
+    "drop"
+  );
+}
+function gateOf(within3) {
+  const [first2, ...rest2] = within3;
+  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+}
+
+// src/template-engine/colors.ts
+init_globals();
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
+}
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
+  }
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
+}
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
+}
+
+// src/help-text.ts
+init_globals();
+
+// src/config/edit-glyphs.ts
+init_globals();
+var REMOVE_GLYPH = "\u2716";
+var ADD_GLYPH = "\u271A";
+var CONFIGURE_GLYPH = "\u{1F527}";
+
+// src/cli-flags.ts
+init_globals();
+var NODE_FLAGS = {
+  help: ["-h", "--help"],
+  version: ["-V", "--version"]
+};
+
+// src/help-text.ts
+var LANE_PLACES = [
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
+].join(" or ");
+var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+var EDIT_MODE_HELP = [
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
+  "\u21BA resets layout"
+];
+var LANE_HELP = {
+  statusline: [
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "launch Claude Code with the command printed by cc-candybar --help"
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane \xB7 off: closes it"
+  ]
+};
+var HELP_TEXT = `
+cc-candybar - Beautiful powerline statusline for Claude Code
+
+Usage: cc-candybar [options]
+
+Standalone Commands:
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
+
+Debugging:
+  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
+
+Configuration:
+  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
+  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
+  --config PATH            Use PATH as the user layer. Approved project
+                           config and repository plugins still load.
+  --config-only PATH       Load only PATH over the bundled base. Installed
+                           plugins and definitions listed in PATH still load.
+  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
+  To see the effective merged config:
+    cc-candybar config
+
+  Every bar carries a settings menu, whatever your config says \u2014 no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
+  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t2) => t2.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace().flatMap(({ path: path31, names }) => [
+  `    ${path31}`,
+  ...names.map(
+    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
+  )
+]).join("\n")}
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
+
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
+  url-handle URL           Send a cc-candybar:// link to the daemon as a
+                           click. Terminal links use the URL handler app.
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
+  frames --lane LANE [--config PATH | --config-only PATH]
+                           One session's bar as the daemon pushes it \u2014 up to
+                           30 frames a second while it moves, at once on a
+                           click \u2014 one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (config flags ride with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ${LANE_PLACES} is on.
+  bar-pane PANE            Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, as the daemon
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
+
+Config tooling:
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
+`;
+
+// src/config/settings-menu.ts
+init_globals();
+
+// src/config/quiet-text.ts
+init_globals();
+var QUIET_PCT = 60;
+var QUIET_MIN_CONTRAST = 3;
+var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
+
+// src/config/quick-actions.ts
+init_globals();
+var QUICK_ACTIONS = {
+  copySession: { copy: "{{ .session.id }}" },
+  copyResume: { copy: "{{ .resume_command }}" },
+  openProject: { open: "{{ .project_dir }}" },
+  openTranscript: { open: "{{ .transcript_path }}" },
+  openConfig: { open: "{{ .config_path }}" }
+};
+function quickActions(prefix) {
+  const name = (action2) => `${prefix}${action2}`;
+  return {
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    actions: Object.fromEntries(
+      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
+        `${prefix}${action2}`,
+        decl
+      ])
+    )
+  };
+}
+
+// src/config/command-tray.ts
+init_globals();
+var COMMANDS = ["/compact", "/model"];
+var CLEAR = "/clear";
+function commandTray(prefix) {
+  const commandAction = (line) => `${prefix}${line.slice(1)}`;
+  const typeClear = `${prefix}clear.slash`;
+  const clear = confirmStep(
+    `${prefix}clear`,
+    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
+    [{ action: typeClear, when: "true" }]
+  );
+  return {
+    template: COMMANDS.map(
+      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
+    ).join("") + clear.template,
+    when: `{{ ${IN_TMUX} }}`,
+    actions: {
+      ...Object.fromEntries(
+        COMMANDS.map((line) => [
+          commandAction(line),
+          { slash: slashLine(line) }
+        ])
+      ),
+      ...clear.actions,
+      [typeClear]: { slash: slashLine(CLEAR) }
+    },
+    variables: clear.variables,
+    disarm: clear.disarm
+  };
+}
+
+// src/config/autocompact-control.ts
+init_globals();
+function autocompactControl(prefix, formatCount) {
+  return {
+    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
+    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
+    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
+    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
+    // picks one by name.
+    actions: {
+      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
+      ...Object.fromEntries(
+        AUTOCOMPACT_WINDOWS.map((w) => [
+          `${prefix}${w}`,
+          { slash: slashLine(`/autocompact ${w}`) }
+        ])
+      )
+    }
+  };
+}
+
+// src/config/format-token-count.ts
+init_globals();
+var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
+
+// src/config/settings-menu.ts
+var EDIT_SEG = `${SETTINGS_NS}edit`;
+var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
+var TOOLBAR = quickActions(SETTINGS_NS);
+var COMMANDS_SEG = `${SETTINGS_NS}commands`;
+var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
+var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
+var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
+var USER_LAYER_WRITABLE = `.${layerVar(DEFAULT_WRITE_LAYER)}`;
+var seg = (name) => ({ kind: "segment", name });
+var TAB_KEY = `${SETTINGS_NS}tab`;
+var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
+var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
+var tabRef = (tab) => ({
+  variable: TAB_KEY,
+  key: TAB_KEY,
+  member: tab
+});
+var SAVE_SEG = `${SETTINGS_NS}save`;
+var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
+var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+var PRESET_DELETE_GLYPH = "\u{1F6AE}";
+var controlSeg = (name) => `${SETTINGS_NS}${name}`;
+var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
+var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
+var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
+var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
+var THEME_DEFAULT_CELL = {
+  when: `{{ and ${USER_LAYER_WRITABLE} .${THEME_DEFAULT_DIFFERS} }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
+};
+var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
+var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+var UNDO_ACTION = `${SETTINGS_NS}undo`;
+var BACK_ACTION = `${SETTINGS_NS}back`;
+var BACK_STEP = `${BACK_ACTION}.step`;
+var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
+var BACK_SEG = BACK_ACTION;
+var BACK_GLYPH = "\u25C1";
+var BACK_CELL = {
+  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
+};
+var REDO_ACTION = `${SETTINGS_NS}redo`;
+var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
+var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
+var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
+var submenuRef = (name) => {
+  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
+  return { variable: key, key, member: name };
+};
+var PREVIEWS = {
+  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
+  // segment, named, each block in the tint the bar's variation and shade deal
+  // it — so it shows what a preset, a variation or a shade changes.
+  layout: { template: "{{ layoutPreview }}" },
+  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+  // samples exactly the palette the bar is drawn in. (The theme picker carries
+  // its own demo of the theme it has selected.)
+  palette: { template: "{{ themePreview }}" },
+  // While the preset ring is on a preset the user made
+  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
+  // 📐 layout tab makes one.
+  presetDelete: {
+    when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
+    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
+  }
+};
+var controlRow = (name, row) => `${SETTINGS_NS}list.${name}.${row}`;
+var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
+var DRIFT_MARK = " \u2022";
+var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
+var laneSettings = LANE_NAMES.map(
+  (lane) => [LANES[lane].switch.setting, lane]
+);
+var HELP_ARTIFACTS = {
+  variables: {},
+  actions: {},
+  segments: {}
+};
+var HELP = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  })
+);
+var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+var laneReadout = (lane) => {
+  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
+  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
+    " "
+  );
+  return (
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+  );
+};
+var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
+var FPS_SEG = `${SETTINGS_NS}fps`;
+var POLLED = "polled";
+var AT_MOST = "\u2264";
+var FPS_UNIT = " fps";
+var RATE_WIDTH = Math.max(
+  POLLED.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
+);
+var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
+var TRAIL = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
+);
+var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+var menuControl = (name) => {
+  const row = SETTINGS[name];
+  const place = PLACE[name];
+  return {
+    ...row,
+    name,
+    place,
+    control: settingControl(
+      {
+        label: row.label,
+        domain: settingControlDomain(row.configKey)
+      },
+      row.sessionKey,
+      row.effectiveVar,
+      controlApply(name),
+      accordionOf(place)
+    ),
+    beneath: row.previews.map((preview) => PREVIEWS[preview]),
+    help: [HELP[name]].filter((h) => h !== void 0),
+    submenus: submenusBeside(name)
+  };
+};
+var CONTROLS = Object.keys(SETTINGS).map(menuControl);
+var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
+var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+  controlsUnder(place)
+)}))`;
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
+var SETTINGS_WRITTEN_KEYS = new Set(
+  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
+);
+var RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
+);
+var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
+var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
+var UNSAVED_VAR = saveCountVar("unsaved");
+var counted = (count, body) => ({
+  body,
+  shown: `(gt .${saveCountVar(count)} 0)`
+});
+var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
+var writableLayers = (roles) => `(or ${roles.map((role) => `.${layerVar(role)}`).join(" ")})`;
+var HAS_WRITABLE_LAYER = writableLayers(LAYER_ROLES);
+var HAS_OTHER_LAYER = writableLayers(
+  LAYER_ROLES.filter((role) => role !== DEFAULT_WRITE_LAYER)
+);
+var SAVE_TARGETS = LAYER_ROLES.map(
+  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
+).join("");
+var SAVE_BODY = `{{ if ${HAS_OTHER_LAYER} }}{{ ${SAVE_LABEL} }}:${SAVE_TARGETS}{{ else if ${USER_LAYER_WRITABLE} }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "${DEFAULT_WRITE_LAYER}" }}{{ end }}`;
+var SAVE_PARTS = [
+  {
+    body: SAVE_BODY,
+    shown: `(and (gt .${UNSAVED_VAR} 0) ${HAS_WRITABLE_LAYER})`
+  },
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
+  {
+    body: RESET_ALL.template,
+    shown: `(and ${USER_LAYER_WRITABLE} (or ${anyResettable(CONTROLS)} ${RESET_ALL.armed}))`
+  }
+];
+var SAVE_CELL = {
+  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
+  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
+    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
+  ).join("")
+};
+var CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS2, place: "session" }
+];
+var disarms = (out) => out.map((c) => c.step.disarm);
+var DOOR_DISARMS = disarms(CONFIRMS);
+var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
+function controlNode(c) {
+  const self2 = controlSeg(c.name);
+  if (c.control.kind === "inline") return seg(self2);
+  return disclosureNode(
+    self2,
+    c.control.list.ref,
+    {
+      kind: "container",
+      direction: "vertical",
+      children: [...c.control.list.rows, ...c.beneath].map(
+        (_, row) => seg(controlRow(c.name, row))
+      )
+    },
+    "drop"
+  );
+}
+function isSettingsAnchor(segmentName) {
+  return segmentName === SETTINGS_ANCHOR;
+}
+function prependAnchor(node) {
+  const anchorRef = seg(SETTINGS_ANCHOR);
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first2, ...rest2] = node.children;
+    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
+      kind: "container",
+      direction: "vertical",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.when === void 0) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  const { when: when2, children: children2, ...row } = node;
+  return {
+    ...row,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row.direction, when: when2, children: children2 }
+    ]
+  };
+}
+function withAnchor(node) {
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
+}
+function countAnchors(node) {
+  let n = 0;
+  for (const each of walkNodes(node)) {
+    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
+  }
+  return n;
+}
+function anchorUnderGate(node, gated2 = false) {
+  const here = gated2 || node.when !== void 0;
+  if (node.kind === "segment") {
+    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
+  }
+  return node.children.some((child) => anchorUnderGate(child, here));
+}
+var PLACE_BODY = {
+  // `◁ back`, the controls one click from the door — theme, preset — then
+  // arranging the bar, then the save cell whenever it has something to do.
+  door: {
+    direction: "horizontal",
+    content: [seg(BACK_SEG)],
+    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
+  },
+  // The quick actions, then the commands typed into Claude Code beside the
+  // auto-compact window they would summarize at.
+  session: {
+    direction: "vertical",
+    content: [
+      seg(TOOLBAR_SEG),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
+      }
+    ],
+    after: []
+  },
+  look: { direction: "horizontal", content: [], after: [] },
+  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  config: { direction: "horizontal", content: [], after: [] },
+  // The settings that adapt the theme, then — while the look they make
+  // differs from the theme's own default — the cell that saves it as that
+  // default.
+  gear: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)]
+  },
+  toggles: { direction: "horizontal", content: [], after: [] }
+};
+function placeBody(place) {
+  const { direction, content, after } = PLACE_BODY[place];
+  return {
+    kind: "container",
+    direction,
+    children: [...content, ...controlsAt(place), ...after]
+  };
+}
+function expandAnchor(node) {
+  if (node.kind === "segment") {
+    return isSettingsAnchor(node.name) ? {
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
+        seg(FPS_SEG)
+      ]
+    } : node;
+  }
+  return expandContainer(node);
+}
+function doorBody() {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      placeBody("door"),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: TABS.map(
+          ({ member }) => disclosureNode(
+            tabSeg(member),
+            tabRef(member),
+            placeBody(member),
+            "drop"
+          )
+        )
+      }
+    ]
+  };
+}
+var DOOR_BODY = doorBody();
+function expandContainer(node) {
+  return {
+    ...node,
+    children: node.children.map((child) => expandAnchor(child))
+  };
+}
+function settingsArtifacts(doorGlyph) {
+  const artifacts = {
+    variables: {
+      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0"
+      }
+    },
+    actions: {
+      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      ...TOOLBAR.actions,
+      ...COMMANDS2.actions,
+      ...AUTOCOMPACT.actions,
+      [SAVE_SEG]: { save: true, layer: "ask" },
+      [UNDO_ACTION]: { undo: true },
+      // [LAW:composability] Going back can reopen a view a confirm sits in, so
+      // it disarms every confirm as the door does: a confirm is only ever
+      // clicked in the view its own arming click was made in.
+      [BACK_STEP]: { back: true },
+      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
+      [REDO_ACTION]: { redo: true },
+      [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
+      [PRESET_DELETE]: {
+        preset: "delete",
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
+      }
+    },
+    segments: {
+      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
+      // below, which are a word plus the ▸/▾ that gates it. The door has no
+      // label to gate: it is a glyph, so a second glyph beside it would be the
+      // only thing on the bar that spells its state twice. The door's glyph
+      // names what it opens, `✖` names what the click does.
+      //
+      // Two displays through the same `[closed, member]` cycle every other
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ is red as this depth draws it on the pressed state, the
+      // theme's own error red wherever one reads (`errorRedOn`). It never
+      // slides lightness: a slid red stops reading as red, and the ✖ must be
+      // red on every theme. Closed,
+      // the author's glyph keeps the cell's own text.
+      [SETTINGS_ANCHOR]: {
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+      },
+      [FPS_SEG]: { template: FRAME_RATE },
+      [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
+      [AUTOCOMPACT_SEG]: {
+        template: AUTOCOMPACT.template,
+        bg: AUTOCOMPACT.bg,
+        when: AUTOCOMPACT.when
+      },
+      [BACK_SEG]: BACK_CELL,
+      [SAVE_SEG]: SAVE_CELL,
+      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
+      [PRESET_SAVE]: {
+        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,
+        when: `{{ ${USER_LAYER_WRITABLE} }}`
+      },
+      [EDIT_SEG]: {
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
+      }
+    }
+  };
+  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
+    kind: "input",
+    path: "themeDefault.differs",
+    type: "boolean",
+    default: false
+  };
+  artifacts.variables[THEME_DEFAULT_THEME] = {
+    kind: "input",
+    path: "themeDefault.theme",
+    type: "string",
+    default: ""
+  };
+  artifacts.variables[BACK_COUNT] = {
+    kind: "input",
+    path: "navigation.back",
+    type: "number",
+    default: 0
+  };
+  for (const role of LAYER_ROLES) {
+    artifacts.variables[layerVar(role)] = {
+      kind: "input",
+      path: `layers.${role}`,
+      type: "boolean",
+      default: false
+    };
+  }
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
+      kind: "input",
+      path: count,
+      type: "number",
+      default: 0
+    };
+  }
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
+  for (const { member, label: label2 } of TABS) {
+    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
+      TAB_KEY,
+      member
+    );
+    artifacts.actions[tabSeg(member)] = {
+      do: [tabToggle(member), ...TAB_DISARMS]
+    };
+    const display = markedDisplay(member);
+    artifacts.segments[tabSeg(member)] = {
+      template: `{{ ${disclosureTriggerCall(
+        tabSeg(member),
+        display(label2),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
+      )} }}`
+    };
+  }
+  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
+  declareSettingControls(artifacts);
+  return artifacts;
+}
+function declareSettingControls(artifacts) {
+  for (const c of CONTROLS) {
+    Object.assign(artifacts.actions, c.control.actions);
+    const reset = controlReset(c.name);
+    artifacts.actions[reset] = { reset: c.configKey };
+    artifacts.variables[controlResettable(c.name)] = {
+      kind: "input",
+      path: `resettable.${c.name}`,
+      type: "boolean",
+      default: false
+    };
+    const resetCell = `{{ if and ${USER_LAYER_WRITABLE} .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
+    Object.assign(artifacts.variables, c.control.variables);
+    artifacts.segments[controlSeg(c.name)] = {
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
+    };
+    if (c.control.kind === "picker") {
+      [
+        ...c.control.list.rows.map((template) => ({ template })),
+        ...c.beneath
+      ].forEach((row, i2) => {
+        artifacts.segments[controlRow(c.name, i2)] = row;
+      });
+    }
+  }
+  Object.assign(artifacts.actions, RESET_ALL.actions);
+  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
+  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
+  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
+  for (const name of SUBMENU_NAMES) {
+    const ref = submenuRef(name);
+    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
+      ref.key,
+      ref.member
+    );
+    artifacts.segments[submenuSeg(name)] = {
+      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
+    };
+  }
+}
+function ensureEditToggle(artifacts) {
+  const { variables, actions } = editModeArtifacts();
+  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.actions, actions);
+}
+function synthesizeSettingsMenu(config) {
+  const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
+  ensureEditToggle(artifacts);
+  const presets = { ...config.presets };
+  for (const name of presetNames(config.presets)) {
+    const { node } = presetRoot(config, name);
+    const root = expandAnchor(withAnchor(node));
+    presets[name] = { ...presetByName(config.presets, name), root };
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...artifacts.variables },
+    actions: { ...config.actions, ...artifacts.actions },
+    segments: { ...config.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/edit-chrome.ts
+var EDIT_LIVE_KEY = `${EDIT_NS}live`;
+var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
+var EDIT_DONE_SEG = `${EDIT_NS}done`;
+var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
+var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
+var EDIT_LIVE_REF = {
+  variable: EDIT_LIVE_KEY,
+  key: EDIT_LIVE_KEY,
+  member: DISCLOSURE_OPEN
+};
+function configuringVar(presetIdent) {
+  return `${EDIT_NS}configuring.p${presetIdent}`;
+}
+function namesView(presetIdent) {
+  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
+}
+function configuringDecl(members) {
+  const terms = members.map(
+    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
+  );
+  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
+}
+function inNamesView(presetIdent, verdict, when2) {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
+}
+var PRESET_CUSTOMIZED_VAR = "preset.customized";
+var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${USER_LAYER_WRITABLE} .${PRESET_CUSTOMIZED_VAR} }}`;
+var isChromeExempt = isReservedName;
+function configOptionDomains(config) {
+  return new Map([
+    ...perConfigDomainsFor(config),
+    ...addableSegmentDomains(config)
+  ]);
+}
+var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
+function addableSegmentDomains(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      ADDABLE_DOMAIN,
+      {
+        members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
+        library: {
+          groups: LIBRARY_GROUPS.map((id2) => ({
+            id: id2,
+            label: GROUP_LABELS[id2]
+          })),
+          entry: (option) => {
+            const decl = config.segments[option];
+            return {
+              group: decl.group ?? OTHER_GROUP,
+              ...decl.description !== void 0 && {
+                description: decl.description
+              }
+            };
+          }
+        }
+      }
+    ]
+  ]);
+}
+function chromeCell(name, template, artifacts) {
+  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
+  return { kind: "segment", name };
+}
+function removeTerm(ctx, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
+  ctx.artifacts.actions[actionName] = {
+    persist: ctx.rootKey,
+    removeSegment: id2
+  };
+  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
+}
+function inArrangeMode(term) {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
+}
+function shownWhile(refs, when2) {
+  return refs.reduce(
+    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+    when2
+  );
+}
+function configureRefsIn(nodes) {
+  return nodes.flatMap(
+    (node) => [...walkNodes(node)].flatMap(
+      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
+    )
+  );
+}
+function placementDraftKey(presetIdent, id2, setting) {
+  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
+}
+function configureParts(ctx, node, decls) {
+  const id2 = placementId(node);
+  const placement = escapedIdent(id2);
+  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
+  const member = configureMember(ctx.preset, id2);
+  ctx.configured.push(member);
+  const enter = `${prefix}.configure.${placement}`;
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold]
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member
+  };
+  const drafts = {};
+  const controls = Object.entries(decls).map(([name, decl]) => {
+    const key = placementDraftKey(ctx.presetIdent, id2, name);
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    ctx.artifacts.variables[variable] = {
+      kind: "state",
+      key,
+      default: settingSpelling(node.settings?.[name] ?? decl.default)
+    };
+    drafts[name] = { id: id2, key, variable };
+    const segName = `${prefix}.setting.${placement}.${name}`;
+    const control2 = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      listKey
+    );
+    Object.assign(ctx.artifacts.actions, control2.actions);
+    Object.assign(ctx.artifacts.variables, control2.variables);
+    if (control2.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control2.template };
+      return { kind: "segment", name: segName };
+    }
+    ctx.artifacts.segments[segName] = { template: control2.template };
+    const rows = control2.list.rows.map((template, row) => {
+      const listSeg = `${segName}.list.${row}`;
+      ctx.artifacts.segments[listSeg] = { template };
+      return { kind: "segment", name: listSeg };
+    });
+    return disclosureNode(
+      segName,
+      control2.list.ref,
+      { kind: "container", direction: "vertical", children: rows },
+      "drop"
+    );
+  });
+  return {
+    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
+    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
+    // One control per row, its list dropping below it when opened.
+    body: { kind: "container", direction: "vertical", children: controls },
+    drafts
+  };
+}
+var LABEL_NS = `${EDIT_NS}label:`;
+function arrangedSegment(name) {
+  if (name.startsWith(LABEL_NS)) {
+    const label2 = name.slice(LABEL_NS.length);
+    return label2.slice(label2.indexOf(":") + 1);
+  }
+  return name.startsWith(EDIT_NS) ? void 0 : name;
+}
+function labelChrome(child, decl, ctx, configure) {
+  const id2 = placementId(child);
+  const name = labelSegment(ctx, id2, child, decl, id2);
+  const settings = Object.fromEntries(
+    IMPLIED_SETTINGS.flatMap((setting) => {
+      const value = child.settings?.[setting];
+      return value === void 0 ? [] : [[setting, value]];
+    })
+  );
+  return {
+    ...disclosureNode(
+      name,
+      configure.ref,
+      configure.body,
+      "drop",
+      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
+    ),
+    ...Object.keys(settings).length > 0 && { settings },
+    drafts: Object.fromEntries(
+      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
+    )
+  };
+}
+function labelSegment(ctx, key, child, decl, text4) {
+  const name = `${LABEL_NS}${key}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
+    ...decl.palette !== void 0 && { palette: decl.palette }
+  };
+  return name;
+}
+function editableUnit(child, spliced, first2, ctx) {
+  const id2 = placementId(child);
+  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
+  const after = insertTerm(ctx, id2, "after");
+  const remove = removeTerm(ctx, id2);
+  const decl = ctx.segments[child.name];
+  const configure = configureParts(ctx, child, settingsOf(decl));
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map(
+      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts
+    },
+    chromeCell(after.host, after.template, ctx.artifacts)
+  ];
+}
+function fileLabel(file) {
+  return import_node_path26.default.join(import_node_path26.default.basename(import_node_path26.default.dirname(file)), import_node_path26.default.basename(file));
+}
+function insertedUnit(child, insertedBy, spliced, ctx) {
+  const decl = ctx.segments[child.name];
+  const id2 = placementId(child);
+  const label2 = {
+    kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/`, so the two names never meet.
+    name: labelSegment(
+      ctx,
+      `${id2}/${ctx.presetIdent}`,
+      child,
+      decl,
+      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`
+  };
+  return [
+    label2,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
+    }
+  ];
+}
+function insertTerm(ctx, anchor, relation) {
+  const { artifacts } = ctx;
+  const {
+    apply: applyName,
+    host: chromeSegName,
+    stateKey
+  } = insertGap(ctx.preset, anchor, relation);
+  artifacts.actions[applyName] = {
+    persist: ctx.rootKey,
+    insertSegmentFrom: ADDABLE_DOMAIN,
+    anchor,
+    relation
+  };
+  const member = menuMember(applyName);
+  const pageKey = menuPageKey(stateKey);
+  const identity2 = menuActionName(stateKey, member);
+  artifacts.variables[stateKey] = {
+    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF]
+  };
+  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
+  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
+  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return {
+    host: chromeSegName,
+    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
+  };
+}
+function insertGap(preset, anchor, relation) {
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
+  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
+}
+function spliceContainer(node, ctx) {
+  const children2 = [];
+  const firstContent = node.children.findIndex(
+    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
+  );
+  const splice2 = (body) => spliceContainer(body, ctx);
+  for (const [i2, child] of node.children.entries()) {
+    if (child.kind === "container") {
+      children2.push(splice2(child));
+      continue;
+    }
+    const spliced = mapOpens(child, splice2);
+    if (isChromeExempt(child.name)) {
+      children2.push(spliced);
+      continue;
+    }
+    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
+    const unit = {
+      kind: "container",
+      direction: "horizontal",
+      children: cells,
+      unit: true
+    };
+    children2.push(
+      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
+    );
+  }
+  return {
+    ...node,
+    children: children2,
+    ...node.when !== void 0 && {
+      when: shownWhile(
+        configureRefsIn(children2),
+        inNamesView(ctx.presetIdent, "true", node.when)
+      )
+    }
+  };
+}
+function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  artifacts.actions[actionName] = { reset: rootKey };
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
+    when: CUSTOMIZED_BANNER_GATE
+  };
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      // The ways out lead the top row, top left, where they are found without
+      // reopening the menu edit mode was entered from: keep or discard what
+      // was changed, restore the bundled layout, and the view toggle.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [...lead, { kind: "segment", name: chromeSegName }, live]
+      },
+      // The `(?)`'s body drops BELOW the row the trigger rides while the
+      // disclosure is open, like every other disclosure body in this codebase.
+      withTrailingCell(splicedRoot, tail)
+    ]
+  };
+}
+function withTrailingCell(node, cell3) {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell3]
+    };
+  }
+  const last2 = node.children.at(-1);
+  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
+    };
+  }
+  return { ...node, children: [...node.children, cell3] };
+}
+function spliceEditChromeForPreset(config, presetName, artifacts, lead, live, tail) {
+  const { node } = presetRoot(config, presetName);
+  const ctx = {
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
+    rootKey: presetRootKey(presetName),
+    segments: config.segments,
+    artifacts,
+    configured: []
+  };
+  const spliced = spliceContainer(node, ctx);
+  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
+    ctx.configured
+  );
+  return wrapWithPresetRows(
+    spliced,
+    ctx.presetIdent,
+    ctx.rootKey,
+    artifacts,
+    lead,
+    live,
+    tail
+  );
+}
+function synthesizeEditChrome(config) {
+  const artifacts = {
+    variables: {},
+    actions: {},
+    segments: {}
+  };
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts
+  );
+  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
+    EDIT_LIVE_KEY,
+    DISCLOSURE_CLOSED
+  );
+  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
+    EDIT_LIVE_KEY,
+    EDIT_LIVE_REF.member
+  );
+  artifacts.segments[EDIT_LIVE_KEY] = {
+    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
+    when: EDIT_MODE_GATE
+  };
+  const live = { kind: "segment", name: EDIT_LIVE_KEY };
+  const tail = help;
+  artifacts.variables[EDIT_CHANGES_VAR] = {
+    kind: "input",
+    path: "history.sinceEdit",
+    type: "number",
+    default: 0
+  };
+  artifacts.actions[EDIT_DONE_SEG] = { save: true };
+  artifacts.segments[EDIT_DONE_SEG] = {
+    template: `{{ if ${TO_KEEP} }}{{ if ${USER_LAYER_WRITABLE} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ end }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
+    when: EDIT_MODE_GATE
+  };
+  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
+  artifacts.segments[EDIT_CANCEL_SEG] = {
+    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+  };
+  const lead = [
+    { kind: "segment", name: EDIT_DONE_SEG },
+    { kind: "segment", name: EDIT_CANCEL_SEG }
+  ];
+  const presets = { ...config.presets };
+  for (const name of presetNames(config.presets)) {
+    const root = spliceEditChromeForPreset(
+      config,
+      name,
+      artifacts,
+      lead,
+      live,
+      tail
+    );
+    presets[name] = { ...presetByName(config.presets, name), root };
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...artifacts.variables },
+    actions: { ...config.actions, ...artifacts.actions },
+    segments: { ...config.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/loader/styles.ts
+init_globals();
+function endcapsNameMessage(at, name, endcapsAt) {
+  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
+}
+var STYLE_SCHEMA = {
+  noun: "style key",
+  fields: {
+    hueShift: optionalNumberSpec(),
+    chromaScale: optionalNumberSpec({ min: 0 }),
+    lightnessScale: optionalNumberSpec(),
+    lightnessShift: optionalNumberSpec()
+  }
+};
+function validateStyles(ctx, raw) {
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "styles",
+      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["styles"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/")) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    if (isStyleEraEndcaps(name)) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
+    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
+  }
+  return out;
+}
+
+// src/config/loader/presets.ts
+init_globals();
+var presetRootSpec = {
+  required: false,
+  json: { $ref: ROOT_FRAGMENT_REF },
+  parse: (ctx, path31, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path31}.${field}`, raw[field])
+};
+var presetGlobalsSpec = {
+  required: false,
+  json: presetGlobalsJson(),
+  parse: (ctx, path31, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path31}.${field}`, raw[field])
+};
+var PRESET_SCHEMA = {
+  noun: "preset key",
+  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
+};
+function validatePresets(ctx, raw) {
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "presets",
+      message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["presets"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+      ctx.issues.push({
+        path: `presets.${name}`,
+        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        line: findKeyLine(ctx.source, ["presets", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+
+// src/config/loader/cross-ref.ts
+init_globals();
+
+// src/config/loader/unplaced.ts
+init_globals();
+function presenceOf(segments, rendering) {
+  const owners = [...rendering].map(
+    ([ns, definition]) => [ownedBy(ns), definition]
+  );
+  return (name) => {
+    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
+      return { kind: "declared" };
+    const owner = owners.find(([owns]) => owns(name));
+    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
+    const scope = scopeOf(name);
+    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
+  };
+}
+function reportable(presence2) {
+  return presence2.kind === "plugin" || presence2.kind === "missing";
+}
+function absentPlacement(config, cells, presence2) {
+  const placed2 = /* @__PURE__ */ new Map();
+  const add2 = (id2, at) => {
+    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
+  };
+  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config.root,
+    ...Object.values(config.presets).flatMap(
+      (p2) => p2.root === void 0 ? [] : [p2.root]
+    )
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
+  for (const cell3 of cells)
+    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
+  const absent = /* @__PURE__ */ new Set();
+  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id2, at] of placed2)
+      if (!absent.has(id2) && at.every(standsOnAbsent)) {
+        absent.add(id2);
+        grew = true;
+      }
+  }
+  return (id2) => absent.has(id2);
+}
+function withoutUnplaced(config) {
+  let removed = 0;
+  const declared = presenceOf(config.segments, /* @__PURE__ */ new Map());
+  const placed2 = (name) => {
+    const keep = declared(name).kind === "declared";
+    if (!keep) removed += 1;
+    return keep;
+  };
+  const container = (node) => ({
+    ...node,
+    children: node.children.flatMap((child) => nodes(child))
+  });
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
+  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
+  const root = (r) => ({
+    ...r,
+    rows: Object.fromEntries(
+      Object.entries(r.rows).map(([name, row]) => [name, tree(row)])
+    )
+  });
+  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
+  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
+  const result = {
+    ...config,
+    root: root(config.root),
+    presets: Object.fromEntries(
+      Object.entries(config.presets).map(([name, p2]) => [name, preset(p2)])
+    )
+  };
+  return removed === 0 ? config : result;
+}
+var EMPTY_ROW = {
+  kind: "container",
+  direction: "horizontal",
+  children: []
+};
+
+// src/config/loader/projections.ts
 init_globals();
 
 // src/template-engine/engine.ts
@@ -71613,6033 +74717,6 @@ function createCcCandybarEngine(opts) {
   });
 }
 
-// src/template-engine/scope.ts
-init_globals();
-function buildScope(store) {
-  const names = new Set(store.names());
-  return makeProxy(store, names, "");
-}
-function makeProxy(store, names, prefix) {
-  return new Proxy(/* @__PURE__ */ Object.create(null), {
-    has(_, key) {
-      if (typeof key !== "string") return false;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) return !absentDocument(store, fullKey);
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) return true;
-      }
-      return false;
-    },
-    get(_, key) {
-      if (typeof key !== "string") return void 0;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) {
-        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
-        const doc = store.readDocument(fullKey);
-        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
-      }
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) {
-          return makeProxy(store, names, fullKey);
-        }
-      }
-      return void 0;
-    }
-  });
-}
-function placementScope(scope, settings) {
-  return new Proxy(scope, {
-    has: (target, key) => key === "settings" || Reflect.has(target, key),
-    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
-  });
-}
-function absentDocument(store, name) {
-  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
-}
-function unwrapDocument(name, doc) {
-  switch (doc.kind) {
-    case "ok":
-      return doc.value;
-    case "pending":
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not completed a scan`
-      );
-    case "failed":
-      throw new Error(`variable "${name}": ${doc.reason}`);
-  }
-}
-
-// src/facts/source-identity.ts
-init_globals();
-var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
-function keyHashOf(value) {
-  return crypto_default.createHash("sha256").update(value).digest("hex");
-}
-
-// src/var-system/sources.ts
-var TORN_WRITE_SETTLE_MS = 250;
-function parseDuration(s) {
-  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
-  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
-  const v = parseFloat(m[1]);
-  switch (m[2]) {
-    case "ms":
-      return v;
-    case "s":
-      return v * 1e3;
-    case "m":
-      return v * 6e4;
-    case "h":
-      return v * 36e5;
-    default:
-      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
-  }
-}
-function parserIdOf(parse3) {
-  switch (parse3.kind) {
-    case "text":
-      return { kind: "text" };
-    case "regex":
-      return { kind: "regex", pattern: parse3.pattern };
-    case "json":
-      return { kind: "json" };
-  }
-}
-var UNBOUND = {
-  session: () => {
-    throw new PendingValueError(
-      "session_id",
-      "the view's session has no value yet: no view source is bound"
-    );
-  },
-  read: () => pendingOf("unread"),
-  run: () => UNREAD_RUN,
-  env: () => UNREAD_ENV,
-  drawnAt: () => {
-    throw new PendingValueError(
-      "colorCompatibility.effective",
-      "the drawn depth has no value yet: no view source is bound"
-    );
-  }
-};
-var found = (value) => ({ kind: "found", value });
-function resolvePath2(obj, path31) {
-  let cur = obj;
-  let inDocument = false;
-  for (const part of path31.split(".")) {
-    if (!inDocument && isPending(cur)) return cur;
-    if (cur == null || typeof cur !== "object") return found(void 0);
-    inDocument ||= part === "value" && cur.kind === "ok";
-    cur = cur[part];
-  }
-  return !inDocument && isPending(cur) ? cur : found(cur);
-}
-function sourceReading(name, resolved) {
-  if (resolved.kind === "pending") return resolved;
-  const raw = resolved.value;
-  if (raw === void 0) {
-    return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
-      "read"
-    );
-  }
-  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
-  switch (kind) {
-    case "ok":
-    case "absent":
-    case "failed":
-      return raw;
-    default:
-      return failed(
-        `variable "${name}": the view's payload holds no source reading at "${name}"`,
-        "read"
-      );
-  }
-}
-function coerceToType(raw, type3) {
-  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
-    throw new TypeError(
-      `Expected string|number|boolean from payload, got ${typeof raw}`
-    );
-  }
-  if (type3 === "string") return toString2(raw);
-  if (type3 === "number") return toNumber(raw);
-  return toBool(raw);
-}
-function zeroValue(type3) {
-  if (type3 === "number") return 0;
-  if (type3 === "boolean") return false;
-  return "";
-}
-var SourceRegistry = class _SourceRegistry {
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
-  //
-  // sessionState lets the daemon inject its singleton so state-kind variables
-  // share one MobX atom and one disk-persistence layer with the click verbs.
-  // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
-    this.store = store;
-    this.defaultEmptyValue = defaultEmptyValue;
-    this.parent = parent;
-    this.sessionState = sessionState;
-    this.cleanups.push(observe(this.subscriptionsNow, () => {
-    }));
-    this.cleanups.push(observe(this.envNow, () => {
-    }));
-  }
-  store;
-  defaultEmptyValue;
-  parent;
-  lastErrors = /* @__PURE__ */ new Map();
-  // A cache policy that cannot fire is a STANDING fault, not a read's
-  // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A key template
-  // that throws lives until the key evaluates again. One map, since a
-  // variable has one policy. Observable, since the bar draws each fault as a
-  // refresh warning.
-  policyFaults = observable.map(void 0, {
-    deep: false
-  });
-  // The run's own standing fault, as the host reads it: the judge refused
-  // the run, or its watch cannot hear every place its path changes. Its own
-  // map, written by the run's fault alone, so a policy's outcome and a run's
-  // never clear each other.
-  runFaults = observable.map(void 0, {
-    deep: false
-  });
-  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
-  // tears everything down in one call.
-  cleanups = [];
-  // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
-  // by variable name: a derivation of its identity's inputs, pending while a
-  // policy over values has nothing answered to name, failed while its key
-  // failed before ever answering. A derivation, never a
-  // value a reaction writes, so whoever reads the runs inside a batch — a
-  // turn handed a world state from within the host's reaction — reads them as
-  // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
-  // and their readings come back through the view's input source.
-  runs = observable.map(
-    void 0,
-    { deep: false }
-  );
-  runSourcesNow = computed(
-    () => new Map([...this.runs].map(([name, run2]) => [name, run2.get()]))
-  );
-  namedNow = computed(
-    () => new Map(
-      [...this.runSourcesNow.get()].flatMap(
-        ([name, run2]) => run2.kind === "ok" ? [[name, run2.value]] : []
-      )
-    )
-  );
-  // Every `shell` and `file` source by variable name, with the run it names
-  // or why it names none: what the render event counts, so a source whose key
-  // never answers, or failed, is still told.
-  runSources() {
-    return this.runSourcesNow.get();
-  }
-  // The named runs declared by this registry, including aliases for a shared run.
-  namedRuns() {
-    return this.namedNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry needs run, deduped by
-  // digest, in digest order, so an output is the same whatever order a config
-  // declares in. Computed and observed for the registry's life (the
-  // constructor), so a turn in which nothing moved sorts nothing: a computed
-  // read outside a reaction is derived again on every read.
-  subscriptionsNow = computed(
-    () => [
-      ...new Map(
-        [...this.namedNow.get().values()].map((run2) => [run2.digest, run2])
-      )
-    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run2]) => run2)
-  );
-  subscriptions() {
-    return this.subscriptionsNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry's inputs are derived from
-  // (`bindInputs`), and so the depth the terminal draws this view's renders at
-  // — the one depth every contrast floor reads, in this registry's variable
-  // templates and in the render engine alike. Derived from the view's own
-  // settings, so a template variable whose `readableOn` read it recomputes in
-  // the turn the setting moves (edit mode staging a depth included), never at
-  // a draw.
-  inputs = observable.box(UNBOUND, {
-    deep: false
-  });
-  drawnAt = () => this.inputs.get().drawnAt();
-  // Shared engine instance — parse() is expensive; the engine is reused for
-  // all key: template compilations.
-  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
-  // The names of this registry's own async sources (shell, file), whose
-  // stored values `published` reads.
-  sourceNames = observable.array([], { deep: false });
-  // The variables this registry's `env` sources read.
-  envNames = observable.array([], { deep: false });
-  // [LAW:one-source-of-truth] What this registry needs of the session's
-  // environment: each variable once, sorted, so an output is the same
-  // whatever order a config declares in.
-  envNow = computed(
-    () => [...new Set(this.envNames)].sort(),
-    { equals: compareStructural }
-  );
-  envSubscriptions() {
-    return this.envNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry's sources have published, as
-  // one value that changes exactly when one of their stored values or
-  // standing faults does: the store writes a value only when its own compare
-  // finds it changed, and a fault is written only when its reason does, so a
-  // re-read that found what was stored moves nothing. A session's view reacts
-  // to it, and so its feed wakes on a publish that changed what the bar can
-  // show (openView).
-  publishedNow = computed(
-    () => ({
-      values: this.sourceNames.map((name) => this.store.stored(name)),
-      faults: [...this.policyFaults.values(), ...this.runFaults.values()]
-    })
-  );
-  published() {
-    return this.publishedNow.get();
-  }
-  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
-  // so tests can substitute a fake and the daemon shares its singleton.
-  // Absent in non-daemon contexts; declareState() rejects loudly in that case
-  // rather than silently returning empty strings.
-  sessionState;
-  // [LAW:one-source-of-truth] A session's view of this directory home
-  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
-  // its own, which reads through to this one. The session's values are
-  // declared there, so its inputs, its state and its derivations are its own,
-  // and what its sources fail with is recorded there; a directory value it
-  // reads is this home's one node, and its failure this home's one record. It
-  // shares the daemon's session state, and is disposed on its
-  // own: a session leaving the directory disposes nothing of it.
-  view() {
-    return new _SourceRegistry(
-      new VariableStore(this.store.clock, this.store),
-      this.defaultEmptyValue,
-      this.sessionState,
-      this
-    );
-  }
-  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
-  // variable it declares lives there, and the renderer reads back through it.
-  // Exposing it read-only lets a caller that already holds the registry obtain
-  // the one store without threading a second reference that could diverge (the
-  // action runtime reads current values from this exact store).
-  get variableStore() {
-    return this.store;
-  }
-  // ─── Synchronous source kinds ─────────────────────────────────────────────
-  // literal: type inferred from value; box written once at declaration and never again.
-  declareLiteral(name, value) {
-    this.store.defineBox(name, typeOf(value), value);
-  }
-  // A document that is a known failure for as long as it is declared.
-  declareFailedDocument(name, reason) {
-    this.store.defineDocument(name, failed(reason, "parse"));
-  }
-  // A plugin's source: a document derived from the reading its view's payload
-  // carries at the source's own name — ok, absent or failed as the storage
-  // owner read the session's file, or pending while it has not answered.
-  // [LAW:no-silent-failure] A payload with nothing there is a declaration
-  // that did not take the source the config declares: a bug, read as a failure
-  // naming the variable, never as absent.
-  declareSourceDocument(name) {
-    this.store.defineDerivedDocument(
-      name,
-      () => sourceReading(name, this.inputs.get().read(name))
-    );
-  }
-  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
-  // the registry lives — a render state's hold on a plugin's storage folder —
-  // released by the registry's one teardown (`dispose`), with everything else
-  // it holds.
-  own(release3) {
-    this.cleanups.push(release3);
-  }
-  // input: a derived value of its path in the bound InputSource, cast to its
-  // type. [LAW:types-are-the-program] Before its source answers it holds no
-  // value: it is not answered yet, never its default, which answers a payload
-  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
-  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
-  declareInput(name, path31, type3, varDefault, derivation) {
-    this.store.defineDerived(
-      name,
-      type3,
-      derivation,
-      () => this.inputAt(name, path31, type3, varDefault)
-    );
-  }
-  // [LAW:single-enforcer] The one reading of an input: its path's value cast
-  // to its type, else the fallback chain with the failure recorded.
-  inputAt(name, path31, type3, varDefault) {
-    const resolved = this.inputs.get().read(path31);
-    if (resolved.kind === "pending") {
-      this.lastErrors.delete(name);
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not answered`
-      );
-    }
-    const raw = resolved.value;
-    if (raw === void 0) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        `input path "${path31}" not found in payload`
-      );
-    }
-    try {
-      const value = coerceToType(raw, type3);
-      this.lastErrors.delete(name);
-      return value;
-    } catch (e) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        e instanceof Error ? e.message : String(e)
-      );
-    }
-  }
-  // env: a variable of the session's environment, which the host holds and
-  // hands in as this one variable's value (`InputSource.env`). Pending until
-  // it is handed in; an unset variable is the fallback, with the reason on
-  // the variable. Always a string: env vars are text by nature.
-  declareEnv(name, envVar, varDefault) {
-    const fallback = this.stringInitial(varDefault);
-    this.store.defineBox(name, "string", pendingOf("unread"));
-    runInAction(() => this.envNames.push(envVar));
-    this.cleanups.push(
-      reaction(
-        () => this.inputs.get().env(envVar),
-        (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
-        },
-        { fireImmediately: true }
-      )
-    );
-  }
-  // ─── Async source kinds ───────────────────────────────────────────────────
-  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
-  declareShell(name, command, opts) {
-    this.declareSource(
-      name,
-      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
-      opts.cache,
-      opts.parse
-    );
-  }
-  // file: read the file at path (whole, or its first line) as the text the
-  // parser sees.
-  declareFile(name, filePath2, opts) {
-    this.declareSource(
-      name,
-      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
-      opts.cache,
-      opts.parse
-    );
-  }
-  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
-  // the one reaction that publishes into it the reading of the run it names,
-  // as the view's input source has it (the host runs it: read → parse). The
-  // cache policy names WHICH run, through the identity it names
-  // (registerCachePolicy), never whether the node exists
-  // [LAW:dataflow-not-control-flow].
-  //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first run answers, and on a key's move
-  // it holds the old run's answer until the new run's lands — the old `ok` is
-  // simply not overwritten yet, so a key change draws no pending flash (spec
-  // section 19).
-  declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
-    const refreshOf = this.registerCachePolicy(name, cache2);
-    const run2 = computed(
-      () => {
-        const refresh = refreshOf();
-        return refresh.kind === "ok" ? ok(
-          runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
-        ) : refresh;
-      },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
-      {
-        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
-      }
-    );
-    runInAction(() => {
-      this.sourceNames.push(name);
-      this.runs.set(name, run2);
-    });
-    this.cleanups.push(
-      // The run's fault, as the host reads it, is the variable's standing
-      // fault for as long as this source names that run.
-      reaction(
-        () => this.runFact(name)?.fault ?? null,
-        (fault) => this.noteFault(
-          this.runFaults,
-          name,
-          fault === null ? ok(void 0) : failed(fault, "read")
-        ),
-        { fireImmediately: true }
-      ),
-      reaction(
-        () => this.runFact(name)?.reading,
-        (reading) => {
-          if (reading === void 0 || reading.kind === "pending") return;
-          const { at: _at, ...outcome } = reading;
-          publish(outcome);
-        },
-        { fireImmediately: true }
-      )
-    );
-  }
-  // The reading of the run `name` names, or nothing while its policy names
-  // none (one over values not answered yet).
-  runFact(name) {
-    const run2 = this.runs.get(name)?.get();
-    return run2?.kind === "ok" ? this.inputs.get().run(run2.value.digest) : void 0;
-  }
-  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
-  // the node it publishes: the text arms publish a string box, the json arm a
-  // document. Selected once, at declaration — the pipeline never asks again.
-  // The run parsed by the arm's own parser (source-runs.ts), so its value is
-  // the arm's type.
-  publisherFor(name, parse3) {
-    switch (parse3.kind) {
-      case "text":
-      case "regex":
-        return this.scalarPublisher(name, parse3.default);
-      case "json":
-        return this.documentPublisher(name, parse3.default);
-    }
-  }
-  scalarPublisher(name, varDefault) {
-    const fallback = this.stringInitial(varDefault);
-    this.store.defineBox(name, "string", fallback);
-    return (outcome) => {
-      this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome, fallback));
-    };
-  }
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node is pending until its first scan, then holds what the scan
-  // found — absent when it had nothing to read, failed with its reason after a
-  // bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value the way a
-  // string has "".
-  //
-  // The default stands in for a run that had nothing to READ — a missing
-  // file, a command that failed, blank output — never for text that was read
-  // and is not a document (failed in its parse phase): that is a broken
-  // writer, and reads as its failure (⚠) whatever the default says
-  // (brandon-plugins-ktag.8fv).
-  //
-  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
-  // (truncate, then write) is caught mid-update by any read that lands
-  // between the two, and the text it sees is not a document. Text that does
-  // not parse is therefore held back while a document is showing: the document
-  // stays, and the failure is published only if no read replaces it within
-  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
-  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
-  // that settle; a document that was never good shows it at once.
-  documentPublisher(name, varDefault) {
-    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
-    this.store.defineDocument(name, fallback);
-    let clearSettling;
-    let showingRead = false;
-    this.cleanups.push(() => clearSettling?.());
-    return (raw) => {
-      clearSettling?.();
-      const outcome = raw;
-      this.noteOutcome(name, outcome);
-      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-      const next2 = readText || varDefault === void 0 ? outcome : fallback;
-      const torn2 = showingRead && readText && outcome.kind !== "ok";
-      const show2 = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next2);
-      };
-      if (torn2) {
-        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
-      } else {
-        show2();
-      }
-    };
-  }
-  // template: a variable whose value is derived by evaluating a go-template
-  // against the current variable store.  MobX auto-tracks every store.read()
-  // made during evaluation — no explicit dep declarations needed.
-  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
-  // invalidation graph built from the template's read pattern; a projection
-  // (one that reads the instant: src/config/loader/projections.ts) is derived
-  // again by every read, at the draw in progress.
-  declareTemplate(name, template, opts) {
-    const parsedTpl = this.engine.parse(template);
-    this.declareDerived(
-      name,
-      opts.type,
-      opts.derivation,
-      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // time: the instant of the draw in progress in a Go reference-time layout —
-  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
-  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
-  // layout implementation, the one a template calling `date` gets.
-  declareTime(name, opts) {
-    const parsedTpl = this.engine.parse("{{ date .layout now }}");
-    const scope = { layout: opts.format };
-    this.declareDerived(
-      name,
-      "string",
-      "projection",
-      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
-  // template and a time variable differ only in what they compute, and a
-  // computed and a projection only in whether the store keeps the answer.
-  // Evaluated at its first read, never at declaration: a projection has no
-  // instant to read until a draw binds one, and cycles are the loader's to
-  // refuse (validateNoCycles) [LAW:single-enforcer].
-  declareDerived(name, type3, derivation, derive, fallback) {
-    this.store.defineDerived(name, type3, derivation, () => {
-      try {
-        const result = coerceToType(derive(), type3);
-        this.lastErrors.delete(name);
-        return result;
-      } catch (e) {
-        const pending2 = readPending(e);
-        if (pending2 !== void 0) {
-          this.lastErrors.delete(name);
-          throw pending2;
-        }
-        const message2 = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message2);
-        if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message2}`);
-        }
-        return fallback;
-      }
-    });
-  }
-  // state: read-through to SessionState. The computed reads two deps — the
-  // bound view's session (`session()`) and SessionState itself (MobX-tracked
-  // via its internal atom). A click verb that mutates SessionState
-  // invalidates this computed.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
-  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
-  // determine the result, never whether code runs.
-  declareState(name, opts) {
-    if (!this.sessionState) {
-      throw new Error(
-        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
-      );
-    }
-    const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(void 0);
-    this.store.defineComputed(name, "string", () => {
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
-    });
-  }
-  // [LAW:one-source-of-truth] The revision of the session state this render's
-  // `state` variables read (SessionStateReader.revision), found the way they
-  // find it: through the session id the render was handed. A registry with no
-  // session state reads none — one state that never changes.
-  stateRevision() {
-    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
-  }
-  // The session the bound view draws for (InputSource.session): pending, as
-  // every input is, before a view is bound.
-  session() {
-    return this.inputs.get().session();
-  }
-  // ─── The view's source ────────────────────────────────────────────────────
-  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
-  // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
-  bindInputs(source) {
-    runInAction(() => this.inputs.set(source));
-  }
-  // ─── Diagnostics ─────────────────────────────────────────────────────────
-  // Returns the recorded error for a variable, or undefined if the last
-  // resolution succeeded (or the variable has never been resolved).
-  getLastError(name) {
-    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
-    const read2 = this.lastErrors.get(name);
-    const fault = this.standingFault(name);
-    if (fault === void 0) return read2;
-    return read2 === void 0 || read2.message === fault.message ? fault : {
-      timestamp: read2.timestamp,
-      message: `${fault.message}; ${read2.message}`
-    };
-  }
-  // Every variable that cannot refresh, with why: its cache policy cannot
-  // fire, or the host refused or cannot hear its run. Each render reports
-  // them (`RenderWarning` kind `refresh`), since the bar draws such a
-  // variable's last value or fallback with nothing of its own to say so.
-  cachePolicyFaults() {
-    const names = /* @__PURE__ */ new Set([
-      ...this.policyFaults.keys(),
-      ...this.runFaults.keys()
-    ]);
-    return new Map([
-      ...this.parent?.cachePolicyFaults() ?? [],
-      ...[...names].map((name) => [name, this.standingFault(name)])
-    ]);
-  }
-  // A variable's standing fault: its policy's and its run's, joined when
-  // both stand, so neither hides the other.
-  standingFault(name) {
-    const policy = this.policyFaults.get(name);
-    const run2 = this.runFaults.get(name);
-    return policy === void 0 || run2 === void 0 ? policy ?? run2 : {
-      timestamp: policy.timestamp,
-      message: `${policy.message}; ${run2.message}`
-    };
-  }
-  // Whether `name` lives in this registry's own store, not its directory's.
-  declaredHere(name) {
-    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
-  }
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
-  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
-  // reads registered by async source kinds.
-  // Call when the registry is no longer needed (e.g. on daemon shutdown or
-  // config hot-reload). Returns how many computeds the store released, for
-  // the caller's log line.
-  dispose() {
-    for (const cleanup of this.cleanups) cleanup();
-    this.cleanups.length = 0;
-    return this.store.dispose();
-  }
-  // ─── Private helpers ──────────────────────────────────────────────────────
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
-  // refresh of the identity the source names: a period, a watched path or
-  // nothing is the run's own refresh, fixed at declaration; a policy over what
-  // the source reads is the hash of what that answered, pending until it
-  // first answers. Adding a new policy kind means adding one case here.
-  registerCachePolicy(name, policy) {
-    switch (policy.kind) {
-      case "never":
-        return () => ok({ kind: "never" });
-      case "ttl":
-        return () => ok({ kind: "ttl", durationMs: policy.durationMs });
-      case "watch_file":
-        return () => ok({ kind: "watch_file", path: policy.path });
-      case "key": {
-        const parsedKey = this.engine.parse(policy.template);
-        return this.answeredUnder(name, () => {
-          try {
-            return ok(
-              parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
-            );
-          } catch (e) {
-            return readPending(e) !== void 0 ? pendingOf("unread") : failed(
-              `cache key: ${e instanceof Error ? e.message : String(e)}`,
-              "read"
-            );
-          }
-        });
-      }
-      case "depends_on": {
-        return this.answeredUnder(name, () => {
-          const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
-        });
-      }
-    }
-  }
-  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — name the hash of the last value what
-  // they read answered. Over a value not answered yet (a view's inputs before
-  // its first payload) they name nothing (pending) rather than reading, so a first value
-  // is one read, not a read under no value and another when the value arrives
-  // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
-  // answered, keeps the last answer, so a key failing for a moment and coming
-  // back unchanged names nothing new; what it failed with is the variable's
-  // standing fault (noteFault). One that has never answered names its
-  // failure, so the render event says failed rather than unread.
-  answeredUnder(name, reads) {
-    const answer2 = computed(reads, { equals: compareStructural });
-    this.cleanups.push(
-      reaction(
-        () => answer2.get(),
-        (now2) => this.noteFault(this.policyFaults, name, now2),
-        { fireImmediately: true }
-      )
-    );
-    let last2;
-    return () => {
-      const now2 = answer2.get();
-      if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
-    };
-  }
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
-  fallbackOf(name, type3, varDefault, errorMessage) {
-    this.recordError(name, errorMessage);
-    if (varDefault !== void 0) return varDefault;
-    try {
-      return coerceToType(this.defaultEmptyValue, type3);
-    } catch {
-      return zeroValue(type3);
-    }
-  }
-  // Initial string value for shell/file boxes before the first async run.
-  stringInitial(varDefault) {
-    if (varDefault !== void 0) return varDefault;
-    if (typeof this.defaultEmptyValue === "string")
-      return this.defaultEmptyValue;
-    return "";
-  }
-  recordError(name, message2) {
-    this.lastErrors.set(name, {
-      timestamp: this.store.clock.now(),
-      message: message2
-    });
-  }
-  // The one fold from an outcome (whether the policy can fire, whether the
-  // host can run the run) to the variable's standing fault in `faults`.
-  // A fault standing for the same reason keeps its record, so it moves
-  // nothing that draws it.
-  noteFault(faults, name, outcome) {
-    runInAction(() => {
-      if (outcome.kind !== "failed") faults.delete(name);
-      else if (faults.get(name)?.message !== outcome.reason)
-        faults.set(name, {
-          timestamp: this.store.clock.now(),
-          message: outcome.reason
-        });
-    });
-  }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
-    else
-      this.recordError(
-        name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
-      );
-  }
-};
-
-// src/template-engine/index.ts
-init_globals();
-
-// src/template-engine/cells.ts
-init_globals();
-function fragmentsToCells(fragments, baseStyle) {
-  const cells = [];
-  let group = [];
-  const flush = () => {
-    if (!group.length) return;
-    const cell3 = buildCell(group, baseStyle);
-    if (cell3.plain.length > 0) cells.push(cell3);
-    group = [];
-  };
-  for (const frag of fragments) {
-    const item = { frag, style: resolvedStyle(frag.style) };
-    if (item.style.link) {
-      flush();
-      const cell3 = buildCell([item], baseStyle);
-      if (cell3.plain.length > 0) cells.push(cell3);
-    } else {
-      group.push(item);
-    }
-  }
-  flush();
-  return cells;
-}
-function buildCell(items, baseStyle) {
-  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
-  const layered = items.map(
-    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
-  );
-  const cell3 = RichText.fromFragments(layered);
-  cell3.end = "";
-  cell3.overflow = "ignore";
-  if (layered.length === 1) {
-    cell3.style = layered[0].style;
-  } else if (base !== void 0) {
-    cell3.style = base;
-  }
-  return cell3;
-}
-function withStyle(frag, style) {
-  const copy2 = frag.copy();
-  copy2.style = style;
-  return copy2;
-}
-
-// src/template-engine/layout.ts
-init_globals();
-function evaluateWhen(template, scope) {
-  if (template === void 0) return true;
-  const fragments = template.evaluate(scope);
-  return fragments.map((f) => f.plain).join("") !== "false";
-}
-var HIDDEN = { kind: "hidden" };
-var SHOWN = { kind: "shown" };
-function gateOf(template, scope) {
-  try {
-    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
-  } catch (e) {
-    const pending2 = readPending(e);
-    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-      kind: "failed",
-      message: e instanceof Error ? e.message : String(e)
-    };
-  }
-}
-function collapseToCell(cells, baseStyle) {
-  const merged = RichText.fromFragments(cells);
-  merged.end = "";
-  merged.overflow = "ignore";
-  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
-  return merged;
-}
-function sizeCell(cell3, width, how) {
-  if (cell3.cellLength > width) {
-    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
-  } else if (cell3.cellLength < width) {
-    cell3.align(how.justify, width);
-  }
-}
-function cellParts({ lead, text: text4, trail }) {
-  return [
-    ...lead === void 0 ? [] : [lead],
-    text4,
-    ...trail === void 0 ? [] : [trail]
-  ];
-}
-function heldCell({ text: text4, placement, lead, trail }) {
-  return {
-    text: unlinked(text4),
-    placement,
-    ...lead !== void 0 && { lead: unlinked(lead) },
-    ...trail !== void 0 && { trail: unlinked(trail) }
-  };
-}
-function unlinked(text4) {
-  const copy2 = text4.blankCopy(text4.plain);
-  copy2.style = resolvedStyle(text4.style).clearMetaAndLinks();
-  for (const { start, end, style } of text4.spans)
-    copy2.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
-  return copy2;
-}
-function stripItem(cell3) {
-  const parts = cellParts(cell3);
-  if (parts.length === 1) return cell3.text;
-  const joined = collapseToCell(parts);
-  joined.style = cell3.text.style;
-  return joined;
-}
-function applySegmentLayout(cells, options) {
-  const {
-    width,
-    justify,
-    truncate,
-    baseStyle,
-    padding,
-    placement,
-    lead = [],
-    trail = []
-  } = options;
-  if (cells.length === 0) return [];
-  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
-  const pad = new RichText(" ".repeat(padding));
-  const tail = {
-    placement,
-    ...lead.length > 0 && {
-      lead: collapseToCell([pad, ...lead], baseStyle)
-    },
-    ...trail.length > 0 && {
-      trail: collapseToCell([...trail, pad], baseStyle)
-    }
-  };
-  if (width === "auto") return [{ text: cell3, ...tail }];
-  const how = { justify, truncate };
-  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
-  sizeCell(cell3, width, how);
-  return [{ text: cell3, ...tail }];
-}
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
-}
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
-}
-
-// src/render/active-segment.ts
-init_globals();
-function createActiveSegmentRef(drawnAt) {
-  return { current: null, drawnAt };
-}
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
-  const active2 = {
-    segName,
-    placementId: placementId2,
-    palette,
-    disclosure,
-    tint,
-    text: text4,
-    bg: void 0,
-    drops: []
-  };
-  ref.current = active2;
-  return active2;
-}
-function inSegment(ref, place, run2) {
-  return publishing(
-    ref,
-    () => run2(
-      openSegment(
-        ref,
-        place.segName,
-        place.placementId,
-        place.palette,
-        place.disclosure,
-        place.tint,
-        place.text
-      )
-    )
-  );
-}
-function outsideSegments(ref, run2) {
-  return publishing(ref, () => {
-    ref.current = null;
-    return run2();
-  });
-}
-function publishing(ref, run2) {
-  const prior = ref.current;
-  try {
-    return run2();
-  } finally {
-    ref.current = prior;
-  }
-}
-function requireActiveSegment(ref, spelling) {
-  const active2 = ref.current;
-  if (active2 === null) {
-    throw new Error(
-      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
-    );
-  }
-  return active2;
-}
-
-// src/render/action.ts
-init_globals();
-
-// src/config/option-domain.ts
-init_globals();
-
-// src/themes/palette-resolvers.ts
-init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
-  }
-  return palette;
-}
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
-}
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
-}
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
-  );
-}
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
-}
-function decideThemeName(name, where, onUnresolvable) {
-  const named2 = namedTheme(name);
-  if (named2 !== null) return named2;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
-    )
-  );
-  return themeFloor();
-}
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
-  );
-}
-function themeFloor() {
-  return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
-  };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve2, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
-      {
-        members: Object.keys(config.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
-      }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config.presets) }]
-  ]);
-}
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
-  }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/layout-ops.ts
-init_globals();
-function encodeLayoutOp(op) {
-  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
-}
-function decodeLayoutOp(token) {
-  const parts = token.split(":");
-  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
-    return { op: "remove", target: parts[1] };
-  }
-  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
-    return {
-      op: "insert",
-      segment: parts[1],
-      anchor: parts[2],
-      relation: parts[3]
-    };
-  }
-  return null;
-}
-function mintPlacement(segment, anchor, trees) {
-  const taken2 = new Set(
-    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
-  );
-  const id2 = freePlacementId(segment, taken2);
-  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
-}
-
-// src/render/action.ts
-function renderBinding(runtime, reader) {
-  if (runtime.bound === void 0) {
-    throw new Error(
-      `${reader} ran outside a render: no render bound its store and clocks`
-    );
-  }
-  return runtime.bound;
-}
-function renderLook(runtime, reader) {
-  const { look } = renderBinding(runtime, reader);
-  if (look === void 0) {
-    throw new Error(`${reader} read the render's look before it was resolved`);
-  }
-  return look;
-}
-function renderLayout(runtime, reader) {
-  const { layout } = renderBinding(runtime, reader);
-  if (layout === void 0) {
-    throw new Error(`${reader} read the render's rows before they were laid`);
-  }
-  return layout();
-}
-function bindRender(runtime, binding) {
-  if (runtime.bound !== void 0) {
-    throw new Error("a render bound a compile another render holds");
-  }
-  runtime.bound = binding;
-  return {
-    [Symbol.dispose]: () => {
-      runtime.bound = void 0;
-    }
-  };
-}
-function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
-  const out = /* @__PURE__ */ new Map();
-  const entries = Object.entries(actions);
-  for (const [name, action2] of [
-    ...entries.filter(([, a]) => !("do" in a)),
-    ...entries.filter(([, a]) => "do" in a)
-  ]) {
-    out.set(
-      name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
-    );
-  }
-  return out;
-}
-function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
-  if ("set" in action2) {
-    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
-    if ("to" in action2) {
-      return {
-        kind: "set-literal",
-        key: action2.set,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "set-option",
-        key: action2.set,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    if ("int" in action2) {
-      return { kind: "set-int", key: action2.set, stateVar };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "set-cycle",
-        key: action2.set,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    return {
-      kind: "set-bounded",
-      key: action2.set,
-      by: action2.by
-    };
-  }
-  if ("persist" in action2) {
-    const layer = action2.layer ?? "user";
-    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
-    if ("to" in action2) {
-      return {
-        kind: "persist-literal",
-        key: action2.persist,
-        layer,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "persist-option",
-        key: action2.persist,
-        layer,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "persist-cycle",
-        key: action2.persist,
-        layer,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    if ("removeSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        layer,
-        op: { op: "remove", target: action2.removeSegment }
-      };
-    }
-    if ("insertSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        layer,
-        op: {
-          op: "insert",
-          segment: action2.insertSegment,
-          anchor: action2.anchor,
-          relation: action2.relation
-        }
-      };
-    }
-    if ("insertSegmentFrom" in action2) {
-      const domain = resolveOptionDomain(
-        action2.insertSegmentFrom,
-        perConfigDomains
-      );
-      return {
-        kind: "layout-op-option",
-        key: action2.persist,
-        layer,
-        anchor: action2.anchor,
-        relation: action2.relation,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    return {
-      kind: "persist-bounded",
-      key: action2.persist,
-      layer,
-      by: action2.by
-    };
-  }
-  if ("copy" in action2) {
-    return {
-      kind: "copy",
-      text: parseActionTemplate(parse3, action2.copy, name)
-    };
-  }
-  if ("open" in action2) {
-    return {
-      kind: "open",
-      target: parseActionTemplate(parse3, action2.open, name)
-    };
-  }
-  if ("reset" in action2) {
-    return { kind: "reset", key: action2.reset, layer: action2.layer ?? "user" };
-  }
-  if ("slash" in action2) return { kind: "slash", line: action2.slash };
-  if ("run" in action2) {
-    return {
-      kind: "run",
-      name,
-      declaration: runDeclaration(action2),
-      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
-      env: Object.entries(action2.env).map(
-        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
-      )
-    };
-  }
-  if ("undo" in action2) return { kind: "undo" };
-  if ("redo" in action2) return { kind: "redo" };
-  if ("back" in action2) return { kind: "back" };
-  if ("rewind" in action2) return { kind: "rewind" };
-  if ("save" in action2) return { kind: "save", layer: action2.layer ?? "user" };
-  if ("preset" in action2) {
-    const layer = action2.layer ?? "user";
-    return action2.preset === "save" ? { kind: "preset-save", layer } : {
-      kind: "preset-delete",
-      layer,
-      name: parseActionTemplate(parse3, action2.name, name)
-    };
-  }
-  if ("themeDefault" in action2)
-    return { kind: "theme-default-save", layer: action2.layer ?? "user" };
-  const [head, ...rest2] = action2.do.map((member) => {
-    const c = compiled.get(member);
-    if (c === void 0) {
-      throw new Error(
-        `action "${name}" fires "${member}", which is not declared in this config`
-      );
-    }
-    return c;
-  });
-  return { kind: "do", head, rest: rest2 };
-}
-function presentedAction(c) {
-  return c.kind === "do" ? presentedAction(c.head) : c;
-}
-function bindsTemplateValue(c) {
-  const presented = presentedAction(c);
-  switch (presented.kind) {
-    case "set-option":
-    case "set-int":
-    case "persist-option":
-    case "layout-op-option":
-      return true;
-    case "set-literal":
-    case "set-bounded":
-    case "set-cycle":
-    case "copy":
-    case "open":
-    case "persist-literal":
-    case "persist-bounded":
-    case "persist-cycle":
-    case "reset":
-    case "layout-op":
-    case "undo":
-    case "redo":
-    case "back":
-    case "rewind":
-    case "save":
-    case "preset-save":
-    case "preset-delete":
-    case "theme-default-save":
-    case "slash":
-    case "run":
-    case "do":
-      return false;
-  }
-}
-function parseActionTemplate(parse3, src, name) {
-  try {
-    return parse3(src);
-  } catch (e) {
-    throw new Error(
-      `Template parse error in actions.${name}: ${e.message}`,
-      { cause: e }
-    );
-  }
-}
-function readVar(store, name) {
-  return store.has(name) ? toString2(store.read(name)) : "";
-}
-function clickSession(runtime, reader) {
-  return renderBinding(runtime, reader).registry.session();
-}
-function evalTemplate(tpl, scope) {
-  return tpl.evaluate(scope).map((f) => f.plain).join("");
-}
-function linkFragment(text4, link, active2, base) {
-  const rt = new RichText(text4, {
-    style: Style.combine([
-      base,
-      styleWithLink(new Style({ bold: active2 }), link)
-    ])
-  });
-  rt.overflow = "ignore";
-  rt.end = "";
-  return rt;
-}
-function linkOver(cell3, target, current = false) {
-  const link = styleWithLink(
-    new Style({ bold: current ? true : void 0 }),
-    target
-  );
-  const linked = new RichText(cell3.plain, {
-    style: Style.combine([resolvedStyle(cell3.style), link])
-  });
-  for (const span of cell3.spans) {
-    linked.stylize(
-      Style.combine([resolvedStyle(span.style), link]),
-      span.start,
-      span.end
-    );
-  }
-  linked.overflow = "ignore";
-  linked.end = "";
-  return linked;
-}
-function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
-}
-function realize(c, display, boundValue, store, sessionId2) {
-  switch (c.kind) {
-    case "set-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
-      };
-    }
-    case "set-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-int": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
-        active: false
-      };
-    }
-    case "set-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_STATE,
-            args: [sessionId2, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "copy":
-      return {
-        effects: [
-          {
-            verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    case "open":
-      return {
-        effects: [
-          {
-            verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
-    // verbatim (same literal/option/cycle/bounded semantics), only the wire
-    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
-    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
-    // the write durable, not the click itself.
-    case "persist-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, c.value] }
-        ],
-        active: current === c.value
-      };
-    }
-    case "persist-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, value] }
-        ],
-        active: current === value
-      };
-    }
-    case "persist-cycle": {
-      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, next2] }
-        ],
-        active: false
-      };
-    }
-    case "persist-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_CONFIG,
-            args: [sessionId2, c.layer, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "reset":
-      return {
-        effects: [
-          { verb: VERB_RESET_CONFIG, args: [sessionId2, c.layer, c.key] }
-        ],
-        active: false
-      };
-    // [LAW:one-source-of-truth] No key to carry — the click just says "step
-    // the history", and which entry moves is entirely server-side state
-    // (never wire input, so there is nothing here to gate). Never "active":
-    // a history step is a one-shot trigger, not a current-selection toggle.
-    case "undo":
-      return {
-        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
-        active: false
-      };
-    case "redo":
-      return {
-        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
-        active: false
-      };
-    case "back":
-      return {
-        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
-        active: false
-      };
-    // One-shot, like undo: which steps it takes back is server-side state.
-    case "rewind":
-      return {
-        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
-        active: false
-      };
-    // [LAW:no-silent-failure] A save that asks writes the layer its click
-    // binds, and one drawn without a layer to bind is the author's error,
-    // said on the bar — never a write to some layer it did not name.
-    case "save": {
-      const layer = c.layer === "ask" ? layerRoleOf(boundValue) : c.layer;
-      if (layer === null)
-        throw new Error(
-          `a save that asks which layer it writes binds the layer as its value \u2014 {{ action "<save>" "\u{1F4BE} project" "project" }} \u2014 and ${boundValue === void 0 ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`
-        );
-      return {
-        effects: [{ verb: VERB_SAVE, args: [sessionId2, layer] }],
-        active: false
-      };
-    }
-    // Never "active": one-shot triggers, like save.
-    case "preset-save":
-      return {
-        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId2, c.layer] }],
-        active: false
-      };
-    case "theme-default-save":
-      return {
-        effects: [
-          { verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId2, c.layer] }
-        ],
-        active: false
-      };
-    case "preset-delete":
-      return {
-        effects: [
-          {
-            verb: VERB_DELETE_PRESET,
-            args: [sessionId2, c.layer, evalTemplate(c.name, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // Never "active": typing a command is a one-shot trigger.
-    case "slash":
-      return {
-        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
-    // draw, as copy's text is. The host signs the captured evaluation when it
-    // publishes the frame, so the click runs what the bar showed.
-    // Never "active": a run is a one-shot trigger.
-    case "run": {
-      const scope = buildScope(store);
-      const evaluated2 = {
-        run: c.argv.map((item) => evalTemplate(item, scope)),
-        env: Object.fromEntries(
-          c.env.map(([variable, value]) => [
-            variable,
-            evalTemplate(value, scope)
-          ])
-        )
-      };
-      return {
-        effects: [
-          {
-            kind: "run",
-            session: sessionId2,
-            action: c.name,
-            declaration: c.declaration,
-            evaluated: evaluated2
-          }
-        ],
-        active: false
-      };
-    }
-    // [LAW:one-source-of-truth] The op is fixed at compile time (see
-    // compileAction) — the click just delivers it. `apply-layout-op`'s
-    // handler does read-current-append-write (see verbs/index.ts), unlike
-    // persist-literal's plain overwrite, so it is its own verb rather than
-    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
-    // trigger, not a current-selection toggle.
-    case "layout-op":
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.layer, c.key, encodeLayoutOp(c.op)]
-          }
-        ],
-        active: false
-      };
-    case "do": {
-      const head = realize(c.head, display, boundValue, store, sessionId2);
-      return {
-        effects: [
-          ...head.effects,
-          ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2).effects
-          )
-        ],
-        active: head.active
-      };
-    }
-    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
-    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
-    // relation are the compiled literals. Same wire shape a literal layout-op
-    // emits, so the daemon's apply-layout-op handler and undo/redo need no
-    // knowledge of where the segment name came from. Never "active": a
-    // structural edit is a one-shot trigger, not a current-selection toggle.
-    case "layout-op-option": {
-      const segment = boundValue ?? display;
-      const op = {
-        op: "insert",
-        segment,
-        anchor: c.anchor,
-        relation: c.relation
-      };
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.layer, c.key, encodeLayoutOp(op)]
-          }
-        ],
-        active: false
-      };
-    }
-  }
-}
-function selectDisplay(name, action2, displays, store) {
-  if (displays.length === 0) {
-    throw new Error(`action "${name}" needs a display (the clickable text)`);
-  }
-  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
-    const display = pickCycleDisplay(
-      `action "${name}"`,
-      displays,
-      action2.members.length,
-      cycleIndex(action2, store)
-    );
-    return { display, boundValue: void 0 };
-  }
-  if (displays.length > 2) {
-    throw new Error(
-      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
-    );
-  }
-  return { display: displays[0], boundValue: displays[1]?.plain };
-}
-function renderAction(name, displays, runtime) {
-  const declared = runtime.compiled.get(name);
-  if (!declared) {
-    throw new Error(`action "${name}" is not declared in this config`);
-  }
-  const store = renderBinding(runtime, `action "${name}"`).store;
-  const { display, boundValue } = selectDisplay(
-    name,
-    presentedAction(declared),
-    displays,
-    store
-  );
-  const sessionId2 = clickSession(runtime, `action "${name}"`);
-  const { effects, active: active2 } = realize(
-    declared,
-    display.plain,
-    boundValue,
-    store,
-    sessionId2
-  );
-  return linkOver(display, actionTarget(effects), active2);
-}
-function actionFuncs(runtime) {
-  return {
-    action: {
-      fn: (name, ...displays) => renderAction(name, displays, runtime),
-      argTypes: ["string", "liftable"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/band-style.ts
-init_globals();
-function stateCell(palette, background, drawnAt) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(background),
-    color: ColorSpec.fromRgba(textOn2(palette, background, drawnAt))
-  });
-}
-function decoratedCell({
-  tint,
-  text: text4
-}) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(tint),
-    color: ColorSpec.fromRgba(text4)
-  });
-}
-function closeOn(palette, ground, drawnAt) {
-  return new Style({
-    color: ColorSpec.fromRgba(
-      ensureContrast(
-        palette.get(DISCLOSURE_CLOSE_ROLE),
-        ground,
-        TEXT_MIN_CONTRAST,
-        drawnAt
-      )
-    )
-  });
-}
-function closeCell(palette, background, drawnAt) {
-  return Style.combine([
-    stateCell(palette, background, drawnAt),
-    closeOn(palette, background, drawnAt)
-  ]);
-}
-function bandItemStyle(active2, step4, drawnAt) {
-  return decoratedCell(
-    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
-  );
-}
-
-// src/config/edit-chrome.ts
-init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
-
-// src/config/setting-control.ts
-init_globals();
-
-// src/config/menu-keys.ts
-init_globals();
-
-// src/config/ident.ts
-init_globals();
-function ident(name) {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-var ESCAPE = "Z";
-function escapedIdent(name) {
-  return Array.from(
-    name,
-    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
-      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
-      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
-    )
-  ).join("");
-}
-
-// src/config/menu-keys.ts
-var PAGE_HOLDING_CURRENT = "-1";
-function menuMember(applyName) {
-  return applyName;
-}
-function menuStateKey(placementId2, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
-}
-function sharedMenuStateKey(sharedKey) {
-  return MENU_NS + ident(sharedKey);
-}
-function menuActionName(stateKey, member) {
-  return stateKey + "." + member;
-}
-function menuPageKey(stateKey) {
-  return MENU_PAGE_NS + stateKey;
-}
-var MENU_OPTION_NAMES = [
-  "closeOnPick",
-  "paged",
-  "key",
-  "distribution"
-];
-var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
-var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
-function parseMenuOptions(entries) {
-  for (const name of Object.keys(entries)) {
-    if (!isMenuOptionName(name)) {
-      throw new Error(
-        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
-      );
-    }
-  }
-  const bool = (name, def) => {
-    const v = entries[name];
-    if (v === void 0) return def;
-    if (typeof v !== "boolean") {
-      throw new Error(
-        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
-      );
-    }
-    return v;
-  };
-  const key = entries["key"];
-  if (key !== void 0 && typeof key !== "string") {
-    throw new Error(
-      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
-    );
-  }
-  if (key === "") {
-    throw new Error(
-      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
-    );
-  }
-  const distribution = entries["distribution"];
-  if (distribution !== void 0 && !isDistributionName(distribution)) {
-    throw new Error(
-      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
-    );
-  }
-  return {
-    closeOnPick: bool("closeOnPick", false),
-    paged: bool("paged", true),
-    key,
-    distribution: placedBy(distribution)
-  };
-}
-
-// src/config/setting-control.ts
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
-  }
-  return parseSessionInt(value, domain) !== null;
-}
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted2 = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
-    const named2 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
-  }
-  return `an integer from ${domain.min} to ${domain.max}`;
-}
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
-    variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
-    },
-    list: { ref, rows }
-  };
-}
-
-// src/config/loader/persist-target.ts
-init_globals();
-
-// src/config/loader/globals.ts
-init_globals();
-var LIVE_GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
-);
-function retired(spec, description) {
-  return {
-    ...spec,
-    json: { ...spec.json, deprecated: true, description },
-    parse(ctx, path31, field, raw) {
-      spec.parse(ctx, path31, field, raw);
-      return void 0;
-    }
-  };
-}
-var GLOBALS_FIELDS = {
-  ...LIVE_GLOBALS_FIELDS,
-  updateNotice: retired(
-    optionalBooleanSpec(),
-    "Obsolete in-bar update notice."
-  ),
-  experimentalBand: retired(
-    optionalBooleanSpec(),
-    "Obsolete Claude Code band mod."
-  ),
-  experimentalTmuxStatus: retired(
-    optionalBooleanSpec(),
-    "Obsolete tmux status renderer."
-  ),
-  renderer: retired(
-    optionalEnumSpec(["claude", "tmux"]),
-    "Obsolete tmux status renderer."
-  )
-};
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row) {
-  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
-}
-function fragmentRejection(description, message2) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path31, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: message2(`${path31}.${field}`),
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
-  );
-}
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
-  );
-}
-function nameOnlySpec(spec, subject, why2) {
-  return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path31, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
-    )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path31 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path31,
-        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path31, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path31, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path31, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(LIVE_GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor3);
-  }
-  return seeds;
-}
-
-// src/config/loader/persist-target.ts
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
-  }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
-}
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
-}
-
-// src/config/loader/edit-mode.ts
-init_globals();
-
-// src/config/loader/reserved-namespace.ts
-init_globals();
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
-function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
-  for (const section of ["variables", "actions", "segments"]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(ns)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-      }
-    }
-  }
-}
-function pluginScopeCollisions(ctx, out, inherited) {
-  for (const section of [
-    "variables",
-    "actions",
-    "helpers",
-    "segments"
-  ]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      const scope = scopeOf(name);
-      if (scope === void 0) continue;
-      if (section !== "variables" && name === scope) continue;
-      if (section === "segments" && inherited.has(name)) continue;
-      ctx.issues.push({
-        path: `${section}.${name}`,
-        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
-        line: findKeyLine(ctx.source, [section, name])
-      });
-    }
-  }
-  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
-    for (const v of Object.keys(decl.vars ?? {})) {
-      const name = `${segment}.${v}`;
-      const at = () => ({
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      });
-      if (isPayloadInput(name)) {
-        ctx.issues.push({
-          ...at(),
-          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
-        });
-        continue;
-      }
-      const scope = scopeOf(name);
-      if (scope === void 0 || inherited.has(segment)) continue;
-      ctx.issues.push({
-        ...at(),
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
-      });
-    }
-  }
-}
-var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-function payloadDeclarationNotices(filePath2, source, declared) {
-  const lineOf = keyLocator(source);
-  return declared.filter(isPayloadInput).map((name) => {
-    const line = lineOf(["variables", name]);
-    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
-  });
-}
-function isPayloadInput(name) {
-  return Object.hasOwn(PAYLOAD_INPUTS, name);
-}
-
-// src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
-var EDIT_CONFIGURE_KEY = "edit.configure";
-var EDIT_TOGGLE_ACTION = "edit.toggle";
-var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(preset, id2) {
-  return `${escapedIdent(preset)}:${id2}`;
-}
-var EDIT_MODE_REF = {
-  variable: EDIT_MODE_KEY,
-  key: EDIT_MODE_KEY,
-  member: EDIT_MODE_ARRANGE
-};
-var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
-function referencesEditToggle(template) {
-  try {
-    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
-  } catch {
-    return false;
-  }
-}
-function fileWantsEditMode(out) {
-  if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
-  )) {
-    return true;
-  }
-  for (const seg2 of Object.values(out.segments ?? {})) {
-    const fields2 = [
-      seg2.template,
-      seg2.bg,
-      seg2.fg,
-      ...Object.values(seg2.partials ?? {})
-    ];
-    for (const field of fields2) {
-      if (typeof field === "string" && referencesEditToggle(field)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-function synthesizeEditModeToggle(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
-  if (!fileWantsEditMode(out)) return;
-  const { variables, actions } = editModeArtifacts();
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-}
-function editModeArtifacts() {
-  return {
-    variables: {
-      // Arranging lives inside the door: closing the menu leaves edit mode
-      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
-      // close the main menu").
-      [EDIT_MODE_KEY]: {
-        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-        within: [SETTINGS_REF]
-      },
-      // Configuring is a level inside arranging, so leaving edit mode by any
-      // control closes it (src/config/disclosure-nest.ts).
-      [EDIT_CONFIGURE_KEY]: {
-        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
-        within: [EDIT_MODE_REF]
-      }
-    },
-    actions: {
-      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-        EDIT_MODE_KEY,
-        EDIT_MODE_ARRANGE
-      ),
-      [EDIT_UNCONFIGURE_ACTION]: {
-        set: EDIT_CONFIGURE_KEY,
-        to: DISCLOSURE_CLOSED
-      }
-    }
-  };
-}
-
-// src/config/help.ts
-init_globals();
-var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within3, out) {
-  const self2 = {
-    variable: name,
-    key: name,
-    member: DISCLOSURE_OPEN
-  };
-  out.variables[name] = {
-    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within3.length > 0 && { within: within3 }
-  };
-  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
-  out.segments[name] = {
-    template: disclosureTrigger(
-      name,
-      HELP_GLYPH_CLOSED,
-      DISCLOSURE_GLYPH_CLOSE
-    ),
-    // The trigger is visible wherever its host surface is. An unnested `(?)`
-    // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf2(within3)
-  };
-  const children2 = lines2.map((line, i2) => {
-    const lineName = `${name}.${i2}`;
-    out.segments[lineName] = { template: line };
-    return { kind: "segment", name: lineName };
-  });
-  return disclosureNode(
-    name,
-    self2,
-    { kind: "container", direction: "horizontal", children: children2 },
-    "drop"
-  );
-}
-function gateOf2(within3) {
-  const [first2, ...rest2] = within3;
-  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
-}
-
-// src/help-text.ts
-init_globals();
-
-// src/config/edit-glyphs.ts
-init_globals();
-var REMOVE_GLYPH = "\u2716";
-var ADD_GLYPH = "\u271A";
-var CONFIGURE_GLYPH = "\u{1F527}";
-
-// src/cli-flags.ts
-init_globals();
-var NODE_FLAGS = {
-  help: ["-h", "--help"],
-  version: ["-V", "--version"]
-};
-
-// src/help-text.ts
-var LANE_PLACES = [
-  ...new Set(
-    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
-  )
-].join(" or ");
-var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
-var EDIT_MODE_HELP = [
-  `${ADD_GLYPH} inserts`,
-  `${REMOVE_GLYPH} removes`,
-  `${CONFIGURE_GLYPH} configures`,
-  "\u21BA resets layout"
-];
-var LANE_HELP = {
-  statusline: [
-    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "launch Claude Code with the command printed by cc-candybar --help"
-  ],
-  pane: [
-    "animates the bar in a tmux pane under this session's",
-    "on: opens that pane \xB7 off: closes it"
-  ]
-};
-var HELP_TEXT = `
-cc-candybar - Beautiful powerline statusline for Claude Code
-
-Usage: cc-candybar [options]
-
-Standalone Commands:
-  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
-  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
-
-Debugging:
-  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
-
-Configuration:
-  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
-  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
-  --config PATH            Use PATH as the user layer. Approved project
-                           config and repository plugins still load.
-  --config-only PATH       Load only PATH over the bundled base. Installed
-                           plugins and definitions listed in PATH still load.
-  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
-  To see the effective merged config:
-    cc-candybar config
-
-  Every bar carries a settings menu, whatever your config says \u2014 no config
-  needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
-  A change applies to this session at once.
-  Where each setting is in the menu: the globals field that sets it in a
-  config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path31, names }) => [
-  `    ${path31}`,
-  ...names.map(
-    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
-  )
-]).join("\n")}
-  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
-  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
-
-Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
-${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
-
-Subcommands:
-  install                  One-shot setup: stages the runtime (native render
-                           binary + dist bundle) at a stable path, creates the
-                           URL handler app + cc-candybar:// scheme (macOS), and
-                           writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
-  install-url-handler      Just stage the runtime and create + register the URL
-                           handler app (macOS only).
-  url-handle URL           Send a cc-candybar:// link to the daemon as a
-                           click. Terminal links use the URL handler app.
-  plugin install SOURCE    Install a repository's plugins into
-                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
-                           local path, a GitHub slug (owner/repo) or a git URL,
-                           and its plugins are the folders under
-                           .cc-candybar/plugins/. A definition the bar would
-                           drop installs nothing. Re-run to update.
-  daemon-stats [--json]    Query the running daemon for runtime stats:
-                           uptime, RSS, cache hit rates, watcher count,
-                           request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH | --config-only PATH]
-                           One session's bar as the daemon pushes it \u2014 up to
-                           30 frames a second while it moves, at once on a
-                           click \u2014 one JSON message per stdout line. Reads
-                           Claude Code's statusline JSON from stdin (one object
-                           a line) and sends it as the session's data
-                           (config flags ride with it). LANE is one of
-                           ${LANE_NAMES.join(", ")}:
-                           the experimental lane this stream serves,
-                           which streams only while its toggle in the settings
-                           menu's ${LANE_PLACES} is on.
-  bar-pane PANE            Draw the bar of the Claude Code session in tmux
-                           pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. The bar is
-                           drawn at PANE's width, so split PANE with -v for a
-                           pane under it that fits. Experimental:
-                           runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
-
-Config tooling:
-  schema                   Print the JSON Schema for the config file shape
-                           (.cc-candybar.json5). Point an editor's $schema at it
-                           for autocomplete + structural validation.
-  vars [--json]            Declared variables: source kind, value, last error.
-  segments [--json]        Segment templates and their last rendered output.
-  config [--json]          The effective merged config. (All three query the
-                           running daemon; none spawn one.)
-
-`;
-
-// src/config/settings-menu.ts
-init_globals();
-
-// src/config/quiet-text.ts
-init_globals();
-var QUIET_PCT = 60;
-var QUIET_MIN_CONTRAST = 3;
-var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/config/quick-actions.ts
-init_globals();
-var QUICK_ACTIONS = {
-  copySession: { copy: "{{ .session.id }}" },
-  copyResume: { copy: "{{ .resume_command }}" },
-  openProject: { open: "{{ .project_dir }}" },
-  openTranscript: { open: "{{ .transcript_path }}" },
-  openConfig: { open: "{{ .config_path }}" }
-};
-function quickActions(prefix) {
-  const name = (action2) => `${prefix}${action2}`;
-  return {
-    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
-    // their values: a local-only repo has no page and a bar on the bundled
-    // default no file, and the glyph is absent. Every payload carries a
-    // resume command, so `⎘ resume` is not gated.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
-    actions: Object.fromEntries(
-      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
-        `${prefix}${action2}`,
-        decl
-      ])
-    )
-  };
-}
-
-// src/config/command-tray.ts
-init_globals();
-
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
-  const actions = {};
-  for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
-// src/config/command-tray.ts
-var COMMANDS = ["/compact", "/model"];
-var CLEAR = "/clear";
-function commandTray(prefix) {
-  const commandAction = (line) => `${prefix}${line.slice(1)}`;
-  const typeClear = `${prefix}clear.slash`;
-  const clear = confirmStep(
-    `${prefix}clear`,
-    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [{ action: typeClear, when: "true" }]
-  );
-  return {
-    template: COMMANDS.map(
-      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
-    ).join("") + clear.template,
-    when: `{{ ${IN_TMUX} }}`,
-    actions: {
-      ...Object.fromEntries(
-        COMMANDS.map((line) => [
-          commandAction(line),
-          { slash: slashLine(line) }
-        ])
-      ),
-      ...clear.actions,
-      [typeClear]: { slash: slashLine(CLEAR) }
-    },
-    variables: clear.variables,
-    disarm: clear.disarm
-  };
-}
-
-// src/config/autocompact-control.ts
-init_globals();
-function autocompactControl(prefix, formatCount) {
-  return {
-    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
-    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
-    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
-    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
-    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
-    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
-    // picks one by name.
-    actions: {
-      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
-      ...Object.fromEntries(
-        AUTOCOMPACT_WINDOWS.map((w) => [
-          `${prefix}${w}`,
-          { slash: slashLine(`/autocompact ${w}`) }
-        ])
-      )
-    }
-  };
-}
-
-// src/config/format-token-count.ts
-init_globals();
-var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
-
-// src/config/settings-menu.ts
-var EDIT_SEG = `${SETTINGS_NS}edit`;
-var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
-var TOOLBAR = quickActions(SETTINGS_NS);
-var COMMANDS_SEG = `${SETTINGS_NS}commands`;
-var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
-var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
-var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
-var seg = (name) => ({ kind: "segment", name });
-var TAB_KEY = `${SETTINGS_NS}tab`;
-var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
-var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
-var tabRef = (tab) => ({
-  variable: TAB_KEY,
-  key: TAB_KEY,
-  member: tab
-});
-var SAVE_SEG = `${SETTINGS_NS}save`;
-var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
-var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
-var PRESET_DELETE_GLYPH = "\u{1F6AE}";
-var controlSeg = (name) => `${SETTINGS_NS}${name}`;
-var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
-var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
-var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
-var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
-var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
-var THEME_DEFAULT_CELL = {
-  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
-};
-var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-var UNDO_ACTION = `${SETTINGS_NS}undo`;
-var BACK_ACTION = `${SETTINGS_NS}back`;
-var BACK_STEP = `${BACK_ACTION}.step`;
-var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-var BACK_SEG = BACK_ACTION;
-var BACK_GLYPH = "\u25C1";
-var BACK_CELL = {
-  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
-};
-var REDO_ACTION = `${SETTINGS_NS}redo`;
-var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
-var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
-var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
-var submenuRef = (name) => {
-  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
-  return { variable: key, key, member: name };
-};
-var PREVIEWS = {
-  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
-  // segment, named, each block in the tint the bar's variation and shade deal
-  // it — so it shows what a preset, a variation or a shade changes.
-  layout: { template: "{{ layoutPreview }}" },
-  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
-  // samples exactly the palette the bar is drawn in. (The theme picker carries
-  // its own demo of the theme it has selected.)
-  palette: { template: "{{ themePreview }}" },
-  // While the preset ring is on a preset the user made
-  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
-  presetDelete: {
-    when: "{{ not .preset.bundled }}",
-    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
-  }
-};
-var controlRow = (name, row) => `${SETTINGS_NS}list.${name}.${row}`;
-var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
-var DRIFT_MARK = " \u2022";
-var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
-var laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].switch.setting, lane]
-);
-var HELP_ARTIFACTS = {
-  variables: {},
-  actions: {},
-  segments: {}
-};
-var HELP = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => {
-    const name = `${SETTINGS_NS}help.${setting}`;
-    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
-  })
-);
-var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-var laneReadout = (lane) => {
-  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
-  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
-    " "
-  );
-  return (
-    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
-    // the renderer's: the setting's value against the one that turns the lane
-    // on, each spelled as a template literal of its own type.
-    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
-  );
-};
-var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
-var FPS_SEG = `${SETTINGS_NS}fps`;
-var POLLED = "polled";
-var AT_MOST = "\u2264";
-var FPS_UNIT = " fps";
-var RATE_WIDTH = Math.max(
-  POLLED.length,
-  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
-);
-var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
-var TRAIL = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
-);
-var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var menuControl = (name) => {
-  const row = SETTINGS[name];
-  const place = PLACE[name];
-  return {
-    ...row,
-    name,
-    place,
-    control: settingControl(
-      {
-        label: row.label,
-        domain: settingControlDomain(row.configKey)
-      },
-      row.sessionKey,
-      row.effectiveVar,
-      controlApply(name),
-      accordionOf(place)
-    ),
-    beneath: row.previews.map((preview) => PREVIEWS[preview]),
-    help: [HELP[name]].filter((h) => h !== void 0),
-    submenus: submenusBeside(name)
-  };
-};
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
-var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-  controlsUnder(place)
-)}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
-    controlNode(c),
-    ...c.help,
-    ...c.submenus.map(
-      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-    )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
-var SETTINGS_WRITTEN_KEYS = new Set(
-  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
-);
-var RESET_ALL = confirmStep(
-  RESET_ALL_SEG,
-  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
-);
-var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
-var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
-var UNSAVED_VAR = saveCountVar("unsaved");
-var counted = (count, body) => ({
-  body,
-  shown: `(gt .${saveCountVar(count)} 0)`
-});
-var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
-var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
-var SAVE_TO = LAYER_ROLES.map(
-  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
-).join("");
-var SAVE_BODY = `{{ if or .${layerVar("project")} .${layerVar("local")} }}{{ ${SAVE_LABEL} }}:${SAVE_TO}{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
-var SAVE_PARTS = [
-  counted("unsaved", SAVE_BODY),
-  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
-  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
-  {
-    body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
-  }
-];
-var SAVE_CELL = {
-  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
-  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
-    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
-  ).join("")
-};
-var CONFIRMS = [
-  { step: RESET_ALL, place: "door" },
-  { step: COMMANDS2, place: "session" }
-];
-var disarms = (out) => out.map((c) => c.step.disarm);
-var DOOR_DISARMS = disarms(CONFIRMS);
-var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
-function controlNode(c) {
-  const self2 = controlSeg(c.name);
-  if (c.control.kind === "inline") return seg(self2);
-  return disclosureNode(
-    self2,
-    c.control.list.ref,
-    {
-      kind: "container",
-      direction: "vertical",
-      children: [...c.control.list.rows, ...c.beneath].map(
-        (_, row) => seg(controlRow(c.name, row))
-      )
-    },
-    "drop"
-  );
-}
-function isSettingsAnchor(segmentName) {
-  return segmentName === SETTINGS_ANCHOR;
-}
-function prependAnchor(node) {
-  const anchorRef = seg(SETTINGS_ANCHOR);
-  if (node.kind === "container" && node.direction === "vertical") {
-    const [first2, ...rest2] = node.children;
-    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
-      kind: "container",
-      direction: "vertical",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.when === void 0) {
-    return { ...node, children: [anchorRef, ...node.children] };
-  }
-  const { when: when2, children: children2, ...row } = node;
-  return {
-    ...row,
-    children: [
-      anchorRef,
-      { kind: "container", direction: row.direction, when: when2, children: children2 }
-    ]
-  };
-}
-function withAnchor(node) {
-  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed2;
-}
-function countAnchors(node) {
-  let n = 0;
-  for (const each of walkNodes(node)) {
-    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
-  }
-  return n;
-}
-function anchorUnderGate(node, gated2 = false) {
-  const here = gated2 || node.when !== void 0;
-  if (node.kind === "segment") {
-    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
-  }
-  return node.children.some((child) => anchorUnderGate(child, here));
-}
-var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
-  // The quick actions, then the commands typed into Claude Code beside the
-  // auto-compact window they would summarize at.
-  session: {
-    direction: "vertical",
-    content: [
-      seg(TOOLBAR_SEG),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
-      }
-    ],
-    after: []
-  },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
-  config: { direction: "horizontal", content: [], after: [] },
-  // The settings that adapt the theme, then — while the look they make
-  // differs from the theme's own default — the cell that saves it as that
-  // default.
-  gear: {
-    direction: "horizontal",
-    content: [],
-    after: [seg(THEME_DEFAULT_SEG)]
-  },
-  toggles: { direction: "horizontal", content: [], after: [] }
-};
-function placeBody(place) {
-  const { direction, content, after } = PLACE_BODY[place];
-  return {
-    kind: "container",
-    direction,
-    children: [...content, ...controlsAt(place), ...after]
-  };
-}
-function expandAnchor(node) {
-  if (node.kind === "segment") {
-    return isSettingsAnchor(node.name) ? {
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
-        seg(FPS_SEG)
-      ]
-    } : node;
-  }
-  return expandContainer(node);
-}
-function doorBody() {
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      placeBody("door"),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
-    ]
-  };
-}
-var DOOR_BODY = doorBody();
-function expandContainer(node) {
-  return {
-    ...node,
-    children: node.children.map((child) => expandAnchor(child))
-  };
-}
-function settingsArtifacts(doorGlyph) {
-  const artifacts = {
-    variables: {
-      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
-      [DIAGNOSTICS_VIEWING]: {
-        kind: "state",
-        key: DIAGNOSTICS_VIEWING,
-        default: "0"
-      }
-    },
-    actions: {
-      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
-      ...TOOLBAR.actions,
-      ...COMMANDS2.actions,
-      ...AUTOCOMPACT.actions,
-      [SAVE_SEG]: { save: true, layer: "ask" },
-      [UNDO_ACTION]: { undo: true },
-      // [LAW:composability] Going back can reopen a view a confirm sits in, so
-      // it disarms every confirm as the door does: a confirm is only ever
-      // clicked in the view its own arming click was made in.
-      [BACK_STEP]: { back: true },
-      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
-      [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save" },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
-      [PRESET_DELETE]: {
-        preset: "delete",
-        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
-      }
-    },
-    segments: {
-      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
-      // below, which are a word plus the ▸/▾ that gates it. The door has no
-      // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `✖` names what the click does.
-      //
-      // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is red as this depth draws it on the pressed state, the
-      // theme's own error red wherever one reads (`errorRedOn`). It never
-      // slides lightness: a slid red stops reading as red, and the ✖ must be
-      // red on every theme. Closed,
-      // the author's glyph keeps the cell's own text.
-      [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
-      },
-      [FPS_SEG]: { template: FRAME_RATE },
-      [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
-      [AUTOCOMPACT_SEG]: {
-        template: AUTOCOMPACT.template,
-        bg: AUTOCOMPACT.bg,
-        when: AUTOCOMPACT.when
-      },
-      [BACK_SEG]: BACK_CELL,
-      [SAVE_SEG]: SAVE_CELL,
-      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
-      [PRESET_SAVE]: {
-        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
-      },
-      [EDIT_SEG]: {
-        // Entering or leaving edit mode is a click like every other in the
-        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
-        // reach while the bar is arranged.
-        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
-      }
-    }
-  };
-  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
-    kind: "input",
-    path: "themeDefault.differs",
-    type: "boolean",
-    default: false
-  };
-  artifacts.variables[THEME_DEFAULT_THEME] = {
-    kind: "input",
-    path: "themeDefault.theme",
-    type: "string",
-    default: ""
-  };
-  artifacts.variables[BACK_COUNT] = {
-    kind: "input",
-    path: "navigation.back",
-    type: "number",
-    default: 0
-  };
-  for (const role of LAYER_ROLES) {
-    artifacts.variables[layerVar(role)] = {
-      kind: "input",
-      path: `layers.${role}`,
-      type: "boolean",
-      default: false
-    };
-  }
-  for (const count of SAVE_COUNTS) {
-    artifacts.variables[saveCountVar(count)] = {
-      kind: "input",
-      path: count,
-      type: "number",
-      default: 0
-    };
-  }
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
-  for (const { member, label: label2 } of TABS) {
-    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
-      TAB_KEY,
-      member
-    );
-    artifacts.actions[tabSeg(member)] = {
-      do: [tabToggle(member), ...TAB_DISARMS]
-    };
-    const display = markedDisplay(member);
-    artifacts.segments[tabSeg(member)] = {
-      template: `{{ ${disclosureTriggerCall(
-        tabSeg(member),
-        display(label2),
-        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
-      )} }}`
-    };
-  }
-  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
-  declareSettingControls(artifacts);
-  return artifacts;
-}
-function declareSettingControls(artifacts) {
-  for (const c of CONTROLS) {
-    Object.assign(artifacts.actions, c.control.actions);
-    const reset = controlReset(c.name);
-    artifacts.actions[reset] = { reset: c.configKey };
-    artifacts.variables[controlResettable(c.name)] = {
-      kind: "input",
-      path: `resettable.${c.name}`,
-      type: "boolean",
-      default: false
-    };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
-    Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.name)] = {
-      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
-    };
-    if (c.control.kind === "picker") {
-      [
-        ...c.control.list.rows.map((template) => ({ template })),
-        ...c.beneath
-      ].forEach((row, i2) => {
-        artifacts.segments[controlRow(c.name, i2)] = row;
-      });
-    }
-  }
-  Object.assign(artifacts.actions, RESET_ALL.actions);
-  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
-  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
-  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
-  for (const name of SUBMENU_NAMES) {
-    const ref = submenuRef(name);
-    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
-      ref.key,
-      ref.member
-    );
-    artifacts.segments[submenuSeg(name)] = {
-      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
-    };
-  }
-}
-function ensureEditToggle(artifacts) {
-  const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables);
-  Object.assign(artifacts.actions, actions);
-}
-function synthesizeSettingsMenu(config) {
-  const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
-  ensureEditToggle(artifacts);
-  const presets = { ...config.presets };
-  for (const name of presetNames(config.presets)) {
-    const { node } = presetRoot(config, name);
-    const root = expandAnchor(withAnchor(node));
-    presets[name] = { ...presetByName(config.presets, name), root };
-  }
-  return {
-    ...config,
-    variables: { ...config.variables, ...artifacts.variables },
-    actions: { ...config.actions, ...artifacts.actions },
-    segments: { ...config.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/edit-chrome.ts
-var EDIT_LIVE_KEY = `${EDIT_NS}live`;
-var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
-var EDIT_DONE_SEG = `${EDIT_NS}done`;
-var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
-var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
-var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-var EDIT_LIVE_REF = {
-  variable: EDIT_LIVE_KEY,
-  key: EDIT_LIVE_KEY,
-  member: DISCLOSURE_OPEN
-};
-function configuringVar(presetIdent) {
-  return `${EDIT_NS}configuring.p${presetIdent}`;
-}
-function namesView(presetIdent) {
-  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
-}
-function configuringDecl(members) {
-  const terms = members.map(
-    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
-  );
-  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
-}
-function inNamesView(presetIdent, verdict, when2) {
-  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
-}
-var PRESET_CUSTOMIZED_VAR = "preset.customized";
-var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
-var isChromeExempt = isReservedName;
-function configOptionDomains(config) {
-  return new Map([
-    ...perConfigDomainsFor(config),
-    ...addableSegmentDomains(config)
-  ]);
-}
-var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
-function addableSegmentDomains(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      ADDABLE_DOMAIN,
-      {
-        members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
-        library: {
-          groups: LIBRARY_GROUPS.map((id2) => ({
-            id: id2,
-            label: GROUP_LABELS[id2]
-          })),
-          entry: (option) => {
-            const decl = config.segments[option];
-            return {
-              group: decl.group ?? OTHER_GROUP,
-              ...decl.description !== void 0 && {
-                description: decl.description
-              }
-            };
-          }
-        }
-      }
-    ]
-  ]);
-}
-function chromeCell(name, template, artifacts) {
-  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
-  return { kind: "segment", name };
-}
-function removeTerm(ctx, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
-  ctx.artifacts.actions[actionName] = {
-    persist: ctx.rootKey,
-    removeSegment: id2
-  };
-  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
-}
-function inArrangeMode(term) {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
-}
-function shownWhile(refs, when2) {
-  return refs.reduce(
-    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
-    when2
-  );
-}
-function configureRefsIn(nodes) {
-  return nodes.flatMap(
-    (node) => [...walkNodes(node)].flatMap(
-      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
-    )
-  );
-}
-function placementDraftKey(presetIdent, id2, setting) {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
-}
-function configureParts(ctx, node, decls) {
-  const id2 = placementId(node);
-  const placement = escapedIdent(id2);
-  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id2);
-  ctx.configured.push(member);
-  const enter = `${prefix}.configure.${placement}`;
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold]
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member
-  };
-  const drafts = {};
-  const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
-      key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
-    };
-    drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${placement}.${name}`;
-    const control2 = settingControl(
-      controlDeclOf(decl),
-      key,
-      variable,
-      segName,
-      listKey
-    );
-    Object.assign(ctx.artifacts.actions, control2.actions);
-    Object.assign(ctx.artifacts.variables, control2.variables);
-    if (control2.kind === "inline") {
-      ctx.artifacts.segments[segName] = { template: control2.template };
-      return { kind: "segment", name: segName };
-    }
-    ctx.artifacts.segments[segName] = { template: control2.template };
-    const rows = control2.list.rows.map((template, row) => {
-      const listSeg = `${segName}.list.${row}`;
-      ctx.artifacts.segments[listSeg] = { template };
-      return { kind: "segment", name: listSeg };
-    });
-    return disclosureNode(
-      segName,
-      control2.list.ref,
-      { kind: "container", direction: "vertical", children: rows },
-      "drop"
-    );
-  });
-  return {
-    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row, its list dropping below it when opened.
-    body: { kind: "container", direction: "vertical", children: controls },
-    drafts
-  };
-}
-var LABEL_NS = `${EDIT_NS}label:`;
-function arrangedSegment(name) {
-  if (name.startsWith(LABEL_NS)) {
-    const label2 = name.slice(LABEL_NS.length);
-    return label2.slice(label2.indexOf(":") + 1);
-  }
-  return name.startsWith(EDIT_NS) ? void 0 : name;
-}
-function labelChrome(child, decl, ctx, configure) {
-  const id2 = placementId(child);
-  const name = labelSegment(ctx, id2, child, decl, id2);
-  const settings = Object.fromEntries(
-    IMPLIED_SETTINGS.flatMap((setting) => {
-      const value = child.settings?.[setting];
-      return value === void 0 ? [] : [[setting, value]];
-    })
-  );
-  return {
-    ...disclosureNode(
-      name,
-      configure.ref,
-      configure.body,
-      "drop",
-      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
-    ),
-    ...Object.keys(settings).length > 0 && { settings },
-    drafts: Object.fromEntries(
-      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
-    )
-  };
-}
-function labelSegment(ctx, key, child, decl, text4) {
-  const name = `${LABEL_NS}${key}:${child.name}`;
-  ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
-    ...decl.palette !== void 0 && { palette: decl.palette }
-  };
-  return name;
-}
-function editableUnit(child, spliced, first2, ctx) {
-  const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
-  const after = insertTerm(ctx, id2, "after");
-  const remove = removeTerm(ctx, id2);
-  const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, child, settingsOf(decl));
-  const lead = inArrangeMode(remove);
-  const trail = inArrangeMode(configure.term);
-  return [
-    ...leading.map(
-      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
-    ),
-    // Labelled by the placement's id: two placements of one segment are
-    // told apart by it, and a bare placement's id is its segment's name.
-    { ...labelChrome(child, decl, ctx, configure), lead, trail },
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-      lead,
-      trail,
-      drafts: configure.drafts
-    },
-    chromeCell(after.host, after.template, ctx.artifacts)
-  ];
-}
-function fileLabel(file) {
-  return import_node_path26.default.join(import_node_path26.default.basename(import_node_path26.default.dirname(file)), import_node_path26.default.basename(file));
-}
-function insertedUnit(child, insertedBy, spliced, ctx) {
-  const decl = ctx.segments[child.name];
-  const id2 = placementId(child);
-  const label2 = {
-    kind: "segment",
-    // Keyed by the preset too: another preset may hold the same id as an
-    // editable placement, whose label reads only the id. An id holds no
-    // `/`, so the two names never meet.
-    name: labelSegment(
-      ctx,
-      `${id2}/${ctx.presetIdent}`,
-      child,
-      decl,
-      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
-    ),
-    when: `{{ ${namesView(ctx.presetIdent)} }}`
-  };
-  return [
-    label2,
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
-    }
-  ];
-}
-function insertTerm(ctx, anchor, relation) {
-  const { artifacts } = ctx;
-  const {
-    apply: applyName,
-    host: chromeSegName,
-    stateKey
-  } = insertGap(ctx.preset, anchor, relation);
-  artifacts.actions[applyName] = {
-    persist: ctx.rootKey,
-    insertSegmentFrom: ADDABLE_DOMAIN,
-    anchor,
-    relation
-  };
-  const member = menuMember(applyName);
-  const pageKey = menuPageKey(stateKey);
-  const identity2 = menuActionName(stateKey, member);
-  artifacts.variables[stateKey] = {
-    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
-    within: [EDIT_MODE_REF]
-  };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
-  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
-  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return {
-    host: chromeSegName,
-    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
-  };
-}
-function insertGap(preset, anchor, relation) {
-  const gap = `${relation}.${escapedIdent(anchor)}`;
-  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
-  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
-}
-function spliceContainer(node, ctx) {
-  const children2 = [];
-  const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
-  );
-  const splice2 = (body) => spliceContainer(body, ctx);
-  for (const [i2, child] of node.children.entries()) {
-    if (child.kind === "container") {
-      children2.push(splice2(child));
-      continue;
-    }
-    const spliced = mapOpens(child, splice2);
-    if (isChromeExempt(child.name)) {
-      children2.push(spliced);
-      continue;
-    }
-    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
-    const unit = {
-      kind: "container",
-      direction: "horizontal",
-      children: cells,
-      unit: true
-    };
-    children2.push(
-      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
-    );
-  }
-  return {
-    ...node,
-    children: children2,
-    ...node.when !== void 0 && {
-      when: shownWhile(
-        configureRefsIn(children2),
-        inNamesView(ctx.presetIdent, "true", node.when)
-      )
-    }
-  };
-}
-function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
-  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  artifacts.actions[actionName] = { reset: rootKey };
-  artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
-    when: CUSTOMIZED_BANNER_GATE
-  };
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      // The ways out lead the top row, top left, where they are found without
-      // reopening the menu edit mode was entered from: keep or discard what
-      // was changed, restore the bundled layout, and the view toggle.
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [...lead, { kind: "segment", name: chromeSegName }, live]
-      },
-      // The `(?)`'s body drops BELOW the row the trigger rides while the
-      // disclosure is open, like every other disclosure body in this codebase.
-      withTrailingCell(splicedRoot, tail)
-    ]
-  };
-}
-function withTrailingCell(node, cell3) {
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [node, cell3]
-    };
-  }
-  const last2 = node.children.at(-1);
-  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
-    return {
-      ...node,
-      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
-    };
-  }
-  return { ...node, children: [...node.children, cell3] };
-}
-function spliceEditChromeForPreset(config, presetName, artifacts, lead, live, tail) {
-  const { node } = presetRoot(config, presetName);
-  const ctx = {
-    preset: presetName,
-    presetIdent: escapedIdent(presetName),
-    rootKey: presetRootKey(presetName),
-    segments: config.segments,
-    artifacts,
-    configured: []
-  };
-  const spliced = spliceContainer(node, ctx);
-  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
-    ctx.configured
-  );
-  return wrapWithPresetRows(
-    spliced,
-    ctx.presetIdent,
-    ctx.rootKey,
-    artifacts,
-    lead,
-    live,
-    tail
-  );
-}
-function synthesizeEditChrome(config) {
-  const artifacts = {
-    variables: {},
-    actions: {},
-    segments: {}
-  };
-  const help = declareHelp(
-    `${EDIT_NS}help`,
-    EDIT_MODE_HELP,
-    [EDIT_MODE_REF],
-    artifacts
-  );
-  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
-    EDIT_LIVE_KEY,
-    DISCLOSURE_CLOSED
-  );
-  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
-    EDIT_LIVE_KEY,
-    EDIT_LIVE_REF.member
-  );
-  artifacts.segments[EDIT_LIVE_KEY] = {
-    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
-    when: EDIT_MODE_GATE
-  };
-  const live = { kind: "segment", name: EDIT_LIVE_KEY };
-  const tail = help;
-  artifacts.variables[EDIT_CHANGES_VAR] = {
-    kind: "input",
-    path: "history.sinceEdit",
-    type: "number",
-    default: 0
-  };
-  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
-  artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
-    when: EDIT_MODE_GATE
-  };
-  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
-  artifacts.segments[EDIT_CANCEL_SEG] = {
-    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
-  };
-  const lead = [
-    { kind: "segment", name: EDIT_DONE_SEG },
-    { kind: "segment", name: EDIT_CANCEL_SEG }
-  ];
-  const presets = { ...config.presets };
-  for (const name of presetNames(config.presets)) {
-    const root = spliceEditChromeForPreset(
-      config,
-      name,
-      artifacts,
-      lead,
-      live,
-      tail
-    );
-    presets[name] = { ...presetByName(config.presets, name), root };
-  }
-  return {
-    ...config,
-    variables: { ...config.variables, ...artifacts.variables },
-    actions: { ...config.actions, ...artifacts.actions },
-    segments: { ...config.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/themes/index.ts
-init_globals();
-
-// src/dsl/node-registry.ts
-init_globals();
-
-// src/render/split-lines.ts
-init_globals();
-function splitCellsIntoLines(cells) {
-  const lines2 = [];
-  let current = [];
-  for (const cell3 of cells) {
-    if (!cell3.contains("\n")) {
-      current.push(cell3);
-      continue;
-    }
-    const pieces = cell3.split("\n");
-    current.push(pieces[0]);
-    for (let i2 = 1; i2 < pieces.length; i2++) {
-      lines2.push(current);
-      current = [pieces[i2]];
-    }
-  }
-  lines2.push(current);
-  return lines2;
-}
-
-// src/dsl/node-registry.ts
-function rowIdentities(lines2) {
-  const counts = /* @__PURE__ */ new Map();
-  return lines2.map((line) => {
-    const kind = `${line.place}.${line.band}`;
-    const nth = counts.get(kind) ?? 0;
-    counts.set(kind, nth + 1);
-    return { line, row: `${kind}#${nth}` };
-  });
-}
-var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
-function within2(parent, own2) {
-  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
-}
-function returnedBy(id2, lines2) {
-  const own2 = [];
-  const deeper = [];
-  let ground;
-  for (const line of lines2) {
-    (line.band === "own" ? own2 : deeper).push(line);
-    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
-  }
-  return {
-    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
-    deeper
-  };
-}
-function heldLine(line) {
-  return { ...line, cells: line.cells.map(heldCell) };
-}
-function composeBlocks(direction, blocks) {
-  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
-  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
-  return [...above, ...composeFlow(direction, flow3)];
-}
-function composeFlow(direction, blocks) {
-  switch (direction) {
-    case "vertical":
-      return blocks.flatMap((b) => b);
-    case "horizontal": {
-      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      if (height === 0) return [];
-      const row0 = {
-        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
-        band: "own",
-        place: "flow"
-      };
-      const drops = blocks.flatMap((b) => b.slice(1));
-      return [row0, ...drops];
-    }
-  }
-}
-function layoutRows(node, shown) {
-  const lines2 = (n, address) => {
-    if (!shown(n)) return [];
-    if (n.kind === "segment") {
-      return [
-        {
-          cells: [{ name: n.name, address, settings: n.settings }],
-          band: "own",
-          place: "flow"
-        }
-      ];
-    }
-    return composeBlocks(
-      n.direction,
-      n.children.map(
-        (child, index) => lines2(child, [...address, childStep(n, index)])
-      )
-    );
-  };
-  return lines2(node, []).map((line) => [...line.cells]);
-}
-function childStep(node, index) {
-  return node.steps[index];
-}
-function spanOf(node) {
-  if (node.kind === "segment" || node.unit === true) {
-    return { width: 1, reach: 1 };
-  }
-  const laid = laidOut(node);
-  return { width: widthOf2(laid), reach: reachOf(laid) };
-}
-function laidOut(node) {
-  const spans = node.children.map(spanOf);
-  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
-  if (node.direction === "vertical" || node.unit === true) {
-    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
-  }
-  let start = 0;
-  return spans.map((span, i2) => {
-    const at = start;
-    start += span.width;
-    return { start: at, span, ownLine: ownLine(i2) };
-  });
-}
-var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
-var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
-function placeChildren(node, at) {
-  const laid = laidOut(node);
-  if (at?.axis === "cell") {
-    return laid.map(({ start, span, ownLine }) => {
-      const index = at.index + start;
-      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
-    });
-  }
-  const axis = AXIS_OF[node.direction];
-  const distribution = placedBy(node.distribution);
-  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
-  return places.map((index) => ({
-    index,
-    count,
-    distribution,
-    axis,
-    lineStart: 0,
-    lineEnd
-  }));
-}
-var containerType = {
-  compile(node, cctx) {
-    const steps2 = placeChildren(node, cctx.at);
-    return {
-      kind: "container",
-      direction: node.direction,
-      when: cctx.when,
-      steps: steps2,
-      children: node.children.map(
-        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
-      )
-    };
-  },
-  render(node, ctx) {
-    if (ctx.gate.kind === "failed") ctx.gate.report();
-    return composeBlocks(
-      node.direction,
-      node.children.map(
-        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
-      )
-    );
-  }
-};
-var BODY_PLACE = {
-  drop: (line) => line.place,
-  above: () => "above"
-};
-var OPEN_LEAD = {
-  drop: (inline, close) => ({ lead: close(), stays: inline }),
-  above: (inline) => ({
-    lead: inline.slice(0, 1).flatMap((line) => line.cells),
-    stays: inline.slice(1)
-  })
-};
-var segmentType = {
-  compile(node, cctx) {
-    return {
-      kind: "segment",
-      when: cctx.when,
-      name: node.name,
-      id: placementId(node),
-      settings: cctx.placementSettings(node),
-      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
-      // predicate by the one `disclosureGate` every disclosure reads through.
-      ...node.opens !== void 0 && {
-        opens: {
-          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          // A body roots a band: its first step is placed afresh.
-          body: cctx.compileChild(
-            node.opens.body,
-            bodyPath(cctx.path),
-            void 0
-          ),
-          key: node.opens.ref.key,
-          placement: node.opens.placement
-        }
-      },
-      ...node.lead !== void 0 && {
-        lead: cctx.parse(node.lead, "lead")
-      },
-      ...node.trail !== void 0 && {
-        trail: cctx.parse(node.trail, "trail")
-      }
-    };
-  },
-  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
-  // hidden, gated off, drawn, broken — is reported to the session's record, so
-  // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
-};
-function drawSegment(node, ctx) {
-  const seg2 = ctx.lookupSegment(node.name);
-  if (seg2 === void 0) {
-    throw new Error(`Layout segment "${node.name}" has no matching segment`);
-  }
-  if (ctx.gate.kind === "hidden") return [];
-  const scope = placementScope(ctx.scope, node.settings);
-  if (ctx.gate.kind === "failed") {
-    return brokenSegment(node, scope, ctx, ctx.gate.message);
-  }
-  try {
-    const parts = ctx.placement(node);
-    const gate2 = within2(ctx.gate, parts.gate());
-    if (gate2.kind === "failed") {
-      return brokenSegment(node, scope, ctx, gate2.message);
-    }
-    if (gate2.kind === "hidden") return [];
-    const ownBodyGate = parts.bodyGate();
-    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
-    if (bodyGate.kind === "failed") {
-      return brokenSegment(node, scope, ctx, bodyGate.message);
-    }
-    const palette = placementPalette(node.settings.theme, ctx.palette);
-    const placement = {
-      id: node.id,
-      effect: node.settings.effect,
-      ground: groundOf(palette)
-    };
-    const layoutOf = (baseStyle) => ({
-      width: seg2.width ?? "auto",
-      justify: seg2.justify ?? "left",
-      truncate: seg2.truncate ?? "right",
-      baseStyle,
-      // [LAW:dataflow-not-control-flow] Padding is uniform across every
-      // line a segment contributes — inline rows AND dropped menu bands —
-      // one value, no per-line-kind branch. The picker reserves 2×padding
-      // at its pagination seam so a padded band still fits the width
-      // budget.
-      padding: ctx.padding,
-      placement
-    });
-    const bodyOpen = bodyGate.kind === "shown";
-    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
-    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
-    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
-      node,
-      scope,
-      ctx,
-      own2.variable,
-      palette,
-      bodyOpen,
-      layoutOf
-    );
-    if (drawn === null) return [];
-    const { styles, inline: inlineLines, drops: dropLines } = drawn;
-    const opens = node.opens;
-    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
-      ...line,
-      place: BODY_PLACE[opens.placement](line)
-    }));
-    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
-      ...layoutOf(style),
-      width: "auto",
-      padding
-    });
-    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
-      inlineLines,
-      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
-    ) : { lead: [], stays: inlineLines };
-    const holdLead = openLead.flatMap(
-      (cell3) => leadCell(
-        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
-        styles.trigger,
-        0
-      )
-    );
-    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
-    const ledBody = bodyLines.map((line, i2) => ({
-      cells: [...leadOf(line, i2), ...line.cells],
-      band: "deeper",
-      place: line.place
-    }));
-    const laidLines = [...stays, ...dropLines];
-    ctx.segments.set(
-      node.id,
-      [
-        ...laidLines.flatMap((line) => line.cells),
-        ...bodyLines.flatMap(leadOf)
-      ].flatMap(cellParts)
-    );
-    return [...laidLines, ...ledBody];
-  } catch (err) {
-    return brokenSegment(
-      node,
-      scope,
-      ctx,
-      err.message ?? String(err)
-    );
-  }
-}
-var waitingOn = (variable) => ({
-  kind: "waiting",
-  variable
-});
-function ownAnswer(evaluate) {
-  try {
-    return { kind: "drawn", segment: evaluate() };
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 === void 0) throw err;
-    return waitingOn(pending2.variable);
-  }
-}
-function drawnRows2(segment, layoutOf) {
-  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
-  const baseStyle = open2 ? styles.trigger : styles.closed;
-  const layout = layoutOf(baseStyle);
-  const inline = splitCellsIntoLines(
-    fragmentsToCells(fragments, baseStyle)
-  ).map((line, i2) => ({
-    cells: applySegmentLayout(line, {
-      ...layout,
-      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
-      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
-    }),
-    band: "own",
-    place: "flow"
-  }));
-  return {
-    styles,
-    inline,
-    drops: drops.map((body) => ({
-      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
-        ...layout,
-        baseStyle: styles.band
-      }),
-      band: "deeper",
-      place: "flow"
-    }))
-  };
-}
-var LOADING_GLYPH = "\u2026";
-function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
-  ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
-  if (last2?.kind === "hidden") return null;
-  const styles = ctx.decorations(node, palette);
-  const style = bodyOpen ? styles.trigger : styles.closed;
-  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
-  const trail = fragmentsToCells(
-    errorAffix(node.trail, node, scope, ctx),
-    style
-  );
-  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
-    (line) => line.cells.map((cell3) => cell3.text.cellLength)
-  );
-  return {
-    styles,
-    inline: rows.map((widths, row) => ({
-      cells: widths.flatMap((width, i2) => {
-        const first2 = row === 0 && i2 === 0;
-        return applySegmentLayout(
-          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
-          {
-            ...layoutOf(style),
-            width,
-            justify: "left",
-            truncate: "right",
-            lead: first2 ? lead : [],
-            trail: first2 ? trail : []
-          }
-        );
-      }),
-      band: "own",
-      place: "flow"
-    })),
-    drops: []
-  };
-}
-function cellsWidth(cells) {
-  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
-}
-function brokenSegment(node, scope, ctx, message2) {
-  ctx.brokenPlacement(node.id, message2);
-  const oneLine = message2.replace(/\s*\n\s*/g, " ");
-  return [
-    {
-      cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
-        {
-          width: "auto",
-          justify: "left",
-          truncate: "right",
-          padding: 0,
-          // It follows the bar, and fades in from the bar's ground: the
-          // failure it reports may be the read of this placement's own
-          // settings.
-          placement: {
-            id: node.id,
-            effect: FOLLOW_BAR,
-            ground: groundOf(ctx.palette)
-          },
-          lead: errorAffix(node.lead, node, scope, ctx),
-          trail: errorAffix(node.trail, node, scope, ctx)
-        }
-      ),
-      band: "own",
-      place: "flow"
-    }
-  ];
-}
-function errorAffix(affix, node, scope, ctx) {
-  if (affix === void 0) return [];
-  try {
-    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.brokenPlacement(node.id, err.message ?? String(err));
-    return [];
-  }
-}
-var REGISTRY = {
-  container: containerType,
-  segment: segmentType
-};
-function nodeType(kind) {
-  return REGISTRY[kind];
-}
-
-// src/dsl/parts.ts
-var SELECTION_OF = {
-  palette: "theme",
-  style: "style",
-  effect: "effect"
-};
-var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
-var COLOR_FLOOR = "truecolor";
-var UNDRAWN = {
-  width: 0,
-  chromeCols: 0,
-  padding: 0,
-  seamCols: 0,
-  preset: ""
-};
-function answerOf3(deriver) {
-  try {
-    return { ok: true, value: deriver() };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-function unwrap2(answer2) {
-  if (answer2.ok) return answer2.value;
-  throw answer2.error;
-}
-var always = (value) => ({ read: () => value });
-var sameLook = sameBy({
-  basePalette: is,
-  palette: is,
-  decor: sameDecor
-});
-var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
-    this.registry = registry;
-    this.source = source;
-    this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
-      const said2 = this.inputAt(COLOR_PATH);
-      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
-    });
-    const drawn = observable(UNDRAWN, void 0, { deep: false });
-    this.facts = drawn;
-    const look = this.look;
-    const phase = this.phase;
-    const layout = () => this.layout.read();
-    this.binding = {
-      store,
-      registry,
-      get width() {
-        return drawn.width;
-      },
-      get chromeCols() {
-        return drawn.chromeCols;
-      },
-      get padding() {
-        return drawn.padding;
-      },
-      get seamCols() {
-        return drawn.seamCols;
-      },
-      get look() {
-        return phase.ruling ? void 0 : look.get();
-      },
-      get layout() {
-        return phase.ruling ? void 0 : layout;
-      }
-    };
-    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
-      const root = source.roots.get(drawn.preset);
-      const palette = look.get().palette;
-      return layoutRows(root, (node) => this.shown(node)).map(
-        (row) => row.flatMap(({ name: placedName, address, settings }) => {
-          const name = arrangedSegment(placedName);
-          return name === void 0 ? [] : [
-            {
-              name,
-              address,
-              palette: placementPalette(settings.theme, palette)
-            }
-          ];
-        })
-      );
-    });
-    registry.bindInputs({
-      session: () => this.view.get().session,
-      read: (path31) => this.inputAt(path31),
-      run: (digest2) => this.view.get().run(digest2),
-      env: (name) => this.view.get().env(name),
-      drawnAt: () => drawnDepth(this.colorCompatibility())
-    });
-  }
-  store;
-  registry;
-  source;
-  // How many parts have derived since the view's first draw: what one draw
-  // adds is how many of its parts it evaluated.
-  evaluated = 0;
-  // [LAW:one-source-of-truth] The view's one scope. Its names are the
-  // store's when it is built, at the view's first draw: a view declares
-  // every variable before it is drawn.
-  scope;
-  binding;
-  facts;
-  look = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
-  });
-  layout;
-  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
-  // draw resolves its look — the look is what the rules decide — so while one
-  // is, the binding has neither look nor layout to give: a read is refused by
-  // name (renderLook, renderLayout), never answered with the last draw's.
-  // Read outside every kept part but the rule's own, which always runs here.
-  phase = { ruling: false };
-  gates = /* @__PURE__ */ new Map();
-  placements = /* @__PURE__ */ new Map();
-  rules = /* @__PURE__ */ new Map();
-  slots = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
-  // and its slots read it as it stands, never a copy a draw wrote.
-  view;
-  terminalWidth = observable.box(null);
-  // The draw in progress's own facts — the payload fields its instant answers
-  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
-  // the projections over them, which only a draw reads.
-  projected = void 0;
-  drawnSlots = /* @__PURE__ */ new Map();
-  // What the view draws from: a session view's source is bound once; a caller
-  // drawing a fixed payload binds each.
-  bind(view) {
-    runInAction(() => this.view.set(view));
-  }
-  // [LAW:no-ambient-temporal-coupling] An older request's terminal width is
-  // visible to the templates in this draw only. Restore it before the outer
-  // action ends so subscription reactions see the canonical view's inputs.
-  withTerminalWidth(width, draw2) {
-    return runInAction(() => {
-      const before = this.terminalWidth.get();
-      this.terminalWidth.set(width);
-      try {
-        return draw2();
-      } finally {
-        this.terminalWidth.set(before);
-      }
-    });
-  }
-  // The selections in force.
-  selections() {
-    return this.view.get().selections();
-  }
-  // The draw's facts, before it reads a part, and the payload fields its own
-  // instant answers.
-  draw(facts, projected) {
-    this.draws++;
-    this.projected = projected;
-    this.drawnSlots.clear();
-    runInAction(() => Object.assign(this.facts, facts));
-  }
-  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
-  // answers it: a selection's `.effective` its slot, a field of the instant
-  // the draw in progress, every other the view's payload.
-  inputAt(path31) {
-    const slot = slotAt(path31);
-    if (slot !== void 0) return found(this.slotName(slot));
-    if (drawProjectionAt(path31) !== void 0)
-      return resolvePath2(this.projected, path31);
-    if (path31 === "term.cols") {
-      const width = this.terminalWidth.get();
-      if (width !== null) return found(width);
-    }
-    return resolvePath2(this.view.get().payload(), path31);
-  }
-  // The depth the view's colour setting draws at: its floor while the payload
-  // has not said, or says something no depth is.
-  depth;
-  colorCompatibility() {
-    return this.depth.read();
-  }
-  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
-  // the rule's answer. A rule that reads no instant is kept: settled in the
-  // turn what it reads changes, so a cache policy over the slot's
-  // `.effective` re-runs then, never at a draw. A pending answer keeps the
-  // name last settled (the floor before any); a failure is the floor with
-  // its warning, which every draw reading the slot reports.
-  slot(slot) {
-    let node = this.slots.get(slot);
-    if (node === void 0) {
-      let last2;
-      const settle3 = () => {
-        const selection2 = this.selections()[SELECTION_OF[slot]];
-        if (selection2.kind === "decided")
-          return settled2(selection2.name, null, null);
-        const rule = compiledRule(this.source, slot, selection2.source);
-        if (this.source.instant.has(rule.template))
-          return { kind: "per-draw", rule };
-        const outcome = this.rule(rule.template);
-        switch (outcome.kind) {
-          case "named": {
-            let warning = null;
-            last2 = decideSlot(
-              this.source,
-              slot,
-              outcome.name,
-              rule.where,
-              (m) => {
-                warning = m;
-              }
-            );
-            return settled2(last2, warning, null);
-          }
-          case "pending":
-            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
-          case "failed":
-            last2 = SLOT_FLOORS[slot];
-            return settled2(
-              last2,
-              ruleFloorMessage(
-                rule.where,
-                slot,
-                `the rule failed \u2014 ${outcome.error}`
-              ),
-              null
-            );
-        }
-      };
-      let held;
-      node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle3();
-        if (held === void 0 || !sameSlot(held, next2)) held = next2;
-        return held;
-      });
-      this.slots.set(slot, node);
-    }
-    return node.read();
-  }
-  // The name a slot's `.effective` reads: its settled name, or what this
-  // draw's rule settled on.
-  slotName(slot) {
-    const state = this.slot(slot);
-    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
-  }
-  // What a per-draw rule settled on in the draw in progress.
-  drawnSlot(slot, name) {
-    this.drawnSlots.set(slot, name);
-  }
-  // Which draw is in progress: a part that reads the instant answers once in it.
-  draws = 0;
-  // The look the draw resolved, before its walk.
-  publishLook(look) {
-    runInAction(() => this.look.set(look));
-  }
-  // A layout node's own `when`, as the walk asks it.
-  gate(node) {
-    const { when: when2 } = node;
-    if (when2 === void 0) return gateOf(when2, this.scope);
-    let part = this.gates.get(node);
-    if (part === void 0) {
-      part = this.derive(
-        "when",
-        this.readsInstant(when2),
-        () => outsideSegments(
-          this.source.activeSegment,
-          () => gateOf(when2, this.scope)
-        )
-      );
-      this.gates.set(node, part);
-    }
-    return part.read();
-  }
-  placement(node) {
-    let parts = this.placements.get(node);
-    if (parts === void 0) {
-      parts = new Placement(this, node);
-      this.placements.set(node, parts);
-    }
-    return parts;
-  }
-  rule(template) {
-    let part = this.rules.get(template);
-    if (part === void 0) {
-      part = this.derive(
-        "rule",
-        this.readsInstant(template),
-        () => {
-          this.phase.ruling = true;
-          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
-          try {
-            return {
-              kind: "named",
-              name: template.evaluate(this.scope).map((f) => f.plain).join("")
-            };
-          } catch (e) {
-            const pending2 = readPending(e);
-            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-              kind: "failed",
-              error: e instanceof Error ? e.message : String(e)
-            };
-          } finally {
-            bound?.[Symbol.dispose]();
-            this.phase.ruling = false;
-          }
-        }
-      );
-      this.rules.set(template, part);
-    }
-    return part.read();
-  }
-  readsInstant(...templates) {
-    return templates.some(
-      (template) => template !== void 0 && this.source.instant.has(template)
-    );
-  }
-  // [LAW:single-enforcer] Every part derives here: kept by the store, or
-  // derived at every read when it reads the instant, and counted.
-  // A part that reads the instant is derived once per draw however often the
-  // draw reads it — a body reads its colours, its lead and trail read both —
-  // since one draw is one instant over one store.
-  derive(name, readsInstant, deriver) {
-    const counted2 = () => {
-      this.evaluated++;
-      return deriver();
-    };
-    return this.store.derive(
-      `part ${name}`,
-      readsInstant ? "projection" : "computed",
-      readsInstant ? this.oncePerDraw(counted2) : counted2
-    );
-  }
-  oncePerDraw(deriver) {
-    let memo = null;
-    return () => {
-      if (memo?.draw !== this.draws) {
-        memo = { draw: this.draws, answer: answerOf3(deriver) };
-      }
-      return unwrap2(memo.answer);
-    };
-  }
-  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
-  // the rows a layout lays out are drawn by: a node's `when`, then a
-  // segment's own — and a segment either `when` of which throws is SHOWN,
-  // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. A `when` not answered yet is shown,
-  // and under it a segment as its own `when` says, as the walk asks it. Edit
-  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
-  // part of it, while a name label stands in for its segment
-  // (`arrangedSegment`).
-  shown(node) {
-    const gate2 = this.gate(node);
-    if (node.kind === "container")
-      return gate2.kind === "shown" || gate2.kind === "pending";
-    if (arrangedSegment(node.name) === void 0) return false;
-    if (gate2.kind === "hidden") return false;
-    if (gate2.kind === "failed") return true;
-    return this.placement(node).gate().kind !== "hidden";
-  }
-};
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
-  if (parts !== void 0) {
-    parts.bind(view);
-    return parts;
-  }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
-  return made;
-}
-function partsOf(source, store) {
-  const parts = source.views.get(store);
-  if (parts === void 0) {
-    throw new Error(
-      "a store was drawn before its view was bound (bindView): its inputs have no source"
-    );
-  }
-  return parts;
-}
-var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
-var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
-function compiledRule(source, slot, rule) {
-  const compiled = source.globalExpressions.get(slot)?.get(rule);
-  if (compiled === void 0) {
-    throw new Error(
-      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
-    );
-  }
-  return compiled;
-}
-function decideSlot(source, slot, name, where, warn) {
-  switch (slot) {
-    case "palette":
-      return decideThemeName(name, where, warn).name;
-    case "style":
-      return decideStyleName(name, source.styles).name;
-    case "effect":
-      return decideEffectName(name).name;
-  }
-}
-var Placement = class {
-  // What the walk hands each part: where it draws the placement, then what
-  // the colours and the body evaluated to.
-  where = inlet(
-    sameBy({ palette: is, region: sameRegion })
-  );
-  ground = inlet(
-    sameBy({
-      colours: sameDealt,
-      bodyOpen: is
-    })
-  );
-  opened = inlet(
-    sameBy({
-      colours: sameDealt,
-      open: is
-    })
-  );
-  ownGate;
-  open;
-  colours;
-  body;
-  affixes;
-  constructor(view, node) {
-    const seg2 = view.source.segments[node.name];
-    const ref = view.source.activeSegment;
-    const scope = placementScope(view.scope, node.settings);
-    const { when: when2, bg, fg, template } = seg2;
-    const { lead, trail } = node;
-    const opens = node.opens?.open;
-    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
-      view.readsInstant(when2),
-      () => outsideSegments(ref, () => gateOf(when2, scope))
-    );
-    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
-      view.readsInstant(opens),
-      () => outsideSegments(ref, () => gateOf(opens, view.scope))
-    );
-    this.colours = view.derive(
-      `${node.id} colours`,
-      view.readsInstant(bg, fg),
-      () => {
-        const { palette, region } = this.where.get();
-        return coloursOf(
-          ref,
-          node,
-          palette,
-          region,
-          view.registry.drawnAt(),
-          bg,
-          fg,
-          scope
-        );
-      }
-    );
-    this.body = view.derive(
-      `${node.id} body`,
-      view.readsInstant(template),
-      () => {
-        const { colours, bodyOpen } = this.ground.get();
-        return bodyOf(ref, node, colours, template, bodyOpen, scope);
-      }
-    );
-    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
-      view.readsInstant(lead, trail),
-      () => {
-        const { colours, open: open2 } = this.opened.get();
-        return affixesOf(ref, node, colours, open2, lead, trail, scope);
-      }
-    );
-  }
-  gate() {
-    return this.ownGate.read();
-  }
-  bodyGate() {
-    return this.open.read();
-  }
-  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
-  // what the one before it evaluated to: the colours, then the body over its
-  // ground, then the lead and trail over what the body opened.
-  evaluate(palette, region) {
-    this.where.set({ palette, region });
-    const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
-    const body = this.body.read();
-    this.opened.set({ colours, open: body.open });
-    return evaluated(colours, body, this.affixes.read());
-  }
-};
-function inlet(same2) {
-  const box = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
-  });
-  return {
-    set: (value) => runInAction(() => box.set(value)),
-    // [LAW:no-defensive-null-guards] Filled before it is read (above).
-    get: () => box.get()
-  };
-}
-var sameHex = (a, b) => a.hex === b.hex;
-var sameDealt = sameBy({
-  palette: is,
-  drawnAt: is,
-  tint: sameHex,
-  text: sameHex,
-  bg: sameHex,
-  disclosure: sameDisclosure
-});
-function placeOf(node, colours) {
-  return {
-    segName: node.name,
-    placementId: node.id,
-    palette: colours.palette,
-    disclosure: colours.disclosure,
-    tint: colours.tint,
-    text: colours.text
-  };
-}
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
-function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
-  const dealt = {
-    palette,
-    drawnAt,
-    ...decorationFor(palette, region, drawnAt)
-  };
-  return inSegment(ref, placeOf(node, dealt), (active2) => {
-    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
-    return { ...dealt, bg: active2.bg, style };
-  });
-}
-function bodyOf(ref, node, colours, template, bodyOpen, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
-    const fragments = template.evaluate(scope);
-    return {
-      fragments,
-      drops: active2.drops,
-      open: active2.drops.length > 0 || bodyOpen
-    };
-  });
-}
-function affixesOf(ref, node, colours, open2, lead, trail, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = open2 ? bandOf(colours).state : colours.bg;
-    return {
-      lead: lead?.evaluate(scope) ?? [],
-      trail: trail?.evaluate(scope) ?? [],
-      drops: active2.drops
-    };
-  });
-}
-var NO_AFFIXES = { lead: [], trail: [], drops: [] };
-function stylesOf(colours) {
-  const { palette, drawnAt, disclosure } = colours;
-  return {
-    closed: colours.style,
-    get trigger() {
-      return stateCell(palette, bandOf(colours).state, drawnAt);
-    },
-    get band() {
-      return stateCell(palette, bandOf(colours).plane, drawnAt);
-    },
-    get close() {
-      return closeCell(palette, bandOf(colours).state, drawnAt);
-    },
-    disclosure
-  };
-}
-function evaluated(colours, body, affixes) {
-  return {
-    styles: stylesOf(colours),
-    fragments: body.fragments,
-    lead: affixes.lead,
-    trail: affixes.trail,
-    drops: [...body.drops, ...affixes.drops],
-    open: body.open
-  };
-}
-function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
-  const colours = coloursOf(
-    ref,
-    node,
-    palette,
-    region,
-    drawnAt,
-    void 0,
-    void 0,
-    scope
-  );
-  return evaluated(
-    colours,
-    bodyOf(ref, node, colours, body, false, scope),
-    NO_AFFIXES
-  );
-}
-function decoratedStyles(ref, node, palette, region, drawnAt) {
-  return stylesOf(
-    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
-  );
-}
-
-// src/dsl/render.ts
-init_globals();
-
-// src/config/shell-env.ts
-init_globals();
-var SHELL_BASE_ENV = [
-  "HOME",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "LOGNAME",
-  "PATH",
-  "SHELL",
-  "TMPDIR",
-  "USER",
-  "XDG_CACHE_HOME",
-  "XDG_CONFIG_DIRS",
-  "XDG_CONFIG_HOME",
-  "XDG_DATA_DIRS",
-  "XDG_DATA_HOME",
-  "XDG_RUNTIME_DIR",
-  "XDG_STATE_HOME"
-];
-function shellEnvOf(declared = []) {
-  return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
-}
-
-// src/render/fill.ts
-init_globals();
-function wrapOffsets(plain, line, indent2) {
-  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
-  const wrapping = held + plain;
-  const offsets = [];
-  let at = 0;
-  wrappedLines(wrapping, line).forEach((wrapped) => {
-    const content = wrapped.trimEnd();
-    const start = wrapping.indexOf(content, at);
-    if (content !== "" && start > held.length)
-      offsets.push(start - held.length);
-    at = start + content.length;
-  });
-  return offsets;
-}
-function takenOnLine(before, options) {
-  if (before.length === 0) return 0;
-  const { lines: lines2 } = drawStripCells(
-    before.map(({ owner }) => owner),
-    options
-  );
-  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
-  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
-}
-function fits(cell3, line, options) {
-  if (cell3.cellLength <= line) return true;
-  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
-  return cellLen(plainOf2(lines2.flat())) <= options.width;
-}
-function dividedToLine(item, line, before, options) {
-  if (fits(item.owner, line, options)) return [item];
-  const text4 = item.owner.copy().expandTabs();
-  const indent2 = takenOnLine(before, options);
-  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i2) => ({
-    ...item,
-    owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
-  })).filter(
-    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
-  );
-}
-function fitRow(row, options) {
-  const line = Math.max(
-    WIDEST_GLYPH_COLS,
-    lineWidth(options) - stripChromeCols(options) - options.padding
-  );
-  return filled(row, options).reduce(
-    (fitted, item) => [
-      ...fitted,
-      ...dividedToLine(item, line, fitted, options)
-    ],
-    []
-  );
-}
-function filled(row, options) {
-  const items = () => row.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
-  const demands = [];
-  row.forEach(({ fill }, at) => {
-    if (fill !== void 0) demands.push({ at, how: fill });
-  });
-  if (demands.length === 0) return items();
-  if (!Number.isFinite(options.width)) return items();
-  const natural = drawStripCells(row.map(stripItem), options).lines;
-  if (natural.length > 1) return items();
-  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
-  const share = Math.floor(deficit / demands.length);
-  const remainder = deficit - share * demands.length;
-  demands.forEach(({ at, how }, i2) => {
-    const grow = share + (i2 === demands.length - 1 ? remainder : 0);
-    const { text: text4 } = row[at];
-    sizeCell(text4, text4.cellLength + grow, how);
-  });
-  return items();
-}
-
-// src/render/frame-memory.ts
-init_globals();
-function recordFrom(last2, source) {
-  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
-}
-function beginRecord(source, returned2) {
-  const placements = /* @__PURE__ */ new Map();
-  const rules = /* @__PURE__ */ new Map();
-  return {
-    placed: (id2, lines2) => {
-      const { drawing: drawing2 } = returned2(id2, lines2);
-      placements.set(
-        id2,
-        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-      );
-      return lines2;
-    },
-    rule: (slot, name) => rules.set(slot, name),
-    record: (passages) => ({ source, placements, rules, passages })
-  };
-}
-var HIDDEN_RECORD = { kind: "hidden" };
-
-// src/render/disclosure-close.ts
-init_globals();
-function disclosureCloseFragment(sessionId2, key) {
-  return linkFragment(
-    DISCLOSURE_GLYPH_CLOSE,
-    {
-      kind: "action",
-      effects: [
-        {
-          verb: VERB_SET_STATE,
-          args: [sessionId2, key, DISCLOSURE_CLOSED]
-        }
-      ]
-    },
-    false
-  );
-}
-
-// src/render/picker.ts
-init_globals();
-
-// src/render/option-paint.ts
-init_globals();
-
-// src/render/swatch.ts
-init_globals();
-var SWATCH_GLYPH = "\u2580";
-function swatch(palette) {
-  const ground = ColorSpec.fromRgba(palette.get("background"));
-  const drawn = RichText.fromFragments(
-    DECOR_HUES.map(
-      (role) => new RichText(SWATCH_GLYPH, {
-        style: new Style({
-          color: ColorSpec.fromRgba(palette.get(role)),
-          bgcolor: ground
-        })
-      })
-    )
-  );
-  drawn.overflow = "ignore";
-  drawn.end = "";
-  return drawn;
-}
-
-// src/render/option-paint.ts
-var cell2 = (text4, style) => {
-  const drawn = typeof text4 === "string" ? new RichText(text4, { style }) : text4;
-  drawn.overflow = "ignore";
-  drawn.end = "";
-  return drawn;
-};
-var currentMark = (current) => new Style({ bold: current });
-function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
-  if (paletteOf === void 0) {
-    return (position, _option, label2, current) => cell2(
-      label2,
-      Style.combine([
-        bandItemStyle(active2, { ...position, distribution }, drawnAt),
-        currentMark(current)
-      ])
-    );
-  }
-  const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, label2, current) => named(
-    label2,
-    Style.combine([text4, currentMark(current)]),
-    paletteOf(option, render3)
-  );
-}
-var named = (label2, text4, palette) => cell2(
-  RichText.fromFragments([
-    cell2(label2, text4),
-    cell2(" ", text4),
-    swatch(palette)
-  ])
-);
-function labelPaint(render3, paletteOf, option, label2) {
-  return paletteOf === void 0 ? cell2(label2) : named(label2, void 0, paletteOf(option, render3));
-}
-function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
-  const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, _label, current) => cell2(
-    RichText.fromFragments([
-      cell2(current ? "[" : " ", text4),
-      swatch(paletteOf(option, render3)),
-      cell2(current ? "]" : " ", text4)
-    ])
-  );
-}
-
-// src/render/library.ts
-init_globals();
-var LIBRARY_PAGE_ROWS = 8;
-function libraryLayout(entries, groups, paged) {
-  const sections = groups.map((group) => ({
-    label: group.label,
-    indices: entries.flatMap(
-      (entry, i2) => entry.group === group.id ? [i2] : []
-    )
-  })).filter((section) => section.indices.length > 0);
-  const placed2 = sections.reduce((n, s) => n + s.indices.length, 0);
-  if (placed2 !== entries.length) {
-    const known = new Set(groups.map((g) => g.id));
-    const stray = entries.flatMap(
-      (entry, i2) => known.has(entry.group) ? [] : [`#${i2} (group "${entry.group}")`]
-    );
-    throw new Error(
-      `library: ${stray.join(", ")} name a group the domain does not list (${[...known].join(", ")})`
-    );
-  }
-  return paged ? sections.flatMap(
-    (section) => chunk2(section.indices, LIBRARY_PAGE_ROWS).map((indices) => [
-      { label: section.label, indices }
-    ])
-  ) : [sections];
-}
-function chunk2(items, size) {
-  return Array.from(
-    { length: Math.ceil(items.length / size) },
-    (_, n) => items.slice(n * size, (n + 1) * size)
-  );
-}
-function fitCells(text4, width) {
-  return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
-}
-
-// src/render/picker.ts
-var PICKER_PREV = "\u2190";
-var PICKER_NEXT = "\u2192";
-function cellWidth2(text4) {
-  return new RichText(text4).cellLength;
-}
-function rowBudget(runtime) {
-  const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
-  return Math.max(1, width - chromeCols - 2 * padding);
-}
-function ledRowBudget(runtime) {
-  const { padding, seamCols } = renderBinding(runtime, "a row fit");
-  return Math.max(
-    1,
-    rowBudget(runtime) - (cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 2 * padding + seamCols)
-  );
-}
-function paginate(widths, available, reserve) {
-  if (!Number.isFinite(available)) {
-    return widths.length > 0 ? [widths.map((_, i2) => i2)] : [];
-  }
-  const usable = Math.max(1, available - reserve);
-  const pages = [];
-  let cur = [];
-  let curW = 0;
-  for (let i2 = 0; i2 < widths.length; i2++) {
-    const w = widths[i2];
-    if (cur.length === 0) {
-      cur = [i2];
-      curW = w;
-    } else if (curW + 1 + w <= usable) {
-      cur.push(i2);
-      curW += 1 + w;
-    } else {
-      pages.push(cur);
-      cur = [i2];
-      curW = w;
-    }
-  }
-  if (cur.length > 0) pages.push(cur);
-  return pages;
-}
-function gridPages(widths, available, navReserve) {
-  const arrowReserve = cellWidth2(PICKER_PREV) + 1 + cellWidth2(PICKER_NEXT) + 1;
-  const firstPass = paginate(widths, available, navReserve);
-  return (firstPass.length > 1 ? paginate(widths, available, navReserve + arrowReserve) : firstPass).map((cells) => [{ label: "", indices: cells }]);
-}
-function assemble(frags) {
-  const spaced = [];
-  for (const frag of frags) {
-    if (spaced.length > 0) spaced.push(new RichText(" "));
-    spaced.push(frag);
-  }
-  const assembled = RichText.fromFragments(spaced);
-  assembled.overflow = "ignore";
-  assembled.end = "";
-  return assembled;
-}
-function requireKind(runtime, name, kind, shape, helper) {
-  const action2 = runtime.compiled.get(name);
-  if (!action2 || action2.kind !== kind) {
-    throw new Error(
-      `${helper} references action "${name}" which must be ${shape}, got ${action2 ? `a ${action2.kind} action` : "no such action"}`
-    );
-  }
-  return action2;
-}
-function requireOptionKind(runtime, name, helper) {
-  const declared = runtime.compiled.get(name);
-  const action2 = declared ? presentedAction(declared) : declared;
-  if (!action2 || action2.kind !== "set-option" && action2.kind !== "persist-option" && action2.kind !== "layout-op-option") {
-    throw new Error(
-      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action2 ? `a ${action2.kind} action` : "no such action"}`
-    );
-  }
-  return action2;
-}
-function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
-  const declared = runtime.compiled.get(applyName);
-  const store = renderBinding(runtime, "picker").store;
-  const sessionId2 = clickSession(runtime, "picker");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
-  const optionFace = (i2, label2) => {
-    const option = apply.options[i2];
-    return itemPaint(
-      { index: i2, count: apply.options.length },
-      option,
-      label2,
-      option === current
-    );
-  };
-  const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
-  const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
-  };
-  const labelOf = apply.labelOf ?? ((option) => option);
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
-  const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
-    gridFaces.map((face) => face.cellLength),
-    available,
-    navReserve
-  );
-  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
-  const pageHolding = (index) => Math.max(
-    0,
-    pages.findIndex(
-      (sections) => sections.some((section) => section.indices.includes(index))
-    )
-  );
-  const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
-  );
-  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
-  const pageSections = pages[pageIdx] ?? [];
-  const pageTarget = (value) => actionTarget([
-    { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
-  ]);
-  const closeWrite = close.kind === "led" ? [] : [
-    {
-      verb: VERB_SET_STATE,
-      args: [sessionId2, ...close.writes.flatMap(([k, v]) => [k, v])]
-    }
-  ];
-  const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
-  const optionTarget = (option) => actionTarget([
-    ...realize(declared, option, option, store, sessionId2).effects,
-    ...closeEffects
-  ]);
-  const optionCell = (face, i2) => linkOver(face, optionTarget(apply.options[i2]));
-  const nav = close.kind === "led" ? [] : [
-    linkFragment(
-      DISCLOSURE_GLYPH_CLOSE,
-      actionTarget(closeWrite),
-      false,
-      closeStyle
-    )
-  ];
-  nav.push(
-    ...steps2.map(
-      ({ glyph, option }) => linkFragment(
-        glyph,
-        actionTarget([
-          ...realize(declared, option, option, store, sessionId2).effects,
-          {
-            verb: VERB_SET_STATE,
-            args: [
-              sessionId2,
-              page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
-            ]
-          }
-        ]),
-        false
-      )
-    )
-  );
-  if (pageIdx > 0) {
-    nav.push(linkFragment(PICKER_PREV, pageTarget(pageIdx - 1), false));
-  }
-  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageTarget(pageIdx + 1), false)] : [];
-  if (catalogue === void 0) {
-    const indices = pageSections.flatMap((section) => section.indices);
-    return [
-      assemble([
-        ...nav,
-        ...indices.map((i2) => optionCell(gridFaces[i2], i2)),
-        ...next2
-      ])
-    ];
-  }
-  const bold = new Style({ bold: true });
-  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
-  const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines2 = [assemble([...nav, ...where, ...next2])];
-  for (const section of pageSections) {
-    if (pageSections.length > 1) {
-      lines2.push(assemble([new RichText(section.label, { style: bold })]));
-    }
-    const nameWidth = Math.max(
-      ...section.indices.map((i2) => cellWidth2(labelOf(apply.options[i2])))
-    );
-    for (const i2 of section.indices) {
-      const name = labelOf(apply.options[i2]);
-      const authored = catalogue.entries[i2].description;
-      const description = authored === void 0 ? void 0 : sanitizeText(authored);
-      const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
-      const row = description === void 0 ? name : `${name}${gap}${description}`;
-      lines2.push(
-        assemble([optionCell(optionFace(i2, fitCells(row, available)), i2)])
-      );
-    }
-  }
-  return lines2;
-}
-function pickerFuncs(runtime, activeSegment) {
-  return {
-    picker: {
-      fn: (applyName, pageName, closeOnPick, paged, inBody, ...extra) => {
-        refuseSurplus(
-          `picker "${applyName}"`,
-          ["closeOnPick", "paged", "inBody"],
-          extra
-        );
-        const page2 = requireKind(
-          runtime,
-          pageName,
-          "set-int",
-          "an int action ({ set, int: true })",
-          "picker"
-        );
-        if (inBody === true && closeOnPick === true) {
-          throw new Error(
-            `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
-          );
-        }
-        const apply = requireOptionKind(runtime, applyName, "picker");
-        const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
-        if (active2.bg === void 0) {
-          throw new Error(
-            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
-          );
-        }
-        const drawnAt = activeSegment.drawnAt();
-        const draw2 = (ground) => renderPicker(
-          applyName,
-          apply,
-          { key: page2.key, stateVar: page2.stateVar },
-          inBody === true ? { kind: "led" } : {
-            kind: "own",
-            writes: [[page2.key, "-1"]],
-            onPick: closeOnPick === true
-          },
-          paged === true,
-          runtime,
-          // A bare `{{ picker }}` authors no options dict, so it places by
-          // the default — the same resolution a `{{ menu }}` with no
-          // "distribution" option makes.
-          optionPaint(
-            active2,
-            placedBy(void 0),
-            renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
-            drawnAt,
-            ground
-          ),
-          closeOn(active2.palette, ground, drawnAt)
-        );
-        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
-        if (rows.length === 0) return draw2(active2.bg)[0];
-        active2.drops.push(...rows);
-        return draw2(band.state)[0];
-      },
-      argTypes: ["string", "string", "bool"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/carousel.ts
-init_globals();
-var CAROUSEL_PREV = "\u25C0";
-var CAROUSEL_NEXT = "\u25B6";
-function ringAround(options, current) {
-  const count = options.length;
-  const centre = Math.max(options.indexOf(current), 0);
-  return (offset) => ((centre + offset) % count + count) % count;
-}
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
-    throw new Error(
-      `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
-    );
-  }
-  const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
-    throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
-    );
-  }
-  const declared = runtime.compiled.get(applyName);
-  const sessionId2 = clickSession(runtime, "carousel");
-  const { options } = apply;
-  if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
-  const ring = (offset) => options[indexAt(offset)];
-  const step4 = (offset) => actionTarget(
-    realize(declared, ring(offset), ring(offset), store, sessionId2).effects
-  );
-  return assemble([
-    linkFragment(CAROUSEL_PREV, step4(-1), false),
-    linkOver(
-      // Drawn as the arrows are, in the segment's own colours (Brandon: "The
-      // name loses its styling"), beside the swatch of the value in force
-      // when the domain is colour-valued.
-      labelPaint(
-        renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
-        ring(0),
-        label2
-      ),
-      actionTarget(
-        realize(
-          runtime.compiled.get(openName),
-          ring(0),
-          void 0,
-          store,
-          sessionId2
-        ).effects
-      )
-    ),
-    linkFragment(CAROUSEL_NEXT, step4(1), false)
-  ]);
-}
-function carouselFuncs(runtime) {
-  return {
-    carousel: {
-      fn: (applyName, openName, label2) => {
-        if (label2.trim() === "") {
-          throw new Error(`carousel "${applyName}": label is empty`);
-        }
-        if (!runtime.compiled.has(openName)) {
-          throw new Error(
-            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
-          );
-        }
-        if (bindsTemplateValue(runtime.compiled.get(openName))) {
-          throw new Error(
-            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
-          );
-        }
-        return renderCarousel(
-          applyName,
-          requireOptionKind(runtime, applyName, "carousel"),
-          openName,
-          label2,
-          runtime
-        );
-      },
-      argTypes: ["string", "string", "string"],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/theme-preview.ts
-init_globals();
-
-// src/render/swatches.ts
-init_globals();
-var SWATCHES_RANDOM = "?";
-function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
-    throw new Error(
-      `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
-    );
-  }
-  if (apply.paletteOf === void 0) {
-    throw new Error(
-      `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
-    );
-  }
-  return apply;
-}
-function randomOther(seed, count, centre) {
-  let h = Math.imul(seed ^ seed >>> 16, 73244475);
-  h = Math.imul(h ^ h >>> 16, 73244475);
-  h ^= h >>> 16;
-  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
-}
-function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
-    throw new Error(
-      `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
-    );
-  }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
-}
-function swatchFuncs(runtime) {
-  return {
-    swatch: {
-      fn: (applyName, ...tail) => {
-        const [option, ...extra] = tail;
-        refuseSurplus(`swatch "${applyName}"`, ["option"], extra);
-        if (option !== void 0 && typeof option !== "string") {
-          throw new Error(
-            `swatch "${applyName}": option must be text, got ${JSON.stringify(option)}`
-          );
-        }
-        return swatch(optionPalette(runtime, applyName, "swatch", option));
-      },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-function swatchesFuncs(runtime, activeSegment, clock) {
-  return {
-    swatches: {
-      fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
-        const page2 = requireKind(
-          runtime,
-          pageName,
-          "set-int",
-          "an int action ({ set, int: true })",
-          "swatches"
-        );
-        const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
-        if (active2.bg === void 0) {
-          throw new Error(
-            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
-          );
-        }
-        const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
-        const count = options.length;
-        const steps2 = () => {
-          const at = ringAround(
-            options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
-          );
-          return [
-            { glyph: CAROUSEL_PREV, option: options[at(-1)] },
-            {
-              glyph: SWATCHES_RANDOM,
-              option: options[randomOther(clock().getTime(), count, at(0))]
-            },
-            { glyph: CAROUSEL_NEXT, option: options[at(1)] }
-          ];
-        };
-        const [line] = renderPicker(
-          applyName,
-          apply,
-          { key: page2.key, stateVar: page2.stateVar },
-          { kind: "led" },
-          true,
-          runtime,
-          swatchPaint(
-            active2,
-            renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
-            drawnAt,
-            active2.bg
-          ),
-          closeOn(active2.palette, active2.bg, drawnAt),
-          count === 0 ? [] : steps2()
-        );
-        return line;
-      },
-      argTypes: ["string", "string"],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/theme-preview.ts
-var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
-function previewRows(palette, decor, opens, drawnAt) {
-  const band = bandFor(palette, opens, drawnAt);
-  const chosen = (text4, colour) => ({
-    text: text4,
-    colour,
-    ink: textOn2(palette, colour, drawnAt)
-  });
-  return [
-    [
-      vocabularyOf(palette, decor, drawnAt).map((entry, i2) => {
-        const colour = decorEntryColour(palette, entry);
-        return {
-          text: BAR_WORDS[i2 % BAR_WORDS.length],
-          colour,
-          ink: decor.shade.text(palette, entry.hue, colour, drawnAt)
-        };
-      })
-    ],
-    [
-      [chosen("\u25BE open", band.state), chosen("menu", band.plane)],
-      [
-        chosen("warn", palette.get("warning")),
-        chosen("error", palette.get("error"))
-      ]
-    ]
-  ];
-}
-function renderRow(groups, available) {
-  const cells = groups.flatMap(
-    (group, g) => group.map(({ text: text4, colour, ink }, i2) => ({
-      gap: g > 0 && i2 === 0 ? " " : "",
-      cell: new RichText(` ${text4} `, {
-        style: decoratedCell({ tint: colour, text: ink })
-      })
-    }))
-  );
-  const fragments = [];
-  let width = 0;
-  for (const { gap, cell: cell3 } of cells) {
-    width += gap.length + cell3.cellLength;
-    if (width > available) break;
-    if (gap !== "") fragments.push(new RichText(gap));
-    fragments.push(cell3);
-  }
-  return fragments;
-}
-function renderThemePreview(palette, decor, opens, drawnAt, available) {
-  const rows = previewRows(palette, decor, opens, drawnAt).map(
-    (row) => renderRow(row, available)
-  );
-  const preview = RichText.fromFragments(
-    rows.flatMap((row, i2) => i2 === 0 ? row : [new RichText("\n"), ...row])
-  );
-  preview.overflow = "ignore";
-  preview.end = "";
-  return preview;
-}
-function themePreviewFuncs(runtime, activeSegment) {
-  return {
-    // `{{ themePreview }}` samples the palette the bar is drawn in;
-    // `{{ themePreview "applyAction" }}` the palette the option that action's
-    // key holds puts in force — the theme picker's demo of the selected theme.
-    themePreview: {
-      fn: (...args) => {
-        const [applyName, ...extra] = args;
-        refuseSurplus("themePreview", ["applyAction"], extra);
-        if (applyName !== void 0 && typeof applyName !== "string") {
-          throw new Error(
-            `themePreview: applyAction must name a declared action, got ${JSON.stringify(applyName)}`
-          );
-        }
-        const { palette, decor } = renderLook(runtime, "{{ themePreview }}");
-        return renderThemePreview(
-          applyName === void 0 ? palette : optionPalette(runtime, applyName, "themePreview"),
-          decor,
-          // The bar trigger's band of the lineage the preview stands in: a
-          // band is coloured from the row its trigger stands in, which only
-          // the trigger's own region knows (decor.ts `decorationFor`).
-          {
-            ...requireActiveSegment(activeSegment, "{{ themePreview }}").disclosure,
-            depth: 0
-          },
-          activeSegment.drawnAt(),
-          ledRowBudget(runtime)
-        );
-      },
-      argTypes: ["value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/layout-preview.ts
-init_globals();
-var blockLabel = (name) => name.slice(name.lastIndexOf(".") + 1);
-var clippedLabel = (name, most) => {
-  const label2 = new RichText(blockLabel(name));
-  label2.truncate(most, { marker: "\u2026" });
-  return label2.plain;
-};
-function labelBudget(rows, available) {
-  const widths = rows.map(
-    (row) => row.map(({ name }) => cellWidth2(blockLabel(name)))
-  );
-  const fits2 = (most2) => widths.every(
-    (row) => row.reduce((sum2, w) => sum2 + Math.min(w, most2) + 2, 0) <= available
-  );
-  let most = Math.max(1, ...widths.flat());
-  while (most > 1 && !fits2(most)) most -= 1;
-  return most;
-}
-function renderLayoutPreview(rows, decor, drawnAt, available) {
-  const most = labelBudget(rows, available);
-  const lines2 = rows.map((row) => {
-    const blocks = [];
-    let width = 0;
-    for (const { name, address, palette } of row) {
-      const block = new RichText(` ${clippedLabel(name, most)} `, {
-        style: decoratedCell(
-          decorationFor(palette, { kind: "bar", decor, address }, drawnAt)
-        )
-      });
-      width += block.cellLength;
-      if (width > available) break;
-      blocks.push(block);
-    }
-    return blocks;
-  });
-  const preview = RichText.fromFragments(
-    lines2.flatMap(
-      (blocks, i2) => i2 === 0 ? blocks : [new RichText("\n"), ...blocks]
-    )
-  );
-  preview.overflow = "ignore";
-  preview.end = "";
-  return preview;
-}
-var LAYOUT_PREVIEW = "layoutPreview";
-function layoutPreviewFuncs(runtime, activeSegment) {
-  return {
-    [LAYOUT_PREVIEW]: {
-      fn: () => renderLayoutPreview(
-        renderLayout(runtime, "{{ layoutPreview }}"),
-        renderLook(runtime, "{{ layoutPreview }}").decor,
-        activeSegment.drawnAt(),
-        ledRowBudget(runtime)
-      ),
-      argTypes: [],
-      arity: { kind: "exact" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/menu.ts
-init_globals();
-function renderMenu(applyName, displays, options, runtime) {
-  const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
-  const action2 = runtime.action;
-  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
-  const pageKey = menuPageKey(stateKey);
-  const member = menuMember(applyName);
-  const store = renderBinding(action2, "menu").store;
-  const open2 = readVar(store, stateKey) === member;
-  const sessionId2 = clickSession(action2, "menu");
-  const successor = open2 ? DISCLOSURE_CLOSED : member;
-  const glyph = linkFragment(
-    pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
-    actionTarget([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId2, stateKey, successor, pageKey, "0"]
-      }
-    ]),
-    false
-  );
-  const body = () => {
-    const drawnAt = runtime.activeSegment.drawnAt();
-    const plane = bandFor(
-      placement.palette,
-      placement.disclosure,
-      drawnAt
-    ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
-    return renderPicker(
-      applyName,
-      apply,
-      { key: pageKey, stateVar: pageKey },
-      {
-        kind: "own",
-        writes: [
-          [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"]
-        ],
-        onPick: options.closeOnPick
-      },
-      options.paged,
-      action2,
-      // Placed by THIS menu's distribution: the picker knows positions,
-      // the instance knows how it places them. Unless the domain is
-      // colour-valued, in which case every option is its name in the
-      // plane's text beside its swatch; one call decides, the same one the
-      // standalone `{{ picker }}` makes.
-      optionPaint(
-        placement,
-        options.distribution,
-        renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
-        drawnAt,
-        plane
-      ),
-      closeOn(placement.palette, plane, drawnAt)
-    );
-  };
-  placement.drops.push(...open2 ? body() : []);
-  return glyph;
-}
-var isDict = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function parseMenuArgs(applyName, tail) {
-  const last2 = tail[tail.length - 1];
-  const optsArg = isDict(last2) ? last2 : void 0;
-  const displayArgs = optsArg === void 0 ? tail : tail.slice(0, -1);
-  const bad = displayArgs.findIndex((d) => typeof d !== "string");
-  if (bad !== -1) {
-    throw new Error(
-      `{{ menu "${applyName}" }} display #${bad + 1} is not text (${JSON.stringify(displayArgs[bad])}) \u2014 a menu binds its trigger text, then an optional trailing (dict \u2026) of options`
-    );
-  }
-  return {
-    displays: displayArgs,
-    // [LAW:one-source-of-truth] The same option reader the loader folds over
-    // the static dict — vocabulary, types, defaults live once.
-    options: parseMenuOptions(optsArg ?? {})
-  };
-}
-function menuFuncs(runtime) {
-  return {
-    menu: {
-      fn: (applyName, ...tail) => {
-        const { displays, options } = parseMenuArgs(applyName, tail);
-        return renderMenu(applyName, displays, options, runtime);
-      },
-      argTypes: ["string", "value"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
-// src/render/segment-color.ts
-init_globals();
-
-// src/template-engine/gauge.ts
-init_globals();
-function renderGauge(spec) {
-  const { value, max: max3, width, filled: filled2, empty: empty2, colourAt } = spec;
-  const lit = litCells(value, max3, width);
-  const cells = [];
-  for (let i2 = 0; i2 < width; i2++) {
-    const isLit = i2 < lit;
-    const hex = isLit && colourAt !== void 0 ? colourAt(i2 * max3 / width) : void 0;
-    cells.push(
-      new RichText(isLit ? filled2 : empty2, {
-        style: hex === void 0 ? void 0 : new Style({ color: hex })
-      })
-    );
-  }
-  const gauge = RichText.fromFragments(cells);
-  gauge.end = "";
-  gauge.overflow = "ignore";
-  return gauge;
-}
-function litCells(value, max3, width) {
-  if (!Number.isFinite(value) || !Number.isFinite(max3) || max3 <= 0) return 0;
-  return Math.min(width, Math.max(0, Math.round(value / max3 * width)));
-}
-
-// src/render/segment-color.ts
-function segmentColorFuncs(ref) {
-  const bgOf = {
-    fn: (() => {
-      const active2 = requireActiveSegment(ref, "{{ bgOf }}");
-      if (active2.bg === void 0) {
-        throw new Error(
-          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
-        );
-      }
-      return active2.bg.hex;
-    }),
-    argTypes: [],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const tint = {
-    fn: (() => requireActiveSegment(ref, "{{ tint }}").tint.hex),
-    argTypes: [],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const errorRedOn = {
-    fn: ((bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ errorRedOn }}");
-      return errorRed(palette2, resolveColorRef(palette2, bgRef), ref.drawnAt()).hex;
-    }),
-    argTypes: ["string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const palette = paletteFuncs(
-    () => requireActiveSegment(ref, "{{ color }} / {{ ramp }} / {{ gauge }}").palette
-  );
-  const gauge = {
-    fn: ((value, max3, width, filled2, empty2, easing, ...stops) => {
-      const ramped = easing === void 0 ? void 0 : [easing, ...flattenStops(stops)];
-      return renderGauge({
-        value,
-        max: max3,
-        width,
-        filled: filled2,
-        empty: empty2,
-        colourAt: ramped === void 0 ? void 0 : (position) => String(
-          palette.ramp.fn(position, ...ramped)
-        )
-      });
-    }),
-    // "float" for the two measurements (a percentage need not be whole), "int"
-    // for the cell count, the glyph pair, then a repeating string slot for the
-    // optional easing and its stops — Go's spelling of an optional tail is a
-    // variadic one, so the gate requires the five and `ramp` refuses an easing
-    // with no stop.
-    argTypes: ["float", "float", "int", "string", "string", "string"],
-    arity: { kind: "variadic" },
-    returnType: "T"
-  };
-  return { ...palette, bgOf, tint, errorRedOn, gauge };
-}
-var POLES = [
-  { pole: parseRgbHex("000000"), rungs: ["darken-1", "darken-2", "darken-3"] },
-  {
-    pole: parseRgbHex("ffffff"),
-    rungs: ["lighten-1", "lighten-2", "lighten-3"]
-  }
-];
-var TERMINAL_REDS = [
-  ANSI_COLOR_NAMES.red,
-  ANSI_COLOR_NAMES.bright_red
-].map((index) => STANDARD_TABLE.get(index));
-var RED_HUE = { from: -20, to: 38, chroma: 0.06 };
-function readsRed(colour) {
-  const { h, c } = Oklch.fromRgba(colour);
-  const hue = h > 180 ? h - 360 : h;
-  return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
-}
-function errorRed(palette, ground, depth) {
-  const shown = drawnColour(ground, depth);
-  const [farther, nearer] = [...POLES].sort(
-    (x, y) => contrastRatio(y.pole, shown) - contrastRatio(x.pole, shown)
-  );
-  const themed = [
-    "text-error",
-    "error",
-    ...[...farther.rungs, ...nearer.rungs].map((rung) => `error-${rung}`)
-  ].map((name) => resolveColorRef(palette, name));
-  const counted2 = (ratio) => Math.min(ratio, TEXT_MIN_CONTRAST);
-  return [...themed, ...TERMINAL_REDS].map((colour) => {
-    const drawn = drawnColour(colour, depth);
-    return { colour, drawn, ratio: counted2(contrastRatio(drawn, shown)) };
-  }).filter(({ drawn }) => readsRed(drawn)).reduce((best, c) => c.ratio > best.ratio ? c : best).colour;
-}
-function flattenStops(stops) {
-  return stops.flatMap((stop2) => {
-    const cut = stop2.indexOf(":");
-    const at = cut < 0 ? NaN : Number(stop2.slice(0, cut));
-    if (!Number.isFinite(at)) {
-      throw new Error(
-        `{{ gauge }} stop "${stop2}" must be "<position>:<colour>", e.g. "80:error" or "80:#ff0000"`
-      );
-    }
-    return [at, stop2.slice(cut + 1)];
-  });
-}
-
-// src/dsl/variable-scope.ts
-init_globals();
-var KIND_SCOPE = {
-  input: "view",
-  state: "view",
-  template: "view",
-  time: "view",
-  source: "view",
-  shell: "view",
-  file: "view",
-  env: "view",
-  literal: "directory",
-  dropped: "directory"
-};
-var SCOPES = /* @__PURE__ */ new WeakMap();
-function variableScopes(config) {
-  let scopes = SCOPES.get(config);
-  if (scopes === void 0) {
-    scopes = new Map(
-      [...declaredVariables(config)].map(([name, decl]) => [
-        name,
-        KIND_SCOPE[decl.kind]
-      ])
-    );
-    SCOPES.set(config, scopes);
-  }
-  return scopes;
-}
-
-// src/dsl/view-source.ts
-init_globals();
-
-// src/config/loader/projections.ts
-init_globals();
-
 // src/config/loader/value-reads.ts
 init_globals();
 function valueReads({ names, helpers, actions }) {
@@ -77814,1617 +74891,6 @@ function instantReadOf(template, config) {
 function templateInstants(basis) {
   return (template) => instantRead(template, basis) !== null;
 }
-
-// src/dsl/render.ts
-function toCachePolicy(cache2) {
-  if ("ttl" in cache2)
-    return { kind: "ttl", durationMs: parseDuration(cache2.ttl) };
-  if ("watch_file" in cache2)
-    return { kind: "watch_file", path: cache2.watch_file };
-  if ("depends_on" in cache2)
-    return { kind: "depends_on", varNames: cache2.depends_on };
-  if ("key" in cache2) return { kind: "key", template: cache2.key };
-  if ("never" in cache2) return { kind: "never" };
-  throw new Error(
-    `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
-  );
-}
-function toSourceParse(parse3, dflt) {
-  switch (parseArm(parse3)) {
-    case "json":
-      return { kind: "json", default: dflt };
-    case "regex":
-      return {
-        kind: "regex",
-        pattern: parse3.regex,
-        default: dflt
-      };
-    case "text":
-      return { kind: "text", default: dflt };
-  }
-}
-function declareOne(registry, name, decl, cwd2, derivation) {
-  switch (decl.kind) {
-    case "literal":
-      registry.declareLiteral(name, decl.value);
-      break;
-    case "dropped":
-      registry.declareFailedDocument(name, decl.reason);
-      break;
-    // [LAW:single-enforcer] A plugin source's reading is read by the managed
-    // storage owner and carried by the view's payload at the source's name
-    // (src/renderer/render-payload.ts); the view derives the document from it.
-    case "source":
-      registry.declareSourceDocument(name);
-      break;
-    case "input":
-      registry.declareInput(
-        name,
-        decl.path,
-        decl.type ?? "string",
-        decl.default,
-        derivation
-      );
-      break;
-    case "env":
-      registry.declareEnv(name, decl.name, decl.default);
-      break;
-    case "file":
-      registry.declareFile(name, decl.path, {
-        readMode: decl.readMode,
-        cache: toCachePolicy(decl.cache),
-        parse: toSourceParse(decl.parse, decl.default)
-      });
-      break;
-    case "shell":
-      registry.declareShell(name, decl.command, {
-        cwd: cwd2,
-        env: shellEnvOf(decl.env),
-        cache: toCachePolicy(decl.cache),
-        parse: toSourceParse(decl.parse, decl.default)
-      });
-      break;
-    case "template":
-      registry.declareTemplate(name, decl.template, {
-        type: decl.type ?? "string",
-        varDefault: decl.default,
-        derivation
-      });
-      break;
-    case "time":
-      registry.declareTime(name, {
-        format: decl.layout,
-        varDefault: decl.default
-      });
-      break;
-    case "state":
-      registry.declareState(name, {
-        key: decl.key,
-        ...decl.default !== void 0 && { varDefault: decl.default }
-      });
-      break;
-  }
-}
-function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
-  let defines = inherit;
-  for (const [name, body] of Object.entries(bodies)) {
-    try {
-      defines = engine.parse(`{{ define "${name}" }}${body}{{ end }}`, defines).defines();
-    } catch (e) {
-      throw new Error(
-        `Template parse error in ${errorPath}.${name}: ${e.message}`,
-        { cause: e }
-      );
-    }
-  }
-  return defines;
-}
-var compileAlone = (_key, input) => compileDslConfig(input);
-function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE) {
-  const input = compileInputOf(config);
-  const key = compileKey(input);
-  return {
-    compiled: compile(key, input),
-    compileKey: key,
-    loadWarnings: declareDslVariables(config, registry, cwd2, scopes)
-  };
-}
-function compileInputOf(config) {
-  const { variables, ...rest2 } = config;
-  const stateKeyToVar = /* @__PURE__ */ new Map();
-  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
-    if (name in variables) stateKeyToVar.set(key, name);
-  }
-  for (const [name, decl] of stateVarDecls(config)) {
-    if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
-  }
-  return {
-    config: rest2,
-    stateReads: [...stateKeyToVar].sort(([a], [b]) => a < b ? -1 : 1),
-    projections: [...projectionsOf(config)].sort(
-      ([a], [b]) => a < b ? -1 : 1
-    )
-  };
-}
-function compileKey(input) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
-}
-function declareDslVariables(config, registry, cwd2, scopes) {
-  const scopeOf3 = variableScopes(config);
-  const projections = projectionsOf(config);
-  const loadWarnings = [];
-  for (const [name, decl] of declaredVariables(config)) {
-    if (!scopes.has(scopeOf3.get(name))) continue;
-    try {
-      declareOne(
-        registry,
-        name,
-        decl,
-        cwd2,
-        projections.has(name) ? "projection" : "computed"
-      );
-    } catch (err) {
-      loadWarnings.push(
-        `Variable "${name}": ${err.message ?? String(err)}`
-      );
-    }
-  }
-  return loadWarnings;
-}
-var EVERY_SCOPE = /* @__PURE__ */ new Set([
-  "directory",
-  "view"
-]);
-function compileDslConfig({
-  config,
-  stateReads,
-  projections
-}) {
-  const actionRuntime = {
-    bound: void 0,
-    compiled: /* @__PURE__ */ new Map()
-  };
-  const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
-  const activeSegment = createActiveSegmentRef(drawnAt);
-  const menuRuntime = {
-    action: actionRuntime,
-    activeSegment
-  };
-  const styleNames = Object.keys(config.styles);
-  const presetOptions = presetNames(config.presets);
-  const perConfigDomains = configOptionDomains(config);
-  const renderClocks = [
-    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now)
-  ];
-  const engine = createCcCandybarEngine({
-    extraFuncs: {
-      ...actionFuncs(actionRuntime),
-      ...swatchFuncs(actionRuntime),
-      ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime),
-      ...themePreviewFuncs(actionRuntime, activeSegment),
-      ...layoutPreviewFuncs(actionRuntime, activeSegment),
-      ...menuFuncs(menuRuntime),
-      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
-      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
-      // from, published by the walk. Binding it to a palette captured HERE
-      // (registration runs once per config load, renders happen per tick) was
-      // the two-clocks bug this seam exists to close: a session theme click or
-      // a style moved a segment's background while every in-body color stayed
-      // where it was, so one segment painted from two palettes at once. Reading
-      // live costs nothing structurally — FuncMap bodies run at evaluate time,
-      // so parse-once/evaluate-many is untouched.
-      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
-      ...segmentColorFuncs(activeSegment),
-      // [LAW:one-type-per-behavior] The per-config sibling of the static
-      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
-      // projection of the "styles" option domain. Injected here — not in the
-      // static FuncMap — because the domain is this config's styles block.
-      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
-      // The presets domain's twin of the binding above — same per-config
-      // reason, same shape. A hand-authored `range presets` and a
-      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
-      // derived click gate admits.
-      presets: {
-        fn: () => presetOptions,
-        argTypes: [],
-        arity: { kind: "exact" }
-      }
-    },
-    clockFuncs: renderClocks,
-    drawnAt
-  });
-  const helpers = compileHelpers(engine, config.helpers, "helpers");
-  const sources = /* @__PURE__ */ new Map();
-  const parse3 = (src) => {
-    const parsed2 = engine.parse(src, helpers);
-    sources.set(parsed2, src);
-    return parsed2;
-  };
-  const nodeTemplates = /* @__PURE__ */ new Map();
-  const parseShared = (src) => {
-    const known = nodeTemplates.get(src);
-    if (known !== void 0) return known;
-    const parsed2 = parse3(src);
-    nodeTemplates.set(src, parsed2);
-    return parsed2;
-  };
-  const stateKeyToVar = new Map(stateReads);
-  actionRuntime.compiled = compileActions(
-    parse3,
-    config.actions,
-    stateKeyToVar,
-    perConfigDomains
-  );
-  const compiled = /* @__PURE__ */ Object.create(
-    null
-  );
-  for (const [segName, seg2] of Object.entries(config.segments)) {
-    const segDefines = seg2.partials === void 0 ? helpers : compileHelpers(
-      engine,
-      seg2.partials,
-      `segments.${segName}.partials`,
-      helpers
-    );
-    const segParse = (src) => {
-      const parsed2 = engine.parse(src, segDefines);
-      sources.set(parsed2, src);
-      return parsed2;
-    };
-    const parseField = (src, field, read2 = seg2.partials === void 0 ? parseShared : segParse) => {
-      try {
-        return read2(src);
-      } catch (e) {
-        throw new Error(
-          `Template parse error in segments.${segName}.${field}: ${e.message}`,
-          { cause: e }
-        );
-      }
-    };
-    compiled[segName] = {
-      when: seg2.when !== void 0 ? parseField(seg2.when, "when") : void 0,
-      template: parseField(seg2.template, "template", segParse),
-      bg: seg2.bg !== void 0 ? parseField(seg2.bg, "bg", segParse) : void 0,
-      fg: seg2.fg !== void 0 ? parseField(seg2.fg, "fg", segParse) : void 0
-    };
-  }
-  const parseNodeField = (src, path31, field) => {
-    try {
-      return parseShared(src);
-    } catch (e) {
-      throw new Error(
-        `Template parse error in ${path31}.${field}: ${e.message}`,
-        { cause: e }
-      );
-    }
-  };
-  const resolvedSettings = (node) => {
-    const declared = settingsOf(config.segments[node.name]);
-    const out = /* @__PURE__ */ Object.create(null);
-    for (const [name, decl] of Object.entries(declared)) {
-      Object.defineProperty(out, name, {
-        enumerable: true,
-        get: () => placementSetting(
-          node,
-          name,
-          decl,
-          (draft) => String(
-            renderBinding(actionRuntime, `setting ${name}`).store.read(
-              draft.variable
-            )
-          )
-        )
-      });
-    }
-    return Object.freeze(out);
-  };
-  const compileNode = (node, path31, at) => {
-    const cctx = {
-      path: path31,
-      at,
-      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path31, "when"),
-      parse: (src, field) => parseNodeField(src, path31, field),
-      compileChild: compileNode,
-      placementSettings: resolvedSettings
-    };
-    return nodeType(node.kind).compile(node, cctx);
-  };
-  const roots = /* @__PURE__ */ new Map();
-  for (const name of presetOptions) {
-    const { node, path: path31 } = presetRoot(config, name);
-    roots.set(name, compileNode(node, path31, void 0));
-  }
-  const globalExpressions = new Map(
-    EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
-  );
-  for (const { at, slot, rule: authored } of authoredRules(config)) {
-    const where = at.join(".");
-    const rules = globalExpressions.get(slot);
-    const seen = rules.get(authored);
-    rules.set(
-      authored,
-      seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
-    );
-  }
-  const instantNames = new Set(projections.map(([name]) => name));
-  const basis = {
-    reads: valueReads({
-      names: instantNames,
-      helpers: config.helpers,
-      actions: config.actions
-    }),
-    projections: new Map(projections),
-    clock: engineClockFunctions(renderClocks)
-  };
-  const gateReadsInstant = templateInstants(basis);
-  const gates = [...roots.values()].flatMap(layoutGates(compiled));
-  const layoutReadsInstant = gates.some(
-    (gate2) => gateReadsInstant(sources.get(gate2))
-  );
-  const finalClock = layoutReadsInstant ? /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW]) : basis.clock;
-  const readsInstant = templateInstants({ ...basis, clock: finalClock });
-  const instant = new Set(
-    [...sources].flatMap(
-      ([template, source]) => readsInstant(source) ? [template] : []
-    )
-  );
-  for (const [segName, seg2] of Object.entries(config.segments)) {
-    if (seg2.partials === void 0) continue;
-    const segReadsInstant = templateInstants({
-      reads: valueReads({
-        names: instantNames,
-        helpers: { ...config.helpers, ...seg2.partials },
-        actions: config.actions
-      }),
-      projections: basis.projections,
-      clock: finalClock
-    });
-    for (const field of SEGMENT_TEMPLATE_FIELDS) {
-      const parsed2 = compiled[segName][field];
-      if (parsed2 === void 0) continue;
-      if (segReadsInstant(sources.get(parsed2))) instant.add(parsed2);
-    }
-  }
-  return {
-    segments: compiled,
-    roots,
-    activeSegment,
-    menuRuntime,
-    globalExpressions,
-    instant,
-    layoutReadsInstant,
-    styles: config.styles,
-    runtime: actionRuntime,
-    views: /* @__PURE__ */ new WeakMap()
-  };
-}
-function instantSegments(compiled) {
-  return Object.entries(compiled.segments).flatMap(
-    ([name, segment]) => [segment.when, segment.bg, segment.fg, segment.template].some(
-      (template) => template !== void 0 && compiled.instant.has(template)
-    ) ? [name] : []
-  );
-}
-var layoutGates = (segments) => (root) => {
-  const asked = [];
-  layoutRows(root, (node) => {
-    asked.push(node);
-    return true;
-  });
-  return asked.flatMap((node) => [
-    ...node.when === void 0 ? [] : [node.when],
-    ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
-  ]);
-};
-function parseExpressionSlot(parse3, path31, source) {
-  try {
-    return parse3(source);
-  } catch (e) {
-    throw new Error(
-      `${path31} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
-    );
-  }
-}
-var unreachable = (message2) => {
-  throw new Error(`a slot settled on a name its domain refuses: ${message2}`);
-};
-function evalRule(slot, rule, parts, warn, frame2) {
-  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame2);
-  frame2.settled(slot, name);
-  return name;
-}
-function ruleName(slot, rule, outcome, warn, frame2) {
-  switch (outcome.kind) {
-    case "named":
-      return outcome.name;
-    case "pending":
-      frame2.waited(outcome.variable);
-      return frame2.held(slot) ?? SLOT_FLOORS[slot];
-    case "failed":
-      warn({
-        kind: "rule",
-        slot,
-        message: ruleFloorMessage(
-          rule.where,
-          slot,
-          `the rule failed \u2014 ${outcome.error}`
-        )
-      });
-      return SLOT_FLOORS[slot];
-  }
-}
-function placementsUnder(node) {
-  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
-}
-function segmentsUnder(node) {
-  if (node.kind === "container") return node.children.flatMap(segmentsUnder);
-  return [
-    node,
-    ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
-  ];
-}
-function drawDsl(config, compiled, store, registry, projected, at, opts, selection2) {
-  var _stack = [];
-  try {
-    const warnings = [];
-    const warn = (warning) => void warnings.push(warning);
-    const segments = /* @__PURE__ */ new Map();
-    const effects = selection2.effects ?? new SessionEffects("");
-    const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
-    const drawClock = __using(_stack, bindClock(at, clock.timeline));
-    const parts = partsOf(compiled, store);
-    const drawOpts = {
-      ...opts,
-      colorCompatibility: parts.colorCompatibility()
-    };
-    parts.draw(
-      {
-        width: drawOpts.width,
-        chromeCols: stripChromeCols(drawOpts),
-        padding: drawOpts.padding,
-        seamCols: stripSeamCols(drawOpts),
-        preset: selection2.preset
-      },
-      projected
-    );
-    const evaluatedBefore = parts.evaluated;
-    const _bound = __using(_stack, bindRender(compiled.menuRuntime.action, parts.binding));
-    const { preset, transitions } = selection2;
-    const decor = {
-      variation: VARIATIONS[selection2.variation],
-      shade: SHADES[selection2.shade]
-    };
-    const source = {
-      config,
-      preset,
-      revision: registry.stateRevision(),
-      width: drawOpts.width
-    };
-    const record2 = beginRecord(source, returnedBy);
-    const last2 = recordFrom(selection2.record ?? null, source);
-    const waited = /* @__PURE__ */ new Set();
-    const ruleFrame = {
-      held: (slot) => last2?.rules.get(slot),
-      waited: (variable) => waited.add(variable),
-      settled: record2.rule
-    };
-    const rules = /* @__PURE__ */ new Map();
-    const slotted = (slot) => {
-      const state = parts.slot(slot);
-      rules.set(slot, state.kind === "settled" ? "kept" : "per-draw");
-      if (state.kind === "settled") {
-        if (state.warning !== null)
-          warn({ kind: "rule", slot, message: state.warning });
-        if (state.waited !== null) waited.add(state.waited);
-        return state.name;
-      }
-      const name = decideSlot(
-        compiled,
-        slot,
-        evalRule(slot, state.rule, parts, warn, ruleFrame),
-        state.rule.where,
-        (message2) => warn({ kind: "rule", slot, message: message2 })
-      );
-      parts.drawnSlot(slot, name);
-      return name;
-    };
-    const {
-      theme: decidedTheme,
-      style: decidedStyle,
-      effect: decidedEffect
-    } = parts.selections();
-    const theme24 = decidedTheme.kind === "decided" ? decidedTheme : decideThemeName(slotted("palette"), "", unreachable);
-    const style = decidedStyle.kind === "decided" ? decidedStyle : decideStyleName(slotted("style"), config.styles);
-    const effect = decidedEffect.kind === "decided" ? decidedEffect : decideEffectName(slotted("effect"));
-    const basePalette = theme24.value;
-    const palette = transposedPalette(basePalette, style.value);
-    parts.publishLook({ basePalette, palette, decor });
-    const flashFill = palette.get("warning");
-    const flash = selection2.idleSince === void 0 ? null : {
-      idleSince: selection2.idleSince,
-      timeoutS: selection2.menuTimeout,
-      fill: flashFill,
-      text: textOn2(palette, flashFill, registry.drawnAt())
-    };
-    const motion = effects.motion(
-      effect.value,
-      clock,
-      {
-        transitions,
-        source,
-        last: last2,
-        returned: returnedBy,
-        hold: heldLine
-      },
-      flash
-    );
-    const lookupSegment = (name) => config.segments[name];
-    const renderNode = (node, parent, region) => {
-      const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
-      const gate2 = evaluated2.kind === "failed" ? {
-        ...evaluated2,
-        report: () => {
-          const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
-          warn({
-            kind: "when",
-            where,
-            error: evaluated2.message,
-            message: `${where}: ${evaluated2.message} \u2014 what it gates is hidden`
-          });
-        }
-      } : evaluated2;
-      const ctx = {
-        scope: parts.scope,
-        palette,
-        gate: gate2,
-        padding: drawOpts.padding,
-        region,
-        segments,
-        brokenPlacement: (placement, message2) => warn({
-          kind: "segment",
-          placement,
-          message: `segment "${placement}": ${message2}`
-        }),
-        placement: (node2) => parts.placement(node2),
-        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
-          compiled.activeSegment,
-          node2,
-          palette2,
-          region,
-          registry.drawnAt(),
-          body,
-          scope
-        ),
-        lookupSegment,
-        renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
-        // A disclosure body starts a NEW region: the root of the band its
-        // trigger opens. Depth is a fact of that band — counted up by
-        // `decorationFor` each time a band item opens the next — so a nested
-        // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
-        renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
-        // [LAW:one-source-of-truth] The row ✕ names the session every other
-        // affordance's URL does.
-        closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
-        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
-        lastDrawn: (id2) => last2?.placements.get(id2),
-        waited: (variable) => waited.add(variable),
-        decorations: (node2, palette2) => decoratedStyles(
-          compiled.activeSegment,
-          node2,
-          palette2,
-          region,
-          registry.drawnAt()
-        )
-      };
-      return nodeType(node.kind).render(node, ctx);
-    };
-    const root = compiled.roots.get(preset);
-    if (root === void 0) {
-      throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 the config compiler builds one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
-      );
-    }
-    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
-      const items = fitRow(line.cells, drawOpts);
-      const kind = line.band === "deeper" ? "menu" : "bar";
-      return {
-        kind,
-        cellBreaks: items.length - line.cells.length,
-        ...drawStripCells(
-          items.map((item) => item.owner),
-          drawOpts,
-          motion.row(row, kind, items)
-        )
-      };
-    });
-    const left = motion.memory();
-    const memory = { record: record2.record(left.passages), motion: left.motion };
-    const armed = () => rendered.some((row) => row.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
-      ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
-    );
-    const nextChange = Math.min(
-      drawClock.heard(),
-      ...rendered.map((row) => row.nextChange)
-    );
-    const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
-    for (const [variable, fault] of registry.cachePolicyFaults())
-      warn({
-        kind: "refresh",
-        variable,
-        error: fault.message,
-        message: `variable "${variable}" cannot refresh: ${fault.message}`
-      });
-    return {
-      frame: {
-        depth: drawOpts.colorCompatibility,
-        rows: rendered.flatMap(
-          ({ kind, lines: lines2 }) => lines2.map((runs) => ({ kind, runs }))
-        ),
-        nextChange,
-        motion: frameMotion,
-        pending: [...waited].sort()
-      },
-      memory,
-      warnings,
-      segments,
-      evaluated: parts.evaluated - evaluatedBefore,
-      cellBreaks: rendered.reduce((sum2, row) => sum2 + row.cellBreaks, 0),
-      rules
-    };
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-
-// src/renderer/render-payload.ts
-init_globals();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
-
-// src/utils/terminal-width.ts
-init_globals();
-var RESERVED_CHARS = 2;
-function applyClaudeCodeReserve(rawCols) {
-  return Math.max(1, rawCols - RESERVED_CHARS);
-}
-
-// src/renderer/bundled-presets.ts
-init_globals();
-
-// src/config/default-dsl-config.ts
-init_globals();
-
-// src/config/dsl-loader.ts
-init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/layout.ts
-init_globals();
-var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
-var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
-var EMPTY_VERTICAL_NODE = {
-  kind: "container",
-  direction: "vertical",
-  children: []
-};
-function literalSpec(value) {
-  return { required: true, json: { const: value }, parse: () => value };
-}
-function segmentNameSpec() {
-  return {
-    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
-    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path31}.${field}`,
-        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "";
-    }
-  };
-}
-function directionSpec() {
-  return {
-    // Mandatory in the schema (a missing/invalid direction pushes an issue →
-    // throw); the parse recovers to "vertical", a no-op for `fields`. See
-    // `cellsSegmentsSpec`.
-    required: true,
-    json: { enum: [...DIRECTIONS] },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && DIRECTIONS.includes(v)) {
-        return v;
-      }
-      ctx.issues.push({
-        path: `${path31}.${field}`,
-        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "vertical";
-    }
-  };
-}
-function childrenSpec(node) {
-  return {
-    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
-    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    // [LAW:one-source-of-truth] The recursive field points at the node definition
-    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
-    // self-reference. The runtime recursion and the schema recursion break the
-    // same cycle, declared in one place.
-    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (!Array.isArray(v)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `a container must have a "children" array of layout nodes, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return [];
-      }
-      return v.map((child, i2) => node(ctx, `${path31}.${field}[${i2}]`, child));
-    }
-  };
-}
-var SEGMENT_NODE_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("segment"),
-    name: segmentNameSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
-var CONTAINER_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("container"),
-    direction: directionSpec(),
-    children: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function segArmSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path31}.${field}`,
-        message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, [...path31.split("."), field])
-      });
-      return "";
-    }
-  };
-}
-var SEG_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    seg: segArmSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var H_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    h: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var V_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    v: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var validateRoot = (ctx, path31, raw) => {
-  if (typeof raw === "string") {
-    if (raw.length === 0) {
-      ctx.issues.push({
-        path: path31,
-        message: `a bare-string layout node must be a non-empty segment name`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return EMPTY_VERTICAL_NODE;
-    }
-    return { kind: "segment", name: raw };
-  }
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "container") {
-    return record(ctx, CONTAINER_SCHEMA, path31, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "segment") {
-    return record(ctx, SEGMENT_NODE_SCHEMA, path31, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "cells") {
-    ctx.issues.push({
-      path: path31,
-      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
-  Old: { kind: "cells", segments: ["seg1", "seg2"] }
-  New: { h: ["seg1", "seg2"] }`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "group") {
-    const group = record(ctx, GROUP_SCHEMA, path31, raw);
-    if (group === null) return EMPTY_VERTICAL_NODE;
-    ctx.groups.push({
-      name: group.name,
-      label: group.label,
-      ...group.open !== void 0 && { open: group.open },
-      ...group.direction !== void 0 && { direction: group.direction },
-      ...group.key !== void 0 && { key: group.key },
-      ...group.bg !== void 0 && { bg: group.bg },
-      ...group.fg !== void 0 && { fg: group.fg },
-      ...group.when !== void 0 && { when: group.when },
-      path: path31
-    });
-    return lowerGroup(group);
-  }
-  const hasH = "h" in raw;
-  const hasV = "v" in raw;
-  const hasSeg = "seg" in raw;
-  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
-  if (armCount > 1) {
-    const present = ["seg", "h", "v"].filter((k) => k in raw);
-    ctx.issues.push({
-      path: path31,
-      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path31, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "segment",
-      name: arm2.seg,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.id !== void 0 && { id: arm2.id },
-      ...arm2.settings !== void 0 && { settings: arm2.settings }
-    };
-  }
-  if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path31, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: arm2.h,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path31, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "vertical",
-      children: arm2.v,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  ctx.issues.push({
-    path: `${path31}.kind`,
-    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-  return EMPTY_VERTICAL_NODE;
-};
-function rowsSpec() {
-  return {
-    required: true,
-    json: {
-      type: "object",
-      propertyNames: { pattern: ROW_NAME_RE.source },
-      additionalProperties: { $ref: LAYOUT_NODE_REF }
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (!isPlainObject2(v)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-        return {};
-      }
-      const rows = {};
-      for (const [name, node] of Object.entries(v)) {
-        if (!ROW_NAME_RE.test(name)) {
-          ctx.issues.push({
-            path: `${path31}.${field}.${name}`,
-            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, [...path31.split("."), field, name])
-          });
-          continue;
-        }
-        rows[name] = validateRoot(ctx, `${path31}.${field}.${name}`, node);
-      }
-      return rows;
-    }
-  };
-}
-var ROWS_SCHEMA = {
-  noun: "root key",
-  fields: {
-    rows: rowsSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function validateRootFragment(ctx, path31, raw) {
-  if (isPlainObject2(raw) && "rows" in raw) {
-    return record(ctx, ROWS_SCHEMA, path31, raw) ?? { rows: {} };
-  }
-  return validateRoot(ctx, path31, raw);
-}
-var INSERT_SCHEMA = {
-  noun: "insert key",
-  fields: {
-    seg: segArmSpec(),
-    id: placementIdSpec(),
-    before: optionalStringSpec(),
-    after: optionalStringSpec()
-  }
-};
-function validateInsert(ctx, raw, file) {
-  if (!Array.isArray(raw)) {
-    ctx.issues.push({
-      path: "insert",
-      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["insert"])
-    });
-    return [];
-  }
-  return raw.flatMap((entry, i2) => {
-    const path31 = `insert.${i2}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path31, entry);
-    if (arm2 === null) return [];
-    const sides = ["before", "after"].filter(
-      (side) => arm2[side] !== void 0
-    );
-    if (sides.length !== 1) {
-      ctx.issues.push({
-        path: path31,
-        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, path31.split("."))
-      });
-      return [];
-    }
-    if (isReservedName(arm2.seg)) {
-      ctx.issues.push({
-        path: `${path31}.seg`,
-        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
-        line: findKeyLine(ctx.source, [...path31.split("."), "seg"])
-      });
-      return [];
-    }
-    const relation = sides[0];
-    const anchor = arm2[relation];
-    if (isReservedName(anchor)) {
-      ctx.issues.push({
-        path: `${path31}.${relation}`,
-        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
-        line: findKeyLine(ctx.source, [...path31.split("."), relation])
-      });
-      return [];
-    }
-    return [
-      {
-        seg: arm2.seg,
-        ...arm2.id !== void 0 && { id: arm2.id },
-        anchor,
-        relation,
-        by: { file, entry: path31 }
-      }
-    ];
-  });
-}
-function groupNameSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: ROW_NAME_RE.source },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupKeySpec() {
-  return {
-    required: false,
-    json: { type: "string", minLength: 1 },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupLabelSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: "^[^\\n\\r]*$" },
-    parse: (ctx, path31, field, raw) => {
-      const s = requireString(ctx, path31, raw, field);
-      if (s === null) return void 0;
-      if (/[\n\r]/.test(s)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${path31}.${field}: group label must not contain newlines`,
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-        return void 0;
-      }
-      return s;
-    }
-  };
-}
-var GROUP_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("group"),
-    name: groupNameSpec(),
-    label: groupLabelSpec(),
-    open: optionalBooleanSpec(),
-    direction: optionalEnumSpec(DIRECTIONS),
-    key: groupKeySpec(),
-    bg: optionalStringSpec(),
-    fg: optionalStringSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec(),
-    children: childrenSpec(lazy(() => validateRoot))
-  }
-};
-function groupStateKey(g) {
-  return g.key ?? GROUP_NS + g.name;
-}
-function lowerGroup(g) {
-  const ref = GROUP_NS + g.name;
-  return disclosureNode(
-    ref,
-    { variable: ref, key: groupStateKey(g), member: g.name },
-    {
-      kind: "container",
-      direction: g.direction ?? "vertical",
-      children: g.children,
-      ...g.distribution !== void 0 && { distribution: g.distribution }
-    },
-    "drop",
-    g.when
-  );
-}
-function groupIssue(ctx, path31, message2) {
-  ctx.issues.push({
-    path: path31,
-    message: message2,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-}
-function synthesizeGroupDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
-  const groups = ctx.groups;
-  if (groups.length === 0) return;
-  const seen = /* @__PURE__ */ new Set();
-  for (const g of groups) {
-    if (seen.has(g.name)) {
-      groupIssue(
-        ctx,
-        g.path,
-        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
-      );
-    }
-    seen.add(g.name);
-  }
-  for (const inner of groups) {
-    for (const outer of groups) {
-      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
-        groupIssue(
-          ctx,
-          inner.path,
-          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
-        );
-      }
-    }
-  }
-  const defaultByKey = /* @__PURE__ */ new Map();
-  for (const g of groups) {
-    const key = groupStateKey(g);
-    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
-    if (g.open === true) {
-      const prior = defaultByKey.get(key);
-      if (prior !== DISCLOSURE_CLOSED) {
-        groupIssue(
-          ctx,
-          g.path,
-          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
-        );
-      }
-      defaultByKey.set(key, g.name);
-    }
-  }
-  const variables = {};
-  const actions = {};
-  const segments = {};
-  for (const g of groups) {
-    const name = GROUP_NS + g.name;
-    const key = groupStateKey(g);
-    const depth = groups.filter(
-      (other) => other !== g && g.path.startsWith(other.path + ".")
-    ).length;
-    const indent2 = "  ".repeat(depth);
-    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
-    actions[name] = disclosureCycleAction(key, g.name);
-    segments[name] = {
-      template: disclosureTrigger(
-        name,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
-      ),
-      ...g.bg !== void 0 && { bg: g.bg },
-      ...g.fg !== void 0 && { fg: g.fg }
-    };
-  }
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-  out.segments = { ...out.segments ?? {}, ...segments };
-}
-
-// src/config/loader/menu-synth.ts
-init_globals();
-var MENU_FUNC = "menu";
-var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
-var isDictCall = (e) => e.kind === "call" && e.name === "dict";
-var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
-var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
-function analyzeMenuCall(call) {
-  const issue3 = (message2) => ({ kind: "issue", message: message2 });
-  const [applyArg, ...tail] = call.argExprs;
-  if (applyArg === void 0) {
-    return issue3(
-      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
-    return issue3(
-      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  const last2 = tail[tail.length - 1];
-  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
-  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
-  if (displays.some(isDictCall)) {
-    return issue3(
-      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
-    );
-  }
-  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
-    return issue3(
-      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
-    );
-  }
-  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
-  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
-  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
-  if (entries === null) {
-    return issue3(
-      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
-    );
-  }
-  let options;
-  try {
-    options = parseMenuOptions(entries);
-  } catch (e) {
-    return issue3(`with invalid options \u2014 ${e.message}`);
-  }
-  const sharedKey = options.key;
-  if (sharedKey !== void 0) {
-    const reserved = reservedNamespaceOf(sharedKey);
-    if (reserved !== void 0) {
-      return issue3(
-        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
-      );
-    }
-  }
-  return { kind: "ok", apply: applyArg.value, options };
-}
-function parseCalls(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
-  } catch {
-    return "parse-failed";
-  }
-}
-function hostedMenus(template, placement) {
-  const calls = parseCalls(template);
-  return calls === "parse-failed" ? [] : calls.flatMap(
-    (call) => call.kind === "ok" ? [
-      {
-        key: menuStateKey(placement, call.apply, call.options.key),
-        member: menuMember(call.apply)
-      }
-    ] : []
-  );
-}
-function segmentReferencesMenu(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
-  } catch {
-    return false;
-  }
-}
-function menuIssue(ctx, path31, message2) {
-  ctx.issues.push({ path: path31, message: message2, line: findKeyLine(ctx.source, ["root"]) });
-}
-function checkMenuDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
-  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
-  for (const [name, body] of Object.entries(out.helpers ?? {})) {
-    if (segmentReferencesMenu(body)) {
-      ctx.issues.push({
-        path: `helpers.${name}`,
-        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
-        line: findKeyLine(ctx.source, ["helpers", name])
-      });
-    }
-  }
-  const segments = out.segments ?? {};
-  for (const [segName, seg2] of Object.entries(segments)) {
-    for (const field of ["bg", "fg", "when"]) {
-      const tpl = seg2[field];
-      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
-        menuIssue(
-          ctx,
-          `segments.${segName}.${field}`,
-          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
-        );
-      }
-    }
-    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
-      if (segmentReferencesMenu(body)) {
-        ctx.issues.push({
-          path: `segments.${segName}.partials.${name}`,
-          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
-          line: findKeyLine(ctx.source, [
-            "segments",
-            segName,
-            "partials",
-            name
-          ])
-        });
-      }
-    }
-  }
-  if (out.root !== void 0) {
-    for (const node of walkNodes(fragmentNode(out.root))) {
-      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
-        menuIssue(
-          ctx,
-          "root",
-          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
-        );
-      }
-    }
-  }
-  for (const [segName, { template }] of Object.entries(segments)) {
-    if (template === void 0 || !segmentReferencesMenu(template)) continue;
-    const calls = parseCalls(template);
-    if (calls === "parse-failed") continue;
-    for (const call of calls) {
-      const message2 = call.kind === "issue" ? call.message : identityIssue(call.apply);
-      if (message2 !== void 0) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} ${message2}.`
-        );
-      }
-    }
-  }
-}
-function identityIssue(apply) {
-  if (apply === "") {
-    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
-  }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
-    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
-  }
-  return void 0;
-}
-function synthesizePlacementMenus(config, issues) {
-  const variables = {};
-  const actions = {};
-  const callsOf = /* @__PURE__ */ new Map();
-  const reported = /* @__PURE__ */ new Set();
-  const issue3 = (segName, message2) => {
-    const path31 = `segments.${segName}`;
-    if (reported.has(`${path31}\0${message2}`)) return;
-    reported.add(`${path31}\0${message2}`);
-    issues.push({ path: path31, message: message2 });
-  };
-  for (const preset of presetNames(config.presets)) {
-    const ownerBySynthKey = /* @__PURE__ */ new Map();
-    const claimed = /* @__PURE__ */ new Map();
-    for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.kind !== "segment") continue;
-      const seg2 = config.segments[node.name];
-      if (seg2 === void 0) continue;
-      if (!callsOf.has(node.name)) {
-        callsOf.set(node.name, parseCalls(seg2.template));
-      }
-      const calls = callsOf.get(node.name);
-      if (calls === "parse-failed") continue;
-      const id2 = placementId(node);
-      for (const [index, call] of calls.entries()) {
-        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
-          continue;
-        }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
-        const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
-          const prior2 = ownerBySynthKey.get(k);
-          return prior2 !== void 0 && prior2 !== owner;
-        });
-        if (clashKey !== void 0) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
-        const identity2 = menuActionName(stateKey, member);
-        const claimant = `${node.name}\0${index}`;
-        const prior = claimed.get(identity2);
-        if (prior !== void 0 && prior !== claimant) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
-          );
-          continue;
-        }
-        claimed.set(identity2, claimant);
-        actions[identity2] = disclosureCycleAction(stateKey, member);
-        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-        actions[pageKey] = { set: pageKey, int: true };
-      }
-    }
-  }
-  return {
-    ...config,
-    variables: { ...config.variables, ...variables },
-    actions: { ...config.actions, ...actions }
-  };
-}
-
-// src/config/loader/styles.ts
-init_globals();
-function endcapsNameMessage(at, name, endcapsAt) {
-  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
-}
-var STYLE_SCHEMA = {
-  noun: "style key",
-  fields: {
-    hueShift: optionalNumberSpec(),
-    chromaScale: optionalNumberSpec({ min: 0 }),
-    lightnessScale: optionalNumberSpec(),
-    lightnessShift: optionalNumberSpec()
-  }
-};
-function validateStyles(ctx, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "styles",
-      message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["styles"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/")) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    if (isStyleEraEndcaps(name)) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
-    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
-  }
-  return out;
-}
-
-// src/config/loader/presets.ts
-init_globals();
-var presetRootSpec = {
-  required: false,
-  json: { $ref: ROOT_FRAGMENT_REF },
-  parse: (ctx, path31, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path31}.${field}`, raw[field])
-};
-var presetGlobalsSpec = {
-  required: false,
-  json: presetGlobalsJson(),
-  parse: (ctx, path31, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path31}.${field}`, raw[field])
-};
-var PRESET_SCHEMA = {
-  noun: "preset key",
-  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
-};
-function validatePresets(ctx, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "presets",
-      message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
-      ctx.issues.push({
-        path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
-        line: findKeyLine(ctx.source, ["presets", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-
-// src/config/loader/cross-ref.ts
-init_globals();
-
-// src/config/loader/unplaced.ts
-init_globals();
-function presenceOf(segments, rendering) {
-  const owners = [...rendering].map(
-    ([ns, definition]) => [ownedBy(ns), definition]
-  );
-  return (name) => {
-    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
-      return { kind: "declared" };
-    const owner = owners.find(([owns]) => owns(name));
-    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
-    const scope = scopeOf(name);
-    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
-  };
-}
-function reportable(presence2) {
-  return presence2.kind === "plugin" || presence2.kind === "missing";
-}
-function absentPlacement(config, cells, presence2) {
-  const placed2 = /* @__PURE__ */ new Map();
-  const add2 = (id2, at) => {
-    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
-  };
-  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
-  const fragments = [
-    config.root,
-    ...Object.values(config.presets).flatMap(
-      (p2) => p2.root === void 0 ? [] : [p2.root]
-    )
-  ];
-  for (const tree of fragments.flatMap(trees))
-    for (const node of walkNodes(tree))
-      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
-  for (const cell3 of cells)
-    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
-  const absent = /* @__PURE__ */ new Set();
-  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [id2, at] of placed2)
-      if (!absent.has(id2) && at.every(standsOnAbsent)) {
-        absent.add(id2);
-        grew = true;
-      }
-  }
-  return (id2) => absent.has(id2);
-}
-function withoutUnplaced(config) {
-  let removed = 0;
-  const declared = presenceOf(config.segments, /* @__PURE__ */ new Map());
-  const placed2 = (name) => {
-    const keep = declared(name).kind === "declared";
-    if (!keep) removed += 1;
-    return keep;
-  };
-  const container = (node) => ({
-    ...node,
-    children: node.children.flatMap((child) => nodes(child))
-  });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
-  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
-  const root = (r) => ({
-    ...r,
-    rows: Object.fromEntries(
-      Object.entries(r.rows).map(([name, row]) => [name, tree(row)])
-    )
-  });
-  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
-  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
-  const result = {
-    ...config,
-    root: root(config.root),
-    presets: Object.fromEntries(
-      Object.entries(config.presets).map(([name, p2]) => [name, preset(p2)])
-    )
-  };
-  return removed === 0 ? config : result;
-}
-var EMPTY_ROW = {
-  kind: "container",
-  direction: "horizontal",
-  children: []
-};
 
 // src/config/loader/cross-ref.ts
 var UNREAD_DISTRIBUTION = {
@@ -80739,8 +76205,14 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     authored: (name) => authored.has(name)
   });
   refuseIfIssues();
+  const actions = Object.fromEntries(
+    Object.entries(withChrome.actions).map(([name, action2]) => [
+      name,
+      resolveActionLayer(action2)
+    ])
+  );
   return {
-    config: withChrome,
+    config: { ...withChrome, actions },
     dropped,
     placed: merged,
     warnings: notices
@@ -82337,6 +77809,6507 @@ function isBundledPreset(name) {
   return BUNDLED_PRESETS.includes(name);
 }
 
+// src/config/effective-globals.ts
+init_globals();
+
+// src/config/theme-defaults.ts
+init_globals();
+var NO_THEME_DEFAULT = Object.freeze({});
+function themeDefaultsOf(theme24, themeDefaults) {
+  return theme24.kind === "decided" ? themeDefaults[theme24.name] ?? NO_THEME_DEFAULT : NO_THEME_DEFAULT;
+}
+function underThemeDefault(globals, fragment) {
+  return {
+    ...globals,
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, globals[f] ?? fragment[f]])
+    )
+  };
+}
+
+// src/config/effective-globals.ts
+var laneSwitches = (effective) => perLane((lane) => effective[LANES[lane].switch.setting]);
+function editGlobalsOf(config, sessionPick) {
+  return sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
+}
+function resolveValued(field, staged, sessionPick, globals) {
+  const row = valuedRow(field);
+  return effectiveGlobal(
+    staged[field],
+    row.kind === "session" ? sessionPick(settingNameOf(field)) : null,
+    globals[field],
+    row.floor,
+    row.parse
+  );
+}
+function presetOf(config, sessionPick) {
+  return effectivePresetName(
+    // [LAW:one-source-of-truth] Read under the key a preset pick is written
+    // under.
+    sessionPick(settingNameOf("preset")),
+    config.globals.preset,
+    config.presets
+  );
+}
+function resolveEffectiveGlobals(config, sessionPick, presetCustomized) {
+  const preset = presetOf(config, sessionPick);
+  const declared = presetGlobals(config, preset);
+  const staged = editGlobalsOf(config, sessionPick);
+  const theme24 = resolveThemeSelection(
+    staged.palette,
+    sessionPick(settingNameOf("palette")),
+    declared.palette
+  );
+  const globals = underThemeDefault(
+    declared,
+    themeDefaultsOf(theme24, config.themeDefaults)
+  );
+  return {
+    ...Object.fromEntries(
+      VALUED_FIELDS.map((field) => [
+        field,
+        resolveValued(field, staged, sessionPick, globals)
+      ])
+    ),
+    preset,
+    presetCustomized: presetCustomized(preset),
+    theme: theme24,
+    style: resolveStyleSelection(
+      staged.style,
+      sessionPick(settingNameOf("style")),
+      globals.style,
+      config.styles
+    ),
+    effect: resolveEffectSelection(
+      staged.effect,
+      sessionPick(settingNameOf("effect")),
+      globals.effect
+    ),
+    // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
+    // config` — the same `??`, minus the rungs it does not have.
+    separator: staged.default_separator ?? globals.default_separator
+  };
+}
+
+// src/renderer/setting-drafts.ts
+function spelled(e, name) {
+  const value = e[name];
+  switch (typeof value) {
+    case "boolean":
+      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
+    case "number":
+      return String(value);
+    case "string":
+      return value;
+    default:
+      return value.kind === "decided" ? value.name : null;
+  }
+}
+var SETTING_ROWS = Object.entries(SETTINGS);
+var SETTING_KEYS = new Set(
+  SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
+);
+var NOT_CUSTOMIZED = () => false;
+function sessionGlobals(config, sessionPick) {
+  return resolveEffectiveGlobals(
+    config,
+    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
+    NOT_CUSTOMIZED
+  );
+}
+var SELECTORS = ["preset", "theme"];
+function fileThrough(config, sessionPick, depth) {
+  const held = new Set(
+    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey)
+  );
+  return resolveEffectiveGlobals(
+    config,
+    (key) => held.has(key) ? sessionPick(key) : null,
+    NOT_CUSTOMIZED
+  );
+}
+function baseOf(config, sessionPick) {
+  const bases = Array.from(
+    { length: SELECTORS.length + 1 },
+    (_, depth) => fileThrough(config, sessionPick, depth)
+  );
+  return (name) => {
+    const depth = SELECTORS.indexOf(name);
+    return bases[depth === -1 ? SELECTORS.length : depth];
+  };
+}
+function differing(rows, session, baseOf2, targetOf) {
+  return rows.flatMap(([name, row]) => {
+    const value = spelled(session, name);
+    return value === null || value === spelled(baseOf2(name), name) ? [] : [{ ...row, value, target: targetOf(row) }];
+  });
+}
+function sessionSettingValue(config, sessionPick, name) {
+  return spelled(sessionGlobals(config, sessionPick), name);
+}
+function settingDrafts(config, sessionPick) {
+  const session = sessionGlobals(config, sessionPick);
+  return differing(
+    SETTING_ROWS,
+    session,
+    baseOf(config, sessionPick),
+    (row) => landingKey(config, session.preset, row.configKey)
+  );
+}
+function landingKey(config, preset, field) {
+  return field in (presetByName(config.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
+}
+function durableLanding(config, sessionPick, key) {
+  const preset = presetOf(config, sessionPick);
+  const target = parsePersistTarget(key);
+  return {
+    key: target?.scope === "globals" ? landingKey(config, preset, target.field) : key,
+    globals: presetGlobals(config, preset)
+  };
+}
+function placementDrafts(config, sessionPick) {
+  const { preset } = sessionGlobals(config, sessionPick);
+  return slotsOf(config, preset).flatMap(
+    ({ id: id2, setting, key, decl, saved }) => {
+      const pick2 = sessionPick(key);
+      const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
+      return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
+    }
+  );
+}
+function placementPickProblems(config, sessionPick, writes) {
+  const written3 = new Map(writes.map((w) => [w.key, w.value]));
+  return presetNames(config.presets).flatMap((preset) => {
+    const slots = slotsOf(config, preset);
+    const touched = new Set(
+      slots.filter((s) => written3.has(s.key)).map((s) => s.id)
+    );
+    return [...touched].flatMap((id2) => {
+      const own2 = slots.filter((s) => s.id === id2);
+      const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
+      const values2 = Object.fromEntries(
+        own2.map((s) => {
+          const pick2 = written3.get(s.key) ?? sessionPick(s.key);
+          const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
+          return [s.setting, value ?? s.saved];
+        })
+      );
+      return settingOrderProblems(decls, values2).map(
+        ({ message: message2 }) => `placement "${id2}": ${message2}`
+      );
+    });
+  });
+}
+var SLOTS = /* @__PURE__ */ new WeakMap();
+function slotsOf(config, preset) {
+  const byPreset = SLOTS.get(config) ?? /* @__PURE__ */ new Map();
+  SLOTS.set(config, byPreset);
+  const known = byPreset.get(preset);
+  if (known !== void 0) return known;
+  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
+    (node) => node.kind !== "segment" || node.drafts === void 0 ? [] : Object.entries(node.drafts).map(([setting, { id: id2, key }]) => {
+      const decl = settingsOf(config.segments[node.name])[setting];
+      return {
+        id: id2,
+        setting,
+        key,
+        decl,
+        saved: node.settings?.[setting] ?? decl.default
+      };
+    })
+  );
+  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
+  byPreset.set(preset, slots);
+  return slots;
+}
+function presetSnapshot(config, sessionPick) {
+  const session = sessionGlobals(config, sessionPick);
+  return {
+    from: session.preset,
+    globals: presetByName(config.presets, session.preset).globals ?? {},
+    // [LAW:types-are-the-program] A preset cannot select a preset: its
+    // globals schema refuses `preset`, so the row is not offered.
+    picks: differing(
+      SETTING_ROWS.filter(([n]) => n !== "preset"),
+      session,
+      baseOf(config, sessionPick),
+      (row) => row.configKey
+    ),
+    placements: placementDrafts(config, sessionPick)
+  };
+}
+function themeOwnLook(config, theme24) {
+  return resolveEffectiveGlobals(
+    { ...config, globals: { palette: theme24 }, presets: {} },
+    () => null,
+    NOT_CUSTOMIZED
+  );
+}
+function themeDefaultSave(config, sessionPick) {
+  const session = sessionGlobals(config, sessionPick);
+  const theme24 = spelled(session, "theme");
+  if (theme24 === null) return { kind: "rule" };
+  const own2 = themeOwnLook(config, theme24);
+  const declared = presetGlobals(config, session.preset);
+  const look = Object.fromEntries(
+    THEME_DEFAULT_FIELDS.map((f) => [
+      f,
+      spelled(declared[f] === void 0 ? session : own2, f)
+    ])
+  );
+  return {
+    kind: "look",
+    theme: theme24,
+    look,
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own2, f))
+  };
+}
+function resetLayers(key) {
+  const settings = SETTING_PROJECTIONS.filter((p2) => p2.configKey === key);
+  return {
+    sessionKeys: settings.map((p2) => p2.sessionKey),
+    fileKeys: [
+      key,
+      ...isPresetGlobalsField(key) ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key)) : [],
+      ...isThemeDefaultField(key) ? listResolvablePaletteNames().map(
+        (theme24) => themeDefaultKey(theme24, key)
+      ) : []
+    ]
+  };
+}
+function fileHeldSettings(raw) {
+  return new Set(
+    SETTING_PROJECTIONS.map((p2) => p2.configKey).filter(
+      (key) => resetLayers(key).fileKeys.some(
+        (fileKey) => holds(raw, filePath(fileKey))
+      )
+    )
+  );
+}
+function settingCounts(config, fileHeld, sessionPick) {
+  const drafts = settingDrafts(config, sessionPick);
+  const drafted = new Set(drafts.map((d) => d.configKey));
+  const resettable = perSetting(
+    (name) => drafted.has(SETTINGS[name].configKey) || fileHeld.has(SETTINGS[name].configKey)
+  );
+  const themeDefault = themeDefaultSave(config, sessionPick);
+  return {
+    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    resettable,
+    themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
+  };
+}
+function filePath(fileKey) {
+  const target = parsePersistTarget(fileKey);
+  if (target === null || target.scope === "preset-root") {
+    throw new Error(`reset layer "${fileKey}" is not a value path`);
+  }
+  return persistPath(target);
+}
+function holds(doc, path31) {
+  const [step4, ...rest2] = path31;
+  if (step4 === void 0) return doc !== void 0;
+  return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
+}
+
+// src/config/config-snapshot.ts
+init_globals();
+function layerForRole(chain2, role) {
+  return chain2.find((layer) => layer.role === role);
+}
+function layerAtPath(chain2, path31) {
+  return chain2.find((layer) => layer.path === path31);
+}
+function contentOfText(text4) {
+  return text4 === null ? { kind: "absent" } : { kind: "text", text: text4 };
+}
+function writable(content) {
+  return content.kind !== "unreadable";
+}
+
+// src/renderer/lane-handoff.ts
+init_globals();
+function handedOffTo(lanes, following) {
+  return LANE_NAMES.filter(
+    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
+  );
+}
+var HANDOFF_BUTTON = "[\u27F2 claude]";
+function laneDefaultsAfterReset(config, bundled, project) {
+  const resetKeys = perLane(
+    (lane) => new Set(resetLayers(LANES[lane].switch.setting).fileKeys)
+  );
+  return new Map(
+    presetNames(config.presets).map((name) => {
+      const preset = presetByName(config.presets, name);
+      return [
+        name,
+        perLane((lane) => {
+          const { setting } = LANES[lane].switch;
+          const pin = resetKeys[lane].has(presetGlobalsKey(name, setting)) ? project.presets?.[name]?.globals?.[setting] ?? bundled.presets[name]?.globals?.[setting] : preset.globals?.[setting];
+          return (pin ?? project.globals?.[setting] ?? bundled.globals[setting]) === true;
+        })
+      ];
+    })
+  );
+}
+function laneHandoff(sessionId2, writable2, lanes, remaining) {
+  const personal = writable2.filter((role) => role !== "project");
+  const reason = personal.length === 0 ? "No writable personal config layer for the pane" : lanes.some((lane) => remaining[lane]) ? "The pane stays enabled by its config" : null;
+  const line = reason === null ? diagnosticSpan(
+    HANDOFF_BUTTON,
+    actionTarget(
+      personal.map(
+        (role) => configWriteEffect(
+          VERB_RESET_CONFIG,
+          sessionId2,
+          role,
+          ...lanes.map((lane) => LANES[lane].switch.setting)
+        )
+      )
+    )
+  ) : diagnosticSpan(reason, null);
+  return {
+    severity: HANDOFF_SEVERITY,
+    lines: [[line]]
+  };
+}
+
+// src/dsl/render.ts
+init_globals();
+
+// src/config/shell-env.ts
+init_globals();
+var SHELL_BASE_ENV = [
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOGNAME",
+  "PATH",
+  "SHELL",
+  "TMPDIR",
+  "USER",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_DIRS",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_DIRS",
+  "XDG_DATA_HOME",
+  "XDG_RUNTIME_DIR",
+  "XDG_STATE_HOME"
+];
+function shellEnvOf(declared = []) {
+  return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
+}
+
+// src/var-system/sources.ts
+init_globals();
+
+// src/template-engine/scope.ts
+init_globals();
+function buildScope(store) {
+  const names = new Set(store.names());
+  return makeProxy(store, names, "");
+}
+function makeProxy(store, names, prefix) {
+  return new Proxy(/* @__PURE__ */ Object.create(null), {
+    has(_, key) {
+      if (typeof key !== "string") return false;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) return !absentDocument(store, fullKey);
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) return true;
+      }
+      return false;
+    },
+    get(_, key) {
+      if (typeof key !== "string") return void 0;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) {
+        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
+        const doc = store.readDocument(fullKey);
+        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
+      }
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) {
+          return makeProxy(store, names, fullKey);
+        }
+      }
+      return void 0;
+    }
+  });
+}
+function placementScope(scope, settings) {
+  return new Proxy(scope, {
+    has: (target, key) => key === "settings" || Reflect.has(target, key),
+    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
+  });
+}
+function absentDocument(store, name) {
+  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
+}
+function unwrapDocument(name, doc) {
+  switch (doc.kind) {
+    case "ok":
+      return doc.value;
+    case "pending":
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not completed a scan`
+      );
+    case "failed":
+      throw new Error(`variable "${name}": ${doc.reason}`);
+  }
+}
+
+// src/facts/source-identity.ts
+init_globals();
+var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
+function keyHashOf(value) {
+  return crypto_default.createHash("sha256").update(value).digest("hex");
+}
+
+// src/var-system/sources.ts
+var TORN_WRITE_SETTLE_MS = 250;
+function parseDuration(s) {
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
+  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
+  const v = parseFloat(m[1]);
+  switch (m[2]) {
+    case "ms":
+      return v;
+    case "s":
+      return v * 1e3;
+    case "m":
+      return v * 6e4;
+    case "h":
+      return v * 36e5;
+    default:
+      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+  }
+}
+function parserIdOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return { kind: "text" };
+    case "regex":
+      return { kind: "regex", pattern: parse3.pattern };
+    case "json":
+      return { kind: "json" };
+  }
+}
+var UNBOUND = {
+  session: () => {
+    throw new PendingValueError(
+      "session_id",
+      "the view's session has no value yet: no view source is bound"
+    );
+  },
+  read: () => pendingOf("unread"),
+  run: () => UNREAD_RUN,
+  env: () => UNREAD_ENV,
+  drawnAt: () => {
+    throw new PendingValueError(
+      "colorCompatibility.effective",
+      "the drawn depth has no value yet: no view source is bound"
+    );
+  }
+};
+var found = (value) => ({ kind: "found", value });
+function resolvePath2(obj, path31) {
+  let cur = obj;
+  let inDocument = false;
+  for (const part of path31.split(".")) {
+    if (!inDocument && isPending(cur)) return cur;
+    if (cur == null || typeof cur !== "object") return found(void 0);
+    inDocument ||= part === "value" && cur.kind === "ok";
+    cur = cur[part];
+  }
+  return !inDocument && isPending(cur) ? cur : found(cur);
+}
+function sourceReading(name, resolved) {
+  if (resolved.kind === "pending") return resolved;
+  const raw = resolved.value;
+  if (raw === void 0) {
+    return failed(
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
+      "read"
+    );
+  }
+  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
+  switch (kind) {
+    case "ok":
+    case "absent":
+    case "failed":
+      return raw;
+    default:
+      return failed(
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+        "read"
+      );
+  }
+}
+function coerceToType(raw, type3) {
+  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
+    throw new TypeError(
+      `Expected string|number|boolean from payload, got ${typeof raw}`
+    );
+  }
+  if (type3 === "string") return toString2(raw);
+  if (type3 === "number") return toNumber(raw);
+  return toBool(raw);
+}
+function zeroValue(type3) {
+  if (type3 === "number") return 0;
+  if (type3 === "boolean") return false;
+  return "";
+}
+var SourceRegistry = class _SourceRegistry {
+  // defaultEmptyValue is the global fallback of last resort — the config-level
+  // `default_empty_value` from the proposal. Defaults to empty string.
+  //
+  // sessionState lets the daemon inject its singleton so state-kind variables
+  // share one MobX atom and one disk-persistence layer with the click verbs.
+  // Omitted in tests that don't exercise state vars.
+  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
+    this.store = store;
+    this.defaultEmptyValue = defaultEmptyValue;
+    this.parent = parent;
+    this.sessionState = sessionState;
+    this.cleanups.push(observe(this.subscriptionsNow, () => {
+    }));
+    this.cleanups.push(observe(this.envNow, () => {
+    }));
+  }
+  store;
+  defaultEmptyValue;
+  parent;
+  lastErrors = /* @__PURE__ */ new Map();
+  // A cache policy that cannot fire is a STANDING fault, not a read's
+  // outcome: a read that succeeds afterwards says nothing about whether the
+  // source will ever run again, so no read outcome clears it. A key template
+  // that throws lives until the key evaluates again. One map, since a
+  // variable has one policy. Observable, since the bar draws each fault as a
+  // refresh warning.
+  policyFaults = observable.map(void 0, {
+    deep: false
+  });
+  // The run's own standing fault, as the host reads it: the judge refused
+  // the run, or its watch cannot hear every place its path changes. Its own
+  // map, written by the run's fault alone, so a policy's outcome and a run's
+  // never clear each other.
+  runFaults = observable.map(void 0, {
+    deep: false
+  });
+  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
+  // tears everything down in one call.
+  cleanups = [];
+  // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
+  // by variable name: a derivation of its identity's inputs, pending while a
+  // policy over values has nothing answered to name, failed while its key
+  // failed before ever answering. A derivation, never a
+  // value a reaction writes, so whoever reads the runs inside a batch — a
+  // turn handed a world state from within the host's reaction — reads them as
+  // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
+  // and their readings come back through the view's input source.
+  runs = observable.map(
+    void 0,
+    { deep: false }
+  );
+  runSourcesNow = computed(
+    () => new Map([...this.runs].map(([name, run2]) => [name, run2.get()]))
+  );
+  namedNow = computed(
+    () => new Map(
+      [...this.runSourcesNow.get()].flatMap(
+        ([name, run2]) => run2.kind === "ok" ? [[name, run2.value]] : []
+      )
+    )
+  );
+  // Every `shell` and `file` source by variable name, with the run it names
+  // or why it names none: what the render event counts, so a source whose key
+  // never answers, or failed, is still told.
+  runSources() {
+    return this.runSourcesNow.get();
+  }
+  // The named runs declared by this registry, including aliases for a shared run.
+  namedRuns() {
+    return this.namedNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry needs run, deduped by
+  // digest, in digest order, so an output is the same whatever order a config
+  // declares in. Computed and observed for the registry's life (the
+  // constructor), so a turn in which nothing moved sorts nothing: a computed
+  // read outside a reaction is derived again on every read.
+  subscriptionsNow = computed(
+    () => [
+      ...new Map(
+        [...this.namedNow.get().values()].map((run2) => [run2.digest, run2])
+      )
+    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run2]) => run2)
+  );
+  subscriptions() {
+    return this.subscriptionsNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry's inputs are derived from
+  // (`bindInputs`), and so the depth the terminal draws this view's renders at
+  // — the one depth every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Derived from the view's own
+  // settings, so a template variable whose `readableOn` read it recomputes in
+  // the turn the setting moves (edit mode staging a depth included), never at
+  // a draw.
+  inputs = observable.box(UNBOUND, {
+    deep: false
+  });
+  drawnAt = () => this.inputs.get().drawnAt();
+  // Shared engine instance — parse() is expensive; the engine is reused for
+  // all key: template compilations.
+  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
+  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  sourceNames = observable.array([], { deep: false });
+  // The variables this registry's `env` sources read.
+  envNames = observable.array([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry needs of the session's
+  // environment: each variable once, sorted, so an output is the same
+  // whatever order a config declares in.
+  envNow = computed(
+    () => [...new Set(this.envNames)].sort(),
+    { equals: compareStructural }
+  );
+  envSubscriptions() {
+    return this.envNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values or
+  // standing faults does: the store writes a value only when its own compare
+  // finds it changed, and a fault is written only when its reason does, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
+  publishedNow = computed(
+    () => ({
+      values: this.sourceNames.map((name) => this.store.stored(name)),
+      faults: [...this.policyFaults.values(), ...this.runFaults.values()]
+    })
+  );
+  published() {
+    return this.publishedNow.get();
+  }
+  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
+  // so tests can substitute a fake and the daemon shares its singleton.
+  // Absent in non-daemon contexts; declareState() rejects loudly in that case
+  // rather than silently returning empty strings.
+  sessionState;
+  // [LAW:one-source-of-truth] A session's view of this directory home
+  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
+  // its own, which reads through to this one. The session's values are
+  // declared there, so its inputs, its state and its derivations are its own,
+  // and what its sources fail with is recorded there; a directory value it
+  // reads is this home's one node, and its failure this home's one record. It
+  // shares the daemon's session state, and is disposed on its
+  // own: a session leaving the directory disposes nothing of it.
+  view() {
+    return new _SourceRegistry(
+      new VariableStore(this.store.clock, this.store),
+      this.defaultEmptyValue,
+      this.sessionState,
+      this
+    );
+  }
+  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
+  // variable it declares lives there, and the renderer reads back through it.
+  // Exposing it read-only lets a caller that already holds the registry obtain
+  // the one store without threading a second reference that could diverge (the
+  // action runtime reads current values from this exact store).
+  get variableStore() {
+    return this.store;
+  }
+  // ─── Synchronous source kinds ─────────────────────────────────────────────
+  // literal: type inferred from value; box written once at declaration and never again.
+  declareLiteral(name, value) {
+    this.store.defineBox(name, typeOf(value), value);
+  }
+  // A document that is a known failure for as long as it is declared.
+  declareFailedDocument(name, reason) {
+    this.store.defineDocument(name, failed(reason, "parse"));
+  }
+  // A plugin's source: a document derived from the reading its view's payload
+  // carries at the source's own name — ok, absent or failed as the storage
+  // owner read the session's file, or pending while it has not answered.
+  // [LAW:no-silent-failure] A payload with nothing there is a declaration
+  // that did not take the source the config declares: a bug, read as a failure
+  // naming the variable, never as absent.
+  declareSourceDocument(name) {
+    this.store.defineDerivedDocument(
+      name,
+      () => sourceReading(name, this.inputs.get().read(name))
+    );
+  }
+  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
+  // the registry lives — a render state's hold on a plugin's storage folder —
+  // released by the registry's one teardown (`dispose`), with everything else
+  // it holds.
+  own(release3) {
+    this.cleanups.push(release3);
+  }
+  // input: a derived value of its path in the bound InputSource, cast to its
+  // type. [LAW:types-are-the-program] Before its source answers it holds no
+  // value: it is not answered yet, never its default, which answers a payload
+  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
+  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
+  declareInput(name, path31, type3, varDefault, derivation) {
+    this.store.defineDerived(
+      name,
+      type3,
+      derivation,
+      () => this.inputAt(name, path31, type3, varDefault)
+    );
+  }
+  // [LAW:single-enforcer] The one reading of an input: its path's value cast
+  // to its type, else the fallback chain with the failure recorded.
+  inputAt(name, path31, type3, varDefault) {
+    const resolved = this.inputs.get().read(path31);
+    if (resolved.kind === "pending") {
+      this.lastErrors.delete(name);
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not answered`
+      );
+    }
+    const raw = resolved.value;
+    if (raw === void 0) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        `input path "${path31}" not found in payload`
+      );
+    }
+    try {
+      const value = coerceToType(raw, type3);
+      this.lastErrors.delete(name);
+      return value;
+    } catch (e) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        e instanceof Error ? e.message : String(e)
+      );
+    }
+  }
+  // env: a variable of the session's environment, which the host holds and
+  // hands in as this one variable's value (`InputSource.env`). Pending until
+  // it is handed in; an unset variable is the fallback, with the reason on
+  // the variable. Always a string: env vars are text by nature.
+  declareEnv(name, envVar, varDefault) {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    runInAction(() => this.envNames.push(envVar));
+    this.cleanups.push(
+      reaction(
+        () => this.inputs.get().env(envVar),
+        (fact) => {
+          if (fact.kind === "pending") return;
+          const { at: _at, ...outcome } = fact;
+          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
+          this.noteOutcome(name, read2);
+          this.store.setBox(name, orElse(read2, fallback));
+        },
+        { fireImmediately: true }
+      )
+    );
+  }
+  // ─── Async source kinds ───────────────────────────────────────────────────
+  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
+  declareShell(name, command, opts) {
+    this.declareSource(
+      name,
+      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
+      opts.cache,
+      opts.parse
+    );
+  }
+  // file: read the file at path (whole, or its first line) as the text the
+  // parser sees.
+  declareFile(name, filePath2, opts) {
+    this.declareSource(
+      name,
+      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
+      opts.cache,
+      opts.parse
+    );
+  }
+  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
+  // the one reaction that publishes into it the reading of the run it names,
+  // as the view's input source has it (the host runs it: read → parse). The
+  // cache policy names WHICH run, through the identity it names
+  // (registerCachePolicy), never whether the node exists
+  // [LAW:dataflow-not-control-flow].
+  //
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first run answers, and on a key's move
+  // it holds the old run's answer until the new run's lands — the old `ok` is
+  // simply not overwritten yet, so a key change draws no pending flash (spec
+  // section 19).
+  declareSource(name, read2, cache2, parse3) {
+    const publish = this.publisherFor(name, parse3);
+    const refreshOf = this.registerCachePolicy(name, cache2);
+    const run2 = computed(
+      () => {
+        const refresh = refreshOf();
+        return refresh.kind === "ok" ? ok(
+          runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
+        ) : refresh;
+      },
+      // A failure is a failure whatever it says: its text is the variable's
+      // standing fault, so a key throwing a moving message moves no run.
+      {
+        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
+      }
+    );
+    runInAction(() => {
+      this.sourceNames.push(name);
+      this.runs.set(name, run2);
+    });
+    this.cleanups.push(
+      // The run's fault, as the host reads it, is the variable's standing
+      // fault for as long as this source names that run.
+      reaction(
+        () => this.runFact(name)?.fault ?? null,
+        (fault) => this.noteFault(
+          this.runFaults,
+          name,
+          fault === null ? ok(void 0) : failed(fault, "read")
+        ),
+        { fireImmediately: true }
+      ),
+      reaction(
+        () => this.runFact(name)?.reading,
+        (reading) => {
+          if (reading === void 0 || reading.kind === "pending") return;
+          const { at: _at, ...outcome } = reading;
+          publish(outcome);
+        },
+        { fireImmediately: true }
+      )
+    );
+  }
+  // The reading of the run `name` names, or nothing while its policy names
+  // none (one over values not answered yet).
+  runFact(name) {
+    const run2 = this.runs.get(name)?.get();
+    return run2?.kind === "ok" ? this.inputs.get().run(run2.value.digest) : void 0;
+  }
+  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
+  // the node it publishes: the text arms publish a string box, the json arm a
+  // document. Selected once, at declaration — the pipeline never asks again.
+  // The run parsed by the arm's own parser (source-runs.ts), so its value is
+  // the arm's type.
+  publisherFor(name, parse3) {
+    switch (parse3.kind) {
+      case "text":
+      case "regex":
+        return this.scalarPublisher(name, parse3.default);
+      case "json":
+        return this.documentPublisher(name, parse3.default);
+    }
+  }
+  scalarPublisher(name, varDefault) {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", fallback);
+    return (outcome) => {
+      this.noteOutcome(name, outcome);
+      this.store.setBox(name, orElse(outcome, fallback));
+    };
+  }
+  // A document's fallback is the declared default, or NO document: without a
+  // default the node is pending until its first scan, then holds what the scan
+  // found — absent when it had nothing to read, failed with its reason after a
+  // bad one — which the scope proxy surfaces naming the variable
+  // [LAW:no-silent-failure]: a document has no honest empty value the way a
+  // string has "".
+  //
+  // The default stands in for a run that had nothing to READ — a missing
+  // file, a command that failed, blank output — never for text that was read
+  // and is not a document (failed in its parse phase): that is a broken
+  // writer, and reads as its failure (⚠) whatever the default says
+  // (brandon-plugins-ktag.8fv).
+  //
+  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
+  // (truncate, then write) is caught mid-update by any read that lands
+  // between the two, and the text it sees is not a document. Text that does
+  // not parse is therefore held back while a document is showing: the document
+  // stays, and the failure is published only if no read replaces it within
+  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
+  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
+  // that settle; a document that was never good shows it at once.
+  documentPublisher(name, varDefault) {
+    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
+    this.store.defineDocument(name, fallback);
+    let clearSettling;
+    let showingRead = false;
+    this.cleanups.push(() => clearSettling?.());
+    return (raw) => {
+      clearSettling?.();
+      const outcome = raw;
+      this.noteOutcome(name, outcome);
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next2 = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
+      const show2 = () => {
+        showingRead = outcome.kind === "ok";
+        this.store.setDocument(name, next2);
+      };
+      if (torn2) {
+        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
+      } else {
+        show2();
+      }
+    };
+  }
+  // template: a variable whose value is derived by evaluating a go-template
+  // against the current variable store.  MobX auto-tracks every store.read()
+  // made during evaluation — no explicit dep declarations needed.
+  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
+  // invalidation graph built from the template's read pattern; a projection
+  // (one that reads the instant: src/config/loader/projections.ts) is derived
+  // again by every read, at the draw in progress.
+  declareTemplate(name, template, opts) {
+    const parsedTpl = this.engine.parse(template);
+    this.declareDerived(
+      name,
+      opts.type,
+      opts.derivation,
+      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // time: the instant of the draw in progress in a Go reference-time layout —
+  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
+  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
+  // layout implementation, the one a template calling `date` gets.
+  declareTime(name, opts) {
+    const parsedTpl = this.engine.parse("{{ date .layout now }}");
+    const scope = { layout: opts.format };
+    this.declareDerived(
+      name,
+      "string",
+      "projection",
+      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
+  // template and a time variable differ only in what they compute, and a
+  // computed and a projection only in whether the store keeps the answer.
+  // Evaluated at its first read, never at declaration: a projection has no
+  // instant to read until a draw binds one, and cycles are the loader's to
+  // refuse (validateNoCycles) [LAW:single-enforcer].
+  declareDerived(name, type3, derivation, derive, fallback) {
+    this.store.defineDerived(name, type3, derivation, () => {
+      try {
+        const result = coerceToType(derive(), type3);
+        this.lastErrors.delete(name);
+        return result;
+      } catch (e) {
+        const pending2 = readPending(e);
+        if (pending2 !== void 0) {
+          this.lastErrors.delete(name);
+          throw pending2;
+        }
+        const message2 = e instanceof Error ? e.message : String(e);
+        this.recordError(name, message2);
+        if (fallback === void 0) {
+          throw new Error(`variable "${name}": ${message2}`);
+        }
+        return fallback;
+      }
+    });
+  }
+  // state: read-through to SessionState. The computed reads two deps — the
+  // bound view's session (`session()`) and SessionState itself (MobX-tracked
+  // via its internal atom). A click verb that mutates SessionState
+  // invalidates this computed.
+  // Persistence rides on SessionState's disk backing — no extra wiring.
+  //
+  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
+  // determine the result, never whether code runs.
+  declareState(name, opts) {
+    if (!this.sessionState) {
+      throw new Error(
+        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
+      );
+    }
+    const sessionState = this.sessionState;
+    const fallback = opts.varDefault ?? this.stringInitial(void 0);
+    this.store.defineComputed(name, "string", () => {
+      const value = sessionState.get(this.session(), opts.key);
+      return value !== null ? value : fallback;
+    });
+  }
+  // [LAW:one-source-of-truth] The revision of the session state this render's
+  // `state` variables read (SessionStateReader.revision), found the way they
+  // find it: through the session id the render was handed. A registry with no
+  // session state reads none — one state that never changes.
+  stateRevision() {
+    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
+  }
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
+  session() {
+    return this.inputs.get().session();
+  }
+  // ─── The view's source ────────────────────────────────────────────────────
+  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
+  // derived from: bound once by the view that owns the registry, whose source
+  // reads its payload as it stands. A directory binds none: it reads no
+  // payload and no depth — a source whose key reads one is a view's
+  // (src/dsl/variable-scope.ts).
+  bindInputs(source) {
+    runInAction(() => this.inputs.set(source));
+  }
+  // ─── Diagnostics ─────────────────────────────────────────────────────────
+  // Returns the recorded error for a variable, or undefined if the last
+  // resolution succeeded (or the variable has never been resolved).
+  getLastError(name) {
+    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
+    const read2 = this.lastErrors.get(name);
+    const fault = this.standingFault(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 || read2.message === fault.message ? fault : {
+      timestamp: read2.timestamp,
+      message: `${fault.message}; ${read2.message}`
+    };
+  }
+  // Every variable that cannot refresh, with why: its cache policy cannot
+  // fire, or the host refused or cannot hear its run. Each render reports
+  // them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value or fallback with nothing of its own to say so.
+  cachePolicyFaults() {
+    const names = /* @__PURE__ */ new Set([
+      ...this.policyFaults.keys(),
+      ...this.runFaults.keys()
+    ]);
+    return new Map([
+      ...this.parent?.cachePolicyFaults() ?? [],
+      ...[...names].map((name) => [name, this.standingFault(name)])
+    ]);
+  }
+  // A variable's standing fault: its policy's and its run's, joined when
+  // both stand, so neither hides the other.
+  standingFault(name) {
+    const policy = this.policyFaults.get(name);
+    const run2 = this.runFaults.get(name);
+    return policy === void 0 || run2 === void 0 ? policy ?? run2 : {
+      timestamp: policy.timestamp,
+      message: `${policy.message}; ${run2.message}`
+    };
+  }
+  // Whether `name` lives in this registry's own store, not its directory's.
+  declaredHere(name) {
+    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
+  }
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
+  // reads registered by async source kinds.
+  // Call when the registry is no longer needed (e.g. on daemon shutdown or
+  // config hot-reload). Returns how many computeds the store released, for
+  // the caller's log line.
+  dispose() {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups.length = 0;
+    return this.store.dispose();
+  }
+  // ─── Private helpers ──────────────────────────────────────────────────────
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
+  // refresh of the identity the source names: a period, a watched path or
+  // nothing is the run's own refresh, fixed at declaration; a policy over what
+  // the source reads is the hash of what that answered, pending until it
+  // first answers. Adding a new policy kind means adding one case here.
+  registerCachePolicy(name, policy) {
+    switch (policy.kind) {
+      case "never":
+        return () => ok({ kind: "never" });
+      case "ttl":
+        return () => ok({ kind: "ttl", durationMs: policy.durationMs });
+      case "watch_file":
+        return () => ok({ kind: "watch_file", path: policy.path });
+      case "key": {
+        const parsedKey = this.engine.parse(policy.template);
+        return this.answeredUnder(name, () => {
+          try {
+            return ok(
+              parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
+            );
+          } catch (e) {
+            return readPending(e) !== void 0 ? pendingOf("unread") : failed(
+              `cache key: ${e instanceof Error ? e.message : String(e)}`,
+              "read"
+            );
+          }
+        });
+      }
+      case "depends_on": {
+        return this.answeredUnder(name, () => {
+          const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+        });
+      }
+    }
+  }
+  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
+  // key, the variables it depends on — name the hash of the last value what
+  // they read answered. Over a value not answered yet (a view's inputs before
+  // its first payload) they name nothing (pending) rather than reading, so a first value
+  // is one read, not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
+  // answered, keeps the last answer, so a key failing for a moment and coming
+  // back unchanged names nothing new; what it failed with is the variable's
+  // standing fault (noteFault). One that has never answered names its
+  // failure, so the render event says failed rather than unread.
+  answeredUnder(name, reads) {
+    const answer2 = computed(reads, { equals: compareStructural });
+    this.cleanups.push(
+      reaction(
+        () => answer2.get(),
+        (now2) => this.noteFault(this.policyFaults, name, now2),
+        { fireImmediately: true }
+      )
+    );
+    let last2;
+    return () => {
+      const now2 = answer2.get();
+      if (now2.kind === "ok") last2 = now2.value;
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+    };
+  }
+  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
+  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
+  // backstop is the only "silent" path and exists because the caller has already
+  // recorded the error — downstream reads get a safe typed value, not an exception.
+  fallbackOf(name, type3, varDefault, errorMessage) {
+    this.recordError(name, errorMessage);
+    if (varDefault !== void 0) return varDefault;
+    try {
+      return coerceToType(this.defaultEmptyValue, type3);
+    } catch {
+      return zeroValue(type3);
+    }
+  }
+  // Initial string value for shell/file boxes before the first async run.
+  stringInitial(varDefault) {
+    if (varDefault !== void 0) return varDefault;
+    if (typeof this.defaultEmptyValue === "string")
+      return this.defaultEmptyValue;
+    return "";
+  }
+  recordError(name, message2) {
+    this.lastErrors.set(name, {
+      timestamp: this.store.clock.now(),
+      message: message2
+    });
+  }
+  // The one fold from an outcome (whether the policy can fire, whether the
+  // host can run the run) to the variable's standing fault in `faults`.
+  // A fault standing for the same reason keeps its record, so it moves
+  // nothing that draws it.
+  noteFault(faults, name, outcome) {
+    runInAction(() => {
+      if (outcome.kind !== "failed") faults.delete(name);
+      else if (faults.get(name)?.message !== outcome.reason)
+        faults.set(name, {
+          timestamp: this.store.clock.now(),
+          message: outcome.reason
+        });
+    });
+  }
+  // [LAW:single-enforcer] The one fold from a source outcome to the
+  // variable's error record: ok clears it, anything else records the reason.
+  noteOutcome(name, outcome) {
+    if (outcome.kind === "ok") this.lastErrors.delete(name);
+    else
+      this.recordError(
+        name,
+        outcome.kind === "failed" ? outcome.reason : "no value"
+      );
+  }
+};
+
+// src/render/fill.ts
+init_globals();
+
+// src/template-engine/layout.ts
+init_globals();
+function evaluateWhen(template, scope) {
+  if (template === void 0) return true;
+  const fragments = template.evaluate(scope);
+  return fragments.map((f) => f.plain).join("") !== "false";
+}
+var HIDDEN = { kind: "hidden" };
+var SHOWN = { kind: "shown" };
+function gateOf2(template, scope) {
+  try {
+    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
+  } catch (e) {
+    const pending2 = readPending(e);
+    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+      kind: "failed",
+      message: e instanceof Error ? e.message : String(e)
+    };
+  }
+}
+function collapseToCell(cells, baseStyle) {
+  const merged = RichText.fromFragments(cells);
+  merged.end = "";
+  merged.overflow = "ignore";
+  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
+  return merged;
+}
+function sizeCell(cell3, width, how) {
+  if (cell3.cellLength > width) {
+    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
+  } else if (cell3.cellLength < width) {
+    cell3.align(how.justify, width);
+  }
+}
+function cellParts({ lead, text: text4, trail }) {
+  return [
+    ...lead === void 0 ? [] : [lead],
+    text4,
+    ...trail === void 0 ? [] : [trail]
+  ];
+}
+function heldCell({ text: text4, placement, lead, trail }) {
+  return {
+    text: unlinked(text4),
+    placement,
+    ...lead !== void 0 && { lead: unlinked(lead) },
+    ...trail !== void 0 && { trail: unlinked(trail) }
+  };
+}
+function unlinked(text4) {
+  const copy2 = text4.blankCopy(text4.plain);
+  copy2.style = resolvedStyle(text4.style).clearMetaAndLinks();
+  for (const { start, end, style } of text4.spans)
+    copy2.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
+  return copy2;
+}
+function stripItem(cell3) {
+  const parts = cellParts(cell3);
+  if (parts.length === 1) return cell3.text;
+  const joined = collapseToCell(parts);
+  joined.style = cell3.text.style;
+  return joined;
+}
+function applySegmentLayout(cells, options) {
+  const {
+    width,
+    justify,
+    truncate,
+    baseStyle,
+    padding,
+    placement,
+    lead = [],
+    trail = []
+  } = options;
+  if (cells.length === 0) return [];
+  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
+  const pad = new RichText(" ".repeat(padding));
+  const tail = {
+    placement,
+    ...lead.length > 0 && {
+      lead: collapseToCell([pad, ...lead], baseStyle)
+    },
+    ...trail.length > 0 && {
+      trail: collapseToCell([...trail, pad], baseStyle)
+    }
+  };
+  if (width === "auto") return [{ text: cell3, ...tail }];
+  const how = { justify, truncate };
+  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
+  sizeCell(cell3, width, how);
+  return [{ text: cell3, ...tail }];
+}
+
+// src/render/fill.ts
+function wrapOffsets(plain, line, indent2) {
+  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
+  const wrapping = held + plain;
+  const offsets = [];
+  let at = 0;
+  wrappedLines(wrapping, line).forEach((wrapped) => {
+    const content = wrapped.trimEnd();
+    const start = wrapping.indexOf(content, at);
+    if (content !== "" && start > held.length)
+      offsets.push(start - held.length);
+    at = start + content.length;
+  });
+  return offsets;
+}
+function takenOnLine(before, options) {
+  if (before.length === 0) return 0;
+  const { lines: lines2 } = drawStripCells(
+    before.map(({ owner }) => owner),
+    options
+  );
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
+  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
+}
+function fits(cell3, line, options) {
+  if (cell3.cellLength <= line) return true;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
+}
+function dividedToLine(item, line, before, options) {
+  if (fits(item.owner, line, options)) return [item];
+  const text4 = item.owner.copy().expandTabs();
+  const indent2 = takenOnLine(before, options);
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i2) => ({
+    ...item,
+    owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
+  })).filter(
+    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
+  );
+}
+function fitRow(row, options) {
+  const line = Math.max(
+    WIDEST_GLYPH_COLS,
+    lineWidth(options) - stripChromeCols(options) - options.padding
+  );
+  return filled(row, options).reduce(
+    (fitted, item) => [
+      ...fitted,
+      ...dividedToLine(item, line, fitted, options)
+    ],
+    []
+  );
+}
+function filled(row, options) {
+  const items = () => row.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
+  const demands = [];
+  row.forEach(({ fill }, at) => {
+    if (fill !== void 0) demands.push({ at, how: fill });
+  });
+  if (demands.length === 0) return items();
+  if (!Number.isFinite(options.width)) return items();
+  const natural = drawStripCells(row.map(stripItem), options).lines;
+  if (natural.length > 1) return items();
+  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
+  const share = Math.floor(deficit / demands.length);
+  const remainder = deficit - share * demands.length;
+  demands.forEach(({ at, how }, i2) => {
+    const grow = share + (i2 === demands.length - 1 ? remainder : 0);
+    const { text: text4 } = row[at];
+    sizeCell(text4, text4.cellLength + grow, how);
+  });
+  return items();
+}
+
+// src/render/frame-memory.ts
+init_globals();
+function recordFrom(last2, source) {
+  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+}
+function beginRecord(source, returned2) {
+  const placements = /* @__PURE__ */ new Map();
+  const rules = /* @__PURE__ */ new Map();
+  return {
+    placed: (id2, lines2) => {
+      const { drawing: drawing2 } = returned2(id2, lines2);
+      placements.set(
+        id2,
+        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+      );
+      return lines2;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: (passages) => ({ source, placements, rules, passages })
+  };
+}
+var HIDDEN_RECORD = { kind: "hidden" };
+
+// src/themes/index.ts
+init_globals();
+
+// src/template-engine/index.ts
+init_globals();
+
+// src/template-engine/cells.ts
+init_globals();
+function fragmentsToCells(fragments, baseStyle) {
+  const cells = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const cell3 = buildCell(group, baseStyle);
+    if (cell3.plain.length > 0) cells.push(cell3);
+    group = [];
+  };
+  for (const frag of fragments) {
+    const item = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
+      flush();
+      const cell3 = buildCell([item], baseStyle);
+      if (cell3.plain.length > 0) cells.push(cell3);
+    } else {
+      group.push(item);
+    }
+  }
+  flush();
+  return cells;
+}
+function buildCell(items, baseStyle) {
+  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
+  const layered = items.map(
+    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
+  );
+  const cell3 = RichText.fromFragments(layered);
+  cell3.end = "";
+  cell3.overflow = "ignore";
+  if (layered.length === 1) {
+    cell3.style = layered[0].style;
+  } else if (base !== void 0) {
+    cell3.style = base;
+  }
+  return cell3;
+}
+function withStyle(frag, style) {
+  const copy2 = frag.copy();
+  copy2.style = style;
+  return copy2;
+}
+
+// src/render/action.ts
+init_globals();
+
+// src/config/layout-ops.ts
+init_globals();
+function encodeLayoutOp(op) {
+  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
+}
+function decodeLayoutOp(token) {
+  const parts = token.split(":");
+  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
+    return { op: "remove", target: parts[1] };
+  }
+  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
+    return {
+      op: "insert",
+      segment: parts[1],
+      anchor: parts[2],
+      relation: parts[3]
+    };
+  }
+  return null;
+}
+function mintPlacement(segment, anchor, trees) {
+  const taken2 = new Set(
+    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
+  );
+  const id2 = freePlacementId(segment, taken2);
+  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
+}
+
+// src/render/action.ts
+function renderBinding(runtime, reader) {
+  if (runtime.bound === void 0) {
+    throw new Error(
+      `${reader} ran outside a render: no render bound its store and clocks`
+    );
+  }
+  return runtime.bound;
+}
+function renderLook(runtime, reader) {
+  const { look } = renderBinding(runtime, reader);
+  if (look === void 0) {
+    throw new Error(`${reader} read the render's look before it was resolved`);
+  }
+  return look;
+}
+function renderLayout(runtime, reader) {
+  const { layout } = renderBinding(runtime, reader);
+  if (layout === void 0) {
+    throw new Error(`${reader} read the render's rows before they were laid`);
+  }
+  return layout();
+}
+function bindRender(runtime, binding) {
+  if (runtime.bound !== void 0) {
+    throw new Error("a render bound a compile another render holds");
+  }
+  runtime.bound = binding;
+  return {
+    [Symbol.dispose]: () => {
+      runtime.bound = void 0;
+    }
+  };
+}
+function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
+  const out = /* @__PURE__ */ new Map();
+  const entries = Object.entries(actions);
+  for (const [name, action2] of [
+    ...entries.filter(([, a]) => !("do" in a)),
+    ...entries.filter(([, a]) => "do" in a)
+  ]) {
+    out.set(
+      name,
+      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+    );
+  }
+  return out;
+}
+function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
+  if ("set" in action2) {
+    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
+    if ("to" in action2) {
+      return {
+        kind: "set-literal",
+        key: action2.set,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "set-option",
+        key: action2.set,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    if ("int" in action2) {
+      return { kind: "set-int", key: action2.set, stateVar };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "set-cycle",
+        key: action2.set,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    return {
+      kind: "set-bounded",
+      key: action2.set,
+      by: action2.by
+    };
+  }
+  if ("persist" in action2) {
+    const { layer } = action2;
+    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
+    if ("to" in action2) {
+      return {
+        kind: "persist-literal",
+        key: action2.persist,
+        layer,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "persist-option",
+        key: action2.persist,
+        layer,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "persist-cycle",
+        key: action2.persist,
+        layer,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    if ("removeSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        layer,
+        op: { op: "remove", target: action2.removeSegment }
+      };
+    }
+    if ("insertSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        layer,
+        op: {
+          op: "insert",
+          segment: action2.insertSegment,
+          anchor: action2.anchor,
+          relation: action2.relation
+        }
+      };
+    }
+    if ("insertSegmentFrom" in action2) {
+      const domain = resolveOptionDomain(
+        action2.insertSegmentFrom,
+        perConfigDomains
+      );
+      return {
+        kind: "layout-op-option",
+        key: action2.persist,
+        layer,
+        anchor: action2.anchor,
+        relation: action2.relation,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    return {
+      kind: "persist-bounded",
+      key: action2.persist,
+      layer,
+      by: action2.by
+    };
+  }
+  if ("copy" in action2) {
+    return {
+      kind: "copy",
+      text: parseActionTemplate(parse3, action2.copy, name)
+    };
+  }
+  if ("open" in action2) {
+    return {
+      kind: "open",
+      target: parseActionTemplate(parse3, action2.open, name)
+    };
+  }
+  if ("reset" in action2) {
+    return { kind: "reset", key: action2.reset, layer: action2.layer };
+  }
+  if ("slash" in action2) return { kind: "slash", line: action2.slash };
+  if ("run" in action2) {
+    return {
+      kind: "run",
+      name,
+      declaration: runDeclaration(action2),
+      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
+      env: Object.entries(action2.env).map(
+        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
+      )
+    };
+  }
+  if ("undo" in action2) return { kind: "undo" };
+  if ("redo" in action2) return { kind: "redo" };
+  if ("back" in action2) return { kind: "back" };
+  if ("rewind" in action2) return { kind: "rewind" };
+  if ("save" in action2) return { kind: "save", layer: action2.layer };
+  if ("preset" in action2) {
+    const { layer } = action2;
+    return action2.preset === "save" ? { kind: "preset-save", layer } : {
+      kind: "preset-delete",
+      layer,
+      name: parseActionTemplate(parse3, action2.name, name)
+    };
+  }
+  if ("themeDefault" in action2)
+    return { kind: "theme-default-save", layer: action2.layer };
+  const [head, ...rest2] = action2.do.map((member) => {
+    const c = compiled.get(member);
+    if (c === void 0) {
+      throw new Error(
+        `action "${name}" fires "${member}", which is not declared in this config`
+      );
+    }
+    return c;
+  });
+  return { kind: "do", head, rest: rest2 };
+}
+function presentedAction(c) {
+  return c.kind === "do" ? presentedAction(c.head) : c;
+}
+function bindsTemplateValue(c) {
+  const presented = presentedAction(c);
+  switch (presented.kind) {
+    case "set-option":
+    case "set-int":
+    case "persist-option":
+    case "layout-op-option":
+      return true;
+    case "set-literal":
+    case "set-bounded":
+    case "set-cycle":
+    case "copy":
+    case "open":
+    case "persist-literal":
+    case "persist-bounded":
+    case "persist-cycle":
+    case "reset":
+    case "layout-op":
+    case "undo":
+    case "redo":
+    case "back":
+    case "rewind":
+    case "save":
+    case "preset-save":
+    case "preset-delete":
+    case "theme-default-save":
+    case "slash":
+    case "run":
+    case "do":
+      return false;
+  }
+}
+function parseActionTemplate(parse3, src, name) {
+  try {
+    return parse3(src);
+  } catch (e) {
+    throw new Error(
+      `Template parse error in actions.${name}: ${e.message}`,
+      { cause: e }
+    );
+  }
+}
+function readVar(store, name) {
+  return store.has(name) ? toString2(store.read(name)) : "";
+}
+function clickSession(runtime, reader) {
+  return renderBinding(runtime, reader).registry.session();
+}
+function evalTemplate(tpl, scope) {
+  return tpl.evaluate(scope).map((f) => f.plain).join("");
+}
+function linkFragment(text4, link, active2, base) {
+  const rt = new RichText(text4, {
+    style: Style.combine([
+      base,
+      styleWithLink(new Style({ bold: active2 }), link)
+    ])
+  });
+  rt.overflow = "ignore";
+  rt.end = "";
+  return rt;
+}
+function linkOver(cell3, target, current = false) {
+  const link = styleWithLink(
+    new Style({ bold: current ? true : void 0 }),
+    target
+  );
+  const linked = new RichText(cell3.plain, {
+    style: Style.combine([resolvedStyle(cell3.style), link])
+  });
+  for (const span of cell3.spans) {
+    linked.stylize(
+      Style.combine([resolvedStyle(span.style), link]),
+      span.start,
+      span.end
+    );
+  }
+  linked.overflow = "ignore";
+  linked.end = "";
+  return linked;
+}
+function cycleIndex(c, store) {
+  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+}
+function realize(c, display, boundValue, store, sessionId2) {
+  switch (c.kind) {
+    case "set-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
+        active: current === c.value
+      };
+    }
+    case "set-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-int": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
+        active: false
+      };
+    }
+    case "set-bounded": {
+      return {
+        effects: [
+          {
+            verb: VERB_STEP_STATE,
+            args: [sessionId2, c.key, String(c.by)]
+          }
+        ],
+        active: false
+      };
+    }
+    case "copy":
+      return {
+        effects: [
+          {
+            verb: VERB_COPY,
+            args: [evalTemplate(c.text, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    case "open":
+      return {
+        effects: [
+          {
+            verb: VERB_OPEN_VSCODE,
+            args: [evalTemplate(c.target, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
+    // verbatim (same literal/option/cycle/bounded semantics), only the wire
+    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
+    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
+    // the write durable, not the click itself.
+    case "persist-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [
+          configWriteEffect(
+            VERB_SET_CONFIG,
+            sessionId2,
+            c.layer,
+            c.key,
+            c.value
+          )
+        ],
+        active: current === c.value
+      };
+    }
+    case "persist-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [
+          configWriteEffect(VERB_SET_CONFIG, sessionId2, c.layer, c.key, value)
+        ],
+        active: current === value
+      };
+    }
+    case "persist-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [
+          configWriteEffect(VERB_SET_CONFIG, sessionId2, c.layer, c.key, next2)
+        ],
+        active: false
+      };
+    }
+    case "persist-bounded": {
+      return {
+        effects: [
+          configWriteEffect(
+            VERB_STEP_CONFIG,
+            sessionId2,
+            c.layer,
+            c.key,
+            String(c.by)
+          )
+        ],
+        active: false
+      };
+    }
+    case "reset":
+      return {
+        effects: [
+          configWriteEffect(VERB_RESET_CONFIG, sessionId2, c.layer, c.key)
+        ],
+        active: false
+      };
+    // [LAW:one-source-of-truth] No key to carry — the click just says "step
+    // the history", and which entry moves is entirely server-side state
+    // (never wire input, so there is nothing here to gate). Never "active":
+    // a history step is a one-shot trigger, not a current-selection toggle.
+    case "undo":
+      return {
+        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
+        active: false
+      };
+    case "redo":
+      return {
+        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
+        active: false
+      };
+    case "back":
+      return {
+        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
+        active: false
+      };
+    // One-shot, like undo: which steps it takes back is server-side state.
+    case "rewind":
+      return {
+        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
+        active: false
+      };
+    // [LAW:no-silent-failure] A save that asks writes the layer its click
+    // binds, and one drawn without a layer to bind is the author's error,
+    // said on the bar — never a write to some layer it did not name.
+    case "save": {
+      const layer = c.layer === "ask" ? layerRoleOf(boundValue) : c.layer;
+      if (layer === null)
+        throw new Error(
+          `a save that asks which layer it writes binds the layer as its value \u2014 {{ action "<save>" "\u{1F4BE} project" "project" }} \u2014 and ${boundValue === void 0 ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`
+        );
+      return {
+        effects: [configWriteEffect(VERB_SAVE, sessionId2, layer)],
+        active: false
+      };
+    }
+    // Never "active": one-shot triggers, like save.
+    case "preset-save":
+      return {
+        effects: [configWriteEffect(VERB_SAVE_PRESET, sessionId2, c.layer)],
+        active: false
+      };
+    case "theme-default-save":
+      return {
+        effects: [
+          configWriteEffect(VERB_SAVE_THEME_DEFAULT, sessionId2, c.layer)
+        ],
+        active: false
+      };
+    case "preset-delete":
+      return {
+        effects: [
+          configWriteEffect(
+            VERB_DELETE_PRESET,
+            sessionId2,
+            c.layer,
+            evalTemplate(c.name, buildScope(store))
+          )
+        ],
+        active: false
+      };
+    // Never "active": typing a command is a one-shot trigger.
+    case "slash":
+      return {
+        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
+    // draw, as copy's text is. The host signs the captured evaluation when it
+    // publishes the frame, so the click runs what the bar showed.
+    // Never "active": a run is a one-shot trigger.
+    case "run": {
+      const scope = buildScope(store);
+      const evaluated2 = {
+        run: c.argv.map((item) => evalTemplate(item, scope)),
+        env: Object.fromEntries(
+          c.env.map(([variable, value]) => [
+            variable,
+            evalTemplate(value, scope)
+          ])
+        )
+      };
+      return {
+        effects: [
+          {
+            kind: "run",
+            session: sessionId2,
+            action: c.name,
+            declaration: c.declaration,
+            evaluated: evaluated2
+          }
+        ],
+        active: false
+      };
+    }
+    // [LAW:one-source-of-truth] The op is fixed at compile time (see
+    // compileAction) — the click just delivers it. `apply-layout-op`'s
+    // handler does read-current-append-write (see verbs/index.ts), unlike
+    // persist-literal's plain overwrite, so it is its own verb rather than
+    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
+    // trigger, not a current-selection toggle.
+    case "layout-op":
+      return {
+        effects: [
+          configWriteEffect(
+            VERB_APPLY_LAYOUT_OP,
+            sessionId2,
+            c.layer,
+            c.key,
+            encodeLayoutOp(c.op)
+          )
+        ],
+        active: false
+      };
+    case "do": {
+      const head = realize(c.head, display, boundValue, store, sessionId2);
+      return {
+        effects: [
+          ...head.effects,
+          ...c.rest.flatMap(
+            (m) => realize(m, display, void 0, store, sessionId2).effects
+          )
+        ],
+        active: head.active
+      };
+    }
+    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
+    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
+    // relation are the compiled literals. Same wire shape a literal layout-op
+    // emits, so the daemon's apply-layout-op handler and undo/redo need no
+    // knowledge of where the segment name came from. Never "active": a
+    // structural edit is a one-shot trigger, not a current-selection toggle.
+    case "layout-op-option": {
+      const segment = boundValue ?? display;
+      const op = {
+        op: "insert",
+        segment,
+        anchor: c.anchor,
+        relation: c.relation
+      };
+      return {
+        effects: [
+          configWriteEffect(
+            VERB_APPLY_LAYOUT_OP,
+            sessionId2,
+            c.layer,
+            c.key,
+            encodeLayoutOp(op)
+          )
+        ],
+        active: false
+      };
+    }
+  }
+}
+function selectDisplay(name, action2, displays, store) {
+  if (displays.length === 0) {
+    throw new Error(`action "${name}" needs a display (the clickable text)`);
+  }
+  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
+    const display = pickCycleDisplay(
+      `action "${name}"`,
+      displays,
+      action2.members.length,
+      cycleIndex(action2, store)
+    );
+    return { display, boundValue: void 0 };
+  }
+  if (displays.length > 2) {
+    throw new Error(
+      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
+    );
+  }
+  return { display: displays[0], boundValue: displays[1]?.plain };
+}
+function renderAction(name, displays, runtime) {
+  const declared = runtime.compiled.get(name);
+  if (!declared) {
+    throw new Error(`action "${name}" is not declared in this config`);
+  }
+  const store = renderBinding(runtime, `action "${name}"`).store;
+  const { display, boundValue } = selectDisplay(
+    name,
+    presentedAction(declared),
+    displays,
+    store
+  );
+  const sessionId2 = clickSession(runtime, `action "${name}"`);
+  const { effects, active: active2 } = realize(
+    declared,
+    display.plain,
+    boundValue,
+    store,
+    sessionId2
+  );
+  return linkOver(display, actionTarget(effects), active2);
+}
+function actionFuncs(runtime) {
+  return {
+    action: {
+      fn: (name, ...displays) => renderAction(name, displays, runtime),
+      argTypes: ["string", "liftable"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/disclosure-close.ts
+init_globals();
+function disclosureCloseFragment(sessionId2, key) {
+  return linkFragment(
+    DISCLOSURE_GLYPH_CLOSE,
+    {
+      kind: "action",
+      effects: [
+        {
+          verb: VERB_SET_STATE,
+          args: [sessionId2, key, DISCLOSURE_CLOSED]
+        }
+      ]
+    },
+    false
+  );
+}
+
+// src/render/picker.ts
+init_globals();
+
+// src/render/band-style.ts
+init_globals();
+function stateCell(palette, background, drawnAt) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(background),
+    color: ColorSpec.fromRgba(textOn2(palette, background, drawnAt))
+  });
+}
+function decoratedCell({
+  tint,
+  text: text4
+}) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(tint),
+    color: ColorSpec.fromRgba(text4)
+  });
+}
+function closeOn(palette, ground, drawnAt) {
+  return new Style({
+    color: ColorSpec.fromRgba(
+      ensureContrast(
+        palette.get(DISCLOSURE_CLOSE_ROLE),
+        ground,
+        TEXT_MIN_CONTRAST,
+        drawnAt
+      )
+    )
+  });
+}
+function closeCell(palette, background, drawnAt) {
+  return Style.combine([
+    stateCell(palette, background, drawnAt),
+    closeOn(palette, background, drawnAt)
+  ]);
+}
+function bandItemStyle(active2, step4, drawnAt) {
+  return decoratedCell(
+    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
+  );
+}
+
+// src/render/option-paint.ts
+init_globals();
+
+// src/render/swatch.ts
+init_globals();
+var SWATCH_GLYPH = "\u2580";
+function swatch(palette) {
+  const ground = ColorSpec.fromRgba(palette.get("background"));
+  const drawn = RichText.fromFragments(
+    DECOR_HUES.map(
+      (role) => new RichText(SWATCH_GLYPH, {
+        style: new Style({
+          color: ColorSpec.fromRgba(palette.get(role)),
+          bgcolor: ground
+        })
+      })
+    )
+  );
+  drawn.overflow = "ignore";
+  drawn.end = "";
+  return drawn;
+}
+
+// src/render/option-paint.ts
+var cell2 = (text4, style) => {
+  const drawn = typeof text4 === "string" ? new RichText(text4, { style }) : text4;
+  drawn.overflow = "ignore";
+  drawn.end = "";
+  return drawn;
+};
+var currentMark = (current) => new Style({ bold: current });
+function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
+  if (paletteOf === void 0) {
+    return (position, _option, label2, current) => cell2(
+      label2,
+      Style.combine([
+        bandItemStyle(active2, { ...position, distribution }, drawnAt),
+        currentMark(current)
+      ])
+    );
+  }
+  const text4 = stateCell(active2.palette, ground, drawnAt);
+  return (_position, option, label2, current) => named(
+    label2,
+    Style.combine([text4, currentMark(current)]),
+    paletteOf(option, render3)
+  );
+}
+var named = (label2, text4, palette) => cell2(
+  RichText.fromFragments([
+    cell2(label2, text4),
+    cell2(" ", text4),
+    swatch(palette)
+  ])
+);
+function labelPaint(render3, paletteOf, option, label2) {
+  return paletteOf === void 0 ? cell2(label2) : named(label2, void 0, paletteOf(option, render3));
+}
+function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
+  const text4 = stateCell(active2.palette, ground, drawnAt);
+  return (_position, option, _label, current) => cell2(
+    RichText.fromFragments([
+      cell2(current ? "[" : " ", text4),
+      swatch(paletteOf(option, render3)),
+      cell2(current ? "]" : " ", text4)
+    ])
+  );
+}
+
+// src/render/library.ts
+init_globals();
+var LIBRARY_PAGE_ROWS = 8;
+function libraryLayout(entries, groups, paged) {
+  const sections = groups.map((group) => ({
+    label: group.label,
+    indices: entries.flatMap(
+      (entry, i2) => entry.group === group.id ? [i2] : []
+    )
+  })).filter((section) => section.indices.length > 0);
+  const placed2 = sections.reduce((n, s) => n + s.indices.length, 0);
+  if (placed2 !== entries.length) {
+    const known = new Set(groups.map((g) => g.id));
+    const stray = entries.flatMap(
+      (entry, i2) => known.has(entry.group) ? [] : [`#${i2} (group "${entry.group}")`]
+    );
+    throw new Error(
+      `library: ${stray.join(", ")} name a group the domain does not list (${[...known].join(", ")})`
+    );
+  }
+  return paged ? sections.flatMap(
+    (section) => chunk2(section.indices, LIBRARY_PAGE_ROWS).map((indices) => [
+      { label: section.label, indices }
+    ])
+  ) : [sections];
+}
+function chunk2(items, size) {
+  return Array.from(
+    { length: Math.ceil(items.length / size) },
+    (_, n) => items.slice(n * size, (n + 1) * size)
+  );
+}
+function fitCells(text4, width) {
+  return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
+}
+
+// src/render/active-segment.ts
+init_globals();
+function createActiveSegmentRef(drawnAt) {
+  return { current: null, drawnAt };
+}
+function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+  const active2 = {
+    segName,
+    placementId: placementId2,
+    palette,
+    disclosure,
+    tint,
+    text: text4,
+    bg: void 0,
+    drops: []
+  };
+  ref.current = active2;
+  return active2;
+}
+function inSegment(ref, place, run2) {
+  return publishing(
+    ref,
+    () => run2(
+      openSegment(
+        ref,
+        place.segName,
+        place.placementId,
+        place.palette,
+        place.disclosure,
+        place.tint,
+        place.text
+      )
+    )
+  );
+}
+function outsideSegments(ref, run2) {
+  return publishing(ref, () => {
+    ref.current = null;
+    return run2();
+  });
+}
+function publishing(ref, run2) {
+  const prior = ref.current;
+  try {
+    return run2();
+  } finally {
+    ref.current = prior;
+  }
+}
+function requireActiveSegment(ref, spelling) {
+  const active2 = ref.current;
+  if (active2 === null) {
+    throw new Error(
+      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
+    );
+  }
+  return active2;
+}
+
+// src/render/picker.ts
+var PICKER_PREV = "\u2190";
+var PICKER_NEXT = "\u2192";
+function cellWidth2(text4) {
+  return new RichText(text4).cellLength;
+}
+function rowBudget(runtime) {
+  const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
+  return Math.max(1, width - chromeCols - 2 * padding);
+}
+function ledRowBudget(runtime) {
+  const { padding, seamCols } = renderBinding(runtime, "a row fit");
+  return Math.max(
+    1,
+    rowBudget(runtime) - (cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 2 * padding + seamCols)
+  );
+}
+function paginate(widths, available, reserve) {
+  if (!Number.isFinite(available)) {
+    return widths.length > 0 ? [widths.map((_, i2) => i2)] : [];
+  }
+  const usable = Math.max(1, available - reserve);
+  const pages = [];
+  let cur = [];
+  let curW = 0;
+  for (let i2 = 0; i2 < widths.length; i2++) {
+    const w = widths[i2];
+    if (cur.length === 0) {
+      cur = [i2];
+      curW = w;
+    } else if (curW + 1 + w <= usable) {
+      cur.push(i2);
+      curW += 1 + w;
+    } else {
+      pages.push(cur);
+      cur = [i2];
+      curW = w;
+    }
+  }
+  if (cur.length > 0) pages.push(cur);
+  return pages;
+}
+function gridPages(widths, available, navReserve) {
+  const arrowReserve = cellWidth2(PICKER_PREV) + 1 + cellWidth2(PICKER_NEXT) + 1;
+  const firstPass = paginate(widths, available, navReserve);
+  return (firstPass.length > 1 ? paginate(widths, available, navReserve + arrowReserve) : firstPass).map((cells) => [{ label: "", indices: cells }]);
+}
+function assemble(frags) {
+  const spaced = [];
+  for (const frag of frags) {
+    if (spaced.length > 0) spaced.push(new RichText(" "));
+    spaced.push(frag);
+  }
+  const assembled = RichText.fromFragments(spaced);
+  assembled.overflow = "ignore";
+  assembled.end = "";
+  return assembled;
+}
+function requireKind(runtime, name, kind, shape, helper) {
+  const action2 = runtime.compiled.get(name);
+  if (!action2 || action2.kind !== kind) {
+    throw new Error(
+      `${helper} references action "${name}" which must be ${shape}, got ${action2 ? `a ${action2.kind} action` : "no such action"}`
+    );
+  }
+  return action2;
+}
+function requireOptionKind(runtime, name, helper) {
+  const declared = runtime.compiled.get(name);
+  const action2 = declared ? presentedAction(declared) : declared;
+  if (!action2 || action2.kind !== "set-option" && action2.kind !== "persist-option" && action2.kind !== "layout-op-option") {
+    throw new Error(
+      `${helper} references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action2 ? `a ${action2.kind} action` : "no such action"}`
+    );
+  }
+  return action2;
+}
+function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+  const declared = runtime.compiled.get(applyName);
+  const store = renderBinding(runtime, "picker").store;
+  const sessionId2 = clickSession(runtime, "picker");
+  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const optionFace = (i2, label2) => {
+    const option = apply.options[i2];
+    return itemPaint(
+      { index: i2, count: apply.options.length },
+      option,
+      label2,
+      option === current
+    );
+  };
+  const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
+  const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
+  const catalogue = apply.library && {
+    groups: apply.library.groups,
+    entries: apply.options.map(apply.library.entry)
+  };
+  const labelOf = apply.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
+  const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
+    gridFaces.map((face) => face.cellLength),
+    available,
+    navReserve
+  );
+  const rawPage = parseInt(readVar(store, page2.stateVar), 10);
+  const pageHolding = (index) => Math.max(
+    0,
+    pages.findIndex(
+      (sections) => sections.some((section) => section.indices.includes(index))
+    )
+  );
+  const holding2 = pageHolding(
+    current === void 0 ? -1 : apply.options.indexOf(current)
+  );
+  const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
+  const pageSections = pages[pageIdx] ?? [];
+  const pageTarget = (value) => actionTarget([
+    { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
+  ]);
+  const closeWrite = close.kind === "led" ? [] : [
+    {
+      verb: VERB_SET_STATE,
+      args: [sessionId2, ...close.writes.flatMap(([k, v]) => [k, v])]
+    }
+  ];
+  const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
+  const optionTarget = (option) => actionTarget([
+    ...realize(declared, option, option, store, sessionId2).effects,
+    ...closeEffects
+  ]);
+  const optionCell = (face, i2) => linkOver(face, optionTarget(apply.options[i2]));
+  const nav = close.kind === "led" ? [] : [
+    linkFragment(
+      DISCLOSURE_GLYPH_CLOSE,
+      actionTarget(closeWrite),
+      false,
+      closeStyle
+    )
+  ];
+  nav.push(
+    ...steps2.map(
+      ({ glyph, option }) => linkFragment(
+        glyph,
+        actionTarget([
+          ...realize(declared, option, option, store, sessionId2).effects,
+          {
+            verb: VERB_SET_STATE,
+            args: [
+              sessionId2,
+              page2.key,
+              String(pageHolding(apply.options.indexOf(option)))
+            ]
+          }
+        ]),
+        false
+      )
+    )
+  );
+  if (pageIdx > 0) {
+    nav.push(linkFragment(PICKER_PREV, pageTarget(pageIdx - 1), false));
+  }
+  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageTarget(pageIdx + 1), false)] : [];
+  if (catalogue === void 0) {
+    const indices = pageSections.flatMap((section) => section.indices);
+    return [
+      assemble([
+        ...nav,
+        ...indices.map((i2) => optionCell(gridFaces[i2], i2)),
+        ...next2
+      ])
+    ];
+  }
+  const bold = new Style({ bold: true });
+  const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
+  const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
+  const lines2 = [assemble([...nav, ...where, ...next2])];
+  for (const section of pageSections) {
+    if (pageSections.length > 1) {
+      lines2.push(assemble([new RichText(section.label, { style: bold })]));
+    }
+    const nameWidth = Math.max(
+      ...section.indices.map((i2) => cellWidth2(labelOf(apply.options[i2])))
+    );
+    for (const i2 of section.indices) {
+      const name = labelOf(apply.options[i2]);
+      const authored = catalogue.entries[i2].description;
+      const description = authored === void 0 ? void 0 : sanitizeText(authored);
+      const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
+      const row = description === void 0 ? name : `${name}${gap}${description}`;
+      lines2.push(
+        assemble([optionCell(optionFace(i2, fitCells(row, available)), i2)])
+      );
+    }
+  }
+  return lines2;
+}
+function pickerFuncs(runtime, activeSegment) {
+  return {
+    picker: {
+      fn: (applyName, pageName, closeOnPick, paged, inBody, ...extra) => {
+        refuseSurplus(
+          `picker "${applyName}"`,
+          ["closeOnPick", "paged", "inBody"],
+          extra
+        );
+        const page2 = requireKind(
+          runtime,
+          pageName,
+          "set-int",
+          "an int action ({ set, int: true })",
+          "picker"
+        );
+        if (inBody === true && closeOnPick === true) {
+          throw new Error(
+            `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
+          );
+        }
+        const apply = requireOptionKind(runtime, applyName, "picker");
+        const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
+        if (active2.bg === void 0) {
+          throw new Error(
+            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
+          );
+        }
+        const drawnAt = activeSegment.drawnAt();
+        const draw2 = (ground) => renderPicker(
+          applyName,
+          apply,
+          { key: page2.key, stateVar: page2.stateVar },
+          inBody === true ? { kind: "led" } : {
+            kind: "own",
+            writes: [[page2.key, "-1"]],
+            onPick: closeOnPick === true
+          },
+          paged === true,
+          runtime,
+          // A bare `{{ picker }}` authors no options dict, so it places by
+          // the default — the same resolution a `{{ menu }}` with no
+          // "distribution" option makes.
+          optionPaint(
+            active2,
+            placedBy(void 0),
+            renderLook(runtime, "{{ picker }}"),
+            apply.paletteOf,
+            drawnAt,
+            ground
+          ),
+          closeOn(active2.palette, ground, drawnAt)
+        );
+        const band = bandFor(active2.palette, active2.disclosure, drawnAt);
+        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        if (rows.length === 0) return draw2(active2.bg)[0];
+        active2.drops.push(...rows);
+        return draw2(band.state)[0];
+      },
+      argTypes: ["string", "string", "bool"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/carousel.ts
+init_globals();
+var CAROUSEL_PREV = "\u25C0";
+var CAROUSEL_NEXT = "\u25B6";
+function ringAround(options, current) {
+  const count = options.length;
+  const centre = Math.max(options.indexOf(current), 0);
+  return (offset) => ((centre + offset) % count + count) % count;
+}
+function renderCarousel(applyName, apply, openName, label2, runtime) {
+  if (!("stateVar" in apply)) {
+    throw new Error(
+      `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
+    );
+  }
+  const store = renderBinding(runtime, "carousel").store;
+  if (!store.has(apply.stateVar)) {
+    throw new Error(
+      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+    );
+  }
+  const declared = runtime.compiled.get(applyName);
+  const sessionId2 = clickSession(runtime, "carousel");
+  const { options } = apply;
+  if (options.length === 0) return assemble([]);
+  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const ring = (offset) => options[indexAt(offset)];
+  const step4 = (offset) => actionTarget(
+    realize(declared, ring(offset), ring(offset), store, sessionId2).effects
+  );
+  return assemble([
+    linkFragment(CAROUSEL_PREV, step4(-1), false),
+    linkOver(
+      // Drawn as the arrows are, in the segment's own colours (Brandon: "The
+      // name loses its styling"), beside the swatch of the value in force
+      // when the domain is colour-valued.
+      labelPaint(
+        renderLook(runtime, "{{ carousel }}"),
+        apply.paletteOf,
+        ring(0),
+        label2
+      ),
+      actionTarget(
+        realize(
+          runtime.compiled.get(openName),
+          ring(0),
+          void 0,
+          store,
+          sessionId2
+        ).effects
+      )
+    ),
+    linkFragment(CAROUSEL_NEXT, step4(1), false)
+  ]);
+}
+function carouselFuncs(runtime) {
+  return {
+    carousel: {
+      fn: (applyName, openName, label2) => {
+        if (label2.trim() === "") {
+          throw new Error(`carousel "${applyName}": label is empty`);
+        }
+        if (!runtime.compiled.has(openName)) {
+          throw new Error(
+            `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
+          );
+        }
+        if (bindsTemplateValue(runtime.compiled.get(openName))) {
+          throw new Error(
+            `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
+          );
+        }
+        return renderCarousel(
+          applyName,
+          requireOptionKind(runtime, applyName, "carousel"),
+          openName,
+          label2,
+          runtime
+        );
+      },
+      argTypes: ["string", "string", "string"],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/theme-preview.ts
+init_globals();
+
+// src/render/swatches.ts
+init_globals();
+var SWATCHES_RANDOM = "?";
+function requireSwatchable(runtime, applyName, helper) {
+  const apply = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply)) {
+    throw new Error(
+      `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
+    );
+  }
+  if (apply.paletteOf === void 0) {
+    throw new Error(
+      `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
+    );
+  }
+  return apply;
+}
+function randomOther(seed, count, centre) {
+  let h = Math.imul(seed ^ seed >>> 16, 73244475);
+  h = Math.imul(h ^ h >>> 16, 73244475);
+  h ^= h >>> 16;
+  return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
+}
+function optionPalette(runtime, applyName, helper, chosen) {
+  const apply = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
+  if (!apply.options.includes(option)) {
+    throw new Error(
+      `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
+    );
+  }
+  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+}
+function swatchFuncs(runtime) {
+  return {
+    swatch: {
+      fn: (applyName, ...tail) => {
+        const [option, ...extra] = tail;
+        refuseSurplus(`swatch "${applyName}"`, ["option"], extra);
+        if (option !== void 0 && typeof option !== "string") {
+          throw new Error(
+            `swatch "${applyName}": option must be text, got ${JSON.stringify(option)}`
+          );
+        }
+        return swatch(optionPalette(runtime, applyName, "swatch", option));
+      },
+      argTypes: ["string", "value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+function swatchesFuncs(runtime, activeSegment, clock) {
+  return {
+    swatches: {
+      fn: (applyName, pageName) => {
+        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const page2 = requireKind(
+          runtime,
+          pageName,
+          "set-int",
+          "an int action ({ set, int: true })",
+          "swatches"
+        );
+        const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
+        if (active2.bg === void 0) {
+          throw new Error(
+            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
+          );
+        }
+        const drawnAt = activeSegment.drawnAt();
+        const { options } = apply;
+        const count = options.length;
+        const steps2 = () => {
+          const at = ringAround(
+            options,
+            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+          );
+          return [
+            { glyph: CAROUSEL_PREV, option: options[at(-1)] },
+            {
+              glyph: SWATCHES_RANDOM,
+              option: options[randomOther(clock().getTime(), count, at(0))]
+            },
+            { glyph: CAROUSEL_NEXT, option: options[at(1)] }
+          ];
+        };
+        const [line] = renderPicker(
+          applyName,
+          apply,
+          { key: page2.key, stateVar: page2.stateVar },
+          { kind: "led" },
+          true,
+          runtime,
+          swatchPaint(
+            active2,
+            renderLook(runtime, "{{ swatches }}"),
+            apply.paletteOf,
+            drawnAt,
+            active2.bg
+          ),
+          closeOn(active2.palette, active2.bg, drawnAt),
+          count === 0 ? [] : steps2()
+        );
+        return line;
+      },
+      argTypes: ["string", "string"],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/theme-preview.ts
+var BAR_WORDS = ["~/code", "main", "opus", "42%", "5m", "$1.20"];
+function previewRows(palette, decor, opens, drawnAt) {
+  const band = bandFor(palette, opens, drawnAt);
+  const chosen = (text4, colour) => ({
+    text: text4,
+    colour,
+    ink: textOn2(palette, colour, drawnAt)
+  });
+  return [
+    [
+      vocabularyOf(palette, decor, drawnAt).map((entry, i2) => {
+        const colour = decorEntryColour(palette, entry);
+        return {
+          text: BAR_WORDS[i2 % BAR_WORDS.length],
+          colour,
+          ink: decor.shade.text(palette, entry.hue, colour, drawnAt)
+        };
+      })
+    ],
+    [
+      [chosen("\u25BE open", band.state), chosen("menu", band.plane)],
+      [
+        chosen("warn", palette.get("warning")),
+        chosen("error", palette.get("error"))
+      ]
+    ]
+  ];
+}
+function renderRow(groups, available) {
+  const cells = groups.flatMap(
+    (group, g) => group.map(({ text: text4, colour, ink }, i2) => ({
+      gap: g > 0 && i2 === 0 ? " " : "",
+      cell: new RichText(` ${text4} `, {
+        style: decoratedCell({ tint: colour, text: ink })
+      })
+    }))
+  );
+  const fragments = [];
+  let width = 0;
+  for (const { gap, cell: cell3 } of cells) {
+    width += gap.length + cell3.cellLength;
+    if (width > available) break;
+    if (gap !== "") fragments.push(new RichText(gap));
+    fragments.push(cell3);
+  }
+  return fragments;
+}
+function renderThemePreview(palette, decor, opens, drawnAt, available) {
+  const rows = previewRows(palette, decor, opens, drawnAt).map(
+    (row) => renderRow(row, available)
+  );
+  const preview = RichText.fromFragments(
+    rows.flatMap((row, i2) => i2 === 0 ? row : [new RichText("\n"), ...row])
+  );
+  preview.overflow = "ignore";
+  preview.end = "";
+  return preview;
+}
+function themePreviewFuncs(runtime, activeSegment) {
+  return {
+    // `{{ themePreview }}` samples the palette the bar is drawn in;
+    // `{{ themePreview "applyAction" }}` the palette the option that action's
+    // key holds puts in force — the theme picker's demo of the selected theme.
+    themePreview: {
+      fn: (...args) => {
+        const [applyName, ...extra] = args;
+        refuseSurplus("themePreview", ["applyAction"], extra);
+        if (applyName !== void 0 && typeof applyName !== "string") {
+          throw new Error(
+            `themePreview: applyAction must name a declared action, got ${JSON.stringify(applyName)}`
+          );
+        }
+        const { palette, decor } = renderLook(runtime, "{{ themePreview }}");
+        return renderThemePreview(
+          applyName === void 0 ? palette : optionPalette(runtime, applyName, "themePreview"),
+          decor,
+          // The bar trigger's band of the lineage the preview stands in: a
+          // band is coloured from the row its trigger stands in, which only
+          // the trigger's own region knows (decor.ts `decorationFor`).
+          {
+            ...requireActiveSegment(activeSegment, "{{ themePreview }}").disclosure,
+            depth: 0
+          },
+          activeSegment.drawnAt(),
+          ledRowBudget(runtime)
+        );
+      },
+      argTypes: ["value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/layout-preview.ts
+init_globals();
+var blockLabel = (name) => name.slice(name.lastIndexOf(".") + 1);
+var clippedLabel = (name, most) => {
+  const label2 = new RichText(blockLabel(name));
+  label2.truncate(most, { marker: "\u2026" });
+  return label2.plain;
+};
+function labelBudget(rows, available) {
+  const widths = rows.map(
+    (row) => row.map(({ name }) => cellWidth2(blockLabel(name)))
+  );
+  const fits2 = (most2) => widths.every(
+    (row) => row.reduce((sum2, w) => sum2 + Math.min(w, most2) + 2, 0) <= available
+  );
+  let most = Math.max(1, ...widths.flat());
+  while (most > 1 && !fits2(most)) most -= 1;
+  return most;
+}
+function renderLayoutPreview(rows, decor, drawnAt, available) {
+  const most = labelBudget(rows, available);
+  const lines2 = rows.map((row) => {
+    const blocks = [];
+    let width = 0;
+    for (const { name, address, palette } of row) {
+      const block = new RichText(` ${clippedLabel(name, most)} `, {
+        style: decoratedCell(
+          decorationFor(palette, { kind: "bar", decor, address }, drawnAt)
+        )
+      });
+      width += block.cellLength;
+      if (width > available) break;
+      blocks.push(block);
+    }
+    return blocks;
+  });
+  const preview = RichText.fromFragments(
+    lines2.flatMap(
+      (blocks, i2) => i2 === 0 ? blocks : [new RichText("\n"), ...blocks]
+    )
+  );
+  preview.overflow = "ignore";
+  preview.end = "";
+  return preview;
+}
+var LAYOUT_PREVIEW = "layoutPreview";
+function layoutPreviewFuncs(runtime, activeSegment) {
+  return {
+    [LAYOUT_PREVIEW]: {
+      fn: () => renderLayoutPreview(
+        renderLayout(runtime, "{{ layoutPreview }}"),
+        renderLook(runtime, "{{ layoutPreview }}").decor,
+        activeSegment.drawnAt(),
+        ledRowBudget(runtime)
+      ),
+      argTypes: [],
+      arity: { kind: "exact" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/menu.ts
+init_globals();
+function renderMenu(applyName, displays, options, runtime) {
+  const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
+  const action2 = runtime.action;
+  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
+  const pageKey = menuPageKey(stateKey);
+  const member = menuMember(applyName);
+  const store = renderBinding(action2, "menu").store;
+  const open2 = readVar(store, stateKey) === member;
+  const sessionId2 = clickSession(action2, "menu");
+  const successor = open2 ? DISCLOSURE_CLOSED : member;
+  const glyph = linkFragment(
+    pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
+    actionTarget([
+      {
+        verb: VERB_SET_STATE,
+        args: [sessionId2, stateKey, successor, pageKey, "0"]
+      }
+    ]),
+    false
+  );
+  const body = () => {
+    const drawnAt = runtime.activeSegment.drawnAt();
+    const plane = bandFor(
+      placement.palette,
+      placement.disclosure,
+      drawnAt
+    ).plane;
+    const apply = requireOptionKind(action2, applyName, "menu");
+    return renderPicker(
+      applyName,
+      apply,
+      { key: pageKey, stateVar: pageKey },
+      {
+        kind: "own",
+        writes: [
+          [stateKey, DISCLOSURE_CLOSED],
+          [pageKey, "0"]
+        ],
+        onPick: options.closeOnPick
+      },
+      options.paged,
+      action2,
+      // Placed by THIS menu's distribution: the picker knows positions,
+      // the instance knows how it places them. Unless the domain is
+      // colour-valued, in which case every option is its name in the
+      // plane's text beside its swatch; one call decides, the same one the
+      // standalone `{{ picker }}` makes.
+      optionPaint(
+        placement,
+        options.distribution,
+        renderLook(action2, "{{ menu }}"),
+        apply.paletteOf,
+        drawnAt,
+        plane
+      ),
+      closeOn(placement.palette, plane, drawnAt)
+    );
+  };
+  placement.drops.push(...open2 ? body() : []);
+  return glyph;
+}
+var isDict = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function parseMenuArgs(applyName, tail) {
+  const last2 = tail[tail.length - 1];
+  const optsArg = isDict(last2) ? last2 : void 0;
+  const displayArgs = optsArg === void 0 ? tail : tail.slice(0, -1);
+  const bad = displayArgs.findIndex((d) => typeof d !== "string");
+  if (bad !== -1) {
+    throw new Error(
+      `{{ menu "${applyName}" }} display #${bad + 1} is not text (${JSON.stringify(displayArgs[bad])}) \u2014 a menu binds its trigger text, then an optional trailing (dict \u2026) of options`
+    );
+  }
+  return {
+    displays: displayArgs,
+    // [LAW:one-source-of-truth] The same option reader the loader folds over
+    // the static dict — vocabulary, types, defaults live once.
+    options: parseMenuOptions(optsArg ?? {})
+  };
+}
+function menuFuncs(runtime) {
+  return {
+    menu: {
+      fn: (applyName, ...tail) => {
+        const { displays, options } = parseMenuArgs(applyName, tail);
+        return renderMenu(applyName, displays, options, runtime);
+      },
+      argTypes: ["string", "value"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/segment-color.ts
+init_globals();
+
+// src/template-engine/gauge.ts
+init_globals();
+function renderGauge(spec) {
+  const { value, max: max3, width, filled: filled2, empty: empty2, colourAt } = spec;
+  const lit = litCells(value, max3, width);
+  const cells = [];
+  for (let i2 = 0; i2 < width; i2++) {
+    const isLit = i2 < lit;
+    const hex = isLit && colourAt !== void 0 ? colourAt(i2 * max3 / width) : void 0;
+    cells.push(
+      new RichText(isLit ? filled2 : empty2, {
+        style: hex === void 0 ? void 0 : new Style({ color: hex })
+      })
+    );
+  }
+  const gauge = RichText.fromFragments(cells);
+  gauge.end = "";
+  gauge.overflow = "ignore";
+  return gauge;
+}
+function litCells(value, max3, width) {
+  if (!Number.isFinite(value) || !Number.isFinite(max3) || max3 <= 0) return 0;
+  return Math.min(width, Math.max(0, Math.round(value / max3 * width)));
+}
+
+// src/render/segment-color.ts
+function segmentColorFuncs(ref) {
+  const bgOf = {
+    fn: (() => {
+      const active2 = requireActiveSegment(ref, "{{ bgOf }}");
+      if (active2.bg === void 0) {
+        throw new Error(
+          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
+        );
+      }
+      return active2.bg.hex;
+    }),
+    argTypes: [],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const tint = {
+    fn: (() => requireActiveSegment(ref, "{{ tint }}").tint.hex),
+    argTypes: [],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const errorRedOn = {
+    fn: ((bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ errorRedOn }}");
+      return errorRed(palette2, resolveColorRef(palette2, bgRef), ref.drawnAt()).hex;
+    }),
+    argTypes: ["string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const palette = paletteFuncs(
+    () => requireActiveSegment(ref, "{{ color }} / {{ ramp }} / {{ gauge }}").palette
+  );
+  const gauge = {
+    fn: ((value, max3, width, filled2, empty2, easing, ...stops) => {
+      const ramped = easing === void 0 ? void 0 : [easing, ...flattenStops(stops)];
+      return renderGauge({
+        value,
+        max: max3,
+        width,
+        filled: filled2,
+        empty: empty2,
+        colourAt: ramped === void 0 ? void 0 : (position) => String(
+          palette.ramp.fn(position, ...ramped)
+        )
+      });
+    }),
+    // "float" for the two measurements (a percentage need not be whole), "int"
+    // for the cell count, the glyph pair, then a repeating string slot for the
+    // optional easing and its stops — Go's spelling of an optional tail is a
+    // variadic one, so the gate requires the five and `ramp` refuses an easing
+    // with no stop.
+    argTypes: ["float", "float", "int", "string", "string", "string"],
+    arity: { kind: "variadic" },
+    returnType: "T"
+  };
+  return { ...palette, bgOf, tint, errorRedOn, gauge };
+}
+var POLES = [
+  { pole: parseRgbHex("000000"), rungs: ["darken-1", "darken-2", "darken-3"] },
+  {
+    pole: parseRgbHex("ffffff"),
+    rungs: ["lighten-1", "lighten-2", "lighten-3"]
+  }
+];
+var TERMINAL_REDS = [
+  ANSI_COLOR_NAMES.red,
+  ANSI_COLOR_NAMES.bright_red
+].map((index) => STANDARD_TABLE.get(index));
+var RED_HUE = { from: -20, to: 38, chroma: 0.06 };
+function readsRed(colour) {
+  const { h, c } = Oklch.fromRgba(colour);
+  const hue = h > 180 ? h - 360 : h;
+  return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
+}
+function errorRed(palette, ground, depth) {
+  const shown = drawnColour(ground, depth);
+  const [farther, nearer] = [...POLES].sort(
+    (x, y) => contrastRatio(y.pole, shown) - contrastRatio(x.pole, shown)
+  );
+  const themed = [
+    "text-error",
+    "error",
+    ...[...farther.rungs, ...nearer.rungs].map((rung) => `error-${rung}`)
+  ].map((name) => resolveColorRef(palette, name));
+  const counted2 = (ratio) => Math.min(ratio, TEXT_MIN_CONTRAST);
+  return [...themed, ...TERMINAL_REDS].map((colour) => {
+    const drawn = drawnColour(colour, depth);
+    return { colour, drawn, ratio: counted2(contrastRatio(drawn, shown)) };
+  }).filter(({ drawn }) => readsRed(drawn)).reduce((best, c) => c.ratio > best.ratio ? c : best).colour;
+}
+function flattenStops(stops) {
+  return stops.flatMap((stop2) => {
+    const cut = stop2.indexOf(":");
+    const at = cut < 0 ? NaN : Number(stop2.slice(0, cut));
+    if (!Number.isFinite(at)) {
+      throw new Error(
+        `{{ gauge }} stop "${stop2}" must be "<position>:<colour>", e.g. "80:error" or "80:#ff0000"`
+      );
+    }
+    return [at, stop2.slice(cut + 1)];
+  });
+}
+
+// src/dsl/variable-scope.ts
+init_globals();
+var KIND_SCOPE = {
+  input: "view",
+  state: "view",
+  template: "view",
+  time: "view",
+  source: "view",
+  shell: "view",
+  file: "view",
+  env: "view",
+  literal: "directory",
+  dropped: "directory"
+};
+var SCOPES = /* @__PURE__ */ new WeakMap();
+function variableScopes(config) {
+  let scopes = SCOPES.get(config);
+  if (scopes === void 0) {
+    scopes = new Map(
+      [...declaredVariables(config)].map(([name, decl]) => [
+        name,
+        KIND_SCOPE[decl.kind]
+      ])
+    );
+    SCOPES.set(config, scopes);
+  }
+  return scopes;
+}
+
+// src/dsl/parts.ts
+init_globals();
+
+// src/dsl/node-registry.ts
+init_globals();
+
+// src/render/split-lines.ts
+init_globals();
+function splitCellsIntoLines(cells) {
+  const lines2 = [];
+  let current = [];
+  for (const cell3 of cells) {
+    if (!cell3.contains("\n")) {
+      current.push(cell3);
+      continue;
+    }
+    const pieces = cell3.split("\n");
+    current.push(pieces[0]);
+    for (let i2 = 1; i2 < pieces.length; i2++) {
+      lines2.push(current);
+      current = [pieces[i2]];
+    }
+  }
+  lines2.push(current);
+  return lines2;
+}
+
+// src/dsl/node-registry.ts
+function rowIdentities(lines2) {
+  const counts = /* @__PURE__ */ new Map();
+  return lines2.map((line) => {
+    const kind = `${line.place}.${line.band}`;
+    const nth = counts.get(kind) ?? 0;
+    counts.set(kind, nth + 1);
+    return { line, row: `${kind}#${nth}` };
+  });
+}
+var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
+function within2(parent, own2) {
+  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
+}
+function returnedBy(id2, lines2) {
+  const own2 = [];
+  const deeper = [];
+  let ground;
+  for (const line of lines2) {
+    (line.band === "own" ? own2 : deeper).push(line);
+    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
+  }
+  return {
+    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
+    deeper
+  };
+}
+function heldLine(line) {
+  return { ...line, cells: line.cells.map(heldCell) };
+}
+function composeBlocks(direction, blocks) {
+  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
+  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
+  return [...above, ...composeFlow(direction, flow3)];
+}
+function composeFlow(direction, blocks) {
+  switch (direction) {
+    case "vertical":
+      return blocks.flatMap((b) => b);
+    case "horizontal": {
+      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
+      if (height === 0) return [];
+      const row0 = {
+        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
+        band: "own",
+        place: "flow"
+      };
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return [row0, ...drops];
+    }
+  }
+}
+function layoutRows(node, shown) {
+  const lines2 = (n, address) => {
+    if (!shown(n)) return [];
+    if (n.kind === "segment") {
+      return [
+        {
+          cells: [{ name: n.name, address, settings: n.settings }],
+          band: "own",
+          place: "flow"
+        }
+      ];
+    }
+    return composeBlocks(
+      n.direction,
+      n.children.map(
+        (child, index) => lines2(child, [...address, childStep(n, index)])
+      )
+    );
+  };
+  return lines2(node, []).map((line) => [...line.cells]);
+}
+function childStep(node, index) {
+  return node.steps[index];
+}
+function spanOf(node) {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf2(laid), reach: reachOf(laid) };
+}
+function laidOut(node) {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
+  }
+  let start = 0;
+  return spans.map((span, i2) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i2) };
+  });
+}
+var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
+var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+function placeChildren(node, at) {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
+  return places.map((index) => ({
+    index,
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd
+  }));
+}
+var containerType = {
+  compile(node, cctx) {
+    const steps2 = placeChildren(node, cctx.at);
+    return {
+      kind: "container",
+      direction: node.direction,
+      when: cctx.when,
+      steps: steps2,
+      children: node.children.map(
+        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
+      )
+    };
+  },
+  render(node, ctx) {
+    if (ctx.gate.kind === "failed") ctx.gate.report();
+    return composeBlocks(
+      node.direction,
+      node.children.map(
+        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
+      )
+    );
+  }
+};
+var BODY_PLACE = {
+  drop: (line) => line.place,
+  above: () => "above"
+};
+var OPEN_LEAD = {
+  drop: (inline, close) => ({ lead: close(), stays: inline }),
+  above: (inline) => ({
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
+    stays: inline.slice(1)
+  })
+};
+var segmentType = {
+  compile(node, cctx) {
+    return {
+      kind: "segment",
+      when: cctx.when,
+      name: node.name,
+      id: placementId(node),
+      settings: cctx.placementSettings(node),
+      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
+      // predicate by the one `disclosureGate` every disclosure reads through.
+      ...node.opens !== void 0 && {
+        opens: {
+          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            void 0
+          ),
+          key: node.opens.ref.key,
+          placement: node.opens.placement
+        }
+      },
+      ...node.lead !== void 0 && {
+        lead: cctx.parse(node.lead, "lead")
+      },
+      ...node.trail !== void 0 && {
+        trail: cctx.parse(node.trail, "trail")
+      }
+    };
+  },
+  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
+  // hidden, gated off, drawn, broken — is reported to the session's record, so
+  // one that stops drawing leaves the bar as it was last drawn.
+  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+};
+function drawSegment(node, ctx) {
+  const seg2 = ctx.lookupSegment(node.name);
+  if (seg2 === void 0) {
+    throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  }
+  if (ctx.gate.kind === "hidden") return [];
+  const scope = placementScope(ctx.scope, node.settings);
+  if (ctx.gate.kind === "failed") {
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
+  }
+  try {
+    const parts = ctx.placement(node);
+    const gate2 = within2(ctx.gate, parts.gate());
+    if (gate2.kind === "failed") {
+      return brokenSegment(node, scope, ctx, gate2.message);
+    }
+    if (gate2.kind === "hidden") return [];
+    const ownBodyGate = parts.bodyGate();
+    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
+    if (bodyGate.kind === "failed") {
+      return brokenSegment(node, scope, ctx, bodyGate.message);
+    }
+    const palette = placementPalette(node.settings.theme, ctx.palette);
+    const placement = {
+      id: node.id,
+      effect: node.settings.effect,
+      ground: groundOf(palette)
+    };
+    const layoutOf = (baseStyle) => ({
+      width: seg2.width ?? "auto",
+      justify: seg2.justify ?? "left",
+      truncate: seg2.truncate ?? "right",
+      baseStyle,
+      // [LAW:dataflow-not-control-flow] Padding is uniform across every
+      // line a segment contributes — inline rows AND dropped menu bands —
+      // one value, no per-line-kind branch. The picker reserves 2×padding
+      // at its pagination seam so a padded band still fits the width
+      // budget.
+      padding: ctx.padding,
+      placement
+    });
+    const bodyOpen = bodyGate.kind === "shown";
+    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
+    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
+    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
+      node,
+      scope,
+      ctx,
+      own2.variable,
+      palette,
+      bodyOpen,
+      layoutOf
+    );
+    if (drawn === null) return [];
+    const { styles, inline: inlineLines, drops: dropLines } = drawn;
+    const opens = node.opens;
+    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
+      ...line,
+      place: BODY_PLACE[opens.placement](line)
+    }));
+    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
+      ...layoutOf(style),
+      width: "auto",
+      padding
+    });
+    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
+      inlineLines,
+      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
+    ) : { lead: [], stays: inlineLines };
+    const holdLead = openLead.flatMap(
+      (cell3) => leadCell(
+        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
+        styles.trigger,
+        0
+      )
+    );
+    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
+    const ledBody = bodyLines.map((line, i2) => ({
+      cells: [...leadOf(line, i2), ...line.cells],
+      band: "deeper",
+      place: line.place
+    }));
+    const laidLines = [...stays, ...dropLines];
+    ctx.segments.set(
+      node.id,
+      [
+        ...laidLines.flatMap((line) => line.cells),
+        ...bodyLines.flatMap(leadOf)
+      ].flatMap(cellParts)
+    );
+    return [...laidLines, ...ledBody];
+  } catch (err) {
+    return brokenSegment(
+      node,
+      scope,
+      ctx,
+      err.message ?? String(err)
+    );
+  }
+}
+var waitingOn = (variable) => ({
+  kind: "waiting",
+  variable
+});
+function ownAnswer(evaluate) {
+  try {
+    return { kind: "drawn", segment: evaluate() };
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 === void 0) throw err;
+    return waitingOn(pending2.variable);
+  }
+}
+function drawnRows2(segment, layoutOf) {
+  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
+  const baseStyle = open2 ? styles.trigger : styles.closed;
+  const layout = layoutOf(baseStyle);
+  const inline = splitCellsIntoLines(
+    fragmentsToCells(fragments, baseStyle)
+  ).map((line, i2) => ({
+    cells: applySegmentLayout(line, {
+      ...layout,
+      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
+      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
+    }),
+    band: "own",
+    place: "flow"
+  }));
+  return {
+    styles,
+    inline,
+    drops: drops.map((body) => ({
+      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
+        ...layout,
+        baseStyle: styles.band
+      }),
+      band: "deeper",
+      place: "flow"
+    }))
+  };
+}
+var LOADING_GLYPH = "\u2026";
+function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
+  ctx.waited(variable);
+  const last2 = ctx.lastDrawn(node.id);
+  if (last2?.kind === "hidden") return null;
+  const styles = ctx.decorations(node, palette);
+  const style = bodyOpen ? styles.trigger : styles.closed;
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
+  const trail = fragmentsToCells(
+    errorAffix(node.trail, node, scope, ctx),
+    style
+  );
+  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
+    (line) => line.cells.map((cell3) => cell3.text.cellLength)
+  );
+  return {
+    styles,
+    inline: rows.map((widths, row) => ({
+      cells: widths.flatMap((width, i2) => {
+        const first2 = row === 0 && i2 === 0;
+        return applySegmentLayout(
+          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
+          {
+            ...layoutOf(style),
+            width,
+            justify: "left",
+            truncate: "right",
+            lead: first2 ? lead : [],
+            trail: first2 ? trail : []
+          }
+        );
+      }),
+      band: "own",
+      place: "flow"
+    })),
+    drops: []
+  };
+}
+function cellsWidth(cells) {
+  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
+}
+function brokenSegment(node, scope, ctx, message2) {
+  ctx.brokenPlacement(node.id, message2);
+  const oneLine = message2.replace(/\s*\n\s*/g, " ");
+  return [
+    {
+      cells: applySegmentLayout(
+        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        {
+          width: "auto",
+          justify: "left",
+          truncate: "right",
+          padding: 0,
+          // It follows the bar, and fades in from the bar's ground: the
+          // failure it reports may be the read of this placement's own
+          // settings.
+          placement: {
+            id: node.id,
+            effect: FOLLOW_BAR,
+            ground: groundOf(ctx.palette)
+          },
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx)
+        }
+      ),
+      band: "own",
+      place: "flow"
+    }
+  ];
+}
+function errorAffix(affix, node, scope, ctx) {
+  if (affix === void 0) return [];
+  try {
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 !== void 0) ctx.waited(pending2.variable);
+    else ctx.brokenPlacement(node.id, err.message ?? String(err));
+    return [];
+  }
+}
+var REGISTRY = {
+  container: containerType,
+  segment: segmentType
+};
+function nodeType(kind) {
+  return REGISTRY[kind];
+}
+
+// src/dsl/parts.ts
+var SELECTION_OF = {
+  palette: "theme",
+  style: "style",
+  effect: "effect"
+};
+var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
+var COLOR_FLOOR = "truecolor";
+var UNDRAWN = {
+  width: 0,
+  chromeCols: 0,
+  padding: 0,
+  seamCols: 0,
+  preset: ""
+};
+function answerOf3(deriver) {
+  try {
+    return { ok: true, value: deriver() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+function unwrap2(answer2) {
+  if (answer2.ok) return answer2.value;
+  throw answer2.error;
+}
+var always = (value) => ({ read: () => value });
+var sameLook = sameBy({
+  basePalette: is,
+  palette: is,
+  decor: sameDecor
+});
+var ViewParts = class {
+  constructor(store, registry, source, view) {
+    this.store = store;
+    this.registry = registry;
+    this.source = source;
+    this.view = observable.box(view, { deep: false });
+    this.scope = buildScope(store);
+    this.depth = store.derive("drawn depth", "computed", () => {
+      const said2 = this.inputAt(COLOR_PATH);
+      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
+    });
+    const drawn = observable(UNDRAWN, void 0, { deep: false });
+    this.facts = drawn;
+    const look = this.look;
+    const phase = this.phase;
+    const layout = () => this.layout.read();
+    this.binding = {
+      store,
+      registry,
+      get width() {
+        return drawn.width;
+      },
+      get chromeCols() {
+        return drawn.chromeCols;
+      },
+      get padding() {
+        return drawn.padding;
+      },
+      get seamCols() {
+        return drawn.seamCols;
+      },
+      get look() {
+        return phase.ruling ? void 0 : look.get();
+      },
+      get layout() {
+        return phase.ruling ? void 0 : layout;
+      }
+    };
+    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
+      const root = source.roots.get(drawn.preset);
+      const palette = look.get().palette;
+      return layoutRows(root, (node) => this.shown(node)).map(
+        (row) => row.flatMap(({ name: placedName, address, settings }) => {
+          const name = arrangedSegment(placedName);
+          return name === void 0 ? [] : [
+            {
+              name,
+              address,
+              palette: placementPalette(settings.theme, palette)
+            }
+          ];
+        })
+      );
+    });
+    registry.bindInputs({
+      session: () => this.view.get().session,
+      read: (path31) => this.inputAt(path31),
+      run: (digest2) => this.view.get().run(digest2),
+      env: (name) => this.view.get().env(name),
+      drawnAt: () => drawnDepth(this.colorCompatibility())
+    });
+  }
+  store;
+  registry;
+  source;
+  // How many parts have derived since the view's first draw: what one draw
+  // adds is how many of its parts it evaluated.
+  evaluated = 0;
+  // [LAW:one-source-of-truth] The view's one scope. Its names are the
+  // store's when it is built, at the view's first draw: a view declares
+  // every variable before it is drawn.
+  scope;
+  binding;
+  facts;
+  look = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
+  });
+  layout;
+  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
+  // draw resolves its look — the look is what the rules decide — so while one
+  // is, the binding has neither look nor layout to give: a read is refused by
+  // name (renderLook, renderLayout), never answered with the last draw's.
+  // Read outside every kept part but the rule's own, which always runs here.
+  phase = { ruling: false };
+  gates = /* @__PURE__ */ new Map();
+  placements = /* @__PURE__ */ new Map();
+  rules = /* @__PURE__ */ new Map();
+  slots = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
+  // and its slots read it as it stands, never a copy a draw wrote.
+  view;
+  terminalWidth = observable.box(null);
+  // The draw in progress's own facts — the payload fields its instant answers
+  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
+  // the projections over them, which only a draw reads.
+  projected = void 0;
+  drawnSlots = /* @__PURE__ */ new Map();
+  // What the view draws from: a session view's source is bound once; a caller
+  // drawing a fixed payload binds each.
+  bind(view) {
+    runInAction(() => this.view.set(view));
+  }
+  // [LAW:no-ambient-temporal-coupling] An older request's terminal width is
+  // visible to the templates in this draw only. Restore it before the outer
+  // action ends so subscription reactions see the canonical view's inputs.
+  withTerminalWidth(width, draw2) {
+    return runInAction(() => {
+      const before = this.terminalWidth.get();
+      this.terminalWidth.set(width);
+      try {
+        return draw2();
+      } finally {
+        this.terminalWidth.set(before);
+      }
+    });
+  }
+  // The selections in force.
+  selections() {
+    return this.view.get().selections();
+  }
+  // The draw's facts, before it reads a part, and the payload fields its own
+  // instant answers.
+  draw(facts, projected) {
+    this.draws++;
+    this.projected = projected;
+    this.drawnSlots.clear();
+    runInAction(() => Object.assign(this.facts, facts));
+  }
+  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
+  // answers it: a selection's `.effective` its slot, a field of the instant
+  // the draw in progress, every other the view's payload.
+  inputAt(path31) {
+    const slot = slotAt(path31);
+    if (slot !== void 0) return found(this.slotName(slot));
+    if (drawProjectionAt(path31) !== void 0)
+      return resolvePath2(this.projected, path31);
+    if (path31 === "term.cols") {
+      const width = this.terminalWidth.get();
+      if (width !== null) return found(width);
+    }
+    return resolvePath2(this.view.get().payload(), path31);
+  }
+  // The depth the view's colour setting draws at: its floor while the payload
+  // has not said, or says something no depth is.
+  depth;
+  colorCompatibility() {
+    return this.depth.read();
+  }
+  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
+  // the rule's answer. A rule that reads no instant is kept: settled in the
+  // turn what it reads changes, so a cache policy over the slot's
+  // `.effective` re-runs then, never at a draw. A pending answer keeps the
+  // name last settled (the floor before any); a failure is the floor with
+  // its warning, which every draw reading the slot reports.
+  slot(slot) {
+    let node = this.slots.get(slot);
+    if (node === void 0) {
+      let last2;
+      const settle3 = () => {
+        const selection2 = this.selections()[SELECTION_OF[slot]];
+        if (selection2.kind === "decided")
+          return settled2(selection2.name, null, null);
+        const rule = compiledRule(this.source, slot, selection2.source);
+        if (this.source.instant.has(rule.template))
+          return { kind: "per-draw", rule };
+        const outcome = this.rule(rule.template);
+        switch (outcome.kind) {
+          case "named": {
+            let warning = null;
+            last2 = decideSlot(
+              this.source,
+              slot,
+              outcome.name,
+              rule.where,
+              (m) => {
+                warning = m;
+              }
+            );
+            return settled2(last2, warning, null);
+          }
+          case "pending":
+            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
+          case "failed":
+            last2 = SLOT_FLOORS[slot];
+            return settled2(
+              last2,
+              ruleFloorMessage(
+                rule.where,
+                slot,
+                `the rule failed \u2014 ${outcome.error}`
+              ),
+              null
+            );
+        }
+      };
+      let held;
+      node = this.store.derive(`slot ${slot}`, "computed", () => {
+        const next2 = settle3();
+        if (held === void 0 || !sameSlot(held, next2)) held = next2;
+        return held;
+      });
+      this.slots.set(slot, node);
+    }
+    return node.read();
+  }
+  // The name a slot's `.effective` reads: its settled name, or what this
+  // draw's rule settled on.
+  slotName(slot) {
+    const state = this.slot(slot);
+    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
+  }
+  // What a per-draw rule settled on in the draw in progress.
+  drawnSlot(slot, name) {
+    this.drawnSlots.set(slot, name);
+  }
+  // Which draw is in progress: a part that reads the instant answers once in it.
+  draws = 0;
+  // The look the draw resolved, before its walk.
+  publishLook(look) {
+    runInAction(() => this.look.set(look));
+  }
+  // A layout node's own `when`, as the walk asks it.
+  gate(node) {
+    const { when: when2 } = node;
+    if (when2 === void 0) return gateOf2(when2, this.scope);
+    let part = this.gates.get(node);
+    if (part === void 0) {
+      part = this.derive(
+        "when",
+        this.readsInstant(when2),
+        () => outsideSegments(
+          this.source.activeSegment,
+          () => gateOf2(when2, this.scope)
+        )
+      );
+      this.gates.set(node, part);
+    }
+    return part.read();
+  }
+  placement(node) {
+    let parts = this.placements.get(node);
+    if (parts === void 0) {
+      parts = new Placement(this, node);
+      this.placements.set(node, parts);
+    }
+    return parts;
+  }
+  rule(template) {
+    let part = this.rules.get(template);
+    if (part === void 0) {
+      part = this.derive(
+        "rule",
+        this.readsInstant(template),
+        () => {
+          this.phase.ruling = true;
+          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
+          try {
+            return {
+              kind: "named",
+              name: template.evaluate(this.scope).map((f) => f.plain).join("")
+            };
+          } catch (e) {
+            const pending2 = readPending(e);
+            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+              kind: "failed",
+              error: e instanceof Error ? e.message : String(e)
+            };
+          } finally {
+            bound?.[Symbol.dispose]();
+            this.phase.ruling = false;
+          }
+        }
+      );
+      this.rules.set(template, part);
+    }
+    return part.read();
+  }
+  readsInstant(...templates) {
+    return templates.some(
+      (template) => template !== void 0 && this.source.instant.has(template)
+    );
+  }
+  // [LAW:single-enforcer] Every part derives here: kept by the store, or
+  // derived at every read when it reads the instant, and counted.
+  // A part that reads the instant is derived once per draw however often the
+  // draw reads it — a body reads its colours, its lead and trail read both —
+  // since one draw is one instant over one store.
+  derive(name, readsInstant, deriver) {
+    const counted2 = () => {
+      this.evaluated++;
+      return deriver();
+    };
+    return this.store.derive(
+      `part ${name}`,
+      readsInstant ? "projection" : "computed",
+      readsInstant ? this.oncePerDraw(counted2) : counted2
+    );
+  }
+  oncePerDraw(deriver) {
+    let memo = null;
+    return () => {
+      if (memo?.draw !== this.draws) {
+        memo = { draw: this.draws, answer: answerOf3(deriver) };
+      }
+      return unwrap2(memo.answer);
+    };
+  }
+  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
+  // the rows a layout lays out are drawn by: a node's `when`, then a
+  // segment's own — and a segment either `when` of which throws is SHOWN,
+  // because the walk draws an error cell exactly there, where a container
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
+  shown(node) {
+    const gate2 = this.gate(node);
+    if (node.kind === "container")
+      return gate2.kind === "shown" || gate2.kind === "pending";
+    if (arrangedSegment(node.name) === void 0) return false;
+    if (gate2.kind === "hidden") return false;
+    if (gate2.kind === "failed") return true;
+    return this.placement(node).gate().kind !== "hidden";
+  }
+};
+function bindView(source, store, registry, view) {
+  const parts = source.views.get(store);
+  if (parts !== void 0) {
+    parts.bind(view);
+    return parts;
+  }
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
+}
+function partsOf(source, store) {
+  const parts = source.views.get(store);
+  if (parts === void 0) {
+    throw new Error(
+      "a store was drawn before its view was bound (bindView): its inputs have no source"
+    );
+  }
+  return parts;
+}
+var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
+var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
+function compiledRule(source, slot, rule) {
+  const compiled = source.globalExpressions.get(slot)?.get(rule);
+  if (compiled === void 0) {
+    throw new Error(
+      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
+    );
+  }
+  return compiled;
+}
+function decideSlot(source, slot, name, where, warn) {
+  switch (slot) {
+    case "palette":
+      return decideThemeName(name, where, warn).name;
+    case "style":
+      return decideStyleName(name, source.styles).name;
+    case "effect":
+      return decideEffectName(name).name;
+  }
+}
+var Placement = class {
+  // What the walk hands each part: where it draws the placement, then what
+  // the colours and the body evaluated to.
+  where = inlet(
+    sameBy({ palette: is, region: sameRegion })
+  );
+  ground = inlet(
+    sameBy({
+      colours: sameDealt,
+      bodyOpen: is
+    })
+  );
+  opened = inlet(
+    sameBy({
+      colours: sameDealt,
+      open: is
+    })
+  );
+  ownGate;
+  open;
+  colours;
+  body;
+  affixes;
+  constructor(view, node) {
+    const seg2 = view.source.segments[node.name];
+    const ref = view.source.activeSegment;
+    const scope = placementScope(view.scope, node.settings);
+    const { when: when2, bg, fg, template } = seg2;
+    const { lead, trail } = node;
+    const opens = node.opens?.open;
+    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
+      `${node.id} when`,
+      view.readsInstant(when2),
+      () => outsideSegments(ref, () => gateOf2(when2, scope))
+    );
+    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
+      `${node.id} body gate`,
+      view.readsInstant(opens),
+      () => outsideSegments(ref, () => gateOf2(opens, view.scope))
+    );
+    this.colours = view.derive(
+      `${node.id} colours`,
+      view.readsInstant(bg, fg),
+      () => {
+        const { palette, region } = this.where.get();
+        return coloursOf(
+          ref,
+          node,
+          palette,
+          region,
+          view.registry.drawnAt(),
+          bg,
+          fg,
+          scope
+        );
+      }
+    );
+    this.body = view.derive(
+      `${node.id} body`,
+      view.readsInstant(template),
+      () => {
+        const { colours, bodyOpen } = this.ground.get();
+        return bodyOf(ref, node, colours, template, bodyOpen, scope);
+      }
+    );
+    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
+      `${node.id} affixes`,
+      view.readsInstant(lead, trail),
+      () => {
+        const { colours, open: open2 } = this.opened.get();
+        return affixesOf(ref, node, colours, open2, lead, trail, scope);
+      }
+    );
+  }
+  gate() {
+    return this.ownGate.read();
+  }
+  bodyGate() {
+    return this.open.read();
+  }
+  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
+  // what the one before it evaluated to: the colours, then the body over its
+  // ground, then the lead and trail over what the body opened.
+  evaluate(palette, region) {
+    this.where.set({ palette, region });
+    const colours = this.colours.read();
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
+    const body = this.body.read();
+    this.opened.set({ colours, open: body.open });
+    return evaluated(colours, body, this.affixes.read());
+  }
+};
+function inlet(same2) {
+  const box = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
+  });
+  return {
+    set: (value) => runInAction(() => box.set(value)),
+    // [LAW:no-defensive-null-guards] Filled before it is read (above).
+    get: () => box.get()
+  };
+}
+var sameHex = (a, b) => a.hex === b.hex;
+var sameDealt = sameBy({
+  palette: is,
+  drawnAt: is,
+  tint: sameHex,
+  text: sameHex,
+  bg: sameHex,
+  disclosure: sameDisclosure
+});
+function placeOf(node, colours) {
+  return {
+    segName: node.name,
+    placementId: node.id,
+    palette: colours.palette,
+    disclosure: colours.disclosure,
+    tint: colours.tint,
+    text: colours.text
+  };
+}
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
+function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
+  const dealt = {
+    palette,
+    drawnAt,
+    ...decorationFor(palette, region, drawnAt)
+  };
+  return inSegment(ref, placeOf(node, dealt), (active2) => {
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
+    return { ...dealt, bg: active2.bg, style };
+  });
+}
+function bodyOf(ref, node, colours, template, bodyOpen, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
+    const fragments = template.evaluate(scope);
+    return {
+      fragments,
+      drops: active2.drops,
+      open: active2.drops.length > 0 || bodyOpen
+    };
+  });
+}
+function affixesOf(ref, node, colours, open2, lead, trail, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = open2 ? bandOf(colours).state : colours.bg;
+    return {
+      lead: lead?.evaluate(scope) ?? [],
+      trail: trail?.evaluate(scope) ?? [],
+      drops: active2.drops
+    };
+  });
+}
+var NO_AFFIXES = { lead: [], trail: [], drops: [] };
+function stylesOf(colours) {
+  const { palette, drawnAt, disclosure } = colours;
+  return {
+    closed: colours.style,
+    get trigger() {
+      return stateCell(palette, bandOf(colours).state, drawnAt);
+    },
+    get band() {
+      return stateCell(palette, bandOf(colours).plane, drawnAt);
+    },
+    get close() {
+      return closeCell(palette, bandOf(colours).state, drawnAt);
+    },
+    disclosure
+  };
+}
+function evaluated(colours, body, affixes) {
+  return {
+    styles: stylesOf(colours),
+    fragments: body.fragments,
+    lead: affixes.lead,
+    trail: affixes.trail,
+    drops: [...body.drops, ...affixes.drops],
+    open: body.open
+  };
+}
+function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
+  const colours = coloursOf(
+    ref,
+    node,
+    palette,
+    region,
+    drawnAt,
+    void 0,
+    void 0,
+    scope
+  );
+  return evaluated(
+    colours,
+    bodyOf(ref, node, colours, body, false, scope),
+    NO_AFFIXES
+  );
+}
+function decoratedStyles(ref, node, palette, region, drawnAt) {
+  return stylesOf(
+    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
+  );
+}
+
+// src/dsl/view-source.ts
+init_globals();
+
+// src/dsl/render.ts
+function toCachePolicy(cache2) {
+  if ("ttl" in cache2)
+    return { kind: "ttl", durationMs: parseDuration(cache2.ttl) };
+  if ("watch_file" in cache2)
+    return { kind: "watch_file", path: cache2.watch_file };
+  if ("depends_on" in cache2)
+    return { kind: "depends_on", varNames: cache2.depends_on };
+  if ("key" in cache2) return { kind: "key", template: cache2.key };
+  if ("never" in cache2) return { kind: "never" };
+  throw new Error(
+    `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
+  );
+}
+function toSourceParse(parse3, dflt) {
+  switch (parseArm(parse3)) {
+    case "json":
+      return { kind: "json", default: dflt };
+    case "regex":
+      return {
+        kind: "regex",
+        pattern: parse3.regex,
+        default: dflt
+      };
+    case "text":
+      return { kind: "text", default: dflt };
+  }
+}
+function declareOne(registry, name, decl, cwd2, derivation) {
+  switch (decl.kind) {
+    case "literal":
+      registry.declareLiteral(name, decl.value);
+      break;
+    case "dropped":
+      registry.declareFailedDocument(name, decl.reason);
+      break;
+    // [LAW:single-enforcer] A plugin source's reading is read by the managed
+    // storage owner and carried by the view's payload at the source's name
+    // (src/renderer/render-payload.ts); the view derives the document from it.
+    case "source":
+      registry.declareSourceDocument(name);
+      break;
+    case "input":
+      registry.declareInput(
+        name,
+        decl.path,
+        decl.type ?? "string",
+        decl.default,
+        derivation
+      );
+      break;
+    case "env":
+      registry.declareEnv(name, decl.name, decl.default);
+      break;
+    case "file":
+      registry.declareFile(name, decl.path, {
+        readMode: decl.readMode,
+        cache: toCachePolicy(decl.cache),
+        parse: toSourceParse(decl.parse, decl.default)
+      });
+      break;
+    case "shell":
+      registry.declareShell(name, decl.command, {
+        cwd: cwd2,
+        env: shellEnvOf(decl.env),
+        cache: toCachePolicy(decl.cache),
+        parse: toSourceParse(decl.parse, decl.default)
+      });
+      break;
+    case "template":
+      registry.declareTemplate(name, decl.template, {
+        type: decl.type ?? "string",
+        varDefault: decl.default,
+        derivation
+      });
+      break;
+    case "time":
+      registry.declareTime(name, {
+        format: decl.layout,
+        varDefault: decl.default
+      });
+      break;
+    case "state":
+      registry.declareState(name, {
+        key: decl.key,
+        ...decl.default !== void 0 && { varDefault: decl.default }
+      });
+      break;
+  }
+}
+function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
+  let defines = inherit;
+  for (const [name, body] of Object.entries(bodies)) {
+    try {
+      defines = engine.parse(`{{ define "${name}" }}${body}{{ end }}`, defines).defines();
+    } catch (e) {
+      throw new Error(
+        `Template parse error in ${errorPath}.${name}: ${e.message}`,
+        { cause: e }
+      );
+    }
+  }
+  return defines;
+}
+var compileAlone = (_key, input) => compileDslConfig(input);
+function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE) {
+  const input = compileInputOf(config);
+  const key = compileKey(input);
+  return {
+    compiled: compile(key, input),
+    compileKey: key,
+    loadWarnings: declareDslVariables(config, registry, cwd2, scopes)
+  };
+}
+function compileInputOf(config) {
+  const { variables, ...rest2 } = config;
+  const stateKeyToVar = /* @__PURE__ */ new Map();
+  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
+    if (name in variables) stateKeyToVar.set(key, name);
+  }
+  for (const [name, decl] of stateVarDecls(config)) {
+    if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
+  }
+  return {
+    config: rest2,
+    stateReads: [...stateKeyToVar].sort(([a], [b]) => a < b ? -1 : 1),
+    projections: [...projectionsOf(config)].sort(
+      ([a], [b]) => a < b ? -1 : 1
+    )
+  };
+}
+function compileKey(input) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+function declareDslVariables(config, registry, cwd2, scopes) {
+  const scopeOf3 = variableScopes(config);
+  const projections = projectionsOf(config);
+  const loadWarnings = [];
+  for (const [name, decl] of declaredVariables(config)) {
+    if (!scopes.has(scopeOf3.get(name))) continue;
+    try {
+      declareOne(
+        registry,
+        name,
+        decl,
+        cwd2,
+        projections.has(name) ? "projection" : "computed"
+      );
+    } catch (err) {
+      loadWarnings.push(
+        `Variable "${name}": ${err.message ?? String(err)}`
+      );
+    }
+  }
+  return loadWarnings;
+}
+var EVERY_SCOPE = /* @__PURE__ */ new Set([
+  "directory",
+  "view"
+]);
+function compileDslConfig({
+  config,
+  stateReads,
+  projections
+}) {
+  const actionRuntime = {
+    bound: void 0,
+    compiled: /* @__PURE__ */ new Map()
+  };
+  const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
+  const activeSegment = createActiveSegmentRef(drawnAt);
+  const menuRuntime = {
+    action: actionRuntime,
+    activeSegment
+  };
+  const styleNames = Object.keys(config.styles);
+  const presetOptions = presetNames(config.presets);
+  const perConfigDomains = configOptionDomains(config);
+  const renderClocks = [
+    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now)
+  ];
+  const engine = createCcCandybarEngine({
+    extraFuncs: {
+      ...actionFuncs(actionRuntime),
+      ...swatchFuncs(actionRuntime),
+      ...pickerFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime),
+      ...themePreviewFuncs(actionRuntime, activeSegment),
+      ...layoutPreviewFuncs(actionRuntime, activeSegment),
+      ...menuFuncs(menuRuntime),
+      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
+      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
+      // from, published by the walk. Binding it to a palette captured HERE
+      // (registration runs once per config load, renders happen per tick) was
+      // the two-clocks bug this seam exists to close: a session theme click or
+      // a style moved a segment's background while every in-body color stayed
+      // where it was, so one segment painted from two palettes at once. Reading
+      // live costs nothing structurally — FuncMap bodies run at evaluate time,
+      // so parse-once/evaluate-many is untouched.
+      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
+      ...segmentColorFuncs(activeSegment),
+      // [LAW:one-type-per-behavior] The per-config sibling of the static
+      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
+      // projection of the "styles" option domain. Injected here — not in the
+      // static FuncMap — because the domain is this config's styles block.
+      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
+      // The presets domain's twin of the binding above — same per-config
+      // reason, same shape. A hand-authored `range presets` and a
+      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
+      // derived click gate admits.
+      presets: {
+        fn: () => presetOptions,
+        argTypes: [],
+        arity: { kind: "exact" }
+      }
+    },
+    clockFuncs: renderClocks,
+    drawnAt
+  });
+  const helpers = compileHelpers(engine, config.helpers, "helpers");
+  const sources = /* @__PURE__ */ new Map();
+  const parse3 = (src) => {
+    const parsed2 = engine.parse(src, helpers);
+    sources.set(parsed2, src);
+    return parsed2;
+  };
+  const nodeTemplates = /* @__PURE__ */ new Map();
+  const parseShared = (src) => {
+    const known = nodeTemplates.get(src);
+    if (known !== void 0) return known;
+    const parsed2 = parse3(src);
+    nodeTemplates.set(src, parsed2);
+    return parsed2;
+  };
+  const stateKeyToVar = new Map(stateReads);
+  actionRuntime.compiled = compileActions(
+    parse3,
+    config.actions,
+    stateKeyToVar,
+    perConfigDomains
+  );
+  const compiled = /* @__PURE__ */ Object.create(
+    null
+  );
+  for (const [segName, seg2] of Object.entries(config.segments)) {
+    const segDefines = seg2.partials === void 0 ? helpers : compileHelpers(
+      engine,
+      seg2.partials,
+      `segments.${segName}.partials`,
+      helpers
+    );
+    const segParse = (src) => {
+      const parsed2 = engine.parse(src, segDefines);
+      sources.set(parsed2, src);
+      return parsed2;
+    };
+    const parseField = (src, field, read2 = seg2.partials === void 0 ? parseShared : segParse) => {
+      try {
+        return read2(src);
+      } catch (e) {
+        throw new Error(
+          `Template parse error in segments.${segName}.${field}: ${e.message}`,
+          { cause: e }
+        );
+      }
+    };
+    compiled[segName] = {
+      when: seg2.when !== void 0 ? parseField(seg2.when, "when") : void 0,
+      template: parseField(seg2.template, "template", segParse),
+      bg: seg2.bg !== void 0 ? parseField(seg2.bg, "bg", segParse) : void 0,
+      fg: seg2.fg !== void 0 ? parseField(seg2.fg, "fg", segParse) : void 0
+    };
+  }
+  const parseNodeField = (src, path31, field) => {
+    try {
+      return parseShared(src);
+    } catch (e) {
+      throw new Error(
+        `Template parse error in ${path31}.${field}: ${e.message}`,
+        { cause: e }
+      );
+    }
+  };
+  const resolvedSettings = (node) => {
+    const declared = settingsOf(config.segments[node.name]);
+    const out = /* @__PURE__ */ Object.create(null);
+    for (const [name, decl] of Object.entries(declared)) {
+      Object.defineProperty(out, name, {
+        enumerable: true,
+        get: () => placementSetting(
+          node,
+          name,
+          decl,
+          (draft) => String(
+            renderBinding(actionRuntime, `setting ${name}`).store.read(
+              draft.variable
+            )
+          )
+        )
+      });
+    }
+    return Object.freeze(out);
+  };
+  const compileNode = (node, path31, at) => {
+    const cctx = {
+      path: path31,
+      at,
+      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path31, "when"),
+      parse: (src, field) => parseNodeField(src, path31, field),
+      compileChild: compileNode,
+      placementSettings: resolvedSettings
+    };
+    return nodeType(node.kind).compile(node, cctx);
+  };
+  const roots = /* @__PURE__ */ new Map();
+  for (const name of presetOptions) {
+    const { node, path: path31 } = presetRoot(config, name);
+    roots.set(name, compileNode(node, path31, void 0));
+  }
+  const globalExpressions = new Map(
+    EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
+  );
+  for (const { at, slot, rule: authored } of authoredRules(config)) {
+    const where = at.join(".");
+    const rules = globalExpressions.get(slot);
+    const seen = rules.get(authored);
+    rules.set(
+      authored,
+      seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
+    );
+  }
+  const instantNames = new Set(projections.map(([name]) => name));
+  const basis = {
+    reads: valueReads({
+      names: instantNames,
+      helpers: config.helpers,
+      actions: config.actions
+    }),
+    projections: new Map(projections),
+    clock: engineClockFunctions(renderClocks)
+  };
+  const gateReadsInstant = templateInstants(basis);
+  const gates = [...roots.values()].flatMap(layoutGates(compiled));
+  const layoutReadsInstant = gates.some(
+    (gate2) => gateReadsInstant(sources.get(gate2))
+  );
+  const finalClock = layoutReadsInstant ? /* @__PURE__ */ new Set([...basis.clock, LAYOUT_PREVIEW]) : basis.clock;
+  const readsInstant = templateInstants({ ...basis, clock: finalClock });
+  const instant = new Set(
+    [...sources].flatMap(
+      ([template, source]) => readsInstant(source) ? [template] : []
+    )
+  );
+  for (const [segName, seg2] of Object.entries(config.segments)) {
+    if (seg2.partials === void 0) continue;
+    const segReadsInstant = templateInstants({
+      reads: valueReads({
+        names: instantNames,
+        helpers: { ...config.helpers, ...seg2.partials },
+        actions: config.actions
+      }),
+      projections: basis.projections,
+      clock: finalClock
+    });
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
+      const parsed2 = compiled[segName][field];
+      if (parsed2 === void 0) continue;
+      if (segReadsInstant(sources.get(parsed2))) instant.add(parsed2);
+    }
+  }
+  return {
+    segments: compiled,
+    roots,
+    activeSegment,
+    menuRuntime,
+    globalExpressions,
+    instant,
+    layoutReadsInstant,
+    styles: config.styles,
+    runtime: actionRuntime,
+    views: /* @__PURE__ */ new WeakMap()
+  };
+}
+function instantSegments(compiled) {
+  return Object.entries(compiled.segments).flatMap(
+    ([name, segment]) => [segment.when, segment.bg, segment.fg, segment.template].some(
+      (template) => template !== void 0 && compiled.instant.has(template)
+    ) ? [name] : []
+  );
+}
+var layoutGates = (segments) => (root) => {
+  const asked = [];
+  layoutRows(root, (node) => {
+    asked.push(node);
+    return true;
+  });
+  return asked.flatMap((node) => [
+    ...node.when === void 0 ? [] : [node.when],
+    ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
+  ]);
+};
+function parseExpressionSlot(parse3, path31, source) {
+  try {
+    return parse3(source);
+  } catch (e) {
+    throw new Error(
+      `${path31} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
+var unreachable = (message2) => {
+  throw new Error(`a slot settled on a name its domain refuses: ${message2}`);
+};
+function evalRule(slot, rule, parts, warn, frame2) {
+  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame2);
+  frame2.settled(slot, name);
+  return name;
+}
+function ruleName(slot, rule, outcome, warn, frame2) {
+  switch (outcome.kind) {
+    case "named":
+      return outcome.name;
+    case "pending":
+      frame2.waited(outcome.variable);
+      return frame2.held(slot) ?? SLOT_FLOORS[slot];
+    case "failed":
+      warn({
+        kind: "rule",
+        slot,
+        message: ruleFloorMessage(
+          rule.where,
+          slot,
+          `the rule failed \u2014 ${outcome.error}`
+        )
+      });
+      return SLOT_FLOORS[slot];
+  }
+}
+function placementsUnder(node) {
+  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
+}
+function segmentsUnder(node) {
+  if (node.kind === "container") return node.children.flatMap(segmentsUnder);
+  return [
+    node,
+    ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
+  ];
+}
+function drawDsl(config, compiled, store, registry, projected, at, opts, selection2) {
+  var _stack = [];
+  try {
+    const warnings = [];
+    const warn = (warning) => void warnings.push(warning);
+    const segments = /* @__PURE__ */ new Map();
+    const effects = selection2.effects ?? new SessionEffects("");
+    const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
+    const drawClock = __using(_stack, bindClock(at, clock.timeline));
+    const parts = partsOf(compiled, store);
+    const drawOpts = {
+      ...opts,
+      colorCompatibility: parts.colorCompatibility()
+    };
+    parts.draw(
+      {
+        width: drawOpts.width,
+        chromeCols: stripChromeCols(drawOpts),
+        padding: drawOpts.padding,
+        seamCols: stripSeamCols(drawOpts),
+        preset: selection2.preset
+      },
+      projected
+    );
+    const evaluatedBefore = parts.evaluated;
+    const _bound = __using(_stack, bindRender(compiled.menuRuntime.action, parts.binding));
+    const { preset, transitions } = selection2;
+    const decor = {
+      variation: VARIATIONS[selection2.variation],
+      shade: SHADES[selection2.shade]
+    };
+    const source = {
+      config,
+      preset,
+      revision: registry.stateRevision(),
+      width: drawOpts.width
+    };
+    const record2 = beginRecord(source, returnedBy);
+    const last2 = recordFrom(selection2.record ?? null, source);
+    const waited = /* @__PURE__ */ new Set();
+    const ruleFrame = {
+      held: (slot) => last2?.rules.get(slot),
+      waited: (variable) => waited.add(variable),
+      settled: record2.rule
+    };
+    const rules = /* @__PURE__ */ new Map();
+    const slotted = (slot) => {
+      const state = parts.slot(slot);
+      rules.set(slot, state.kind === "settled" ? "kept" : "per-draw");
+      if (state.kind === "settled") {
+        if (state.warning !== null)
+          warn({ kind: "rule", slot, message: state.warning });
+        if (state.waited !== null) waited.add(state.waited);
+        return state.name;
+      }
+      const name = decideSlot(
+        compiled,
+        slot,
+        evalRule(slot, state.rule, parts, warn, ruleFrame),
+        state.rule.where,
+        (message2) => warn({ kind: "rule", slot, message: message2 })
+      );
+      parts.drawnSlot(slot, name);
+      return name;
+    };
+    const {
+      theme: decidedTheme,
+      style: decidedStyle,
+      effect: decidedEffect
+    } = parts.selections();
+    const theme24 = decidedTheme.kind === "decided" ? decidedTheme : decideThemeName(slotted("palette"), "", unreachable);
+    const style = decidedStyle.kind === "decided" ? decidedStyle : decideStyleName(slotted("style"), config.styles);
+    const effect = decidedEffect.kind === "decided" ? decidedEffect : decideEffectName(slotted("effect"));
+    const basePalette = theme24.value;
+    const palette = transposedPalette(basePalette, style.value);
+    parts.publishLook({ basePalette, palette, decor });
+    const flashFill = palette.get("warning");
+    const flash = selection2.idleSince === void 0 ? null : {
+      idleSince: selection2.idleSince,
+      timeoutS: selection2.menuTimeout,
+      fill: flashFill,
+      text: textOn2(palette, flashFill, registry.drawnAt())
+    };
+    const motion = effects.motion(
+      effect.value,
+      clock,
+      {
+        transitions,
+        source,
+        last: last2,
+        returned: returnedBy,
+        hold: heldLine
+      },
+      flash
+    );
+    const lookupSegment = (name) => config.segments[name];
+    const renderNode = (node, parent, region) => {
+      const evaluated2 = parent.kind === "hidden" ? parent : within2(parent, parts.gate(node));
+      const gate2 = evaluated2.kind === "failed" ? {
+        ...evaluated2,
+        report: () => {
+          const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
+          warn({
+            kind: "when",
+            where,
+            error: evaluated2.message,
+            message: `${where}: ${evaluated2.message} \u2014 what it gates is hidden`
+          });
+        }
+      } : evaluated2;
+      const ctx = {
+        scope: parts.scope,
+        palette,
+        gate: gate2,
+        padding: drawOpts.padding,
+        region,
+        segments,
+        brokenPlacement: (placement, message2) => warn({
+          kind: "segment",
+          placement,
+          message: `segment "${placement}": ${message2}`
+        }),
+        placement: (node2) => parts.placement(node2),
+        evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
+          compiled.activeSegment,
+          node2,
+          palette2,
+          region,
+          registry.drawnAt(),
+          body,
+          scope
+        ),
+        lookupSegment,
+        renderChild: (child, held, step4) => renderNode(child, held, descend(region, step4)),
+        // A disclosure body starts a NEW region: the root of the band its
+        // trigger opens. Depth is a fact of that band — counted up by
+        // `decorationFor` each time a band item opens the next — so a nested
+        // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
+        renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
+        // [LAW:one-source-of-truth] The row ✕ names the session every other
+        // affordance's URL does.
+        closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
+        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
+        lastDrawn: (id2) => last2?.placements.get(id2),
+        waited: (variable) => waited.add(variable),
+        decorations: (node2, palette2) => decoratedStyles(
+          compiled.activeSegment,
+          node2,
+          palette2,
+          region,
+          registry.drawnAt()
+        )
+      };
+      return nodeType(node.kind).render(node, ctx);
+    };
+    const root = compiled.roots.get(preset);
+    if (root === void 0) {
+      throw new Error(
+        `Preset "${preset}" has no compiled layout \u2014 the config compiler builds one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+      );
+    }
+    const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
+      const items = fitRow(line.cells, drawOpts);
+      const kind = line.band === "deeper" ? "menu" : "bar";
+      return {
+        kind,
+        cellBreaks: items.length - line.cells.length,
+        ...drawStripCells(
+          items.map((item) => item.owner),
+          drawOpts,
+          motion.row(row, kind, items)
+        )
+      };
+    });
+    const left = motion.memory();
+    const memory = { record: record2.record(left.passages), motion: left.motion };
+    const armed = () => rendered.some((row) => row.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
+      ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
+    );
+    const nextChange = Math.min(
+      drawClock.heard(),
+      ...rendered.map((row) => row.nextChange)
+    );
+    const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
+    for (const [variable, fault] of registry.cachePolicyFaults())
+      warn({
+        kind: "refresh",
+        variable,
+        error: fault.message,
+        message: `variable "${variable}" cannot refresh: ${fault.message}`
+      });
+    return {
+      frame: {
+        depth: drawOpts.colorCompatibility,
+        rows: rendered.flatMap(
+          ({ kind, lines: lines2 }) => lines2.map((runs) => ({ kind, runs }))
+        ),
+        nextChange,
+        motion: frameMotion,
+        pending: [...waited].sort()
+      },
+      memory,
+      warnings,
+      segments,
+      evaluated: parts.evaluated - evaluatedBefore,
+      cellBreaks: rendered.reduce((sum2, row) => sum2 + row.cellBreaks, 0),
+      rules
+    };
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
+  }
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min3, max3, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min3 = Math.min(...ranges.map((r) => r.min));
+    const max3 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min3 || n > max3;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min3, max: max3 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
+  }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config) {
+      const held = gates.get(config);
+      if (held?.epoch === epoch) return held.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
+      gates.set(config, { epoch, gate: gate2 });
+      return gate2;
+    }
+  };
+}
+
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
+}
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return [
+    ...clearableContributions(config),
+    ...Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config) {
+  return mergeContributions(actionContributions(config), "config");
+}
+
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return dropBaselineAllowLists(
+    Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config) {
+  return mergeContributions(actionContributions2(config));
+}
+
+// src/daemon/foundations/gates.ts
+function deriveActionGates(gates, config) {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
+}
+function createGates(held = { state: [], config: [] }) {
+  const state = makeStateKeyspace();
+  const config = makeConfigKeyspace();
+  for (const { key, allowed } of held.state) state.register(key, allowed);
+  for (const { key, allowed } of held.config) config.register(key, allowed);
+  return { state, config };
+}
+
+// src/config/unused.ts
+init_globals();
+function* variablesOf(cfg) {
+  yield* Object.entries(cfg.variables ?? {});
+  for (const [segName, seg2] of Object.entries(cfg.segments ?? {})) {
+    for (const [name, v] of Object.entries(seg2.vars ?? {})) {
+      yield [`${segName}.${name}`, v];
+    }
+  }
+}
+function* templatesOf(config) {
+  for (const seg2 of Object.values(config.segments)) {
+    for (const t2 of [seg2.template, seg2.bg, seg2.fg, seg2.when]) {
+      if (t2 !== void 0) yield t2;
+    }
+    yield* Object.values(seg2.partials ?? {});
+  }
+  for (const preset of presetNames(config.presets)) {
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.when !== void 0) yield node.when;
+    }
+    const globals = presetGlobals(config, preset);
+    for (const slot of EXPRESSION_SLOTS) {
+      const rule = globals[slot];
+      if (isExpression(rule)) yield rule;
+    }
+  }
+  for (const [, v] of variablesOf(config)) {
+    for (const [, t2] of variableTemplates(v)) yield t2;
+  }
+  for (const a of Object.values(config.actions)) {
+    for (const [, source] of actionTemplates(a)) yield source;
+  }
+}
+function unusedDeclarations(raw, config, inserted) {
+  const fold = valueReadsOf(config);
+  const read2 = /* @__PURE__ */ new Set();
+  const bound = /* @__PURE__ */ new Set();
+  const calledHelpers = /* @__PURE__ */ new Set();
+  for (const template of templatesOf(config)) {
+    for (const { reaches } of fold.ofTemplate(template))
+      for (const name of reaches) read2.add(name);
+    for (const { name } of templateActionRefs(template, config.helpers))
+      bound.add(name);
+    for (const name of templateHelperRefs(template, config.helpers))
+      calledHelpers.add(name);
+  }
+  for (const [, v] of variablesOf(config)) {
+    for (const { reaches } of fold.ofVariable(v))
+      for (const name of reaches) read2.add(name);
+  }
+  const clicked = new Set(bound);
+  for (const name of bound) {
+    const action2 = config.actions[name];
+    if (action2 !== void 0 && "do" in action2) {
+      for (const member of action2.do) clicked.add(member);
+    }
+  }
+  const writtenKeys = /* @__PURE__ */ new Set();
+  const placed2 = new Set(inserted);
+  for (const name of clicked) {
+    const action2 = config.actions[name];
+    if (action2 === void 0) continue;
+    if ("set" in action2) writtenKeys.add(action2.set);
+    if ("insertSegment" in action2) placed2.add(action2.insertSegment);
+    if ("insertSegmentFrom" in action2 && Array.isArray(action2.insertSegmentFrom))
+      for (const seg2 of action2.insertSegmentFrom) placed2.add(seg2);
+  }
+  for (const preset of presetNames(config.presets)) {
+    for (const node of walkNodes(presetRoot(config, preset).node)) {
+      if (node.kind === "segment") placed2.add(node.name);
+    }
+  }
+  const variableUsed = (name, v) => read2.has(name) || v.kind === "state" && writtenKeys.has(v.key);
+  const authored = (names) => [...names].filter((name) => !isReservedName(name));
+  const unusedOf = (kind, names, used) => authored(names).filter((name) => !used(name)).map((name) => ({ kind, name }));
+  const variables = new Map(variablesOf(raw));
+  return [
+    ...unusedOf(
+      "variable",
+      variables.keys(),
+      (name) => variableUsed(name, variables.get(name))
+    ),
+    ...unusedOf(
+      "action",
+      Object.keys(raw.actions ?? {}),
+      (name) => clicked.has(name)
+    ),
+    ...unusedOf(
+      "helper",
+      Object.keys(raw.helpers ?? {}),
+      (name) => calledHelpers.has(name)
+    ),
+    ...unusedOf(
+      "segment",
+      Object.keys(raw.segments ?? {}),
+      (name) => placed2.has(name)
+    )
+  ];
+}
+
+// src/renderer/render-cache.ts
+var ENTRY_BYTES = 3 * 1024 * 1024;
+var COMPILE_BYTES = 10 * 1024 * 1024;
+var VIEW_BYTES = 2.5 * 1024 * 1024;
+var RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
+function renderCacheBudget(memoryLimitBytes2) {
+  return Math.floor(
+    Math.max(
+      memoryLimitBytes2 / 4,
+      memoryLimitBytes2 * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES
+    )
+  );
+}
+var MAX_ENTRIES3 = 256;
+function chainOf(snapshot, locs) {
+  const { chain: chain2 } = snapshot;
+  return {
+    // [LAW:one-source-of-truth] The files reported are the files merged: a
+    // layer not written or not read is no layer of the load.
+    layers: chain2.filter((l) => l.content.kind === "text").map((l) => ({ path: l.path, role: l.role })),
+    // Every chain holds the user layer: it is the one no answer gates.
+    home: layerForRole(chain2, "user").path,
+    writable: chain2.filter((l) => writable(l.content)).map((l) => l.role),
+    snapshot,
+    locs
+  };
+}
+function pluginLoadLine(layers, {
+  plugins: plugins2,
+  config,
+  compiled
+}) {
+  const { checkout, loaded, dropped, unreached } = plugins2;
+  const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
+  const dataOf = (definition) => {
+    const data = definition.name === void 0 ? void 0 : config.variables[pluginDataVar(pluginNs(definition))];
+    return data?.kind === "file" ? data.path : "none";
+  };
+  const declared = loaded.flatMap((d) => d.name === void 0 ? [] : [pluginNs(d)]).flatMap(
+    (ns) => Object.entries(config.variables).filter(
+      ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns)
+    )
+  );
+  const sources = declared.filter(([, d]) => d.kind === "source").length;
+  const pluginVariables = declared.length - sources;
+  return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
+}
+function configLoadedLine(entry, cause, settled3) {
+  const { repo: repo2 } = entry.snapshot;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
+}
+function configDisposeLine(teardown, released) {
+  return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
+}
+function authoredRoots(config, raw) {
+  return new Set(
+    presetNames(config.presets).filter(
+      (name) => presetRoot(config, name).path === "root" ? raw.root !== void 0 : raw.presets?.[name]?.root !== void 0
+    )
+  );
+}
+var thrown = (err) => err instanceof Error ? err.message : String(err);
+function plugins(p2) {
+  return {
+    loaded: p2.loaded,
+    dropped: p2.dropped,
+    reached: [...p2.reached].sort(),
+    rendering: [...p2.rendering].sort(([a], [b]) => a.localeCompare(b))
+  };
+}
+function loadKey(inputs) {
+  const { loaded, chain: chain2 } = inputs;
+  return digestOf({
+    cwd: inputs.cwd,
+    chain: {
+      layers: chain2.layers,
+      home: chain2.home,
+      writable: chain2.writable,
+      // Not keyed: its texts reach the state only through `loaded`, keyed
+      // below, where a whitespace or comment edit moves nothing; its paths
+      // are `layers`.
+      snapshot: null,
+      locs: chain2.locs
+    },
+    loaded: {
+      layers: loaded.layers.map(
+        (l) => ({
+          path: l.path,
+          raw: l.raw,
+          config: l.config,
+          plugins: plugins(l.plugins),
+          // Not keyed: positions reach no state, and the resolve redraws
+          // its diagnostics on every load, so a whitespace or comment edit
+          // keeps the state.
+          source: null,
+          // Not keyed: the entry's, recomposed on every load.
+          warnings: null
+        })
+      ),
+      base: loaded.base,
+      installed: {
+        ...plugins(loaded.installed),
+        checkout: loaded.installed.checkout,
+        unreached: loaded.installed.unreached
+      },
+      config: loaded.config,
+      // [LAW:one-source-of-truth] Keyed by message: unlike a layer's own
+      // diagnostics the drops ride the state, positions and all, so a state
+      // kept across an edit that moved a drop would name the old line.
+      dropped: loaded.dropped.map((e) => e.message),
+      // Not keyed: placed from the layers' own configs and inserts, keyed
+      // above.
+      placed: null
+    },
+    sources: [...inputs.sources].sort(([a], [b]) => a.localeCompare(b)).map(([name, folder]) => [name, folder])
+  });
+}
+function declaredSources(config) {
+  const sources = /* @__PURE__ */ new Map();
+  for (const [name, decl] of Object.entries(config.variables))
+    if (decl.kind === "source") sources.set(name, decl.storage);
+  return sources;
+}
+function resolveLoad(cwd2, chain2) {
+  const warnings = [];
+  try {
+    const loaded = loadSnapshot(
+      chain2.snapshot,
+      chain2.locs.home,
+      DEFAULT_DSL_CONFIG,
+      { warned: (w) => warnings.push(...w) }
+    );
+    const inputs = {
+      cwd: cwd2,
+      chain: chain2,
+      loaded,
+      sources: declaredSources(loaded.config)
+    };
+    return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
+  } catch (err) {
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return { kind: "failed", cause: err, warnings };
+  }
+}
+function buildRenderState(load, deps) {
+  const { cwd: cwd2, chain: chain2, loaded } = load;
+  const { layers, config, installed, dropped } = loaded;
+  const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
+  const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const projectPath = layerForRole(chain2.snapshot.chain, "project")?.path;
+  const projectRaw = layers.find((layer) => layer.path === projectPath)?.raw;
+  const inserted = layers.flatMap(
+    (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
+  );
+  const warnings = [];
+  const store = new VariableStore(deps.clock);
+  const registry = new SourceRegistry(
+    store,
+    config.globals.default_empty_value ?? "",
+    deps.sessionState,
+    null
+  );
+  let registration;
+  try {
+    registration = registerCompiled(
+      config,
+      registry,
+      cwd2,
+      deps.compile ?? compileAlone,
+      DIRECTORY_SCOPE
+    );
+    warnings.push(...registration.loadWarnings);
+    const probe2 = registry.view();
+    warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
+    probe2.dispose();
+    deriveActionGates(deps.gates, config);
+  } catch (err) {
+    registry.dispose();
+    if (err instanceof ConfigError) warnings.push(...err.warnings);
+    return { kind: "failed", cause: err, warnings };
+  }
+  return {
+    kind: "built",
+    state: {
+      config,
+      dropped,
+      compileKey: registration.compileKey,
+      loadKey: load.key,
+      buildWarnings: warnings,
+      store,
+      registry,
+      compiled: registration.compiled,
+      // What the menu's resets clear is the user layer's: they name no other.
+      authoredRoots: authoredRoots(merged, homeRaw),
+      fileHeldSettings: fileHeldSettings(homeRaw),
+      configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
+      writable: chain2.writable,
+      remainingLanes: laneDefaultsAfterReset(
+        config,
+        loaded.base,
+        projectRaw ?? {}
+      ),
+      // One entry per declaration, however many layers declare it, judged
+      // over the trees as placed and every layer's insert entries, so a
+      // segment only an insert entry places is used, here or not.
+      unused: [
+        ...new Map(
+          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted)).map((u) => [`${u.kind}:${u.name}`, u])
+        ).values()
+      ],
+      plugins: {
+        checkout: installed.checkout,
+        // What renders, as the loader decided it: a nearer layer's load or
+        // drop replaces a farther one's of the same namespace.
+        loaded: [...installed.rendering.values()],
+        dropped: [
+          ...installed.dropped,
+          ...layers.flatMap((l) => l.plugins.dropped)
+        ],
+        unreached: installed.unreached,
+        reached: installed.reached,
+        rendering: installed.rendering
+      },
+      sources: load.sources
+    }
+  };
+}
+function settle2(chain2, resolveWarnings, attempt4) {
+  const common = {
+    // [LAW:one-source-of-truth] The files reported are the chain loaded.
+    layers: chain2.layers.map((l) => l.path),
+    home: chain2.home
+  };
+  const warnings = (own2) => [
+    ...chain2.snapshot.notices,
+    ...resolveWarnings,
+    ...own2
+  ];
+  switch (attempt4.kind) {
+    case "built":
+    case "kept":
+      return {
+        ...common,
+        kind: attempt4.kind,
+        warnings: warnings(attempt4.state.buildWarnings),
+        state: attempt4.state,
+        error: null
+      };
+    case "failed":
+      return {
+        ...common,
+        kind: "failed",
+        warnings: warnings(attempt4.warnings),
+        state: null,
+        error: thrown(attempt4.cause),
+        cause: attempt4.cause
+      };
+  }
+}
+function loadChain(cwd2, chain2, deps, served = null) {
+  const resolved = resolveLoad(cwd2, chain2);
+  if (resolved.kind === "failed") {
+    return settle2(chain2, [], resolved);
+  }
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(chain2, resolved.warnings, attempt4);
+}
+function loadOrigin(cwd2, snapshot, deps, served = null) {
+  return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
+}
+function fallbackState(cwd2, snapshot, deps) {
+  const resolved = resolveLoad(cwd2, {
+    layers: [],
+    home: "",
+    // The fallback has no loaded chain for its writer to prove.
+    writable: [],
+    snapshot: { ...snapshot, chain: [] },
+    locs: deps.locations
+  });
+  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+  if (built.kind === "failed")
+    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+      cause: built.cause
+    });
+  return built.state;
+}
+var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
+var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
+var NO_WRITABLE_LAYERS = [];
+function writableRoles(access2) {
+  return access2.kind === "available" ? access2.roles : NO_WRITABLE_LAYERS;
+}
+function standaloneRequest(facts) {
+  const requested = observable.box(facts, { deep: false });
+  return {
+    read: () => requested.get(),
+    update: (next2) => {
+      if (next2 !== requested.get()) runInAction(() => requested.set(next2));
+    }
+  };
+}
+function openView(state, cwd2, facts, {
+  source: sourceOf,
+  changed,
+  log,
+  configAccess = () => ({ kind: "available", roles: state.writable })
+}, currentRequest) {
+  const sessionId2 = facts.hookData.session_id;
+  const registry = state.registry.view();
+  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
+  const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
+  let source;
+  try {
+    source = sourceOf({
+      sessionId: sessionId2,
+      state,
+      store: registry.variableStore,
+      requested: request2.read,
+      configAccess
+    });
+  } catch (e) {
+    registry.dispose();
+    throw e;
+  }
+  bindView(state.compiled, registry.variableStore, registry, source);
+  const stopChanged = reaction(
+    () => [
+      source.payload(),
+      source.selections(),
+      registry.published(),
+      state.registry.published()
+    ],
+    () => changed(sessionId2),
+    {
+      equals: compareShallow,
+      fireImmediately: true,
+      onError: (e) => log(
+        "error",
+        `session view change threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
+      )
+    }
+  );
+  return {
+    sessionId: sessionId2,
+    state,
+    store: registry.variableStore,
+    registry,
+    configAccess,
+    source,
+    requested: request2.update,
+    facts: request2.read,
+    frames: /* @__PURE__ */ new Map(),
+    lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
+    retire: stopChanged,
+    dispose: () => {
+      stopChanged();
+      return registry.dispose();
+    }
+  };
+}
+var subscriptionsOf = ({
+  state,
+  registry
+}) => [
+  ...[...state.sources].map(
+    ([source, folder]) => ({ kind: "plugin", source, folder })
+  ),
+  ...registrySubscriptions(registry)
+];
+var registrySubscriptions = (registry) => [
+  ...registry.subscriptions().map((run2) => ({ kind: "run", run: run2 })),
+  ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
+];
+var draftKey = (sessionId2) => `edit:${sessionId2}`;
+var RenderCache = class {
+  entries = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What discovery found at each origin the
+  // renderer subscribes, by `originKey`, as the host's latest `config` handed
+  // it in: the one source every entry loads from. An origin the renderer stops
+  // naming is pruned, so an entry made after loads only a snapshot the host
+  // still follows.
+  snapshots = observable.map(void 0, {
+    deep: false
+  });
+  // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
+  // wait over one of its views ends at: one fact, so a render waiting as the
+  // close drops its view ends then, not at its deadline.
+  lifetime = new AbortController();
+  closing = this.lifetime.signal;
+  get closed() {
+    return this.closing.aborted;
+  }
+  // Every state the map serves or served, until reclaimed.
+  holds = /* @__PURE__ */ new Map();
+  // The last storage hold id minted.
+  storageHolds = 0;
+  // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
+  // render resolved to. A render from another entry replaces it.
+  views = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
+  // delivered copies, by the key its copy click names (src/render/
+  // diagnostics.ts), one map per renderer, since a request and a feed frame
+  // list different messages and a click names the surface it came from. Held
+  // by session, not by view, because a frame on screen outlives the view it
+  // was drawn from (a reload's successor); dropped when the session has no
+  // view. No link carries the text it copies.
+  copies = /* @__PURE__ */ new Map();
+  // Every view the cache serves or served, until reclaimed.
+  viewHolds = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
+  // how many pins each holds: their entries are never evicted (`fit`), for as
+  // long as the feed is open. The collector asks the feeds themselves whether
+  // a session is watched before it retires one.
+  pins = /* @__PURE__ */ new Map();
+  // [LAW:no-silent-failure] Each session whose view last failed to open, by
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
+  openFailures = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] One compile per compile key, shared by every
+  // state carrying that key, and dropped with the last of them (reclaim).
+  compiles = /* @__PURE__ */ new Map();
+  deps;
+  log;
+  // Read when an eviction is decided: the budget is a boot-time fact.
+  budgetBytes;
+  maxEntries;
+  observers;
+  constructor(deps, opts) {
+    this.deps = {
+      ...deps,
+      compile: (key, input) => this.compileOf(key, input)
+    };
+    this.log = deps.log ?? quietLogger;
+    this.budgetBytes = opts.budgetBytes;
+    this.maxEntries = opts.maxEntries ?? MAX_ENTRIES3;
+    this.observers = opts.observers ?? {};
+  }
+  // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
+  // now. Its entry, when it has one, reloads from it unless it digests as the
+  // one the entry last loaded, and a reload whose load inputs did not move
+  // keeps the state it serves (`loadChain`).
+  configure(origin, snapshot) {
+    if (this.closed) throw new Error("render cache used after close");
+    const key = originKey(origin);
+    const held = { snapshot, digest: digestOf(snapshot) };
+    runInAction(() => {
+      this.snapshots.set(key, held);
+      const entry = this.entries.get(key);
+      if (entry !== void 0 && entry.digest !== held.digest)
+        this.reloadInto(entry, held, { kind: "config" });
+    });
+  }
+  // Whether the host handed in `origin`'s config and the renderer still
+  // names it: what an event that needs it waits for.
+  holdsConfig(origin) {
+    return this.snapshots.has(originKey(origin));
+  }
+  // [LAW:one-source-of-truth] The snapshots the renderer still names, by
+  // `originKey`: every other one goes, as the host lets its origin go.
+  prune(keep) {
+    runInAction(() => {
+      for (const key of [...this.snapshots.keys()])
+        if (!keep.has(key)) this.snapshots.delete(key);
+    });
+  }
+  // The compile a served state carries for `key`, else a new one — which the
+  // table learns only when a state carrying it is served, so a load that fails
+  // after compiling leaves nothing behind.
+  compileOf(key, input) {
+    return this.compiles.get(key) ?? compileDslConfig(input);
+  }
+  // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
+  // own heap, plus each compile its entries carry once, however many share it.
+  accountedBytes() {
+    const keys2 = new Set(
+      [...this.entries.values()].map((e) => e.state.compileKey)
+    );
+    return this.entries.size * ENTRY_BYTES + keys2.size * COMPILE_BYTES + this.views.size * VIEW_BYTES;
+  }
+  // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
+  // same fields and a renderable state. The renderer reads the data; no
+  // special-case branches between "first load", "reload",
+  // "reload-after-error".
+  getOrCreate(origin, editing) {
+    let key = originKey(origin);
+    let draft = null;
+    if (editing !== void 0) {
+      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
+      if (draft !== null) key = draftKey(editing);
+    }
+    const existing = this.entries.get(key);
+    const priorRepo = existing?.snapshot.repo;
+    const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
+    if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
+      this.entries.delete(key);
+      this.entries.set(key, existing);
+      if (draft !== null && existing.snapshot !== draft)
+        this.reloadInto(
+          existing,
+          { snapshot: draft, digest: digestOf(draft) },
+          { kind: "edit" }
+        );
+      return existing;
+    }
+    if (existing !== void 0) this.drop(key, existing, "evict");
+    const { projectDir, cwd: cwd2 } = origin;
+    const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
+    const loaded = this.load(cwd2, snapshot, null);
+    if (loaded.state !== null)
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    const entry = {
+      origin,
+      projectDir,
+      cwd: cwd2,
+      configFile: origin.target.path,
+      configLayers: loaded.layers,
+      snapshot,
+      digest: digest2,
+      lastError: loaded.error,
+      lastWarnings: loaded.warnings,
+      state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
+    };
+    makeObservable(entry, { lastError: observable });
+    this.serve(entry.state);
+    this.entries.set(key, entry);
+    this.holdFolders(entry.state);
+    this.fit(entry);
+    this.log(
+      "info",
+      `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
+    );
+    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    return entry;
+  }
+  // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
+  // with for as long as it runs — across the payload await, where another
+  // session's first render can evict its entry and a saved file can reload
+  // it. Either retires the state; the cache disposes it when this hold is
+  // released, so the render finishes on the state it resolved its payload
+  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
+  // every exit, a throw included.
+  hold(origin) {
+    const entry = this.getOrCreate(origin);
+    return this.holdState(entry, entry.state);
+  }
+  // The hold on `entry`'s state that `hold` and `holdView` hand out.
+  holdState(entry, state) {
+    const hold2 = this.holdOf(state);
+    hold2.holders++;
+    let released = false;
+    return {
+      entry,
+      state,
+      [Symbol.dispose]: () => {
+        if (released) throw new Error("render-cache hold released twice");
+        released = true;
+        hold2.holders--;
+        this.reclaim(state, hold2);
+      }
+    };
+  }
+  // [LAW:no-ambient-temporal-coupling] A render's hold on the session's view
+  // of the state it draws with, for the same reason as `hold`: a move, a
+  // reload, an eviction or the host's retire retires the view, and the cache
+  // disposes it when this hold is released.
+  //
+  // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
+  // view draws by it from here, opened (openView) or kept (`requested`), so
+  // no view is drawn for another request.
+  holdSession(origin, facts) {
+    const entry = this.getOrCreate(origin, facts.hookData.session_id);
+    const held = this.holdState(entry, entry.state);
+    let view;
+    let lease;
+    try {
+      view = this.viewOf(held.entry, held.state, facts, "request");
+      lease = this.leaseOf(view);
+    } catch (err) {
+      held[Symbol.dispose]();
+      throw err;
+    }
+    return this.holdViewOf(held, view, lease);
+  }
+  // The edit turn switched the session's config input. Move its existing
+  // view now so pushed frames and click validation see the same draft.
+  refreshEditedView(sessionId2) {
+    const view = this.views.get(sessionId2);
+    if (view === void 0) return;
+    const { origin } = this.leaseOf(view).entry;
+    const requested = view.facts();
+    const entry = this.getOrCreate(origin, sessionId2);
+    if (this.views.get(sessionId2)?.state !== entry.state)
+      this.viewOf(entry, entry.state, requested, "reload");
+    if (this.deps.editSnapshot?.(origin, sessionId2) == null)
+      this.dropDraft(sessionId2);
+    this.observers.onViewChanged?.(sessionId2);
+  }
+  dropDraft(sessionId2) {
+    const key = draftKey(sessionId2);
+    const entry = this.entries.get(key);
+    if (entry !== void 0) this.drop(key, entry, "evict");
+  }
+  // [LAW:single-enforcer] A frame's door: the session's current view, held
+  // for its synchronous draw as `holdSession` holds one, or none. It creates
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O
+  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
+  // (ViewOpening).
+  holdView(sessionId2) {
+    const view = this.views.get(sessionId2);
+    if (view === void 0) return null;
+    const lease = this.leaseOf(view);
+    return this.holdViewOf(
+      this.holdState(lease.entry, view.state),
+      view,
+      lease
+    );
+  }
+  // `held` with `lease` on `view` beside it, both released by the one
+  // `using`. Nothing in it throws, so `held` is never stranded.
+  holdViewOf(held, view, lease) {
+    lease.holders++;
+    let released = false;
+    return {
+      entry: held.entry,
+      state: held.state,
+      view,
+      [Symbol.dispose]: () => {
+        if (released) throw new Error("render-cache view hold released twice");
+        released = true;
+        lease.holders--;
+        this.reclaimView(view, lease);
+        held[Symbol.dispose]();
+      }
+    };
+  }
+  // Why the session has no view, when its last opening threw: what a frame
+  // draws in place of the view `holdView` found none of.
+  openFailure(sessionId2) {
+    return this.openFailures.get(sessionId2) ?? null;
+  }
+  // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
+  // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
+  // session, so it follows the view wherever a request or a reload moves it.
+  pin(sessionId2) {
+    this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) throw new Error("render-cache pin released twice");
+      released = true;
+      const left = (this.pins.get(sessionId2) ?? 0) - 1;
+      if (left > 0) this.pins.set(sessionId2, left);
+      else this.pins.delete(sessionId2);
+    };
+  }
+  // The session's view of `state`: the one it has, or a new one replacing it.
+  viewOf(entry, state, facts, by) {
+    const sessionId2 = facts.hookData.session_id;
+    const current = this.views.get(sessionId2);
+    if (current?.state === state) {
+      this.views.delete(sessionId2);
+      this.views.set(sessionId2, current);
+      current.requested?.(facts);
+      return current;
+    }
+    this.views.delete(sessionId2);
+    let view;
+    try {
+      view = this.opened(entry, state, facts, by);
+    } finally {
+      if (current !== void 0) this.retireView(current, "moved");
+    }
+    this.fit(entry);
+    return view;
+  }
+  // [LAW:single-enforcer] The one way the cache opens a view: drawn by
+  // `facts` from this turn (openView) and entered. Its caller charges it to
+  // the budget, once however many it opens.
+  opened(entry, state, facts, by) {
+    const sessionId2 = facts.hookData.session_id;
+    let view;
+    try {
+      const { currentRequest } = this.deps;
+      view = openView(
+        state,
+        entry.cwd,
+        facts,
+        {
+          source: this.deps.source,
+          changed: (sid) => this.observers.onViewChanged?.(sid),
+          log: this.log,
+          configAccess: () => this.accessTo(entry, state)
+        },
+        currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
+      );
+    } catch (error) {
+      this.openFailures.set(sessionId2, { error });
+      throw error;
+    }
+    this.openFailures.delete(sessionId2);
+    this.views.set(sessionId2, view);
+    this.viewHolds.set(view, { entry, holders: 0, retired: null });
+    this.log(
+      "info",
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+    );
+    return view;
+  }
+  // [LAW:one-source-of-truth] A draft holds its original file content for
+  // preview. Only the current host observation says if it can write through.
+  accessTo(entry, state) {
+    const key = originKey(entry.origin);
+    const error = entry.lastError ?? this.entries.get(key)?.lastError;
+    if (error != null) return { kind: "unavailable", error };
+    const held = this.snapshots.get(key);
+    if (held === void 0)
+      return {
+        kind: "unavailable",
+        error: "No current config is held for this session"
+      };
+    for (const { role, path: path31, content } of held.snapshot.chain)
+      if (content.kind === "unreadable")
+        return {
+          kind: "unavailable",
+          error: `The ${role} config layer at ${path31} could not be read: ${content.error}`
+        };
+    return { kind: "available", roles: state.writable };
+  }
+  leaseOf(view) {
+    const lease = this.viewHolds.get(view);
+    if (lease === void 0) throw new Error("render-cache view never served");
+    return lease;
+  }
+  // The cache stopped serving `view`; its teardown is due now, or when the
+  // last render holding it returns.
+  retireView(view, reason) {
+    if (this.views.get(view.sessionId) === view)
+      this.views.delete(view.sessionId);
+    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
+    view.retire();
+    const lease = this.leaseOf(view);
+    lease.retired = { reason, held: lease.holders };
+    this.reclaimView(view, lease);
+  }
+  // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
+  reclaimView(view, lease) {
+    if (lease.retired === null || lease.holders > 0) return;
+    this.viewHolds.delete(view);
+    this.log(
+      "info",
+      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`
+    );
+  }
+  // [LAW:single-enforcer] The host ended the session (its collector's
+  // sweep): its view closes, and the failure no feed shows goes with it.
+  retireSession(sessionId2) {
+    this.openFailures.delete(sessionId2);
+    const view = this.views.get(sessionId2);
+    if (view !== void 0) this.retireView(view, "idle");
+    this.dropDraft(sessionId2);
+  }
+  // [LAW:one-source-of-truth] What every session's open view needs read: the
+  // plugin sources its config declares, at their storage folders, the runs
+  // its `shell` and `file` sources name, and the variables of the session's
+  // environment its `env` sources read. Read
+  // off the views each turn, so a view that opened, moved or closed is the
+  // next output's.
+  // [LAW:one-source-of-truth] The origins the entries load from. An origin's
+  // config is held as long as an entry at it lives, not as long as a session:
+  // a session retires when idle while its entry stays to draw it again.
+  origins() {
+    return [
+      ...new Map(
+        [...this.entries.values()].map(
+          ({ origin }) => [originKey(origin), origin]
+        )
+      ).values()
+    ];
+  }
+  subscriptions() {
+    return {
+      sources: Object.fromEntries(
+        [...this.views].map(([session, view]) => [
+          session,
+          subscriptionsOf(view)
+        ])
+      )
+    };
+  }
+  // The cache's teardown: every entry is dropped, so its state is disposed now
+  // or when the render holding it returns. The entries' registries would
+  // otherwise keep the cache, and every compile it serves, alive for as long
+  // as the process runs.
+  close() {
+    if (this.closed) return;
+    this.lifetime.abort(new Error("the render cache closed"));
+    const entries = this.entries.size;
+    for (const [key, entry] of this.entries) this.drop(key, entry, "close");
+    runInAction(() => this.snapshots.clear());
+    this.log(
+      "info",
+      `render-cache closed entries=${entries} deferred=${this.stats.retired}`
+    );
+  }
+  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
+  // cache refuses every way one would be built — a new entry, a reload, a
+  // `config` turn after the close.
+  // [LAW:no-silent-failure] A closed cache disposed every state it built; one
+  // built after would hold timers and watchers nothing tears down.
+  load(cwd2, snapshot, served) {
+    if (this.closed) throw new Error("render cache used after close");
+    return loadOrigin(cwd2, snapshot, this.deps, served);
+  }
+  // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
+  // snapshot the host handed in for its origin. None is an event the renderer
+  // did not park until its origin's `config` came: a bug, said with the
+  // origin.
+  snapshotFor(origin) {
+    return this.held(origin).snapshot;
+  }
+  held(origin) {
+    if (this.closed) throw new Error("render cache used after close");
+    const held = this.snapshots.get(originKey(origin));
+    if (held === void 0)
+      throw new Error(
+        `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
+      );
+    return held;
+  }
+  // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
+  // serving it, and its state is retired.
+  drop(key, entry, reason) {
+    this.entries.delete(key);
+    this.retire(entry.state, reason, null);
+  }
+  get stats() {
+    let held = 0;
+    let retired2 = 0;
+    for (const hold2 of this.holds.values()) {
+      if (hold2.holders > 0) held++;
+      if (hold2.retired !== null) retired2++;
+    }
+    let retiredViews = 0;
+    for (const lease of this.viewHolds.values()) {
+      if (lease.retired !== null) retiredViews++;
+    }
+    let passages = 0;
+    for (const view of this.views.values())
+      for (const record2 of view.frames.values())
+        passages += record2.passages?.size ?? 0;
+    return {
+      size: this.entries.size,
+      held,
+      retired: retired2,
+      compiles: this.compiles.size,
+      views: this.views.size,
+      pinned: this.pins.size,
+      retiredViews,
+      passages,
+      accountedBytes: this.accountedBytes(),
+      budgetBytes: this.budgetBytes()
+    };
+  }
+  // [LAW:single-enforcer] The one place the cache's bounds are enforced — its
+  // bytes and its count — run after every change to what the map serves (an
+  // insertion, a reload): least recently used first, until the map fits both
+  // — never `served`, the entry the change was for, which a render is about
+  // to draw.
+  fit(served) {
+    const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
+    const pinned = new Set(
+      [...this.pins.keys()].flatMap((sessionId2) => {
+        const view = this.views.get(sessionId2);
+        return view === void 0 ? [] : [view.state];
+      })
+    );
+    for (const [key, evicted] of this.entries) {
+      if (fits2()) return;
+      if (evicted === served || pinned.has(evicted.state)) continue;
+      this.drop(key, evicted, "evict");
+    }
+    if (!fits2())
+      this.log(
+        "warn",
+        `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
+      );
+  }
+  // The cache starts serving `state`: unheld, and not yet retired — and the
+  // compile it carries is the table's for its key.
+  serve(state) {
+    const held = this.compiles.get(state.compileKey);
+    if (held !== void 0 && held !== state.compiled)
+      throw new Error(
+        `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
+      );
+    this.holds.set(state, {
+      id: ++this.storageHolds,
+      holders: 0,
+      retired: null
+    });
+    this.compiles.set(state.compileKey, state.compiled);
+    if (held === void 0)
+      this.log(
+        "info",
+        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`
+      );
+  }
+  // The host holds the storage folders a served state's latest load named.
+  holdFolders(state) {
+    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
+  }
+  holdOf(state) {
+    const hold2 = this.holds.get(state);
+    if (hold2 === void 0) throw new Error("render-cache state never served");
+    return hold2;
+  }
+  // The cache stopped serving `state`: it left the map, or a reload
+  // replaced it with `successor`. Its teardown is due — now, or at its last
+  // holder's return.
+  retire(state, reason, successor) {
+    for (const view of [...this.views.values()]) {
+      if (view.state !== state) continue;
+      if (successor !== null) {
+        try {
+          this.opened(successor.entry, successor.state, view.facts(), "reload");
+        } catch (e) {
+          this.log(
+            "error",
+            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`
+          );
+        }
+      }
+      this.retireView(view, reason);
+    }
+    const hold2 = this.holdOf(state);
+    hold2.retired = { reason, held: hold2.holders };
+    this.reclaim(state, hold2);
+  }
+  // [LAW:single-enforcer] The one place a state is disposed: once it is
+  // retired AND unheld, from whichever of the two transitions came last. The
+  // registry owns timers, fs watchers and MobX reactions — dropping it
+  // without dispose leaks every handle the config declared.
+  reclaim(state, hold2) {
+    if (hold2.retired === null || hold2.holders > 0) return;
+    this.holds.delete(state);
+    this.deps.storage.release(hold2.id);
+    this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
+    if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
+      this.compiles.delete(state.compileKey);
+  }
+  // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
+  // state.
+  sessionsOn(entry) {
+    return [...this.views.values()].filter((view) => view.state === entry.state).map((view) => view.sessionId);
+  }
+  // Re-populate `entry` from `snapshot`, for `cause`.
+  //
+  // - Load success: swap the fresh state in, retire the prior one.
+  // - Load failure: keep the prior state (the bundled default before any
+  //   config has loaded), set lastError.
+  //
+  // [LAW:single-enforcer] hot-reload contract: any reload that produces a
+  // new DslConfig retires the old state, and `reclaim` disposes its
+  // SourceRegistry — at once when no render holds it, else when the last
+  // one returns. Dropping the reference without that would leak every
+  // timer, watcher and MobX reaction it owns.
+  //
+  // [LAW:single-enforcer] One publish point for "this reload completed":
+  // straight-line, so the signal structurally cannot be skipped by whichever
+  // arm the load took.
+  reloadInto(entry, { snapshot, digest: digest2 }, cause) {
+    const sessions = this.sessionsOn(entry);
+    const served = entry.state;
+    const loaded = this.load(entry.cwd, snapshot, served);
+    entry.snapshot = snapshot;
+    entry.digest = digest2;
+    entry.configLayers = loaded.layers;
+    entry.lastWarnings = loaded.warnings;
+    runInAction(() => {
+      entry.lastError = loaded.error;
+    });
+    if (loaded.state !== null)
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    if (loaded.kind === "built") {
+      entry.state = loaded.state;
+      this.serve(loaded.state);
+    }
+    this.holdFolders(entry.state);
+    if (loaded.kind === "built")
+      this.retire(served, "reload", { entry, state: loaded.state });
+    this.fit(entry);
+    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
+  }
+  get size() {
+    return this.entries.size;
+  }
+  // [LAW:single-enforcer] One read path for "any session's view" used by
+  // the debug protocol's introspection (`debug vars` / `segments` / `config`).
+  // Reads existing views — does NOT open one, so debug introspection never
+  // has the side effect of creating a fresh cache entry (with its own
+  // SourceRegistry timers/watchers) tied to the daemon's own `process.cwd()`.
+  // The most recently rendered session's, since `views` is kept in use order.
+  // Null while no session's view is open; debug responses are empty in that
+  // case by construction.
+  latestView() {
+    return [...this.views.values()].at(-1) ?? null;
+  }
+  // The renderer `by` delivered a frame of the session's bar listing
+  // `copies`. A session with no view is closed: nothing it delivers is kept.
+  delivered(sessionId2, by, copies) {
+    if (!this.views.has(sessionId2)) return;
+    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    this.copies.set(sessionId2, drawn.set(by, copies));
+  }
+  // What the diagnostic under `key` copies in the frame renderer `by` last
+  // delivered for the session; undefined while that renderer's last frame
+  // did not list it. Reads, never opens, like latestView.
+  drawnCopy(sessionId2, by, key) {
+    return this.copies.get(sessionId2)?.get(by)?.get(key);
+  }
+  // The renderer no longer draws the session's bar (its feed closed): what
+  // its last frame listed is on no surface now, so a click naming it is
+  // refused rather than copying a list gone stale, and the surface's next
+  // frame, if it opens again, is a first frame that fades nothing in.
+  stopDrawing(sessionId2, by) {
+    this.copies.get(sessionId2)?.delete(by);
+    this.views.get(sessionId2)?.frames.delete(by);
+  }
+};
+
+// src/renderer/render-payload.ts
+init_globals();
+var import_node_path29 = __toESM(require_path_browserify(), 1);
+
+// src/utils/terminal-width.ts
+init_globals();
+var RESERVED_CHARS = 2;
+function applyClaudeCodeReserve(rawCols) {
+  return Math.max(1, rawCols - RESERVED_CHARS);
+}
+
 // src/segments/session.ts
 init_globals();
 function usageOver(fold, hookData2) {
@@ -82830,85 +84803,6 @@ function projectGitInfo(info, pullRequest, pending2) {
   };
 }
 
-// src/config/effective-globals.ts
-init_globals();
-
-// src/config/theme-defaults.ts
-init_globals();
-var NO_THEME_DEFAULT = Object.freeze({});
-function themeDefaultsOf(theme24, themeDefaults) {
-  return theme24.kind === "decided" ? themeDefaults[theme24.name] ?? NO_THEME_DEFAULT : NO_THEME_DEFAULT;
-}
-function underThemeDefault(globals, fragment) {
-  return {
-    ...globals,
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, globals[f] ?? fragment[f]])
-    )
-  };
-}
-
-// src/config/effective-globals.ts
-var laneSwitches = (effective) => perLane((lane) => effective[LANES[lane].switch.setting]);
-function resolveValued(field, staged, sessionPick, globals) {
-  const row = valuedRow(field);
-  return effectiveGlobal(
-    staged[field],
-    row.kind === "session" ? sessionPick(settingNameOf(field)) : null,
-    globals[field],
-    row.floor,
-    row.parse
-  );
-}
-function presetOf(config, sessionPick) {
-  return effectivePresetName(
-    // [LAW:one-source-of-truth] Read under the key a preset pick is written
-    // under.
-    sessionPick(settingNameOf("preset")),
-    config.globals.preset,
-    config.presets
-  );
-}
-function resolveEffectiveGlobals(config, sessionPick, presetCustomized) {
-  const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset);
-  const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
-  const theme24 = resolveThemeSelection(
-    staged.palette,
-    sessionPick(settingNameOf("palette")),
-    declared.palette
-  );
-  const globals = underThemeDefault(
-    declared,
-    themeDefaultsOf(theme24, config.themeDefaults)
-  );
-  return {
-    ...Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, sessionPick, globals)
-      ])
-    ),
-    preset,
-    presetCustomized: presetCustomized(preset),
-    theme: theme24,
-    style: resolveStyleSelection(
-      staged.style,
-      sessionPick(settingNameOf("style")),
-      globals.style,
-      config.styles
-    ),
-    effect: resolveEffectSelection(
-      staged.effect,
-      sessionPick(settingNameOf("effect")),
-      globals.effect
-    ),
-    // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
-    // config` — the same `??`, minus the rungs it does not have.
-    separator: staged.default_separator ?? globals.default_separator
-  };
-}
-
 // src/daemon/foundations/click-error.ts
 init_globals();
 var KEY = "click.error";
@@ -82948,31 +84842,6 @@ function recordOf(raw) {
   return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
 }
 
-// src/renderer/lane-handoff.ts
-init_globals();
-function handedOffTo(lanes, following) {
-  return LANE_NAMES.filter(
-    (lane) => lanes[lane] && LANES[lane].handsOff && following.has(lane)
-  );
-}
-var HANDOFF_BUTTON = "[\u27F2 claude]";
-function laneHandoff(sessionId2, writable2, lanes) {
-  const reset = actionTarget(
-    writable2.filter((layer) => layer !== "project").map((layer) => ({
-      verb: VERB_RESET_CONFIG,
-      args: [
-        sessionId2,
-        layer,
-        ...lanes.map((lane) => LANES[lane].switch.setting)
-      ]
-    }))
-  );
-  return {
-    severity: HANDOFF_SEVERITY,
-    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]]
-  };
-}
-
 // src/renderer/draw-bar.ts
 function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
   const facts = [];
@@ -82989,8 +84858,8 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
       );
       const bar = drawn.body;
       const statusline = statuslineOf(
-        sessionId2,
-        setup.state.writable,
+        setup,
+        parts.sessionState,
         drawn,
         handedOffTo(lanes, following)
       );
@@ -83132,6 +85001,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   const failure2 = view.source.failure();
   const document = view.source.facts();
   const lanes = laneSwitches(effective);
+  const configAccess = view.configAccess();
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
     // The preset the session's settings resolve to, which the draw uses.
@@ -83149,7 +85019,11 @@ function drawRender(parts, setup, drawing2, feeds) {
   const errors2 = [
     said2("refused-args", refusedArgsError(req.refusedArgs)),
     said2("hints", hintsError),
-    sourced("load", "load", entry.lastError),
+    sourced(
+      "load",
+      "load",
+      configAccess.kind === "unavailable" ? configAccess.error : null
+    ),
     ...state.dropped.map(
       (e) => ({
         kind: "dropped",
@@ -83436,7 +85310,7 @@ function answerRequest(parts, req, presentation, facts) {
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(presentation.client ?? null) === "statusline";
-    const frame2 = toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body;
+    const frame2 = toStatusline ? statuslineOf(setup, parts.sessionState, drawn, elsewhere) : drawn.body;
     keepDraw(parts, setup, kept);
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-"
@@ -83464,12 +85338,31 @@ function deliver(parts, delivery) {
     answeredClickError(parts.sessionState, session, clickShown);
   for (const event of eventsShown) parts.eventAnswered(event);
 }
-function statuslineOf(sessionId2, writable2, drawn, elsewhere) {
-  const [first2, ...rest2] = elsewhere;
-  return first2 === void 0 || drawn.viewerOpen ? drawn.body : standIn(
+function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, elsewhere) {
+  const first2 = elsewhere[0];
+  if (first2 === void 0 || drawn.viewerOpen) return drawn.body;
+  const effective = view.source.effective();
+  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
+  if (defaultsAfterReset === void 0)
+    throw new Error(
+      `No lane reset defaults for resolved preset '${effective.preset}'`
+    );
+  const editGlobals = editGlobalsOf(
+    state.config,
+    (key) => picks.get(sessionId2, key)
+  );
+  const remaining = perLane(
+    (lane) => editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane]
+  );
+  return standIn(
     drawn.body,
     handoffRows(
-      laneHandoff(sessionId2, writable2, [first2, ...rest2]),
+      laneHandoff(
+        sessionId2,
+        writableRoles(view.configAccess()),
+        [first2, ...elsewhere.slice(1)],
+        remaining
+      ),
       drawn.diagnostics,
       sessionId2,
       drawn.geometry
@@ -83950,230 +85843,6 @@ init_globals();
 
 // src/renderer/verbs/key-seeds.ts
 init_globals();
-
-// src/renderer/setting-drafts.ts
-init_globals();
-function spelled(e, name) {
-  const value = e[name];
-  switch (typeof value) {
-    case "boolean":
-      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-    case "number":
-      return String(value);
-    case "string":
-      return value;
-    default:
-      return value.kind === "decided" ? value.name : null;
-  }
-}
-var SETTING_ROWS = Object.entries(SETTINGS);
-var SETTING_KEYS = new Set(
-  SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
-);
-var NOT_CUSTOMIZED = () => false;
-function sessionGlobals(config, sessionPick) {
-  return resolveEffectiveGlobals(
-    config,
-    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
-    NOT_CUSTOMIZED
-  );
-}
-var SELECTORS = ["preset", "theme"];
-function fileThrough(config, sessionPick, depth) {
-  const held = new Set(
-    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey)
-  );
-  return resolveEffectiveGlobals(
-    config,
-    (key) => held.has(key) ? sessionPick(key) : null,
-    NOT_CUSTOMIZED
-  );
-}
-function baseOf(config, sessionPick) {
-  const bases = Array.from(
-    { length: SELECTORS.length + 1 },
-    (_, depth) => fileThrough(config, sessionPick, depth)
-  );
-  return (name) => {
-    const depth = SELECTORS.indexOf(name);
-    return bases[depth === -1 ? SELECTORS.length : depth];
-  };
-}
-function differing(rows, session, baseOf2, targetOf) {
-  return rows.flatMap(([name, row]) => {
-    const value = spelled(session, name);
-    return value === null || value === spelled(baseOf2(name), name) ? [] : [{ ...row, value, target: targetOf(row) }];
-  });
-}
-function sessionSettingValue(config, sessionPick, name) {
-  return spelled(sessionGlobals(config, sessionPick), name);
-}
-function settingDrafts(config, sessionPick) {
-  const session = sessionGlobals(config, sessionPick);
-  return differing(
-    SETTING_ROWS,
-    session,
-    baseOf(config, sessionPick),
-    (row) => landingKey(config, session.preset, row.configKey)
-  );
-}
-function landingKey(config, preset, field) {
-  return field in (presetByName(config.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
-}
-function durableLanding(config, sessionPick, key) {
-  const preset = presetOf(config, sessionPick);
-  const target = parsePersistTarget(key);
-  return {
-    key: target?.scope === "globals" ? landingKey(config, preset, target.field) : key,
-    globals: presetGlobals(config, preset)
-  };
-}
-function placementDrafts(config, sessionPick) {
-  const { preset } = sessionGlobals(config, sessionPick);
-  return slotsOf(config, preset).flatMap(
-    ({ id: id2, setting, key, decl, saved }) => {
-      const pick2 = sessionPick(key);
-      const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
-      return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
-    }
-  );
-}
-function placementPickProblems(config, sessionPick, writes) {
-  const written3 = new Map(writes.map((w) => [w.key, w.value]));
-  return presetNames(config.presets).flatMap((preset) => {
-    const slots = slotsOf(config, preset);
-    const touched = new Set(
-      slots.filter((s) => written3.has(s.key)).map((s) => s.id)
-    );
-    return [...touched].flatMap((id2) => {
-      const own2 = slots.filter((s) => s.id === id2);
-      const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
-      const values2 = Object.fromEntries(
-        own2.map((s) => {
-          const pick2 = written3.get(s.key) ?? sessionPick(s.key);
-          const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
-          return [s.setting, value ?? s.saved];
-        })
-      );
-      return settingOrderProblems(decls, values2).map(
-        ({ message: message2 }) => `placement "${id2}": ${message2}`
-      );
-    });
-  });
-}
-var SLOTS = /* @__PURE__ */ new WeakMap();
-function slotsOf(config, preset) {
-  const byPreset = SLOTS.get(config) ?? /* @__PURE__ */ new Map();
-  SLOTS.set(config, byPreset);
-  const known = byPreset.get(preset);
-  if (known !== void 0) return known;
-  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
-    (node) => node.kind !== "segment" || node.drafts === void 0 ? [] : Object.entries(node.drafts).map(([setting, { id: id2, key }]) => {
-      const decl = settingsOf(config.segments[node.name])[setting];
-      return {
-        id: id2,
-        setting,
-        key,
-        decl,
-        saved: node.settings?.[setting] ?? decl.default
-      };
-    })
-  );
-  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
-  byPreset.set(preset, slots);
-  return slots;
-}
-function presetSnapshot(config, sessionPick) {
-  const session = sessionGlobals(config, sessionPick);
-  return {
-    from: session.preset,
-    globals: presetByName(config.presets, session.preset).globals ?? {},
-    // [LAW:types-are-the-program] A preset cannot select a preset: its
-    // globals schema refuses `preset`, so the row is not offered.
-    picks: differing(
-      SETTING_ROWS.filter(([n]) => n !== "preset"),
-      session,
-      baseOf(config, sessionPick),
-      (row) => row.configKey
-    ),
-    placements: placementDrafts(config, sessionPick)
-  };
-}
-function themeOwnLook(config, theme24) {
-  return resolveEffectiveGlobals(
-    { ...config, globals: { palette: theme24 }, presets: {} },
-    () => null,
-    NOT_CUSTOMIZED
-  );
-}
-function themeDefaultSave(config, sessionPick) {
-  const session = sessionGlobals(config, sessionPick);
-  const theme24 = spelled(session, "theme");
-  if (theme24 === null) return { kind: "rule" };
-  const own2 = themeOwnLook(config, theme24);
-  const declared = presetGlobals(config, session.preset);
-  const look = Object.fromEntries(
-    THEME_DEFAULT_FIELDS.map((f) => [
-      f,
-      spelled(declared[f] === void 0 ? session : own2, f)
-    ])
-  );
-  return {
-    kind: "look",
-    theme: theme24,
-    look,
-    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own2, f))
-  };
-}
-function resetLayers(key) {
-  const settings = SETTING_PROJECTIONS.filter((p2) => p2.configKey === key);
-  return {
-    sessionKeys: settings.map((p2) => p2.sessionKey),
-    fileKeys: [
-      key,
-      ...isPresetGlobalsField(key) ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key)) : [],
-      ...isThemeDefaultField(key) ? listResolvablePaletteNames().map(
-        (theme24) => themeDefaultKey(theme24, key)
-      ) : []
-    ]
-  };
-}
-function fileHeldSettings(raw) {
-  return new Set(
-    SETTING_PROJECTIONS.map((p2) => p2.configKey).filter(
-      (key) => resetLayers(key).fileKeys.some(
-        (fileKey) => holds(raw, filePath(fileKey))
-      )
-    )
-  );
-}
-function settingCounts(config, fileHeld, sessionPick) {
-  const drafts = settingDrafts(config, sessionPick);
-  const drafted = new Set(drafts.map((d) => d.configKey));
-  const resettable = perSetting(
-    (name) => drafted.has(SETTINGS[name].configKey) || fileHeld.has(SETTINGS[name].configKey)
-  );
-  const themeDefault = themeDefaultSave(config, sessionPick);
-  return {
-    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
-    resettable,
-    themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
-  };
-}
-function filePath(fileKey) {
-  const target = parsePersistTarget(fileKey);
-  if (target === null || target.scope === "preset-root") {
-    throw new Error(`reset layer "${fileKey}" is not a value path`);
-  }
-  return persistPath(target);
-}
-function holds(doc, path31) {
-  const [step4, ...rest2] = path31;
-  if (step4 === void 0) return doc !== void 0;
-  return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
-}
-
-// src/renderer/verbs/key-seeds.ts
 function stateKeySeed(config, sessionPick, key) {
   const setting = SESSION_KEY_TO_SETTING.get(key);
   if (setting !== void 0) {
@@ -84359,15 +86028,6 @@ function closingView(store, nestOf2, log) {
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
 
-// src/config/config-snapshot.ts
-init_globals();
-function contentOfText(text4) {
-  return text4 === null ? { kind: "absent" } : { kind: "text", text: text4 };
-}
-function writable(content) {
-  return content.kind !== "unreadable";
-}
-
 // src/renderer/config-writes.ts
 init_globals();
 function requireLayerText(file, content) {
@@ -84421,7 +86081,7 @@ var ConfigWrites = class {
   // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
   // the chain does not hold is no layer a click of this session writes.
   layerAt(file) {
-    const layer = this.held().chain.find((l) => l.path === file);
+    const layer = layerAtPath(this.held().chain, file);
     if (layer === void 0)
       throw new BadVerbArgs(
         `${file} is not a config file this session renders from \u2014 the click is not taken`
@@ -84438,7 +86098,7 @@ var ConfigWrites = class {
   // The file of the click's chain at `role`: null when the chain holds no
   // layer of that role.
   pathOf(role) {
-    return this.held().chain.find((l) => l.role === role)?.path ?? null;
+    return layerForRole(this.held().chain, role)?.path ?? null;
   }
   // A write of the open click, from the file as the click read it (`read`):
   // one change per file, from the click's first read of it to its last write.
@@ -84709,7 +86369,7 @@ function requireValueTarget(key) {
   return target;
 }
 function writeLayerOf(snapshot, role, isolatedFile, home) {
-  const layer = snapshot.chain.find((l) => l.role === role);
+  const layer = layerForRole(snapshot.chain, role);
   if (layer === void 0)
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${isolatedFile !== null ? `${isolatedFile} is the session's only config layer (--config-only), so there is no ${role} layer to write` : `the ${role} layer is the project's, and this session has no approved project`}`
@@ -85774,7 +87434,7 @@ function changeLanded(ctx, { session, consequence, outcome }, effects) {
   holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
 function proveLoadsAsLayer(ctx, origin, file, text4, read2) {
-  const layer = origin === null ? void 0 : ctx.snapshotFor(origin).chain.find((l) => l.path === file);
+  const layer = origin === null ? void 0 : layerAtPath(ctx.snapshotFor(origin).chain, file);
   if (origin === null || layer === void 0)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from \u2014 its step is not taken`
@@ -86459,10 +88119,8 @@ var EditDraft = class {
     this.snapshot = {
       ...this.latest,
       chain: this.latest.chain.flatMap((layer) => {
-        const base = this.base.chain.find(
-          (candidate) => candidate.path === layer.path && candidate.role === layer.role
-        );
-        if (base === void 0) return [];
+        const base = layerAtPath(this.base.chain, layer.path);
+        if (base?.role !== layer.role) return [];
         const value = this.files.get(layer.path);
         const content = value === void 0 ? base.content : value === null ? { kind: "absent" } : { kind: "text", text: value };
         return [{ ...layer, content }];
@@ -86495,7 +88153,7 @@ var EditDraft = class {
   begin(prove) {
     const working = new Map(this.files);
     const layerAt = (file) => {
-      const layer = this.base.chain.find((layer2) => layer2.path === file);
+      const layer = layerAtPath(this.base.chain, file);
       if (layer === void 0)
         throw new BadVerbArgs(`${file} is not a layer of this edit`);
       return layer;
@@ -86508,7 +88166,7 @@ var EditDraft = class {
         else working.set(file, after);
       },
       roleOf: (file) => layerAt(file).role,
-      pathOf: (role) => this.base.chain.find((layer) => layer.role === role)?.path ?? null,
+      pathOf: (role) => layerForRole(this.base.chain, role)?.path ?? null,
       prove
     };
     const journal = this.history.begin(files);
@@ -86529,9 +88187,7 @@ var EditDraft = class {
         const rewritten2 = /* @__PURE__ */ new Map();
         for (const [path31, after] of working) {
           const source = layerAt(path31);
-          const target = latest.chain.find(
-            (layer) => layer.role === source.role
-          );
+          const target = layerForRole(latest.chain, source.role);
           if (target?.path !== path31)
             throw new BadVerbArgs(
               `save: the ${source.role} layer for this edit moved`
@@ -86964,7 +88620,7 @@ function nextDocument(document, held) {
 // src/renderer/session-source.ts
 init_globals();
 function sessionSource(deps) {
-  return ({ sessionId: sessionId2, state, store, requested }) => {
+  return ({ sessionId: sessionId2, state, store, requested, configAccess }) => {
     const pick2 = (key) => deps.sessionState.get(sessionId2, key);
     const effective = store.derive(
       "session.effective",
@@ -86992,7 +88648,7 @@ function sessionSource(deps) {
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick2),
           configPath: state.configPath,
-          layers: layerFlags(state.writable)
+          layers: layerFlags(writableRoles(configAccess()))
         },
         history: deps.history(sessionId2),
         back: deps.navigation(sessionId2, state.config)
@@ -87021,1484 +88677,6 @@ function sessionSource(deps) {
     };
   };
 }
-
-// src/renderer/render-cache.ts
-init_globals();
-
-// src/daemon/foundations/gates.ts
-init_globals();
-
-// src/daemon/foundations/config-validators.ts
-init_globals();
-
-// src/daemon/foundations/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min3, max3, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min3 = Math.min(...ranges.map((r) => r.min));
-    const max3 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min3 || n > max3;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min3, max: max3 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config) {
-      const held = gates.get(config);
-      if (held?.epoch === epoch) return held.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
-      gates.set(config, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/foundations/config-validators.ts
-function makeConfigKeyspace() {
-  return createKeyspace({}, "config", deriveConfigActionValidators);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function clearableContributions(config) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return [
-    ...clearableContributions(config),
-    ...Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config) {
-  return mergeContributions(actionContributions(config), "config");
-}
-
-// src/daemon/foundations/state-validators.ts
-init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme
-};
-function makeStateKeyspace() {
-  return createKeyspace(BASELINE, "state", deriveActionValidators);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
-function actionContributions2(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config) {
-  return mergeContributions(actionContributions2(config));
-}
-
-// src/daemon/foundations/gates.ts
-function deriveActionGates(gates, config) {
-  gates.state.gateFor(config);
-  gates.config.gateFor(config);
-}
-function createGates(held = { state: [], config: [] }) {
-  const state = makeStateKeyspace();
-  const config = makeConfigKeyspace();
-  for (const { key, allowed } of held.state) state.register(key, allowed);
-  for (const { key, allowed } of held.config) config.register(key, allowed);
-  return { state, config };
-}
-
-// src/config/unused.ts
-init_globals();
-function* variablesOf(cfg) {
-  yield* Object.entries(cfg.variables ?? {});
-  for (const [segName, seg2] of Object.entries(cfg.segments ?? {})) {
-    for (const [name, v] of Object.entries(seg2.vars ?? {})) {
-      yield [`${segName}.${name}`, v];
-    }
-  }
-}
-function* templatesOf(config) {
-  for (const seg2 of Object.values(config.segments)) {
-    for (const t2 of [seg2.template, seg2.bg, seg2.fg, seg2.when]) {
-      if (t2 !== void 0) yield t2;
-    }
-    yield* Object.values(seg2.partials ?? {});
-  }
-  for (const preset of presetNames(config.presets)) {
-    for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.when !== void 0) yield node.when;
-    }
-    const globals = presetGlobals(config, preset);
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (isExpression(rule)) yield rule;
-    }
-  }
-  for (const [, v] of variablesOf(config)) {
-    for (const [, t2] of variableTemplates(v)) yield t2;
-  }
-  for (const a of Object.values(config.actions)) {
-    for (const [, source] of actionTemplates(a)) yield source;
-  }
-}
-function unusedDeclarations(raw, config, inserted) {
-  const fold = valueReadsOf(config);
-  const read2 = /* @__PURE__ */ new Set();
-  const bound = /* @__PURE__ */ new Set();
-  const calledHelpers = /* @__PURE__ */ new Set();
-  for (const template of templatesOf(config)) {
-    for (const { reaches } of fold.ofTemplate(template))
-      for (const name of reaches) read2.add(name);
-    for (const { name } of templateActionRefs(template, config.helpers))
-      bound.add(name);
-    for (const name of templateHelperRefs(template, config.helpers))
-      calledHelpers.add(name);
-  }
-  for (const [, v] of variablesOf(config)) {
-    for (const { reaches } of fold.ofVariable(v))
-      for (const name of reaches) read2.add(name);
-  }
-  const clicked = new Set(bound);
-  for (const name of bound) {
-    const action2 = config.actions[name];
-    if (action2 !== void 0 && "do" in action2) {
-      for (const member of action2.do) clicked.add(member);
-    }
-  }
-  const writtenKeys = /* @__PURE__ */ new Set();
-  const placed2 = new Set(inserted);
-  for (const name of clicked) {
-    const action2 = config.actions[name];
-    if (action2 === void 0) continue;
-    if ("set" in action2) writtenKeys.add(action2.set);
-    if ("insertSegment" in action2) placed2.add(action2.insertSegment);
-    if ("insertSegmentFrom" in action2 && Array.isArray(action2.insertSegmentFrom))
-      for (const seg2 of action2.insertSegmentFrom) placed2.add(seg2);
-  }
-  for (const preset of presetNames(config.presets)) {
-    for (const node of walkNodes(presetRoot(config, preset).node)) {
-      if (node.kind === "segment") placed2.add(node.name);
-    }
-  }
-  const variableUsed = (name, v) => read2.has(name) || v.kind === "state" && writtenKeys.has(v.key);
-  const authored = (names) => [...names].filter((name) => !isReservedName(name));
-  const unusedOf = (kind, names, used) => authored(names).filter((name) => !used(name)).map((name) => ({ kind, name }));
-  const variables = new Map(variablesOf(raw));
-  return [
-    ...unusedOf(
-      "variable",
-      variables.keys(),
-      (name) => variableUsed(name, variables.get(name))
-    ),
-    ...unusedOf(
-      "action",
-      Object.keys(raw.actions ?? {}),
-      (name) => clicked.has(name)
-    ),
-    ...unusedOf(
-      "helper",
-      Object.keys(raw.helpers ?? {}),
-      (name) => calledHelpers.has(name)
-    ),
-    ...unusedOf(
-      "segment",
-      Object.keys(raw.segments ?? {}),
-      (name) => placed2.has(name)
-    )
-  ];
-}
-
-// src/renderer/render-cache.ts
-var ENTRY_BYTES = 3 * 1024 * 1024;
-var COMPILE_BYTES = 10 * 1024 * 1024;
-var VIEW_BYTES = 2.5 * 1024 * 1024;
-var RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
-function renderCacheBudget(memoryLimitBytes2) {
-  return Math.floor(
-    Math.max(
-      memoryLimitBytes2 / 4,
-      memoryLimitBytes2 * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES
-    )
-  );
-}
-var MAX_ENTRIES3 = 256;
-function chainOf(snapshot, locs) {
-  const { chain: chain2 } = snapshot;
-  return {
-    // [LAW:one-source-of-truth] The files reported are the files merged: a
-    // layer not written or not read is no layer of the load.
-    layers: chain2.filter((l) => l.content.kind === "text").map((l) => ({ path: l.path, role: l.role })),
-    // Every chain holds the user layer: it is the one no answer gates.
-    home: chain2.find((l) => l.role === "user").path,
-    writable: chain2.filter((l) => writable(l.content)).map((l) => l.role),
-    snapshot,
-    locs
-  };
-}
-function pluginLoadLine(layers, {
-  plugins: plugins2,
-  config,
-  compiled
-}) {
-  const { checkout, loaded, dropped, unreached } = plugins2;
-  const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
-  const dataOf = (definition) => {
-    const data = definition.name === void 0 ? void 0 : config.variables[pluginDataVar(pluginNs(definition))];
-    return data?.kind === "file" ? data.path : "none";
-  };
-  const declared = loaded.flatMap((d) => d.name === void 0 ? [] : [pluginNs(d)]).flatMap(
-    (ns) => Object.entries(config.variables).filter(
-      ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns)
-    )
-  );
-  const sources = declared.filter(([, d]) => d.kind === "source").length;
-  const pluginVariables = declared.length - sources;
-  return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
-}
-function configLoadedLine(entry, cause, settled3) {
-  const { repo: repo2 } = entry.snapshot;
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
-}
-function configDisposeLine(teardown, released) {
-  return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
-}
-function authoredRoots(config, raw) {
-  return new Set(
-    presetNames(config.presets).filter(
-      (name) => presetRoot(config, name).path === "root" ? raw.root !== void 0 : raw.presets?.[name]?.root !== void 0
-    )
-  );
-}
-var thrown = (err) => err instanceof Error ? err.message : String(err);
-function plugins(p2) {
-  return {
-    loaded: p2.loaded,
-    dropped: p2.dropped,
-    reached: [...p2.reached].sort(),
-    rendering: [...p2.rendering].sort(([a], [b]) => a.localeCompare(b))
-  };
-}
-function loadKey(inputs) {
-  const { loaded, chain: chain2 } = inputs;
-  return digestOf({
-    cwd: inputs.cwd,
-    chain: {
-      layers: chain2.layers,
-      home: chain2.home,
-      writable: chain2.writable,
-      // Not keyed: its texts reach the state only through `loaded`, keyed
-      // below, where a whitespace or comment edit moves nothing; its paths
-      // are `layers`.
-      snapshot: null,
-      locs: chain2.locs
-    },
-    loaded: {
-      layers: loaded.layers.map(
-        (l) => ({
-          path: l.path,
-          raw: l.raw,
-          config: l.config,
-          plugins: plugins(l.plugins),
-          // Not keyed: positions reach no state, and the resolve redraws
-          // its diagnostics on every load, so a whitespace or comment edit
-          // keeps the state.
-          source: null,
-          // Not keyed: the entry's, recomposed on every load.
-          warnings: null
-        })
-      ),
-      base: loaded.base,
-      installed: {
-        ...plugins(loaded.installed),
-        checkout: loaded.installed.checkout,
-        unreached: loaded.installed.unreached
-      },
-      config: loaded.config,
-      // [LAW:one-source-of-truth] Keyed by message: unlike a layer's own
-      // diagnostics the drops ride the state, positions and all, so a state
-      // kept across an edit that moved a drop would name the old line.
-      dropped: loaded.dropped.map((e) => e.message),
-      // Not keyed: placed from the layers' own configs and inserts, keyed
-      // above.
-      placed: null
-    },
-    sources: [...inputs.sources].sort(([a], [b]) => a.localeCompare(b)).map(([name, folder]) => [name, folder])
-  });
-}
-function declaredSources(config) {
-  const sources = /* @__PURE__ */ new Map();
-  for (const [name, decl] of Object.entries(config.variables))
-    if (decl.kind === "source") sources.set(name, decl.storage);
-  return sources;
-}
-function resolveLoad(cwd2, chain2) {
-  const warnings = [];
-  try {
-    const loaded = loadSnapshot(
-      chain2.snapshot,
-      chain2.locs.home,
-      DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) }
-    );
-    const inputs = {
-      cwd: cwd2,
-      chain: chain2,
-      loaded,
-      sources: declaredSources(loaded.config)
-    };
-    return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
-  } catch (err) {
-    if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return { kind: "failed", cause: err, warnings };
-  }
-}
-function buildRenderState(load, deps) {
-  const { cwd: cwd2, chain: chain2, loaded } = load;
-  const { layers, config, installed, dropped } = loaded;
-  const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
-  const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
-  const inserted = layers.flatMap(
-    (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
-  );
-  const warnings = [];
-  const store = new VariableStore(deps.clock);
-  const registry = new SourceRegistry(
-    store,
-    config.globals.default_empty_value ?? "",
-    deps.sessionState,
-    null
-  );
-  let registration;
-  try {
-    registration = registerCompiled(
-      config,
-      registry,
-      cwd2,
-      deps.compile ?? compileAlone,
-      DIRECTORY_SCOPE
-    );
-    warnings.push(...registration.loadWarnings);
-    const probe2 = registry.view();
-    warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
-    probe2.dispose();
-    deriveActionGates(deps.gates, config);
-  } catch (err) {
-    registry.dispose();
-    if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return { kind: "failed", cause: err, warnings };
-  }
-  return {
-    kind: "built",
-    state: {
-      config,
-      dropped,
-      compileKey: registration.compileKey,
-      loadKey: load.key,
-      buildWarnings: warnings,
-      store,
-      registry,
-      compiled: registration.compiled,
-      // What the menu's resets clear is the user layer's: they name no other.
-      authoredRoots: authoredRoots(merged, homeRaw),
-      fileHeldSettings: fileHeldSettings(homeRaw),
-      configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
-      writable: chain2.writable,
-      // One entry per declaration, however many layers declare it, judged
-      // over the trees as placed and every layer's insert entries, so a
-      // segment only an insert entry places is used, here or not.
-      unused: [
-        ...new Map(
-          layers.flatMap((l) => unusedDeclarations(l.raw, loaded.placed, inserted)).map((u) => [`${u.kind}:${u.name}`, u])
-        ).values()
-      ],
-      plugins: {
-        checkout: installed.checkout,
-        // What renders, as the loader decided it: a nearer layer's load or
-        // drop replaces a farther one's of the same namespace.
-        loaded: [...installed.rendering.values()],
-        dropped: [
-          ...installed.dropped,
-          ...layers.flatMap((l) => l.plugins.dropped)
-        ],
-        unreached: installed.unreached,
-        reached: installed.reached,
-        rendering: installed.rendering
-      },
-      sources: load.sources
-    }
-  };
-}
-function settle2(chain2, resolveWarnings, attempt4) {
-  const common = {
-    // [LAW:one-source-of-truth] The files reported are the chain loaded.
-    layers: chain2.layers.map((l) => l.path),
-    home: chain2.home
-  };
-  const warnings = (own2) => [
-    ...chain2.snapshot.notices,
-    ...resolveWarnings,
-    ...own2
-  ];
-  switch (attempt4.kind) {
-    case "built":
-    case "kept":
-      return {
-        ...common,
-        kind: attempt4.kind,
-        warnings: warnings(attempt4.state.buildWarnings),
-        state: attempt4.state,
-        error: null
-      };
-    case "failed":
-      return {
-        ...common,
-        kind: "failed",
-        warnings: warnings(attempt4.warnings),
-        state: null,
-        error: thrown(attempt4.cause),
-        cause: attempt4.cause
-      };
-  }
-}
-function loadChain(cwd2, chain2, deps, served = null) {
-  const resolved = resolveLoad(cwd2, chain2);
-  if (resolved.kind === "failed") {
-    return settle2(chain2, [], resolved);
-  }
-  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(chain2, resolved.warnings, attempt4);
-}
-function loadOrigin(cwd2, snapshot, deps, served = null) {
-  return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
-}
-function fallbackState(cwd2, snapshot, deps) {
-  const resolved = resolveLoad(cwd2, {
-    layers: [],
-    home: "",
-    // A failed load's writes are refused until its chain loads (the writer
-    // proves the whole chain), so its bar offers the one layer every chain has.
-    writable: ["user"],
-    snapshot: { ...snapshot, chain: [] },
-    locs: deps.locations
-  });
-  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
-  if (built.kind === "failed")
-    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
-      cause: built.cause
-    });
-  return built.state;
-}
-var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
-var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function standaloneRequest(facts) {
-  const requested = observable.box(facts, { deep: false });
-  return {
-    read: () => requested.get(),
-    update: (next2) => {
-      if (next2 !== requested.get()) runInAction(() => requested.set(next2));
-    }
-  };
-}
-function openView(state, cwd2, facts, { source: sourceOf, changed, log }, currentRequest) {
-  const sessionId2 = facts.hookData.session_id;
-  const registry = state.registry.view();
-  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
-  let source;
-  try {
-    source = sourceOf({
-      sessionId: sessionId2,
-      state,
-      store: registry.variableStore,
-      requested: request2.read
-    });
-  } catch (e) {
-    registry.dispose();
-    throw e;
-  }
-  bindView(state.compiled, registry.variableStore, registry, source);
-  const stopChanged = reaction(
-    () => [
-      source.payload(),
-      source.selections(),
-      registry.published(),
-      state.registry.published()
-    ],
-    () => changed(sessionId2),
-    {
-      equals: compareShallow,
-      fireImmediately: true,
-      onError: (e) => log(
-        "error",
-        `session view change threw sid=${JSON.stringify(sessionId2)}: ${String(e)}`
-      )
-    }
-  );
-  return {
-    sessionId: sessionId2,
-    state,
-    store: registry.variableStore,
-    registry,
-    source,
-    requested: request2.update,
-    facts: request2.read,
-    frames: /* @__PURE__ */ new Map(),
-    lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
-    retire: stopChanged,
-    dispose: () => {
-      stopChanged();
-      return registry.dispose();
-    }
-  };
-}
-var subscriptionsOf = ({
-  state,
-  registry
-}) => [
-  ...[...state.sources].map(
-    ([source, folder]) => ({ kind: "plugin", source, folder })
-  ),
-  ...registrySubscriptions(registry)
-];
-var registrySubscriptions = (registry) => [
-  ...registry.subscriptions().map((run2) => ({ kind: "run", run: run2 })),
-  ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
-];
-var draftKey = (sessionId2) => `edit:${sessionId2}`;
-var RenderCache = class {
-  entries = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What discovery found at each origin the
-  // renderer subscribes, by `originKey`, as the host's latest `config` handed
-  // it in: the one source every entry loads from. An origin the renderer stops
-  // naming is pruned, so an entry made after loads only a snapshot the host
-  // still follows.
-  snapshots = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
-  // wait over one of its views ends at: one fact, so a render waiting as the
-  // close drops its view ends then, not at its deadline.
-  lifetime = new AbortController();
-  closing = this.lifetime.signal;
-  get closed() {
-    return this.closing.aborted;
-  }
-  // Every state the map serves or served, until reclaimed.
-  holds = /* @__PURE__ */ new Map();
-  // The last storage hold id minted.
-  storageHolds = 0;
-  // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
-  // render resolved to. A render from another entry replaces it.
-  views = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
-  // delivered copies, by the key its copy click names (src/render/
-  // diagnostics.ts), one map per renderer, since a request and a feed frame
-  // list different messages and a click names the surface it came from. Held
-  // by session, not by view, because a frame on screen outlives the view it
-  // was drawn from (a reload's successor); dropped when the session has no
-  // view. No link carries the text it copies.
-  copies = /* @__PURE__ */ new Map();
-  // Every view the cache serves or served, until reclaimed.
-  viewHolds = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
-  // how many pins each holds: their entries are never evicted (`fit`), for as
-  // long as the feed is open. The collector asks the feeds themselves whether
-  // a session is watched before it retires one.
-  pins = /* @__PURE__ */ new Map();
-  // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
-  openFailures = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] One compile per compile key, shared by every
-  // state carrying that key, and dropped with the last of them (reclaim).
-  compiles = /* @__PURE__ */ new Map();
-  deps;
-  log;
-  // Read when an eviction is decided: the budget is a boot-time fact.
-  budgetBytes;
-  maxEntries;
-  observers;
-  constructor(deps, opts) {
-    this.deps = {
-      ...deps,
-      compile: (key, input) => this.compileOf(key, input)
-    };
-    this.log = deps.log ?? quietLogger;
-    this.budgetBytes = opts.budgetBytes;
-    this.maxEntries = opts.maxEntries ?? MAX_ENTRIES3;
-    this.observers = opts.observers ?? {};
-  }
-  // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
-  // now. Its entry, when it has one, reloads from it unless it digests as the
-  // one the entry last loaded, and a reload whose load inputs did not move
-  // keeps the state it serves (`loadChain`).
-  configure(origin, snapshot) {
-    if (this.closed) throw new Error("render cache used after close");
-    const key = originKey(origin);
-    const held = { snapshot, digest: digestOf(snapshot) };
-    this.snapshots.set(key, held);
-    const entry = this.entries.get(key);
-    if (entry !== void 0 && entry.digest !== held.digest)
-      this.reloadInto(entry, held, { kind: "config" });
-  }
-  // Whether the host handed in `origin`'s config and the renderer still
-  // names it: what an event that needs it waits for.
-  holdsConfig(origin) {
-    return this.snapshots.has(originKey(origin));
-  }
-  // [LAW:one-source-of-truth] The snapshots the renderer still names, by
-  // `originKey`: every other one goes, as the host lets its origin go.
-  prune(keep) {
-    for (const key of [...this.snapshots.keys()])
-      if (!keep.has(key)) this.snapshots.delete(key);
-  }
-  // The compile a served state carries for `key`, else a new one — which the
-  // table learns only when a state carrying it is served, so a load that fails
-  // after compiling leaves nothing behind.
-  compileOf(key, input) {
-    return this.compiles.get(key) ?? compileDslConfig(input);
-  }
-  // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
-  // own heap, plus each compile its entries carry once, however many share it.
-  accountedBytes() {
-    const keys2 = new Set(
-      [...this.entries.values()].map((e) => e.state.compileKey)
-    );
-    return this.entries.size * ENTRY_BYTES + keys2.size * COMPILE_BYTES + this.views.size * VIEW_BYTES;
-  }
-  // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
-  // same fields and a renderable state. The renderer reads the data; no
-  // special-case branches between "first load", "reload",
-  // "reload-after-error".
-  getOrCreate(origin, editing) {
-    let key = originKey(origin);
-    let draft = null;
-    if (editing !== void 0) {
-      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
-      if (draft !== null) key = draftKey(editing);
-    }
-    const existing = this.entries.get(key);
-    const priorRepo = existing?.snapshot.repo;
-    const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
-    if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
-      this.entries.delete(key);
-      this.entries.set(key, existing);
-      if (draft !== null && existing.snapshot !== draft)
-        this.reloadInto(
-          existing,
-          { snapshot: draft, digest: digestOf(draft) },
-          { kind: "edit" }
-        );
-      return existing;
-    }
-    if (existing !== void 0) this.drop(key, existing, "evict");
-    const { projectDir, cwd: cwd2 } = origin;
-    const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
-    const loaded = this.load(cwd2, snapshot, null);
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    const entry = {
-      origin,
-      projectDir,
-      cwd: cwd2,
-      configFile: origin.target.path,
-      configLayers: loaded.layers,
-      snapshot,
-      digest: digest2,
-      lastError: loaded.error,
-      lastWarnings: loaded.warnings,
-      state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
-    };
-    this.serve(entry.state);
-    this.entries.set(key, entry);
-    this.holdFolders(entry.state);
-    this.fit(entry);
-    this.log(
-      "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
-    );
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
-    return entry;
-  }
-  // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
-  // with for as long as it runs — across the payload await, where another
-  // session's first render can evict its entry and a saved file can reload
-  // it. Either retires the state; the cache disposes it when this hold is
-  // released, so the render finishes on the state it resolved its payload
-  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
-  // every exit, a throw included.
-  hold(origin) {
-    const entry = this.getOrCreate(origin);
-    return this.holdState(entry, entry.state);
-  }
-  // The hold on `entry`'s state that `hold` and `holdView` hand out.
-  holdState(entry, state) {
-    const hold2 = this.holdOf(state);
-    hold2.holders++;
-    let released = false;
-    return {
-      entry,
-      state,
-      [Symbol.dispose]: () => {
-        if (released) throw new Error("render-cache hold released twice");
-        released = true;
-        hold2.holders--;
-        this.reclaim(state, hold2);
-      }
-    };
-  }
-  // [LAW:no-ambient-temporal-coupling] A render's hold on the session's view
-  // of the state it draws with, for the same reason as `hold`: a move, a
-  // reload, an eviction or the host's retire retires the view, and the cache
-  // disposes it when this hold is released.
-  //
-  // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
-  // view draws by it from here, opened (openView) or kept (`requested`), so
-  // no view is drawn for another request.
-  holdSession(origin, facts) {
-    const entry = this.getOrCreate(origin, facts.hookData.session_id);
-    const held = this.holdState(entry, entry.state);
-    let view;
-    let lease;
-    try {
-      view = this.viewOf(held.entry, held.state, facts, "request");
-      lease = this.leaseOf(view);
-    } catch (err) {
-      held[Symbol.dispose]();
-      throw err;
-    }
-    return this.holdViewOf(held, view, lease);
-  }
-  // The edit turn switched the session's config input. Move its existing
-  // view now so pushed frames and click validation see the same draft.
-  refreshEditedView(sessionId2) {
-    const view = this.views.get(sessionId2);
-    if (view === void 0) return;
-    const { origin } = this.leaseOf(view).entry;
-    const requested = view.facts();
-    const entry = this.getOrCreate(origin, sessionId2);
-    if (this.views.get(sessionId2)?.state !== entry.state)
-      this.viewOf(entry, entry.state, requested, "reload");
-    if (this.deps.editSnapshot?.(origin, sessionId2) == null)
-      this.dropDraft(sessionId2);
-    this.observers.onViewChanged?.(sessionId2);
-  }
-  dropDraft(sessionId2) {
-    const key = draftKey(sessionId2);
-    const entry = this.entries.get(key);
-    if (entry !== void 0) this.drop(key, entry, "evict");
-  }
-  // [LAW:single-enforcer] A frame's door: the session's current view, held
-  // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
-  holdView(sessionId2) {
-    const view = this.views.get(sessionId2);
-    if (view === void 0) return null;
-    const lease = this.leaseOf(view);
-    return this.holdViewOf(
-      this.holdState(lease.entry, view.state),
-      view,
-      lease
-    );
-  }
-  // `held` with `lease` on `view` beside it, both released by the one
-  // `using`. Nothing in it throws, so `held` is never stranded.
-  holdViewOf(held, view, lease) {
-    lease.holders++;
-    let released = false;
-    return {
-      entry: held.entry,
-      state: held.state,
-      view,
-      [Symbol.dispose]: () => {
-        if (released) throw new Error("render-cache view hold released twice");
-        released = true;
-        lease.holders--;
-        this.reclaimView(view, lease);
-        held[Symbol.dispose]();
-      }
-    };
-  }
-  // Why the session has no view, when its last opening threw: what a frame
-  // draws in place of the view `holdView` found none of.
-  openFailure(sessionId2) {
-    return this.openFailures.get(sessionId2) ?? null;
-  }
-  // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
-  // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request or a reload moves it.
-  pin(sessionId2) {
-    this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
-    let released = false;
-    return () => {
-      if (released) throw new Error("render-cache pin released twice");
-      released = true;
-      const left = (this.pins.get(sessionId2) ?? 0) - 1;
-      if (left > 0) this.pins.set(sessionId2, left);
-      else this.pins.delete(sessionId2);
-    };
-  }
-  // The session's view of `state`: the one it has, or a new one replacing it.
-  viewOf(entry, state, facts, by) {
-    const sessionId2 = facts.hookData.session_id;
-    const current = this.views.get(sessionId2);
-    if (current?.state === state) {
-      this.views.delete(sessionId2);
-      this.views.set(sessionId2, current);
-      current.requested?.(facts);
-      return current;
-    }
-    this.views.delete(sessionId2);
-    let view;
-    try {
-      view = this.opened(entry, state, facts, by);
-    } finally {
-      if (current !== void 0) this.retireView(current, "moved");
-    }
-    this.fit(entry);
-    return view;
-  }
-  // [LAW:single-enforcer] The one way the cache opens a view: drawn by
-  // `facts` from this turn (openView) and entered. Its caller charges it to
-  // the budget, once however many it opens.
-  opened(entry, state, facts, by) {
-    const sessionId2 = facts.hookData.session_id;
-    let view;
-    try {
-      const { currentRequest } = this.deps;
-      view = openView(
-        state,
-        entry.cwd,
-        facts,
-        {
-          source: this.deps.source,
-          changed: (sid) => this.observers.onViewChanged?.(sid),
-          log: this.log
-        },
-        currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
-      );
-    } catch (error) {
-      this.openFailures.set(sessionId2, { error });
-      throw error;
-    }
-    this.openFailures.delete(sessionId2);
-    this.views.set(sessionId2, view);
-    this.viewHolds.set(view, { entry, holders: 0, retired: null });
-    this.log(
-      "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
-    );
-    return view;
-  }
-  leaseOf(view) {
-    const lease = this.viewHolds.get(view);
-    if (lease === void 0) throw new Error("render-cache view never served");
-    return lease;
-  }
-  // The cache stopped serving `view`; its teardown is due now, or when the
-  // last render holding it returns.
-  retireView(view, reason) {
-    if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
-    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
-    view.retire();
-    const lease = this.leaseOf(view);
-    lease.retired = { reason, held: lease.holders };
-    this.reclaimView(view, lease);
-  }
-  // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
-  reclaimView(view, lease) {
-    if (lease.retired === null || lease.holders > 0) return;
-    this.viewHolds.delete(view);
-    this.log(
-      "info",
-      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`
-    );
-  }
-  // [LAW:single-enforcer] The host ended the session (its collector's
-  // sweep): its view closes, and the failure no feed shows goes with it.
-  retireSession(sessionId2) {
-    this.openFailures.delete(sessionId2);
-    const view = this.views.get(sessionId2);
-    if (view !== void 0) this.retireView(view, "idle");
-    this.dropDraft(sessionId2);
-  }
-  // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their storage folders, the runs
-  // its `shell` and `file` sources name, and the variables of the session's
-  // environment its `env` sources read. Read
-  // off the views each turn, so a view that opened, moved or closed is the
-  // next output's.
-  // [LAW:one-source-of-truth] The origins the entries load from. An origin's
-  // config is held as long as an entry at it lives, not as long as a session:
-  // a session retires when idle while its entry stays to draw it again.
-  origins() {
-    return [
-      ...new Map(
-        [...this.entries.values()].map(
-          ({ origin }) => [originKey(origin), origin]
-        )
-      ).values()
-    ];
-  }
-  subscriptions() {
-    return {
-      sources: Object.fromEntries(
-        [...this.views].map(([session, view]) => [
-          session,
-          subscriptionsOf(view)
-        ])
-      )
-    };
-  }
-  // The cache's teardown: every entry is dropped, so its state is disposed now
-  // or when the render holding it returns. The entries' registries would
-  // otherwise keep the cache, and every compile it serves, alive for as long
-  // as the process runs.
-  close() {
-    if (this.closed) return;
-    this.lifetime.abort(new Error("the render cache closed"));
-    this.snapshots.clear();
-    const entries = this.entries.size;
-    for (const [key, entry] of this.entries) this.drop(key, entry, "close");
-    this.log(
-      "info",
-      `render-cache closed entries=${entries} deferred=${this.stats.retired}`
-    );
-  }
-  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
-  // cache refuses every way one would be built — a new entry, a reload, a
-  // `config` turn after the close.
-  // [LAW:no-silent-failure] A closed cache disposed every state it built; one
-  // built after would hold timers and watchers nothing tears down.
-  load(cwd2, snapshot, served) {
-    if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(cwd2, snapshot, this.deps, served);
-  }
-  // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
-  // snapshot the host handed in for its origin. None is an event the renderer
-  // did not park until its origin's `config` came: a bug, said with the
-  // origin.
-  snapshotFor(origin) {
-    return this.held(origin).snapshot;
-  }
-  held(origin) {
-    if (this.closed) throw new Error("render cache used after close");
-    const held = this.snapshots.get(originKey(origin));
-    if (held === void 0)
-      throw new Error(
-        `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
-      );
-    return held;
-  }
-  // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
-  // serving it, and its state is retired.
-  drop(key, entry, reason) {
-    this.entries.delete(key);
-    this.retire(entry.state, reason, null);
-  }
-  get stats() {
-    let held = 0;
-    let retired2 = 0;
-    for (const hold2 of this.holds.values()) {
-      if (hold2.holders > 0) held++;
-      if (hold2.retired !== null) retired2++;
-    }
-    let retiredViews = 0;
-    for (const lease of this.viewHolds.values()) {
-      if (lease.retired !== null) retiredViews++;
-    }
-    let passages = 0;
-    for (const view of this.views.values())
-      for (const record2 of view.frames.values())
-        passages += record2.passages?.size ?? 0;
-    return {
-      size: this.entries.size,
-      held,
-      retired: retired2,
-      compiles: this.compiles.size,
-      views: this.views.size,
-      pinned: this.pins.size,
-      retiredViews,
-      passages,
-      accountedBytes: this.accountedBytes(),
-      budgetBytes: this.budgetBytes()
-    };
-  }
-  // [LAW:single-enforcer] The one place the cache's bounds are enforced — its
-  // bytes and its count — run after every change to what the map serves (an
-  // insertion, a reload): least recently used first, until the map fits both
-  // — never `served`, the entry the change was for, which a render is about
-  // to draw.
-  fit(served) {
-    const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
-    const pinned = new Set(
-      [...this.pins.keys()].flatMap((sessionId2) => {
-        const view = this.views.get(sessionId2);
-        return view === void 0 ? [] : [view.state];
-      })
-    );
-    for (const [key, evicted] of this.entries) {
-      if (fits2()) return;
-      if (evicted === served || pinned.has(evicted.state)) continue;
-      this.drop(key, evicted, "evict");
-    }
-    if (!fits2())
-      this.log(
-        "warn",
-        `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
-      );
-  }
-  // The cache starts serving `state`: unheld, and not yet retired — and the
-  // compile it carries is the table's for its key.
-  serve(state) {
-    const held = this.compiles.get(state.compileKey);
-    if (held !== void 0 && held !== state.compiled)
-      throw new Error(
-        `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
-      );
-    this.holds.set(state, {
-      id: ++this.storageHolds,
-      holders: 0,
-      retired: null
-    });
-    this.compiles.set(state.compileKey, state.compiled);
-    if (held === void 0)
-      this.log(
-        "info",
-        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`
-      );
-  }
-  // The host holds the storage folders a served state's latest load named.
-  holdFolders(state) {
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
-  }
-  holdOf(state) {
-    const hold2 = this.holds.get(state);
-    if (hold2 === void 0) throw new Error("render-cache state never served");
-    return hold2;
-  }
-  // The cache stopped serving `state`: it left the map, or a reload
-  // replaced it with `successor`. Its teardown is due — now, or at its last
-  // holder's return.
-  retire(state, reason, successor) {
-    for (const view of [...this.views.values()]) {
-      if (view.state !== state) continue;
-      if (successor !== null) {
-        try {
-          this.opened(successor.entry, successor.state, view.facts(), "reload");
-        } catch (e) {
-          this.log(
-            "error",
-            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`
-          );
-        }
-      }
-      this.retireView(view, reason);
-    }
-    const hold2 = this.holdOf(state);
-    hold2.retired = { reason, held: hold2.holders };
-    this.reclaim(state, hold2);
-  }
-  // [LAW:single-enforcer] The one place a state is disposed: once it is
-  // retired AND unheld, from whichever of the two transitions came last. The
-  // registry owns timers, fs watchers and MobX reactions — dropping it
-  // without dispose leaks every handle the config declared.
-  reclaim(state, hold2) {
-    if (hold2.retired === null || hold2.holders > 0) return;
-    this.holds.delete(state);
-    this.deps.storage.release(hold2.id);
-    this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
-    if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
-      this.compiles.delete(state.compileKey);
-  }
-  // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
-  // state.
-  sessionsOn(entry) {
-    return [...this.views.values()].filter((view) => view.state === entry.state).map((view) => view.sessionId);
-  }
-  // Re-populate `entry` from `snapshot`, for `cause`.
-  //
-  // - Load success: swap the fresh state in, retire the prior one.
-  // - Load failure: keep the prior state (the bundled default before any
-  //   config has loaded), set lastError.
-  //
-  // [LAW:single-enforcer] hot-reload contract: any reload that produces a
-  // new DslConfig retires the old state, and `reclaim` disposes its
-  // SourceRegistry — at once when no render holds it, else when the last
-  // one returns. Dropping the reference without that would leak every
-  // timer, watcher and MobX reaction it owns.
-  //
-  // [LAW:single-enforcer] One publish point for "this reload completed":
-  // straight-line, so the signal structurally cannot be skipped by whichever
-  // arm the load took.
-  reloadInto(entry, { snapshot, digest: digest2 }, cause) {
-    const sessions = this.sessionsOn(entry);
-    const served = entry.state;
-    const loaded = this.load(entry.cwd, snapshot, served);
-    entry.snapshot = snapshot;
-    entry.digest = digest2;
-    entry.configLayers = loaded.layers;
-    entry.lastWarnings = loaded.warnings;
-    entry.lastError = loaded.error;
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (loaded.kind === "built") {
-      entry.state = loaded.state;
-      this.serve(loaded.state);
-    }
-    this.holdFolders(entry.state);
-    if (loaded.kind === "built")
-      this.retire(served, "reload", { entry, state: loaded.state });
-    this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
-  }
-  get size() {
-    return this.entries.size;
-  }
-  // [LAW:single-enforcer] One read path for "any session's view" used by
-  // the debug protocol's introspection (`debug vars` / `segments` / `config`).
-  // Reads existing views — does NOT open one, so debug introspection never
-  // has the side effect of creating a fresh cache entry (with its own
-  // SourceRegistry timers/watchers) tied to the daemon's own `process.cwd()`.
-  // The most recently rendered session's, since `views` is kept in use order.
-  // Null while no session's view is open; debug responses are empty in that
-  // case by construction.
-  latestView() {
-    return [...this.views.values()].at(-1) ?? null;
-  }
-  // The renderer `by` delivered a frame of the session's bar listing
-  // `copies`. A session with no view is closed: nothing it delivers is kept.
-  delivered(sessionId2, by, copies) {
-    if (!this.views.has(sessionId2)) return;
-    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    this.copies.set(sessionId2, drawn.set(by, copies));
-  }
-  // What the diagnostic under `key` copies in the frame renderer `by` last
-  // delivered for the session; undefined while that renderer's last frame
-  // did not list it. Reads, never opens, like latestView.
-  drawnCopy(sessionId2, by, key) {
-    return this.copies.get(sessionId2)?.get(by)?.get(key);
-  }
-  // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale, and the surface's next
-  // frame, if it opens again, is a first frame that fades nothing in.
-  stopDrawing(sessionId2, by) {
-    this.copies.get(sessionId2)?.delete(by);
-    this.views.get(sessionId2)?.frames.delete(by);
-  }
-};
 
 // src/renderer/debug.ts
 init_globals();
