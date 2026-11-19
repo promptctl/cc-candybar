@@ -95,3 +95,7 @@ Limits: this used a whole daemon behind a bridge script, and the timing excludes
 ## Done when
 
 A click on a worktree renderer's link, through the installed handler, changes only that renderer. A click on a dead renderer's link shows on a bar, and one with Gather stopped shows a notification.
+
+## Pane acts
+
+The host serializes slash input and bar-pane reconciliation by tmux socket and pane ID. Both check shutdown when they reach the head of that queue. An act refused there never reads or changes the pane.
