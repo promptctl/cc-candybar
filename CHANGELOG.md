@@ -1,3 +1,10 @@
+## [1.235.10](https://github.com/promptctl/cc-candybar/compare/v1.235.9...v1.235.10) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** skip abandoned statusline draws ([#902](https://github.com/promptctl/cc-candybar/issues/902)) ([7df1347](https://github.com/promptctl/cc-candybar/commit/7df1347f46b6e135236f014e234935a7b5ffc5fc))
+* **install:** replace staged executables atomically ([#903](https://github.com/promptctl/cc-candybar/issues/903)) ([2e9c928](https://github.com/promptctl/cc-candybar/commit/2e9c928c2afc2d8e586b4d92408d3c7f575c5f16))
+
 ## [1.235.9](https://github.com/promptctl/cc-candybar/compare/v1.235.8...v1.235.9) (2026-11-19)
 
 ### Bug Fixes
