@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b2c14ebf42db01edd317ebe6cd8bedeee033c50f",
+      "timestamp": "2026-11-19T11:06:51.688Z",
+      "commits": [
+        {
+          "sha": "b2c14ebf42db01edd317ebe6cd8bedeee033c50f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:05:51-07:00",
+          "message": "fix(renderer): integrate edit transactions and menu navigation (#851)\n\n* fix(renderer): give edit mode a draft transaction with undo and redo\n\n* fix(renderer): keep live repository trust in edit previews\n\n* test(edit): verify help and chrome through the active draft\n\n* fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n\n* refactor(renderer): navigate between menu views\n\n* test(integration): verify pane settings activate after saving an edit draft\n\n* test(config): assert typed layer reads at the click boundary"
+        }
+      ]
+    },
+    {
       "version": "pr-855",
       "ref": "refs/pull/855/merge",
       "sha": "7932b5fd07fd375320515c7262c96f50e6c2ac4e",
@@ -42,85 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:56:20-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-851",
-      "ref": "refs/pull/851/merge",
-      "sha": "3c3153cb89e964a1718263d8df8a1aa9529990ac",
-      "timestamp": "2026-11-19T10:58:12.983Z",
-      "commits": [
-        {
-          "sha": "3c3153cb89e964a1718263d8df8a1aa9529990ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:57:11Z",
-          "message": "Merge cb763d8d413a72aec3dce29f07e5b795050801aa into 19a035d767753cfdb962f8696891d8c5f54c8c6f\n"
-        },
-        {
-          "sha": "cb763d8d413a72aec3dce29f07e5b795050801aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:36:12-07:00",
-          "message": "test(config): assert typed layer reads at the click boundary\n"
-        },
-        {
-          "sha": "0ffb763713d3dcf8c8633f6374b21bcf55732926",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:33:41-07:00",
-          "message": "test(integration): verify pane settings activate after saving an edit draft\n"
-        },
-        {
-          "sha": "ca0e375971c79bfc9f8e9aaba95cac2bffcb180d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:25:22-07:00",
-          "message": "refactor(renderer): navigate between menu views\n"
-        },
-        {
-          "sha": "eb7d9deaceec406f97578ede0dda950feff38a06",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:24:20-07:00",
-          "message": "fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n"
-        },
-        {
-          "sha": "67fc74427bb825226f727b0cbbbb5346439568e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:27:11-07:00",
-          "message": "test(edit): verify help and chrome through the active draft\n"
-        },
-        {
-          "sha": "71c492c969b660edbcfe3cd8e38990fa82484b38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:11:37-07:00",
-          "message": "fix(renderer): keep live repository trust in edit previews\n"
-        },
-        {
-          "sha": "110a9b1a87c07a838473c81fc1bb3f67e643a831",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:06-07:00",
-          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "19a035d767753cfdb962f8696891d8c5f54c8c6f",
-      "timestamp": "2026-11-19T10:56:45.412Z",
-      "commits": [
-        {
-          "sha": "19a035d767753cfdb962f8696891d8c5f54c8c6f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T10:55:30Z",
-          "message": "chore(release): set `package.json` to 1.232.13\n\n## [1.232.13](https://github.com/promptctl/cc-candybar/compare/v1.232.12...v1.232.13) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** settle host effects after the renderer answers (ibyq.3h0) ([#844](https://github.com/promptctl/cc-candybar/issues/844)) ([30d7a34](https://github.com/promptctl/cc-candybar/commit/30d7a34587b836199bfd5c0bb320894e7119c63e))\n"
         }
       ]
     },
