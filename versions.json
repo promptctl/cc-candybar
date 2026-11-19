@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-905",
+      "ref": "refs/pull/905/merge",
+      "sha": "810236ce3f2c2a50f87d214ba4c1f8fe8a7d3058",
+      "timestamp": "2026-11-19T20:30:11.376Z",
+      "commits": [
+        {
+          "sha": "810236ce3f2c2a50f87d214ba4c1f8fe8a7d3058",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:29:00Z",
+          "message": "Merge c92a89689bbac73fb744261dae5d18dbf40ca61d into f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81\n"
+        },
+        {
+          "sha": "c92a89689bbac73fb744261dae5d18dbf40ca61d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:58-07:00",
+          "message": "test(config): load an actual absent user layer (ibyq.xrv)\n"
+        },
+        {
+          "sha": "d6e9929090c1f2ccb3452b5b7a2cf392d6acedb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:58-07:00",
+          "message": "test(daemon): verify the click's exact mailbox wait (ibyq.xrv)\n"
+        },
+        {
+          "sha": "217aaa704c435340e09be04d73240d4a30377150",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:57-07:00",
+          "message": "test(proc): release launcher fixtures with their Jest runtime (ibyq.xrv)\n"
+        },
+        {
+          "sha": "c066983d77a8bb8b1420dc22ea34aab2450ebb27",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:04:02-07:00",
+          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
+        },
+        {
+          "sha": "8f5dca725e3f94d34305fbe6118968ac2a86e741",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:46:44-07:00",
+          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
+        },
+        {
+          "sha": "ca5f7c82b5124c6a7286278d4983b7c949abed77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:57-07:00",
+          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-899",
       "ref": "refs/pull/899/merge",
       "sha": "a947b881bd7d8e1dbd5a5e26a07e1654778f95bc",
@@ -63,42 +120,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T13:24:24-07:00",
           "message": "fix(renderer): use one outcome for each config delivery (#894)\n\n* fix(renderer): use one outcome for each config delivery\n\n* test(renderer): supply current config delivery in click rig"
-        }
-      ]
-    },
-    {
-      "version": "pr-905",
-      "ref": "refs/pull/905/merge",
-      "sha": "c1049984b5820d50ba2c16becd78df35777313bf",
-      "timestamp": "2026-11-19T20:07:11.515Z",
-      "commits": [
-        {
-          "sha": "c1049984b5820d50ba2c16becd78df35777313bf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T20:06:08Z",
-          "message": "Merge a7d419420653639d5b982dc5c9783ed7f95d6fe7 into 7b97b3062fa1b643825a0aae621edcce5c8a63af\n"
-        },
-        {
-          "sha": "a7d419420653639d5b982dc5c9783ed7f95d6fe7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:04:02-07:00",
-          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
-        },
-        {
-          "sha": "193c33d333861d41989a14aeeca18c5124adde84",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:46:44-07:00",
-          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
-        },
-        {
-          "sha": "3b5fcfd915595a95c2fdd5bb148d611f5812dae4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:22:57-07:00",
-          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
         }
       ]
     },

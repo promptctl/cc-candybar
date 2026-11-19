@@ -28615,20 +28615,6 @@ function withAnswer(book, dir, answer2, superseded) {
   const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
   return { ...Object.fromEntries(rest2), [dir]: answer2 };
 }
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
 function repoUnreadNotice(gate2) {
   return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
 }
@@ -70257,6 +70243,7 @@ function configLoadedLine(entry, cause, settled3) {
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
+var CONFIG_PENDING = { kind: "pending" };
 function authoredRoots(config, raw) {
   return new Set(
     presetNames(config.presets).filter(
@@ -70548,14 +70535,12 @@ var registrySubscriptions = (registry) => [
 var draftKey = (sessionId2) => `edit:${sessionId2}`;
 var RenderCache = class {
   entries = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What discovery found at each origin the
-  // renderer subscribes, by `originKey`, as the host's latest `config` handed
-  // it in: the one source every entry loads from. An origin the renderer stops
-  // naming is pruned, so an entry made after loads only a snapshot the host
-  // still follows.
-  snapshots = observable.map(void 0, {
-    deep: false
-  });
+  // [LAW:one-source-of-truth] The latest delivery of each retained origin
+  // gates admission and writes, including controls on an already live view.
+  configDeliveries = observable.map(
+    void 0,
+    { deep: false }
+  );
   // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
   // wait over one of its views ends at: one fact, so a render waiting as the
   // close drops its view ends then, not at its deadline.
@@ -70614,25 +70599,39 @@ var RenderCache = class {
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = { snapshot, digest: digestOf(snapshot) };
+    const held = {
+      kind: "received",
+      snapshot,
+      digest: digestOf(snapshot)
+    };
     runInAction(() => {
-      this.snapshots.set(key, held);
+      const recovering = this.configDeliveries.get(key)?.kind === "failed";
+      this.configDeliveries.set(key, held);
       const entry = this.entries.get(key);
-      if (entry !== void 0 && entry.digest !== held.digest)
+      if (entry !== void 0 && (recovering || entry.digest !== held.digest))
         this.reloadInto(entry, held, { kind: "config" });
     });
+  }
+  rejectConfig(origin, failure2) {
+    if (this.closed) return;
+    runInAction(() => {
+      this.configDeliveries.set(originKey(origin), { kind: "failed", failure: failure2 });
+    });
+  }
+  configDelivery(origin) {
+    return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
   }
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
   holdsConfig(origin) {
-    return this.snapshots.has(originKey(origin));
+    return this.configDelivery(origin).kind === "received";
   }
-  // [LAW:one-source-of-truth] The snapshots the renderer still names, by
+  // [LAW:one-source-of-truth] The deliveries the renderer still names, by
   // `originKey`: every other one goes, as the host lets its origin go.
   prune(keep) {
     runInAction(() => {
-      for (const key of [...this.snapshots.keys()])
-        if (!keep.has(key)) this.snapshots.delete(key);
+      for (const key of [...this.configDeliveries.keys()])
+        if (!keep.has(key)) this.configDeliveries.delete(key);
     });
   }
   // The compile a served state carries for `key`, else a new one — which the
@@ -70903,15 +70902,17 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   accessTo(entry, state) {
-    const key = originKey(entry.origin);
-    const error = entry.lastError ?? this.entries.get(key)?.lastError;
-    if (error != null) return { kind: "unavailable", error };
-    const held = this.snapshots.get(key);
-    if (held === void 0)
+    const held = this.configDelivery(entry.origin);
+    if (held.kind === "failed")
+      return { kind: "unavailable", error: held.failure.message };
+    if (held.kind === "pending")
       return {
         kind: "unavailable",
         error: "No current config is held for this session"
       };
+    const key = originKey(entry.origin);
+    const error = entry.lastError ?? this.entries.get(key)?.lastError;
+    if (error != null) return { kind: "unavailable", error };
     for (const { role, path: path30, content } of held.snapshot.chain)
       if (content.kind === "unreadable")
         return {
@@ -70996,7 +70997,7 @@ var RenderCache = class {
     this.lifetime.abort(new Error("the render cache closed"));
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
-    runInAction(() => this.snapshots.clear());
+    runInAction(() => this.configDeliveries.clear());
     this.log(
       "info",
       `render-cache closed entries=${entries} deferred=${this.stats.retired}`
@@ -71020,8 +71021,9 @@ var RenderCache = class {
   }
   held(origin) {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.snapshots.get(originKey(origin));
-    if (held === void 0)
+    const held = this.configDelivery(origin);
+    if (held.kind === "failed") throw new CrossedFailure(held.failure);
+    if (held.kind === "pending")
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
       );
@@ -77375,7 +77377,6 @@ function mainRenderer(parts, pushed, drained) {
   };
   const opening = /* @__PURE__ */ new Set();
   let parked = [];
-  const configFailures = /* @__PURE__ */ new Map();
   const parkedContext = (click2) => {
     const { session } = click2;
     if (click2.kind === "live")
@@ -77395,9 +77396,10 @@ function mainRenderer(parts, pushed, drained) {
     });
     return ready;
   };
-  const throwConfigFailure = (origin) => {
-    const failure2 = configFailures.get(originKey(origin));
-    if (failure2 !== void 0) throw new CrossedFailure(failure2);
+  const configForTurn = (origin) => {
+    const delivery = parts.renderCache.configDelivery(origin);
+    if (delivery.kind === "failed") throw new CrossedFailure(delivery.failure);
+    return delivery;
   };
   const failClicks = (clicks, failure2) => {
     for (const { session } of clicks)
@@ -77449,16 +77451,16 @@ function mainRenderer(parts, pushed, drained) {
           const editMoved = parts.edits.moved(session, origin);
           if (editMoved || previous2 !== null && originKey(previous2.durable.origin) !== originKey(origin))
             parts.renderCache.retireSession(session);
-          const failure2 = configFailures.get(originKey(origin));
-          if (failure2 !== void 0) {
+          const delivery = parts.renderCache.configDelivery(origin);
+          if (delivery.kind === "failed") {
             opening.delete(session);
             failClicks(
               takeClicks((click2) => click2.session === session),
-              failure2
+              delivery.failure
             );
-            throw new CrossedFailure(failure2);
+            throw new CrossedFailure(delivery.failure);
           }
-          if (!parts.renderCache.holdsConfig(origin)) {
+          if (delivery.kind === "pending") {
             opening.add(session);
             record2.push(["parked", "context"]);
             return;
@@ -77474,7 +77476,7 @@ function mainRenderer(parts, pushed, drained) {
       }
       case "config": {
         const key = originKey(event.origin);
-        const recovering = configFailures.has(key);
+        const recovering = parts.renderCache.configDelivery(event.origin).kind === "failed";
         const sessions = (recovering ? parts.worldStates.sessions() : [...opening]).filter(
           (session) => originKey(parts.worldStates.requestOf(session).requested) === key
         );
@@ -77482,15 +77484,16 @@ function mainRenderer(parts, pushed, drained) {
         const ready = takeClicks(
           (click2) => originKey(parkedContext(click2).durable.origin) === key
         );
-        try {
-          parts.renderCache.configure(event.origin, event.config);
-        } catch (thrown2) {
-          const failure2 = failureOf(thrown2);
-          configFailures.set(key, failure2);
-          failClicks(ready, failure2);
-          throw thrown2;
-        }
-        configFailures.delete(key);
+        runInAction(() => {
+          try {
+            parts.renderCache.configure(event.origin, event.config);
+          } catch (thrown2) {
+            const failure2 = failureOf(thrown2);
+            parts.renderCache.rejectConfig(event.origin, failure2);
+            failClicks(ready, failure2);
+            throw new CrossedFailure(failure2);
+          }
+        });
         runEach([
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
@@ -77504,8 +77507,7 @@ function mainRenderer(parts, pushed, drained) {
         const current = parts.worldStates.requestOf(
           event.context.hookData.session_id
         );
-        throwConfigFailure(current.requested);
-        if (!parts.renderCache.holdsConfig(current.requested))
+        if (configForTurn(current.requested).kind === "pending")
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
@@ -77557,8 +77559,7 @@ function mainRenderer(parts, pushed, drained) {
         const context = click2.scope === "session" ? live ?? event.context : null;
         if (context !== null) {
           const { origin } = context.durable;
-          throwConfigFailure(origin);
-          if (!parts.renderCache.holdsConfig(origin)) {
+          if (configForTurn(origin).kind === "pending") {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             parked = [
@@ -77591,11 +77592,20 @@ function mainRenderer(parts, pushed, drained) {
     const views = parts.renderCache.subscriptions().sources;
     const lanes = {};
     for (const session of Object.keys(views)) {
+      const editing = parts.edits.draft(session) !== null;
+      if (editing) {
+        const { requested } = parts.worldStates.requestOf(session);
+        if (parts.renderCache.configDelivery(requested).kind === "failed") {
+          const held = subscriptions.lanes[session];
+          if (held !== void 0) lanes[session] = held;
+          continue;
+        }
+      }
       const switches = viewLanes(
         parts,
         session,
         parts.edits.committed,
-        parts.edits.draft(session) !== null
+        editing
       );
       if (switches !== null) lanes[session] = switches;
     }
@@ -77639,8 +77649,6 @@ function mainRenderer(parts, pushed, drained) {
         subscriptions = subscribed();
         const origins = new Set(subscriptions.configs.map(originKey));
         parts.renderCache.prune(origins);
-        for (const key of configFailures.keys())
-          if (!origins.has(key)) configFailures.delete(key);
       }
       return { kind: "answered", value };
     } catch (thrown2) {
@@ -88884,6 +88892,45 @@ function repoConfigsDir(dir) {
 function repoConfigsPath(dir) {
   return import_node_path27.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
+function storedDirectory(written2) {
+  const dir = import_node_path27.default.sep === "\\" ? written2.replaceAll("/", import_node_path27.default.sep) : written2;
+  if (!import_node_path27.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path27.default.sep).includes("..")) {
+    return null;
+  }
+  return import_node_path27.default.format(import_node_path27.default.parse(import_node_path27.default.normalize(dir)));
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  const book = /* @__PURE__ */ new Map();
+  for (const [written2, value] of Object.entries(doc)) {
+    const dir = storedDirectory(written2);
+    if (dir === null) {
+      return {
+        kind: "failed",
+        reason: `has invalid project directory ${JSON.stringify(written2)}: expected an absolute directory without ".." or NUL`
+      };
+    }
+    const answer2 = REPO_ANSWERS.find((known) => known === value);
+    if (answer2 === void 0) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(written2)} ${JSON.stringify(value)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+    if (written2 !== dir && Object.hasOwn(doc, dir)) continue;
+    const prior = book.get(dir);
+    if (prior !== void 0 && prior !== answer2) {
+      return {
+        kind: "failed",
+        reason: `has conflicting answers for project directory ${JSON.stringify(dir)}`
+      };
+    }
+    book.set(dir, answer2);
+  }
+  return ok(Object.fromEntries(book));
+}
 var repoConfigs = (dir, readText) => stateFile(
   [repoConfigsPath(dir), import_node_path27.default.join(dir, REPO_CONFIGS_FILE)],
   {},
@@ -90048,28 +90095,11 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return installedPluginDirs(locs).map(
-    (root) => readDefinitions(
-      { root, scope: "plugins", listed: files.folders(root) },
-      files
-    )
-  );
-}
-function readDefinitions({ root, scope, listed }, files) {
-  return {
+  return installedPluginDirs(locs).map((root) => ({
     root,
-    scope,
-    listed: "error" in listed ? listed : {
-      folders: listed.folders.map(
-        (name) => readDefinition(
-          import_node_path32.default.join(root, name, DEFINITION_FILE),
-          scope,
-          files
-        )
-      ),
-      files: listed.files
-    }
-  };
+    scope: "plugins",
+    listed: files.folders(root)
+  }));
 }
 function readDefinition(file, scope, files = diskFiles) {
   const badPath = pluginDefinitionProblem(file);
@@ -90093,7 +90123,7 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(roots, checkout) {
+function sessionPlugins(roots, checkout, files = discoveryFiles()) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
@@ -90104,10 +90134,10 @@ function sessionPlugins(roots, checkout) {
       );
       continue;
     }
-    for (const file of listed.folders) {
-      const key = `${scope}\0${import_node_path32.default.basename(import_node_path32.default.dirname(file.path))}`;
+    for (const name of listed.folders) {
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, file);
+      byNs.set(key, { scope, path: import_node_path32.default.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
       strays.push({ path: import_node_path32.default.join(root, name), scope });
@@ -90115,7 +90145,9 @@ function sessionPlugins(roots, checkout) {
   if (checkout.kind === "failed")
     notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
-    plugins: [...byNs.values()],
+    plugins: [...byNs.values()].map(
+      (file) => readDefinition(file.path, file.scope, files)
+    ),
     strays,
     notices,
     checkout: checkout.kind === "ok" ? checkout.value : null
@@ -90161,10 +90193,11 @@ function discover(query, shared) {
   const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
   const { project } = resolution;
   const session = sessionPlugins(
-    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    repoRoot === null ? shared.installed : [...shared.installed, repoRoot],
     // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
     // on its next pass. Watching every parent would add a watch per ancestor.
-    files.checkout(query.cwd)
+    files.checkout(query.cwd),
+    files
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)
