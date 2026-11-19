@@ -4,8 +4,10 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { statSync } from "node:fs";
+import { constants, statSync } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import { Limiter } from "./limiter";
+import { SingleFlight } from "./single-flight";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
 import { debug } from "./logger";
@@ -27,17 +29,20 @@ import { debug } from "./logger";
 export function statStamp(filePath: string | undefined): string {
   if (!filePath) return "";
   try {
-    return stampOf(statSync(filePath));
+    const stat = statSync(filePath, { bigint: true });
+    return stat.isFile() ? transcriptVersion(stat) : "";
   } catch {
     return "";
   }
 }
 
-// [LAW:one-source-of-truth] A transcript's version as stat reports it,
-// `mtimeMs:size` like the git config stamp: an append that lands inside the
-// mtime tick of the read before it (a coarse-timestamp filesystem) moves only
-// the size, and an mtime alone would then call the file unchanged for good —
-// for a session that never renders, nothing else would ever read that tail.
+// [LAW:one-source-of-truth] Aliases of the same regular file and version
+// share windows. A replacement, append or in-place change has another
+// identity even when the path or the size stays the same.
+export function transcriptVersion(stat: BigIntStats): string {
+  return `${stat.dev}:${stat.ino}:${stat.mtimeNs}:${stat.ctimeNs}:${stat.size}`;
+}
+
 export function stampOf(st: { mtimeMs: number; size: number }): string {
   return `${st.mtimeMs}:${st.size}`;
 }
@@ -128,12 +133,12 @@ export interface WholeLines {
 }
 
 // A read whose `lines` may be a view of a lent window: disposing it gives the
-// window back. Read it through `decodeLines`, which does both.
+// window back. Its consumer disposes the loan before returning the text.
 export type AppendedLines = WholeLines & Disposable;
 
 // [LAW:no-shared-mutable-globals] The window buffers: a read takes one as it
 // enters its gate slot and lends it to its caller, who gives it back as soon
-// as the lines are decoded (`decodeLines`). A queued fold holds none, a fold
+// as the lines are decoded. A queued fold holds none, a fold
 // allocates no window buffer per window or per file for the garbage collector
 // to find, and at most TRANSCRIPT_FS_CONCURRENCY are kept (4 MiB): a burst can
 // lend a few more — a woken waiter takes one before the reader it followed
@@ -200,15 +205,109 @@ export async function readAppended(
   });
 }
 
-// [LAW:types-are-the-program] The one way to read a lent read's lines: decode
-// them and give the window back, before anything else can be awaited.
-// `decode` must not keep the buffer.
-export function decodeLines<T>(
-  read: AppendedLines,
-  decode: (lines: Buffer) => T,
-): T {
-  using lent = read;
-  return decode(lent.lines);
+type ForwardText = Omit<WholeLines, "lines"> & {
+  readonly text: string;
+  readonly bytes: number;
+};
+interface TailText {
+  readonly text: string;
+  readonly fromStart: boolean;
+}
+interface Observed<T> {
+  readonly value: T;
+  readonly stamp: string;
+  readonly bytes: number;
+}
+
+// [LAW:no-shared-mutable-globals] The transcript filesystem owns these
+// short-lived immutable windows. Sessions keep their own projections.
+// Only a successful observation of the same regular file version and range
+// can join or hit. Each pool keeps eight windows of up to 512 KiB of input.
+class Observations<T> {
+  private readonly pending = new SingleFlight();
+  private readonly recent = new Map<string, T>();
+
+  async read(
+    path: string,
+    range: string,
+    read: () => Promise<Outcome<Observed<T>>>,
+  ): Promise<Outcome<T>> {
+    const stamp = statStamp(path);
+    if (stamp === "") return observedValue(await read());
+    const key = `${stamp}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== undefined) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed, originalPath } = await this.pending.run(key, async () => {
+      const observed = await read();
+      if (
+        observed.kind === "ok" &&
+        observed.value.stamp === stamp &&
+        observed.value.bytes <= FOLD_WINDOW_BYTES
+      ) {
+        this.recent.set(key, observed.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed, originalPath: path };
+    });
+    // An alias could disappear or switch to another file between stat and
+    // open, independently of this caller's path.
+    return observedValue(
+      originalPath === path ||
+        (observed.kind === "ok" && observed.value.stamp === stamp)
+        ? observed
+        : await read(),
+    );
+  }
+}
+
+function observedValue<T>(found: Outcome<Observed<T>>): Outcome<T> {
+  return found.kind === "ok" ? ok(found.value.value) : found;
+}
+
+const forward = new Observations<ForwardText>();
+const tails = new Observations<TailText>();
+
+export function readAppendedText(
+  path: string,
+  prior: { offset: number; ino: number } | undefined,
+  until: number | undefined,
+): Promise<Outcome<ForwardText>> {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until]);
+  return forward.read(path, range, async () => {
+    const read = await readAppended(path, prior, until);
+    if (read.kind !== "ok") return read;
+    using lent = read.value;
+    const { lines, [Symbol.dispose]: _dispose, ...info } = lent;
+    const bytes = lines.length;
+    return ok({
+      stamp: info.stamp,
+      bytes,
+      value: { ...info, bytes, text: lines.toString("utf8") },
+    });
+  });
+}
+
+export function readTailText(
+  path: string,
+  maxBytes: number,
+): Promise<Outcome<TailText>> {
+  return tails.read(path, String(maxBytes), async () => {
+    const read = await readTail(path, maxBytes);
+    if (read.kind !== "ok") return read;
+    const { stamp, fromStart, buf } = read.value;
+    return ok({
+      stamp,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart },
+    });
+  });
 }
 
 // readAppended's file work, inside its gate slot: the whole lines into
@@ -222,10 +321,13 @@ async function readWholeLines(
 ): Promise<Outcome<WholeLines>> {
   let fh: FileHandle | null = null;
   try {
-    fh = await fsOpen(path, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp = stampOf(st);
+    fh = await fsOpen(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp = transcriptVersion(st);
     // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
     // only while the file stays append-only. Two independent signals break
     // that: the inode changed (a rename-based /compact or log rotation swapped
@@ -344,16 +446,20 @@ async function readInto(
 export async function readTail(
   path: string,
   maxBytes: number,
-): Promise<Outcome<{ buf: Buffer; fromStart: boolean }>> {
+): Promise<Outcome<{ buf: Buffer; fromStart: boolean; stamp: string }>> {
   return gate.run(async () => {
     let fh: FileHandle | null = null;
     try {
-      fh = await fsOpen(path, "r");
-      const { size } = await fh.stat();
+      fh = await fsOpen(path, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat = await fh.stat({ bigint: true });
+      if (!stat.isFile())
+        return failed(`readTail ${path}: not a regular file`, "read");
+      const size = Number(stat.size);
       const start = Math.max(0, size - maxBytes);
       return ok({
         buf: await readInto(fh, Buffer.alloc(size - start), start),
         fromStart: start === 0,
+        stamp: transcriptVersion(stat),
       });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;

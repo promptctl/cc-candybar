@@ -15,6 +15,7 @@ import {
   appendFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   utimesSync,
 } from "node:fs";
 import { HOST } from "./helpers/host";
@@ -300,6 +301,45 @@ describe("foldAppended — the windowed fold", () => {
     expect(a.value.lines.buffer).not.toBe(b.value.lines.buffer);
     a.value[Symbol.dispose]();
     b.value[Symbol.dispose]();
+  });
+
+  test("two transcript names share the same version and read a replaced file anew", async () => {
+    const original = join(dir, "shared.jsonl");
+    const alias = join(dir, "alias.jsonl");
+    const replacement = join(dir, "replacement.jsonl");
+    writeFileSync(original, line(new Date(), 0.1));
+    symlinkSync(original, alias);
+
+    const before = transcriptReads().reads;
+    const [first, second] = await Promise.all([
+      foldOf(original),
+      foldOf(alias),
+    ]);
+    expect(first.folded).toEqual(second.folded);
+    expect(costs(first.folded.value)).toEqual([0.1]);
+    expect(transcriptReads().reads).toBe(before + 1);
+
+    expect((await foldOf(alias)).folded).toEqual(first.folded);
+    expect(transcriptReads().reads).toBe(before + 1);
+
+    appendFileSync(original, line(new Date(), 0.2));
+    const [next, nextAlias] = await Promise.all([
+      foldOf(original, first.folded),
+      foldOf(alias, second.folded),
+    ]);
+    expect(next.folded).toEqual(nextAlias.folded);
+    expect(costs(next.folded.value)).toEqual([0.1, 0.2]);
+    expect(transcriptReads().reads).toBe(before + 2);
+
+    writeFileSync(replacement, line(new Date(), 0.3));
+    renameSync(replacement, original);
+    const [reset, resetAlias] = await Promise.all([
+      foldOf(original, next.folded),
+      foldOf(alias, nextAlias.folded),
+    ]);
+    expect(reset.folded).toEqual(resetAlias.folded);
+    expect(costs(reset.folded.value)).toEqual([0.3]);
+    expect(transcriptReads().reads).toBe(before + 3);
   });
 
   // Every read of a fold is capped at the size its first stat saw, so a file

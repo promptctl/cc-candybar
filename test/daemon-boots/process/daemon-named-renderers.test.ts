@@ -20,6 +20,21 @@ import {
 
 const WORKTREE_MODEL = "Worktree renderer";
 
+function cacheEntry(id: string, timestamp: string): string {
+  return (
+    JSON.stringify({
+      type: "assistant",
+      uuid: id,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [],
+        usage: { cache_read_input_tokens: 10 },
+      },
+    }) + "\n"
+  );
+}
+
 // The release bundle's own renderer, with one deliberately different piece
 // of display code. It still exercises the production process and boot wire,
 // config compiler, templates, and source subscriptions.
@@ -115,19 +130,21 @@ test("two named renderer processes draw separately and share config, transcript 
       config,
       `{
       globals: { experimentalStatusline: true },
-      variables: { modelName: { kind: "input", path: "model.display_name" } },
-      segments: { model: { template: "{{ .modelName }}" } },
-      root: { h: ["model", "plugins.shared.marker"] },
+      variables: {
+        modelName: { kind: "input", path: "model.display_name" },
+        expiry: { kind: "input", path: "cache.expiresAt" },
+      },
+      segments: {
+        model: { template: "{{ .modelName }}" },
+        expiry: { template: "{{ if .expiry }}expiry={{ .expiry }}{{ end }}" },
+      },
+      root: { h: ["model", "plugins.shared.marker", "expiry"] },
     }`,
     );
     for (const transcript of [firstTranscript, secondTranscript])
       fs.writeFileSync(
         transcript,
-        JSON.stringify({
-          type: "user",
-          uuid: "one",
-          message: { role: "user", content: "transcript data" },
-        }) + "\n",
+        cacheEntry("initial", "2026-11-19T12:00:00.000Z"),
       );
     worktreeBundle(alternate);
     const shared = [config, definition, source];
@@ -156,12 +173,13 @@ test("two named renderer processes draw separately and share config, transcript 
     const request = (
       session: string,
       named?: { name: string; bundle: string },
+      transcript = transcriptOf(session),
     ) =>
       frameRequest(isolated.sockPath, {
         ...renderBody(session, root, {}, args),
         hookData: {
           ...hookData(session, root),
-          transcript_path: transcriptOf(session),
+          transcript_path: transcript,
         },
         ...(named !== undefined && {
           env: { ...TEST_ENV, CC_CANDYBAR_NAME: named.name },
@@ -170,10 +188,15 @@ test("two named renderer processes draw separately and share config, transcript 
       });
 
     let primary = "";
+    const expectedExpiry = (hour: string) =>
+      `expiry=${Date.parse(`2026-11-19T${hour}:00:00.000Z`) / 1000}`;
     await until(
       async () => {
         primary = textOf(await request("main-session"));
-        return primary.includes("one-shared-plugin-read");
+        return (
+          primary.includes("one-shared-plugin-read") &&
+          primary.includes(expectedExpiry("13"))
+        );
       },
       () => `primary plugin source was read, last frame: ${primary}`,
       8000,
@@ -248,6 +271,43 @@ test("two named renderer processes draw separately and share config, transcript 
     expect(new Set(both.map((read) => read.pid))).toEqual(
       new Set([daemon.child.pid]),
     );
+
+    // A different Claude session, served by the worktree, names the same
+    // transcript as the main process. Both consume the host's cache at the
+    // current file version and again after an append.
+    expect(textOf(await request("main-session"))).toContain("Opus 4.7");
+    let alias = "";
+    await until(
+      async () => {
+        alias = textOf(
+          await request("alias-session", selected, firstTranscript),
+        );
+        return alias.includes(expectedExpiry("13"));
+      },
+      () => `the worktree showed no expiry for the shared transcript: ${alias}`,
+      8000,
+    );
+    expect(alias).toContain(WORKTREE_MODEL);
+    const beforeAppend = count(readsOf(reads), firstTranscript);
+    expect(beforeAppend).toBe(count(both, firstTranscript));
+    fs.appendFileSync(
+      firstTranscript,
+      cacheEntry("updated", "2026-11-19T14:00:00.000Z"),
+    );
+    await until(
+      async () => {
+        const [standard, alternative] = await Promise.all([
+          request("main-session"),
+          request("alias-session", selected, firstTranscript),
+        ]);
+        return [standard, alternative].every((frame) =>
+          textOf(frame).includes(expectedExpiry("15")),
+        );
+      },
+      () => "both renderers to observe the appended transcript entry",
+      10_000,
+    );
+    expect(count(readsOf(reads), firstTranscript)).toBe(beforeAppend + 2);
 
     const conflict = await sendDaemonRequest(
       isolated.sockPath,

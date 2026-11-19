@@ -3,12 +3,7 @@ import { existsSync } from "node:fs";
 // [LAW:single-enforcer] readdir and the forward read come from the gated
 // transcript-fs owner, not node:fs/promises — the in-flight-I/O bound lives at
 // one seam.
-import {
-  decodeLines,
-  readAppended,
-  readdir,
-  type WholeLines,
-} from "./transcript-fs";
+import { readAppendedText, readdir, type WholeLines } from "./transcript-fs";
 import { join } from "node:path";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
@@ -184,17 +179,14 @@ export async function findAgentTranscripts(
       // The first line only: one forward read from the file start, decoding
       // only the bytes before its first newline (a file with no complete line
       // yet is read again next time).
-      const read = await readAppended(filePath, undefined, undefined);
+      const read = await readAppendedText(filePath, undefined, undefined);
       if (read.kind !== "ok") {
         debug(`Failed to check agent file ${filePath}`);
         continue;
       }
       longLines = longLinesWith(longLines, filePath, read.value);
-      const line = jsonLine(
-        decodeLines(read.value, (b) =>
-          b.subarray(0, Math.max(0, b.indexOf(0x0a))).toString("utf-8"),
-        ),
-      );
+      const { text } = read.value;
+      const line = jsonLine(text.slice(0, Math.max(0, text.indexOf("\n"))));
       if (line.kind === "object" && line.value.sessionId === sessionId) {
         paths.push(filePath);
       }
@@ -472,7 +464,7 @@ export interface LongLine {
 function longLinesWith(
   longLines: readonly LongLine[],
   path: string,
-  read: WholeLines,
+  read: Pick<WholeLines, "longLine" | "start">,
 ): readonly LongLine[] {
   return read.longLine === 0
     ? longLines
@@ -524,7 +516,7 @@ export async function foldAppended<S>(
   let value = prior?.value ?? empty;
   let end: { size: number; stamp: string } | undefined;
   for (;;) {
-    const read = await readAppended(
+    const read = await readAppendedText(
       filePath,
       cursor === undefined
         ? undefined
@@ -539,16 +531,10 @@ export async function foldAppended<S>(
     if (end === undefined || window.reset) {
       end = { size: window.size, stamp: window.stamp };
     }
-    const next = window.start + window.lines.length;
-    // Decoded, and the window given back, before `step` can await — and
-    // passed straight in, never named: a name holds this window's entries in
-    // the fold's frame across the next read's I/O wait, where they are
-    // promoted to the old generation (eight concurrent cold folds of a 29 MB
-    // transcript: +120 MB RSS against +30 MB).
-    value = await step(
-      value,
-      decodeLines(window, (b) => parseJsonlLines(b.toString("utf-8"))),
-    );
+    const next = window.start + window.bytes;
+    // Pass the entries directly so the fold does not hold them across the
+    // next window's I/O.
+    value = await step(value, parseJsonlLines(window.text));
     cursor = {
       offset: next,
       stamp: end.stamp,

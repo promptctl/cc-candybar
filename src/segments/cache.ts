@@ -37,7 +37,7 @@ import {
 import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { readTail, statStamp } from "../utils/transcript-fs.js";
+import { readTailText, statStamp } from "../utils/transcript-fs.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
@@ -204,11 +204,11 @@ async function findLastCacheActivityTs(
   transcriptPath: string,
 ): Promise<Outcome<number>> {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
+    const tail = await readTailText(transcriptPath, maxBytes);
     // absent (no transcript yet) and failed (unreadable) both end the scan;
     // the outcome carries which one happened to the payload boundary.
     if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    const ts = scanLastCacheTs(tail.value.text, tail.value.fromStart);
     if (ts != null) return ok(ts);
     // The window reached the file start: the whole transcript is scanned, no
     // hit exists — growing further would re-read the same bytes.
@@ -217,15 +217,11 @@ async function findLastCacheActivityTs(
   return ABSENT;
 }
 
-function scanBufferForLastCacheTs(
-  buf: Buffer,
-  bufStartsAtFileBeginning: boolean,
-): number | null {
-  const text = buf.toString("utf8");
+function scanLastCacheTs(text: string, fromStart: boolean): number | null {
   const lines = text.split("\n");
   // When the window doesn't start at the file beginning, the first line is
   // likely a partial JSON object — skip it so we never mis-parse a fragment.
-  const start = bufStartsAtFileBeginning ? 0 : 1;
+  const start = fromStart ? 0 : 1;
   for (let i = lines.length - 1; i >= start; i--) {
     const line = lines[i];
     if (!line || !CACHE_HIT_RE.test(line)) continue; // cheap candidate filter
