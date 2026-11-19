@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-895",
+      "ref": "refs/pull/895/merge",
+      "sha": "63228bdf4a7340d8af022616c0f9f34e613f2561",
+      "timestamp": "2026-11-19T19:48:17.159Z",
+      "commits": [
+        {
+          "sha": "63228bdf4a7340d8af022616c0f9f34e613f2561",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T19:47:07Z",
+          "message": "Merge f53991d1d7e8ee767428a6dd9c181a794859b9b5 into 7fb2d364cac124b3f07de1e027e1959943c9a23d\n"
+        },
+        {
+          "sha": "f53991d1d7e8ee767428a6dd9c181a794859b9b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:03:24-07:00",
+          "message": "fix(daemon): check render workspace directories at ingress\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7fb2d364cac124b3f07de1e027e1959943c9a23d",
@@ -13,28 +35,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T19:46:10Z",
           "message": "chore(release): set `package.json` to 1.235.10\n\n## [1.235.10](https://github.com/promptctl/cc-candybar/compare/v1.235.9...v1.235.10) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** skip abandoned statusline draws ([#902](https://github.com/promptctl/cc-candybar/issues/902)) ([7df1347](https://github.com/promptctl/cc-candybar/commit/7df1347f46b6e135236f014e234935a7b5ffc5fc))\n* **install:** replace staged executables atomically ([#903](https://github.com/promptctl/cc-candybar/issues/903)) ([2e9c928](https://github.com/promptctl/cc-candybar/commit/2e9c928c2afc2d8e586b4d92408d3c7f575c5f16))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-895",
-      "ref": "refs/pull/895/merge",
-      "sha": "00696ff2ff0305a54e7be1223a14789bd26ce51e",
-      "timestamp": "2026-11-19T19:41:02.919Z",
-      "commits": [
-        {
-          "sha": "00696ff2ff0305a54e7be1223a14789bd26ce51e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:39:53Z",
-          "message": "Merge 8b07233238fb3df3dbed84af32081e1daeaefc4e into 2e9c928c2afc2d8e586b4d92408d3c7f575c5f16\n"
-        },
-        {
-          "sha": "8b07233238fb3df3dbed84af32081e1daeaefc4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:03:24-07:00",
-          "message": "fix(daemon): check render workspace directories at ingress\n"
         }
       ]
     },
