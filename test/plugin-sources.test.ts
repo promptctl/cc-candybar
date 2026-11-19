@@ -85,16 +85,13 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { NOTHING_READ } from "../src/dsl/view-source";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
+import { rendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
-import type {
-  RequestId,
-  TurnOutcome,
-} from "../src/renderer-interface/interface";
+import type { RequestId } from "../src/renderer-interface/interface";
 import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -843,7 +840,7 @@ function statusline(r: Rig, configFile: string) {
     NO_PUSHES,
     NOTHING_STORED,
   );
-  const rendered = rendererHost(
+  const host = rendererHost(
     MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(
@@ -860,18 +857,6 @@ function statusline(r: Rig, configFile: string) {
     unfollowedCollector(r.collector),
     { ...NO_ACTS, configs: r.configs.discovery },
   );
-  // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
-  // request delivered has settled, the present's `effect-done` among them, so
-  // no turn still holds the session when the test moves on.
-  const delivering: Promise<TurnOutcome>[] = [];
-  const host: RendererHost = {
-    ...rendered,
-    deliver: (input, about) => {
-      const turn = rendered.deliver(input, about);
-      delivering.push(turn);
-      return turn;
-    },
-  };
   let id = 0;
   return async (): Promise<{ text: string; facts: RequestFacts }> => {
     const { hookData } = viewFacts(dir, "s1");
@@ -907,7 +892,6 @@ function statusline(r: Rig, configFile: string) {
     );
     answered.settled(true);
     expect(answered.outcome).toEqual({ kind: "ok" });
-    await Promise.all(delivering.splice(0));
     return { text: textOf(presented.at(-1)!), facts };
   };
 }
@@ -927,14 +911,12 @@ describe("a session's first bar", () => {
     const ask = statusline(r, config(["plugins.p.gated"]));
     programWrites(storageOf(), "s1", { home: "here" });
     await ask();
-    // Two sweeps with no request between them retire the session, which
-    // closes its view.
-    r.collector.sweep();
-    r.collector.sweep();
-    await until(
-      () => r.collector.stats().sessions === 0,
-      "the session's retire answered",
-    );
+    // [LAW:no-ambient-temporal-coupling] A pending receipt can hold the
+    // session across a sweep. Keep sweeping until the idle session retires.
+    await until(() => {
+      r.collector.sweep();
+      return r.collector.stats().sessions === 0;
+    }, "the session's retire answered");
     expect(r.cache.holdView(S1)).toBeNull();
     expect((await ask()).text).toContain("home=here");
   });
