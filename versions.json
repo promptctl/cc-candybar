@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "67f9c326810383c223b62ad696c55bb3e1087dc2",
+      "timestamp": "2026-11-19T11:29:48.160Z",
+      "commits": [
+        {
+          "sha": "67f9c326810383c223b62ad696c55bb3e1087dc2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:28:40-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo) (#838)"
+        }
+      ]
+    },
+    {
       "version": "pr-856",
       "ref": "refs/pull/856/merge",
       "sha": "3efca274db7d76afdf91621cacd763ec6dacbe1b",
@@ -139,43 +154,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:45:50-07:00",
           "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
-      "timestamp": "2026-11-19T11:21:26.529Z",
-      "commits": [
-        {
-          "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:22Z",
-          "message": "Merge 9abf9f5d0b76113135496d1a06fb5281c91848e8 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
-        },
-        {
-          "sha": "9abf9f5d0b76113135496d1a06fb5281c91848e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:56:20-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ecf212eaa936d5cb5e72328591459059b6f50927",
-      "timestamp": "2026-11-19T11:13:41.895Z",
-      "commits": [
-        {
-          "sha": "ecf212eaa936d5cb5e72328591459059b6f50927",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T11:12:46Z",
-          "message": "chore(release): set `package.json` to 1.232.14\n\n## [1.232.14](https://github.com/promptctl/cc-candybar/compare/v1.232.13...v1.232.14) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** integrate edit transactions and menu navigation ([#851](https://github.com/promptctl/cc-candybar/issues/851)) ([b2c14eb](https://github.com/promptctl/cc-candybar/commit/b2c14ebf42db01edd317ebe6cd8bedeee033c50f))\n"
         }
       ]
     },
