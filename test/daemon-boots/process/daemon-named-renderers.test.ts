@@ -567,6 +567,55 @@ test("one project approval from an earlier frame covers both renderers, a config
   }
 }, 30_000);
 
+test("a delivered pane frame settles in the subprocess that drew it", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-pane-receipt");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pane-receipt-"));
+  try {
+    const session = "pane-receipt";
+    const config = path.join(dir, "config.json5");
+    const text = "settle this pane";
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { experimentalPane: true },
+        segments: { sample: { template: text } },
+        root: { h: ["sample"] },
+      }),
+    );
+    const args = ["cc-candybar", "--config", config];
+    const statusline = await frameRequest(
+      daemon.sockPath,
+      renderBody(session, dir, {}, args),
+    );
+    expect(textOf(statusline)).toContain(text);
+
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await pane.waitFor((line) => line.includes(text), text);
+      let pending: number | undefined;
+      await until(
+        async () => {
+          const response = await sendDaemonRequest(daemon.sockPath, {
+            v: PROTOCOL_VERSION,
+            kind: "stats",
+          });
+          if (!response.ok || !("stats" in response))
+            throw new Error(`no daemon stats: ${JSON.stringify(response)}`);
+          pending = response.stats.rendererTurns.presents;
+          return response.stats.frameFeeds.drawn > 0 && pending === 0;
+        },
+        () => `the delivered pane frame settled (${pending} pending)`,
+        2_000,
+      );
+    } finally {
+      pane.close();
+    }
+  } finally {
+    await daemon.cleanup();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the named renderer receives its pane control and earlier statusline run", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-named-clicks");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-click-source-"));
