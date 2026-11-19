@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-885",
+      "ref": "refs/pull/885/merge",
+      "sha": "944e209c929bfd978f8f5fe4a383ce8d964cf5f1",
+      "timestamp": "2026-11-19T16:12:35.651Z",
+      "commits": [
+        {
+          "sha": "944e209c929bfd978f8f5fe4a383ce8d964cf5f1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:11:19Z",
+          "message": "Merge 841a6db45e1e4526929b19cd1a0690b74e427bcd into 67617a157063c21dd274bfef57d3c5f64d5d4c47\n"
+        },
+        {
+          "sha": "841a6db45e1e4526929b19cd1a0690b74e427bcd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:24:34-07:00",
+          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "67617a157063c21dd274bfef57d3c5f64d5d4c47",
@@ -35,28 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-885",
-      "ref": "refs/pull/885/merge",
-      "sha": "176b3c4d2e5c376ca3f745ec5ed9eafa71ca0667",
-      "timestamp": "2026-11-19T15:52:01.880Z",
-      "commits": [
-        {
-          "sha": "176b3c4d2e5c376ca3f745ec5ed9eafa71ca0667",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:51:02Z",
-          "message": "Merge 95973e5e2ac3e12a65384dcf5659879a3a4bb6b0 into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
-        },
-        {
-          "sha": "95973e5e2ac3e12a65384dcf5659879a3a4bb6b0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:24:34-07:00",
-          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
         }
       ]
     },
