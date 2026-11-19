@@ -142,8 +142,8 @@ function renderer(
 // A statusline request for the rig's session, through the host's checkpoint.
 // It passes a flag the client does not know, so its bar lists one error.
 // `pane` is the tmux pane its client reports, if any.
-function checked(pane?: string): CheckedRenderRequest {
-  const configFile = path.join(dir, "config.json5");
+function checked(pane?: string, file = "config.json5"): CheckedRenderRequest {
+  const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
   const { hookData } = requestOf(dir);
   const result = checkRenderRequest(
@@ -618,7 +618,7 @@ describe("the world state the host hands in", () => {
     expect(t.logged.filter((line) => line.startsWith("error"))).toEqual([]);
   });
 
-  test("a retire whose session teardown throws still drops its world state, so the host's next record for the session is taken", async () => {
+  test("a failed teardown retires the session until another context admits it", async () => {
     const t = renderer();
     await request(t);
     const held = t.rig.served.worldStates.of(SESSION);
@@ -639,8 +639,21 @@ describe("the world state the host hands in", () => {
     expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
-    // A new record starts again below the seq the dropped document had.
-    await handIn(t.r, { kind: "world-state", worldState: held });
+    const late = answered(
+      await handIn(t.r, { kind: "world-state", worldState: held }),
+    );
+    expect(late.record).toContainEqual(["world-state", "no-live-session"]);
+    expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
+      /no world state for session/,
+    );
+    // A new context can start below the seq the retired document had.
+    answered(
+      await handIn(t.r, {
+        kind: "context",
+        context: checked(),
+        worldState: held,
+      }),
+    );
     expect(t.rig.served.worldStates.of(SESSION)).toBe(held);
   });
 
@@ -751,6 +764,23 @@ describe("an event that waits for its origin's config", () => {
     expect(Object.keys(configured.subscriptions.sources)).toEqual([SESSION]);
   });
 
+  test("a premature request owns no present and a later request is answered in its own turn", async () => {
+    const t = renderer();
+    const context = checked();
+    const waiting = answered(await contextTurn(t, context));
+    const request = { kind: "request", id: REQUEST, context } as const;
+    const early = threw(await handIn(t.r, request));
+    expect(early.failure.message).toMatch(/config is pending for session/);
+    expect(early.effects).toEqual([]);
+
+    const configured = answered(await configsNamed(t, waiting));
+    expect(configured.effects).toEqual([]);
+    const drawn = answered(await handIn(t.r, request));
+    const present = presentOf(drawn.effects);
+    expect(present.request).toBe(REQUEST);
+    answered(await done(t.r, present, true));
+  });
+
   test("a world state handed in while its context is parked is taken in its order, and the config turn opens the view at it", async () => {
     const t = renderer();
     const parked = answered(await contextTurn(t, checked()));
@@ -759,6 +789,21 @@ describe("an event that waits for its origin's config", () => {
     answered(await handIn(t.r, { kind: "world-state", worldState: next }));
     answered(await configsNamed(t, parked));
     expect(viewOf(t.rig)?.source.facts()).toBe(next);
+  });
+
+  test("config arriving for a previous origin leaves the opening at the newest context", async () => {
+    const t = renderer();
+    const first = checked("%1", "first.json5");
+    const current = checked("%2");
+    const firstWaiting = answered(await contextTurn(t, first));
+    const currentWaiting = answered(await contextTurn(t, current));
+    expect(currentWaiting.subscriptions.configs).toEqual([current.requested]);
+
+    answered(await configsNamed(t, firstWaiting));
+    expect(viewOf(t.rig)).toBeNull();
+
+    answered(await configsNamed(t, currentWaiting));
+    expect(viewOf(t.rig)?.facts()).toBe(current);
   });
 
   test("a parked context its session retired before the config came opens nothing, and the origin is let go", async () => {
@@ -876,6 +921,80 @@ describe("a click", () => {
     click: { scope: "session", verb, session: SESSION, steps: [] },
     arrival: { via: "link", delivery: { kind: "cli" } },
     context: live === null ? null : heardContextOf(live),
+  });
+
+  test("a parked click waits for the current origin and reads its latest context", async () => {
+    const seen: Array<SessionContext | null> = [];
+    const t = renderer({
+      ...NO_VERBS,
+      handler: () => (_value, facts) => void seen.push(facts.context),
+    });
+    const first = checked("%1", "first.json5");
+    const current = checked("%2");
+    const firstWaiting = answered(await contextTurn(t, first));
+    const waiting = answered(await handIn(t.r, click("act")));
+    expect(waiting.record).toContainEqual(["parked", "click"]);
+
+    const currentWaiting = answered(await contextTurn(t, current));
+    answered(await configsNamed(t, firstWaiting));
+    expect(seen).toEqual([]);
+    answered(await configsNamed(t, currentWaiting));
+    expect(seen).toEqual([heardContextOf(current)]);
+  });
+
+  test("failed config settles parked clicks and a later config does not replay them", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, handler: () => acted });
+    const context = checked();
+    answered(await contextTurn(t, context));
+    answered(await handIn(t.r, click("act", context)));
+    const { discovery } = t.rig.cache.configs;
+    discovery.follow([context.requested]);
+    const config = discovery.snapshotOf(context.requested);
+    if (config === null) throw new Error("expected the followed config");
+    const configEvent = {
+      kind: "config",
+      origin: context.requested,
+      config,
+    } as const;
+
+    const configureCache = t.rig.cache.configure.bind(t.rig.cache);
+    t.rig.cache.configure = () => {
+      throw new Error("config turn failed");
+    };
+    const failure = threw(await handIn(t.r, configEvent));
+    expect(failure.failure.message).toBe("config turn failed");
+    expect(failure.record).toEqual([]);
+    expect(t.parts.sessionState.get(SESSION, "click.error")).toContain(
+      "config turn failed",
+    );
+    expect(
+      threw(await handIn(t.r, click("act", context))).failure.message,
+    ).toBe("config turn failed");
+    expect(acted).not.toHaveBeenCalled();
+
+    t.rig.cache.configure = configureCache;
+    answered(await handIn(t.r, configEvent));
+    expect(viewOf(t.rig)?.facts()).toBe(context);
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
+    expect(acted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retirement cancels a parked click and the late config runs no handler", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, handler: () => acted });
+    const context = checked();
+    const waiting = answered(await contextTurn(t, context));
+    answered(await handIn(t.r, click("act", context)));
+
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: SESSION }),
+    );
+    expect(retired.subscriptions.configs).toEqual([]);
+    answered(await configsNamed(t, waiting));
+    expect(viewOf(t.rig)).toBeNull();
+    expect(acted).not.toHaveBeenCalled();
   });
 
   test("answers with what the open views read once its handler has run", async () => {

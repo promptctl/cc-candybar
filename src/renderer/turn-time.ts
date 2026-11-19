@@ -65,6 +65,10 @@ export class TurnTime {
     return () => void this.held.delete(deferral);
   }
 
+  deferrals(): number {
+    return this.held.size;
+  }
+
   // The earliest tick held work is due at, or null when none is held.
   next(): Tick | null {
     return earliestOf([...this.held].map(({ until }) => until));

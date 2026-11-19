@@ -66,6 +66,7 @@ import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
+import { heardRequest } from "./helpers/click";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
@@ -300,13 +301,13 @@ function rig(): Rig {
     collector: served.collector,
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
-      const facts = viewFacts(dir, sid);
+      const facts = heardRequest(sid, dir);
       return served.config(facts, () =>
         cache.holdSession(configs.at(dir, dir, configFile), facts),
       );
     },
     inTurn: (configFile, read) => {
-      const facts = viewFacts(dir, "s1");
+      const facts = heardRequest("s1", dir);
       let seen: ReturnType<typeof read> | undefined;
       const held = served.config(facts, () => {
         const opened = cache.holdSession(

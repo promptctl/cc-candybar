@@ -63,7 +63,7 @@ import {
   recordRender,
 } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
-import { viewFacts } from "./helpers/view-facts";
+import { heardRequest } from "./helpers/click";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
@@ -280,7 +280,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     runs,
     lines,
     hold: (configFile, sid) => {
-      const facts = viewFacts(dir, sid);
+      const facts = heardRequest(sid, dir);
       return served.config(facts, () =>
         cache.holdSession(originOf(dir, dir, configFile), facts),
       );
