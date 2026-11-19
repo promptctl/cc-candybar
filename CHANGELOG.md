@@ -1,3 +1,9 @@
+## [1.235.8](https://github.com/promptctl/cc-candybar/compare/v1.235.7...v1.235.8) (2026-11-19)
+
+### Bug Fixes
+
+* **client:** show startup and timeout feedback in the statusline ([#900](https://github.com/promptctl/cc-candybar/issues/900)) ([2d21da5](https://github.com/promptctl/cc-candybar/commit/2d21da5a247382b00e6ea729e0e1081bcecc4376))
+
 ## [1.235.7](https://github.com/promptctl/cc-candybar/compare/v1.235.6...v1.235.7) (2026-11-19)
 
 ### Bug Fixes
