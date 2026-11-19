@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "21b8abaab0b95c9b35518fcd7a840b2d54aa052b",
+      "timestamp": "2026-11-19T12:37:55.389Z",
+      "commits": [
+        {
+          "sha": "21b8abaab0b95c9b35518fcd7a840b2d54aa052b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T12:36:55Z",
+          "message": "chore(release): set `package.json` to 1.233.1\n\n## [1.233.1](https://github.com/promptctl/cc-candybar/compare/v1.233.0...v1.233.1) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** restore live sessions on renderer restart (ibyq.fqw) ([#862](https://github.com/promptctl/cc-candybar/issues/862)) ([2ea914d](https://github.com/promptctl/cc-candybar/commit/2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-863",
       "ref": "refs/pull/863/merge",
       "sha": "8144df661544d8d2e2efb239d6c077e36fe57f1e",
@@ -107,21 +122,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T04:35:29-07:00",
           "message": "fix(daemon): launches withhold the spawning shell's repository-local environment variables, asked of git once its socket is bound\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8",
-      "timestamp": "2026-11-19T12:29:12.540Z",
-      "commits": [
-        {
-          "sha": "2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:28:15-07:00",
-          "message": "fix(daemon): restore live sessions on renderer restart (ibyq.fqw) (#862)\n\nfix(daemon): restore live sessions on renderer restart\n\nRefs candybar-law-review-ibyq.fqw."
         }
       ]
     },
