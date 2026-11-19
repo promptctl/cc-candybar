@@ -21,7 +21,10 @@ import {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type ReaderRenderRequest,
+} from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
@@ -39,6 +42,9 @@ import {
   setUpRender,
   type RendererParts,
 } from "../src/renderer/draw-bar";
+import { renderWidth } from "../src/renderer/render-payload";
+import { parseFrame, textOf } from "../src/render/frame";
+import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
@@ -145,7 +151,11 @@ function renderer(
 // A statusline request for the rig's session, through the host's checkpoint.
 // It passes a flag the client does not know, so its bar lists one error.
 // `pane` is the tmux pane its client reports, if any.
-function checked(pane?: string, file = "config.json5"): CheckedRenderRequest {
+function checked(
+  pane?: string,
+  file = "config.json5",
+  terminal: Pick<ReaderRenderRequest, "termCols" | "termRows"> = {},
+): CheckedRenderRequest {
   const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
   const { hookData } = requestOf(dir);
@@ -158,6 +168,7 @@ function checked(pane?: string, file = "config.json5"): CheckedRenderRequest {
       cwd: PROJECT,
       encoding: "frame",
       env: TEST_ENV,
+      ...terminal,
       ...(pane === undefined
         ? {}
         : { tmux: { socket: "/tmp/tmux.sock", pane, truecolor: null } }),
@@ -842,77 +853,156 @@ describe("an event that waits for its origin's config", () => {
   });
 });
 
-describe("two requests of one session at different keys", () => {
-  test("each reaches the renderer with the world state read at its own keys, and both answers draw the newest request's", async () => {
-    const t = renderer();
-    // The pane's tmux session, answered when the case lands it.
-    const landings = new Map<string, () => void>();
-    const tmux = fakeTmux(
-      (_holds, hint) =>
-        new Promise((resolve) =>
-          landings.set(hint.pane, () => resolve(ok(`on ${hint.pane}`))),
-        ),
-    );
-    t.rig.providers.tmuxService.declare = tmux.declare as never;
-    const requests: WorldState[] = [];
-    const host = rendererHost(
-      MAIN_RENDERER,
-      systemTimekeeper,
-      hostHeld(
-        hearingEvents(t.r, (input) => {
-          if (input.event.kind === "context")
-            requests.push(input.event.worldState);
-        }),
-      ),
-      () => {},
-      unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
-    );
-    t.rig.served.route(host);
-    const ask = (pane: string, id: number) =>
-      answerStatusline(
-        host,
-        publishingFrames(TEST_SIGNER),
-        t.rig.served.collector,
-        systemTimekeeper,
-        new AbortController().signal,
-        () => {},
-        checkoutLocation,
-        checked(pane),
-        TEST_ENVIRONMENT,
-        id as RequestId,
-        systemTimekeeper.monotonic() + 10_000,
-        [],
-      );
+test("overlapping requests draw the latest pane with each client's width, then a feed and a regular request use the live width", async () => {
+  const t = renderer();
+  const narrow = checked("%1", "config.json5", { termCols: 80, termRows: 4 });
+  const wide = checked("%2", "config.json5", { termCols: 200, termRows: 18 });
+  if (wide.requested.target.path === undefined)
+    throw new Error("test needs a config file");
+  fs.writeFileSync(
+    wide.requested.target.path,
+    `{
+    globals: { autoWrap: true },
+    variables: {
+      paneSession: { kind: "input", path: "tmux.session", default: "unknown" },
+      width: { kind: "template", template: "{{ .term.cols }}" },
+    },
+    segments: {
+      geometry: { template: "width={{ .width }} pane={{ .tmux.pane }} world={{ .paneSession }}" },
+      longA: { template: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      longB: { template: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    },
+    root: { h: ["geometry", "longA", "longB"] },
+  }`,
+  );
 
-    let firstAnswered = false;
-    const first = ask("%1", 1).then((a) => {
-      firstAnswered = true;
-      return a;
-    });
-    // The second arrives while the first waits on its pane.
-    const second = ask("%2", 2);
-    // Each config reaches the renderer as its turn in the mailbox comes.
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(requests.map((w) => w.builtins.tmux.kind)).toEqual([
-      "pending",
-      "pending",
-    ]);
-    // The pane the session left lands: nothing reads it, so the first still
-    // waits, now on the newest request's pane.
-    landings.get("%1")!();
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(firstAnswered).toBe(false);
-    landings.get("%2")!();
-    const answered = await Promise.all([first, second]);
-    for (const { resp } of answered) expect(resp).toMatchObject({ ok: true });
-    const view = viewOf(t.rig)!;
-    expect(view.facts().hints.tmux?.pane).toBe("%2");
-    expect(view.source.facts().builtins.tmux).toMatchObject({
-      kind: "ok",
-      value: { session: "on %2" },
-    });
+  // The test releases the older request last, after the newer pane's read.
+  const landings = new Map<string, () => void>();
+  const tmux = fakeTmux(
+    (_holds, hint) =>
+      new Promise((resolve) =>
+        landings.set(hint.pane, () => resolve(ok(`on ${hint.pane}`))),
+      ),
+  );
+  t.rig.providers.tmuxService.declare = tmux.declare as never;
+  const contexts: WorldState[] = [];
+  const drawings: RequestId[] = [];
+  const collector = t.rig.served.collector;
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      hearingEvents(t.r, ({ event }) => {
+        if (event.kind === "context") contexts.push(event.worldState);
+        if (event.kind === "request") drawings.push(event.id);
+      }),
+    ),
+    () => {},
+    unfollowedCollector(collector),
+    { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+  );
+  t.rig.served.route(host);
+  let resumeOlder = (): void => {};
+  const olderCanDraw = new Promise<void>((resolve) => {
+    resumeOlder = resolve;
   });
+  let olderSourcesReady = false;
+  const earlierCollector = {
+    requested: collector.requested.bind(collector),
+    holding: collector.holding.bind(collector),
+    settled: async (...args: Parameters<typeof collector.settled>) => {
+      await collector.settled(...args);
+      olderSourcesReady = true;
+      await olderCanDraw;
+    },
+  };
+  const ask = (
+    context: CheckedRenderRequest,
+    id: number,
+    sources: typeof earlierCollector,
+  ) =>
+    answerStatusline(
+      host,
+      publishingFrames(TEST_SIGNER),
+      sources,
+      systemTimekeeper,
+      new AbortController().signal,
+      () => {},
+      checkoutLocation,
+      context,
+      TEST_ENVIRONMENT,
+      id as RequestId,
+      systemTimekeeper.monotonic() + 10_000,
+      [],
+    );
+
+  const first = ask(narrow, 1, earlierCollector);
+  const second = ask(wide, 2, collector);
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(contexts.map((w) => w.builtins.tmux.kind)).toEqual([
+    "pending",
+    "pending",
+  ]);
+  landings.get("%1")!();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(olderSourcesReady).toBe(false);
+  landings.get("%2")!();
+  const newer = await second;
+  resumeOlder();
+  const older = await first;
+  expect(drawings).toEqual([2, 1]);
+  const expectFrame = (resp: typeof newer.resp) => {
+    if (!resp.ok || !("frame" in resp))
+      throw new Error(`expected a frame: ${JSON.stringify(resp)}`);
+    return parseFrame(resp.frame);
+  };
+  const wideFrame = expectFrame(newer.resp);
+  const narrowFrame = expectFrame(older.resp);
+  const label = (request: CheckedRenderRequest) =>
+    `width=${renderWidth(request.hints)} pane=%2 world=on %2`;
+  expect(textOf(narrowFrame)).toContain(label(narrow));
+  expect(textOf(wideFrame)).toContain(label(wide));
+  expect(narrowFrame.rows.length).toBeGreaterThan(wideFrame.rows.length);
+  for (const answer of [newer, older]) answer.settled(true);
+
+  const view = viewOf(t.rig)!;
+  expect(view.facts().hints).toMatchObject({
+    tmux: { pane: "%2" },
+    termCols: 200,
+  });
+  expect(view.source.facts().builtins.tmux).toMatchObject({
+    kind: "ok",
+    value: { session: "on %2" },
+  });
+  expect(view.source.payload().term.cols).toBe(renderWidth(wide.hints));
+  const feed = renderFrame(
+    t.parts,
+    SESSION,
+    MOVING_FPS,
+    READ,
+    new Set(),
+    UNFOLLOWED_FEEDS,
+  );
+  if (feed?.frame.kind !== "drawn") throw new Error("the feed did not draw");
+  expect(textOf(feed.frame.bar)).toContain(label(wide));
+
+  const again = await ask(wide, 3, collector);
+  expect(textOf(expectFrame(again.resp))).toContain(label(wide));
+  again.settled(true);
+});
+
+test("diagnostics use the requesting client's rows or its own default ceiling", async () => {
+  const t = renderer();
+  const current = checked(undefined, "config.json5", { termRows: 18 });
+  await configure(t, current);
+  for (const [terminal, rows] of [
+    [{ termRows: 4 }, 4],
+    [{}, MAX_VIEWER_ROWS],
+  ] as const) {
+    using setup = setUpRender(t.parts, current, READ, [], terminal);
+    const { drawn } = drawRender(t.parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+    expect(drawn.geometry.rows).toBe(rows);
+  }
 });
 
 describe("a click", () => {
@@ -1063,8 +1153,6 @@ describe("a click", () => {
     answered(await handIn(t.r, click("act", latest)));
     expect(seen).toEqual(heardContextOf(latest));
   });
-
-
 });
 
 describe("the idle close", () => {

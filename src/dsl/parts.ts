@@ -228,6 +228,7 @@ export class ViewParts {
   // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
   // and its slots read it as it stands, never a copy a draw wrote.
   private readonly view: IObservableValue<ViewSource>;
+  private readonly terminalWidth = observable.box<number | null>(null);
   // The draw in progress's own facts — the payload fields its instant answers
   // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
   // the projections over them, which only a draw reads.
@@ -321,6 +322,21 @@ export class ViewParts {
     runInAction(() => this.view.set(view));
   }
 
+  // [LAW:no-ambient-temporal-coupling] An older request's terminal width is
+  // visible to the templates in this draw only. Restore it before the outer
+  // action ends so subscription reactions see the canonical view's inputs.
+  withTerminalWidth<T>(width: number, draw: () => T): T {
+    return runInAction(() => {
+      const before = this.terminalWidth.get();
+      this.terminalWidth.set(width);
+      try {
+        return draw();
+      } finally {
+        this.terminalWidth.set(before);
+      }
+    });
+  }
+
   // The selections in force.
   selections(): Selections {
     return this.view.get().selections();
@@ -343,6 +359,10 @@ export class ViewParts {
     if (slot !== undefined) return found(this.slotName(slot));
     if (drawProjectionAt(path) !== undefined)
       return resolvePath(this.projected, path);
+    if (path === "term.cols") {
+      const width = this.terminalWidth.get();
+      if (width !== null) return found(width);
+    }
     return resolvePath(this.view.get().payload(), path);
   }
 

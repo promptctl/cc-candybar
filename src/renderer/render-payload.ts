@@ -691,9 +691,9 @@ export interface DrawInputs {
   readonly back: number;
 }
 
-// [LAW:one-source-of-truth] The width a session's bar is drawn to: what its
-// client measured, else the default, less Claude Code's reserve — the one
-// value the payload's `term.cols` and the draw's options both carry.
+// [LAW:one-source-of-truth] Usable columns from the client's measurement or
+// the default, less Claude Code's reserve. Both the canonical payload and a
+// request's presentation derive columns here.
 export function renderWidth(hints: ClientHints): number {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
@@ -908,8 +908,8 @@ export function composePayload(
     ...effectiveInputs(effective),
     history: draw.history,
     navigation: { back: draw.back },
-    // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
-    // measured it (`renderWidth`), the one value the draw's options carry.
+    // The live width for feeds and source keys. A waiting request can
+    // project its own columns into its draw without replacing this payload.
     term: { cols: renderWidth(hints) },
     ...settingCounts,
     ...(configPath !== null && { configPath }),
