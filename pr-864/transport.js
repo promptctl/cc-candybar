@@ -50144,44 +50144,6 @@ async function readTail(path31, maxBytes) {
     }
   });
 }
-function readTailSync(path31, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code: code2 } = e;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
 
 // src/daemon/foundations/debug-types.ts
 init_globals();
@@ -55283,31 +55245,44 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
+// src/utils/regular-text.ts
+init_globals();
+function readRegularTextSync(path31) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error("not a file");
+    return readFileSync(fd, "utf8");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+
 // src/claude-settings-read.ts
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
+  try {
+    return readRegularTextSync(settingsPath);
+  } catch (e) {
+    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
       return "";
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return read2.value.buf.toString("utf8");
+    throw cannotRead(settingsPath, e);
   }
 }
 function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
   let text4;
   try {
     text4 = readClaudeSettingsText(settingsPath);
   } catch (e) {
-    return failed(reason(e), "read");
+    return failed(messageOf(e), "read");
   }
   try {
     return ok(parseSettings(settingsPath, text4));
   } catch (e) {
-    return failed(reason(e), "parse");
+    return failed(messageOf(e), "parse");
   }
 }
 function parseSettings(settingsPath, text4) {
@@ -55323,7 +55298,7 @@ function parseSettings(settingsPath, text4) {
   }
   return parsed2;
 }
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
+var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
 // src/segments/autocompact.ts
 init_globals();
@@ -88456,12 +88431,11 @@ var diskFiles = {
   folders: listFolders,
   text(file) {
     try {
-      return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
+      return { kind: "text", text: readRegularTextSync(file) };
     } catch (e) {
-      const err = e;
       return {
         kind: "unreadable",
-        error: err.code === "EISDIR" ? "not a file" : err.message
+        error: types.isNativeError(e) ? e.message : String(e)
       };
     }
   },
