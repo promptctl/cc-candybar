@@ -10,6 +10,7 @@ import {
   VERB_SET_STATE,
 } from "../../src/click/wire";
 import { assembleFacts } from "../../src/daemon/facts-assembly";
+import { environmentOutput } from "../../src/daemon/environment-output";
 import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -17,6 +18,7 @@ import {
 import { variableOf } from "../../src/daemon/foundations/session-env";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import type { RunReading } from "../../src/daemon/readings";
 import {
   recordingBootProblem,
   recordingInputProblem,
@@ -35,7 +37,7 @@ import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
-import { ABSENT, failed } from "../../src/utils/outcome";
+import { ABSENT, failed, ok } from "../../src/utils/outcome";
 import { pending, type Current } from "../../src/utils/reading";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
@@ -97,9 +99,11 @@ function checked(input: Partial<ReaderRenderRequest> = {}) {
 
 function facts(
   env: ReadonlyMap<string, Current<string>> = new Map(),
+  runs: ReadonlyMap<string, RunReading> = new Map(),
+  prior?: WorldState,
 ): WorldState {
   return assembleFacts(
-    undefined,
+    prior,
     SESSION,
     {
       lanes: {
@@ -115,7 +119,7 @@ function facts(
         hostName: ABSENT,
         hostUser: ABSENT,
         sources: new Map(),
-        runs: new Map(),
+        runs,
         env,
       },
       today: ABSENT,
@@ -235,6 +239,23 @@ test("an environment declaration without a value is recordable, including absent
   expect(
     recordingInputProblem(input({ kind: "world-state", worldState: blank })),
   ).toMatch(/environment source supplied a value/);
+});
+
+test("equal shell output keeps its wire bytes when newly bound environment makes it private", () => {
+  const observation = { reading: ok("same output"), fault: null };
+  const clean = facts(undefined, new Map([["run", observation]]));
+  const inherited = environmentOutput(observation, true);
+  const tainted = facts(undefined, new Map([["run", inherited]]), clean);
+  expect(
+    recordingInputProblem(input({ kind: "world-state", worldState: clean })),
+  ).toBeNull();
+  expect(
+    recordingInputProblem(input({ kind: "world-state", worldState: tainted })),
+  ).toMatch(/command returned data after receiving a session environment/);
+  expect(JSON.stringify(tainted.runs)).toBe(JSON.stringify(clean.runs));
+  expect(facts(undefined, new Map([["run", inherited]]), tainted)).toBe(
+    tainted,
+  );
 });
 
 test("capture refuses raw hook extensions and the raw hint payload the renderer receives for diagnostics", () => {

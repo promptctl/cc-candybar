@@ -73,6 +73,7 @@ import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
+import { isEnvironmentOutput } from "./environment-output.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
@@ -141,7 +142,7 @@ export interface HostWorld {
   readonly configs: RendererConfigs;
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
-  readonly unheard: (text: string) => void;
+  readonly unheard: (text: string, fromEnvironment?: true) => void;
 }
 
 export interface RendererHost {
@@ -901,7 +902,11 @@ export function rendererHost(
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
         : null;
-    if (failed !== null && effect.session === null) world.unheard(failed);
+    const unheard = (reason: string): void => {
+      if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
+      else world.unheard(reason);
+    };
+    if (failed !== null && effect.session === null) unheard(failed);
     const delivered = await deliver(
       () => doneOf(effect, outcome),
       [["effect", String(effect.id)]],
@@ -912,7 +917,7 @@ export function rendererHost(
       delivered.kind === "threw" &&
       delivered.failure.kind === "down"
     )
-      world.unheard(failed);
+      unheard(failed);
     return outcome;
   };
   // A change's or a refused present's, in the slot of the turn that

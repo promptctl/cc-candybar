@@ -13,6 +13,10 @@ import type { Instant } from "../utils/instant";
 import { ABSENT, ok, type Reading } from "../utils/outcome";
 import type { SessionId } from "./foundations/session-id";
 import type { Readings } from "./readings";
+import {
+  environmentOutput,
+  isEnvironmentOutput,
+} from "./environment-output.js";
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
@@ -101,14 +105,19 @@ export function assembleFacts(
   // Each run by digest; an entry whose reading and fault are both the prior's
   // is the prior entry itself, so `sameFacts` finds it unmoved.
   const runs: Record<string, RunFact> = Object.fromEntries(
-    [...lanes.runs].map(([digest, { reading, fault }]) => {
+    [...lanes.runs].map(([digest, observation]) => {
+      const { reading, fault } = observation;
       const held = prior?.runs[digest];
       const fact = stamp(held?.reading, reading);
+      const privateOutput = isEnvironmentOutput(observation);
       return [
         digest,
-        held !== undefined && held.reading === fact && held.fault === fault
+        held !== undefined &&
+        held.reading === fact &&
+        held.fault === fault &&
+        isEnvironmentOutput(held) === privateOutput
           ? held
-          : { reading: fact, fault },
+          : environmentOutput({ reading: fact, fault }, privateOutput),
       ];
     }),
   );

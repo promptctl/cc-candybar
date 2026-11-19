@@ -20,9 +20,12 @@ import type { CheckedRenderRequest } from "../renderer-interface/request-context
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { validateHookData } from "../utils/schema-validator.js";
 import { refusedHints } from "./foundations/protocol.js";
+import { isEnvironmentOutput } from "./environment-output.js";
 
 const SESSION_ENVIRONMENT =
   "a declared environment source supplied a value; record with that variable unset";
+const ENVIRONMENT_OUTPUT =
+  "a command returned data after receiving a session environment; record without that command output";
 const ACTION_ENVIRONMENT =
   "a run action supplies environment values; record without its environment overlay";
 const UNKNOWN_CONFIG =
@@ -33,9 +36,12 @@ const UNKNOWN_PROFILE =
 // [LAW:effects-at-boundaries] Export permits the original bytes or refuses the
 // capture. An environment reading can become arbitrary text in a frame,
 // write or diagnostic, so deleting its field cannot produce a faithful replay.
-function worldProblem({ env }: WorldState): string | null {
-  return Object.values(env).some((fact) => fact.kind === "ok")
-    ? SESSION_ENVIRONMENT
+function worldProblem({ env, runs, daemon }: WorldState): string | null {
+  if (Object.values(env).some((fact) => fact.kind === "ok"))
+    return SESSION_ENVIRONMENT;
+  return Object.values(runs).some(isEnvironmentOutput) ||
+    (daemon.actFailed !== null && isEnvironmentOutput(daemon.actFailed))
+    ? ENVIRONMENT_OUTPUT
     : null;
 }
 
@@ -138,6 +144,8 @@ export function recordingInputProblem({ event }: EventInput): string | null {
       return worldProblem(event.worldState) ?? contextProblem(event.context);
     case "world-state":
       return worldProblem(event.worldState);
+    case "effect-done":
+      return isEnvironmentOutput(event.outcome) ? ENVIRONMENT_OUTPUT : null;
     case "config":
       return configProblem(event.config);
     case "request":
@@ -153,7 +161,6 @@ export function recordingInputProblem({ event }: EventInput): string | null {
     case "due":
     case "viewers":
     case "retire":
-    case "effect-done":
       return null;
   }
 }

@@ -61,6 +61,10 @@ import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
+import {
+  environmentOutput,
+  isEnvironmentOutput,
+} from "./environment-output.js";
 import { RendererRecordings } from "./renderer-recording.js";
 import type { RecordingFile } from "./recording-file.js";
 import {
@@ -745,8 +749,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         configs: configDiscovery.forRenderer(name),
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text) => {
-          actFailed = joinedEvent(actFailed, text, instant());
+        unheard: (text, fromEnvironment) => {
+          // The unacknowledged text is included in the next warning.
+          const prior = actFailed;
+          actFailed = environmentOutput(
+            joinedEvent(prior, text, instant()),
+            fromEnvironment === true ||
+              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+          );
           restateFaults();
         },
       },
