@@ -39,6 +39,7 @@ import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
+  DaemonClosing,
   RendererDown,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
@@ -662,13 +663,13 @@ describe("ids a renderer mints", () => {
 });
 
 describe("a renderer process's close", () => {
-  test("what waits for a boot the close lands in fails as a closed renderer's", async () => {
+  test("closing cancels inputs waiting for boot", async () => {
     const { link, clock } = rig();
     link.arm();
     const waiting = link.renderer.answer(pin);
     const closed = link.close();
     await expect(waiting).rejects.toThrow(
-      new RendererDown("renderer main is closed"),
+      new DaemonClosing("renderer main input"),
     );
     clock.advance(1_000);
     await closed;
@@ -687,7 +688,7 @@ describe("a renderer process's close", () => {
     await closed;
     expect(child.opts.signal?.aborted).toBe(true);
     await expect(link.renderer.answer(pin)).rejects.toThrow(
-      new RendererDown("renderer main is closed"),
+      new DaemonClosing("renderer main input"),
     );
   });
 
@@ -698,7 +699,7 @@ describe("a renderer process's close", () => {
     child.say(startedLine(9001));
     clock.advance(YOUNG_MS);
     await settled();
-    link.beginClose();
+    expect(link.beginClose()).toBe("closing");
     const heard = child.written.length;
     void link.renderer.answer(pin).catch(() => {});
     await settled();
@@ -713,7 +714,7 @@ describe("a renderer process's close", () => {
     );
     expect(ends).toEqual([]);
     await expect(link.renderer.answer(pin)).rejects.toThrow(
-      new RendererDown("renderer main is closed"),
+      new DaemonClosing("renderer main input"),
     );
     await link.close();
   });
@@ -745,19 +746,38 @@ describe("a renderer process's close", () => {
     );
   });
 
-  test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it fails as closed", async () => {
+  test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it is cancelled", async () => {
     const { link, children, clock } = rig();
     link.arm();
     const child = children[0]!;
     const waiting = link.renderer.answer(pin);
-    link.beginClose();
+    expect(link.beginClose()).toBe("closed");
     expect(child.stdinEnded).toBe(true);
     await expect(waiting).rejects.toThrow(
-      new RendererDown("renderer main is closed"),
+      new DaemonClosing("renderer main input"),
     );
     clock.advance(CLOSE_GRACE_MS);
     await settled();
     expect(child.opts.signal?.aborted).toBe(true);
+    await link.close();
+  });
+
+  test("a startup error remains visible after a close begins", async () => {
+    let reject = (_error: Error): void => {};
+    const starting = new Promise<void>((_resolve, fail) => {
+      reject = fail;
+    });
+    const { link, children, logs, levels } = rig(() => starting);
+    link.arm();
+    expect(link.beginClose()).toBe("closed");
+
+    reject(new Error("startup data is invalid"));
+    await settled();
+
+    const error = logs.findIndex((line) => line.includes("start failed"));
+    expect(logs[error]).toContain("startup data is invalid");
+    expect(levels[error]).toBe("error");
+    children[0]!.exit(EXITED);
     await link.close();
   });
 
@@ -766,7 +786,7 @@ describe("a renderer process's close", () => {
     link.arm();
     children[0]!.exit(CRASHED);
     await settled();
-    link.beginClose();
+    expect(link.beginClose()).toBe("closed");
     clock.advance(BACKOFF_MAX_MS);
     expect(children).toHaveLength(1);
     await link.close();

@@ -24,7 +24,20 @@ import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { ServedDaemon } from "../../../src/daemon/daemon";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
-import type { RendererBoot } from "../../../src/renderer-interface/interface";
+import {
+  processPort,
+  type RendererPort,
+} from "../../../src/daemon/renderer-process";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+  type RendererName,
+} from "../../../src/daemon/foundations/renderer-name";
+import {
+  rendererOf,
+  type RendererBoot,
+} from "../../../src/renderer-interface/interface";
+import type { LaunchResult } from "../../../src/proc/launcher";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { processProbe } from "../../helpers/host";
 import {
@@ -42,14 +55,72 @@ import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
-import { buildDaemon, bundleAt, prepareDaemon, statsOf } from "../../helpers/in-worker-daemon";
+import {
+  buildDaemon,
+  bundleAt,
+  prepareDaemon,
+  statsOf,
+} from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
+import { heldClock } from "../../helpers/held-clock";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
 const VALUE_CLOSE = sessionIdOf("value-close");
+const WORKTREE = rendererNameOf("worktree");
+
+// The daemon and its process supervisor are real. The channel keeps one
+// renderer boot waiting for the child, with end and crash under the test's clock.
+function waitingRenderer(waitingFor: RendererName) {
+  const launches: Array<(result: LaunchResult) => void> = [];
+  const pushes: Array<[RendererName, string]> = [];
+  const closed: RendererName[] = [];
+  const supervised = processPort({
+    cwd: "/",
+    heapCapMb: 64,
+    launcher: {
+      launchChannel: () => {
+        let end!: (result: LaunchResult) => void;
+        const ended = new Promise<LaunchResult>((resolve) => {
+          end = resolve;
+        });
+        launches.push(end);
+        return {
+          pid: 9001,
+          write: () => {},
+          end: () => end({ ok: true, stdout: "", stderr: "", exitCode: 0 }),
+          ended,
+        };
+      },
+    },
+  });
+  const local = inProcessRenderer();
+  const port: RendererPort = (prepared) => {
+    const chosen = prepared.name === waitingFor ? supervised : local;
+    return {
+      start: (own) => {
+        const link = chosen(prepared).start(own);
+        return {
+          ...link,
+          renderer: rendererOf({
+            event: (input) => link.renderer.answer(input),
+            adapter: (input) => {
+              pushes.push([prepared.name, input.push.kind]);
+              return link.renderer.answer(input);
+            },
+          }),
+          close: async () => {
+            await link.close();
+            closed.push(prepared.name);
+          },
+        };
+      },
+    };
+  };
+  return { port, launches, pushes, closed };
+}
 
 jest.setTimeout(30_000);
 
@@ -111,6 +182,7 @@ describe("the daemon is a value", () => {
       checkout?: string;
       digest?: string;
       profile?: () => never;
+      renderer?: RendererPort;
     } = {},
   ): ServedDaemon => {
     const { profile } = inputs;
@@ -123,6 +195,7 @@ describe("the daemon is a value", () => {
       ),
       ...(inputs.clock && { clock: inputs.clock }),
       ...(profile && { profile }),
+      ...(inputs.renderer && { renderer: inputs.renderer }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -287,6 +360,76 @@ describe("the daemon is a value", () => {
     expect(daemon.close()).toBe(closing);
     expect(() => daemon.serve()).toThrow("the daemon closed");
     await expect((await closing).settled).resolves.toEqual({ unreaped: [] });
+  });
+
+  test("shutdown closes a primary still booting without requesting its journal or views", async () => {
+    const renderer = waitingRenderer(MAIN_RENDERER);
+    const daemon = construct({ renderer: renderer.port });
+    daemon.arm();
+    expect(renderer.launches).toHaveLength(1);
+
+    await close(daemon);
+
+    expect(renderer.pushes).toEqual([]);
+    expect(renderer.closed).toEqual([MAIN_RENDERER]);
+    await Promise.all(openLogs.map((log) => log.drained()));
+    const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
+    expect(log).toContain("renderer main[1] exited in the daemon's close");
+    expect(log).not.toMatch(
+      /main close-(journal|views) failed|renderer main\[1\] start failed/,
+    );
+  });
+
+  test("shutdown drains a live primary and cancels the restart of a down named renderer", async () => {
+    writeConfig(PADDED);
+    const clock = heldClock(new Date());
+    const renderer = waitingRenderer(WORKTREE);
+    const daemon = construct({ clock, renderer: renderer.port });
+    daemon.arm();
+    await answer(daemon, renderRequest("live-primary"));
+    const requested = daemon.handle(
+      classifyInbound({
+        ...renderRequest("down-worktree"),
+        env: plainEnvironment({ ...process.env, CC_CANDYBAR_NAME: WORKTREE }),
+        client: {
+          kind: "node",
+          bundle: path.join(root, "checkout", "dist", "index.mjs"),
+          source: null,
+        },
+      }),
+      () => false,
+      daemon.stats.accept(),
+      () => false,
+    );
+    expect(renderer.launches).toHaveLength(1);
+    renderer.launches[0]!({
+      ok: false,
+      reason: "signal",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: "SIGTERM",
+    });
+    expect(await requested).toMatchObject({
+      kind: "reply",
+      resp: {
+        ok: false,
+        error: expect.stringContaining("renderer worktree is down"),
+      },
+    });
+
+    await close(daemon);
+    await clock.settle(60_000);
+
+    expect(renderer.pushes).toEqual([
+      [MAIN_RENDERER, "close-journal"],
+      [MAIN_RENDERER, "close-views"],
+    ]);
+    expect(renderer.closed).toEqual([MAIN_RENDERER, WORKTREE]);
+    expect(renderer.launches).toHaveLength(1);
+    await Promise.all(openLogs.map((log) => log.drained()));
+    const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
+    expect(log).not.toMatch(/worktree close-(journal|views) failed/);
   });
 
   test("closing refuses requests and subscriptions without throwing or writing a click", async () => {
