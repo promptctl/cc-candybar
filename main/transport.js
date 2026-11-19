@@ -88308,13 +88308,12 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
 async function clickLaunch(launch, opts, what, said2) {
   const result = await launch(opts);
   if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
-  const held = clickFailed(result, what);
-  return { outcome: { kind: "skipped", reason: held }, said: held };
-}
-function clickFailed(r, what) {
-  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
-  if (r.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(`${what} failed (${failureText(r)})`);
+  if (result.reason === "aborted") {
+    const reason2 = new DaemonClosing(what).message;
+    return { outcome: { kind: "closing", reason: reason2 }, said: reason2 };
+  }
+  const reason = result.reason === "rate-limited" ? `${what} not run: ${failureText(result)}` : `${what} failed (${failureText(result)})`;
+  return { outcome: { kind: "failed", reason }, said: reason };
 }
 
 // src/daemon/acts.ts
