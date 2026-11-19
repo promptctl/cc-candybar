@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-837",
+      "ref": "refs/pull/837/merge",
+      "sha": "421152efd44cf7e53255c3c6a9bda59a46db99a0",
+      "timestamp": "2026-11-19T09:18:15.623Z",
+      "commits": [
+        {
+          "sha": "421152efd44cf7e53255c3c6a9bda59a46db99a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:17:04-07:00",
+          "message": "Merge ecfcb1753f90966fefbf335b562eb9345716708f into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
+        },
+        {
+          "sha": "ecfcb1753f90966fefbf335b562eb9345716708f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:15:56-07:00",
+          "message": "test(doctor): the effect-refresh e2e clicks each doctor run after the one before it has reported\n\nA click replaces the session's run still on its way, which is then never\nread, so two clicks a draw apart logged one run or two depending on how soon\nthe first reading landed, which a loaded runner decides; the test then waited\nfor four logged runs that never came.\n"
+        },
+        {
+          "sha": "dd1e77c85c4803f1d229a486301001ba58567a35",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:15:55-07:00",
+          "message": "fix(host): a process's world drops the variables that locate a repository, so a daemon started from a GIT_DIR shell reads each session's own repo (99f8)\n\nThe detached daemon inherits the environment of whichever shell spawned it.\nGIT_DIR, GIT_WORK_TREE, the rest of `git rev-parse --local-env-vars` and\nGH_REPO in that shell pointed every session's git and forge reads at the\nwrong repository, and `cc-candybar doctor` run there drew the same wrong bar.\n\nThe world is now built by removing those names from the process's own\nenvironment before anything launches, so every child (git, gh, the renderer,\na plugin clone) inherits the drop. git names the variables; a fixed list\nstands in when it cannot (the ask fails, names nothing, or an old git echoes\nthe flag back), and that fallback is loud: a daemon log warning, a standing\nwarning on the bar, and a failing `environment` doctor row with the reason.\nProcesses that stand in for a session (the Node client, check, doctor, the\nsite) report the dropped values back as the session's own environment.\nplugin install's local overlay of the same variables is removed, since the\nworld now owns the drop.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "565297bc5ad531e20862f40bb57808d69d854770",
