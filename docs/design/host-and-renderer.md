@@ -122,6 +122,8 @@ A live session has one renderer record containing its current context and its la
 
 A draw returns frame observations. The host confirms request replies when their writes complete and pushed frames once a subscriber confirms delivery. A subscriber already showing the same bytes can confirm without another write. The renderer keeps accepted layout, cells and diagnostics by surface, with one motion and menu baseline per session. An older completion can fill its surface without changing newer session motion. View replacement and feed closure retire the matching presentation targets, so their pending receipts can settle without restoring the old layout. The successor view can still serve the copy text from a frame that remains visible.
 
+An open pane feed keeps its config entry pinned when its view fails to open. A successful changed config delivery can reopen the view using the session's current context. Frame ticks read the ready view or show its opening error.
+
 ## 7. Interfaces
 
 ### The renderer interface
