@@ -70220,17 +70220,20 @@ function renderCacheBudget(memoryLimitBytes2) {
   );
 }
 var MAX_ENTRIES = 256;
-function chainOf(snapshot, locs) {
-  const { chain: chain2 } = snapshot;
+function configPaths(snapshot) {
+  return snapshot.chain.flatMap(
+    ({ path: path31, content }) => content.kind === "text" ? [path31] : []
+  );
+}
+function configFiles(chain2) {
+  const textPath = (role) => {
+    const layer = layerForRole(chain2, role);
+    return layer?.content.kind === "text" ? layer.path : null;
+  };
   return {
-    // [LAW:one-source-of-truth] The files reported are the files merged: a
-    // layer not written or not read is no layer of the load.
-    layers: chain2.filter((l) => l.content.kind === "text").map((l) => ({ path: l.path, role: l.role })),
-    // Every chain holds the user layer: it is the one no answer gates.
-    home: layerForRole(chain2, "user").path,
-    writable: chain2.filter((l) => writable(l.content)).map((l) => l.role),
-    snapshot,
-    locs
+    user: textPath("user"),
+    project: textPath("project"),
+    writable: chain2.filter(({ content }) => writable(content)).map(({ role }) => role)
   };
 }
 function pluginLoadLine(layers, {
@@ -70255,7 +70258,8 @@ function pluginLoadLine(layers, {
 }
 function configLoadedLine(entry, cause, settled3) {
   const { repo: repo2 } = entry.snapshot;
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
+  const { projectDir, cwd: cwd2 } = entry.origin;
+  return `config loaded projectDir=${valueOf(projectDir)} cwd=${valueOf(cwd2)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -70277,19 +70281,10 @@ function plugins(p2) {
   };
 }
 function loadKey(inputs) {
-  const { loaded, chain: chain2 } = inputs;
+  const { loaded } = inputs;
   return digestOf({
     cwd: inputs.cwd,
-    chain: {
-      layers: chain2.layers,
-      home: chain2.home,
-      writable: chain2.writable,
-      // Not keyed: its texts reach the state only through `loaded`, keyed
-      // below, where a whitespace or comment edit moves nothing; its paths
-      // are `layers`.
-      snapshot: null,
-      locs: chain2.locs
-    },
+    files: inputs.files,
     loaded: {
       layers: loaded.layers.map(
         (l) => ({
@@ -70329,18 +70324,15 @@ function declaredSources(config) {
     if (decl.kind === "source") sources.set(name, decl.storage);
   return sources;
 }
-function resolveLoad(cwd2, chain2) {
+function resolveLoad(cwd2, snapshot, home) {
   const warnings = [];
   try {
-    const loaded = loadSnapshot(
-      chain2.snapshot,
-      chain2.locs.home,
-      DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) }
-    );
+    const loaded = loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, {
+      warned: (w) => warnings.push(...w)
+    });
     const inputs = {
       cwd: cwd2,
-      chain: chain2,
+      files: configFiles(snapshot.chain),
       loaded,
       sources: declaredSources(loaded.config)
     };
@@ -70351,12 +70343,11 @@ function resolveLoad(cwd2, chain2) {
   }
 }
 function buildRenderState(load, deps) {
-  const { cwd: cwd2, chain: chain2, loaded } = load;
+  const { cwd: cwd2, files, loaded } = load;
   const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
-  const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
-  const projectPath = layerForRole(chain2.snapshot.chain, "project")?.path;
-  const projectRaw = layers.find((layer) => layer.path === projectPath)?.raw;
+  const userRaw = layers.find(({ path: path31 }) => path31 === files.user)?.raw ?? {};
+  const projectRaw = layers.find(({ path: path31 }) => path31 === files.project)?.raw;
   const inserted = layers.flatMap(
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
@@ -70399,10 +70390,10 @@ function buildRenderState(load, deps) {
       registry,
       compiled: registration.compiled,
       // What the menu's resets clear is the user layer's: they name no other.
-      authoredRoots: authoredRoots(merged, homeRaw),
-      fileHeldSettings: fileHeldSettings(homeRaw),
-      configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
-      writable: chain2.writable,
+      authoredRoots: authoredRoots(merged, userRaw),
+      fileHeldSettings: fileHeldSettings(userRaw),
+      configPath: files.user,
+      writable: files.writable,
       remainingLanes: laneDefaultsAfterReset(
         config,
         loaded.base,
@@ -70433,14 +70424,10 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle(chain2, resolveWarnings, attempt4) {
-  const common = {
-    // [LAW:one-source-of-truth] The files reported are the chain loaded.
-    layers: chain2.layers.map((l) => l.path),
-    home: chain2.home
-  };
+function settle(snapshot, resolveWarnings, attempt4) {
+  const layers = configPaths(snapshot);
   const warnings = (own2) => [
-    ...chain2.snapshot.notices,
+    ...snapshot.notices,
     ...resolveWarnings,
     ...own2
   ];
@@ -70448,7 +70435,7 @@ function settle(chain2, resolveWarnings, attempt4) {
     case "built":
     case "kept":
       return {
-        ...common,
+        layers,
         kind: attempt4.kind,
         warnings: warnings(attempt4.state.buildWarnings),
         state: attempt4.state,
@@ -70456,7 +70443,7 @@ function settle(chain2, resolveWarnings, attempt4) {
       };
     case "failed":
       return {
-        ...common,
+        layers,
         kind: "failed",
         warnings: warnings(attempt4.warnings),
         state: null,
@@ -70465,27 +70452,14 @@ function settle(chain2, resolveWarnings, attempt4) {
       };
   }
 }
-function loadChain(cwd2, chain2, deps, served = null) {
-  const resolved = resolveLoad(cwd2, chain2);
-  if (resolved.kind === "failed") {
-    return settle(chain2, [], resolved);
-  }
-  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle(chain2, resolved.warnings, attempt4);
-}
 function loadOrigin(cwd2, snapshot, deps, served = null) {
-  return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
+  const resolved = resolveLoad(cwd2, snapshot, deps.locations.home);
+  if (resolved.kind === "failed") return settle(snapshot, [], resolved);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle(snapshot, resolved.warnings, attempt4);
 }
 function fallbackState(cwd2, snapshot, deps) {
-  const resolved = resolveLoad(cwd2, {
-    layers: [],
-    home: "",
-    // The fallback has no loaded chain for its writer to prove.
-    writable: [],
-    snapshot: { ...snapshot, chain: [] },
-    locs: deps.locations
-  });
-  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps);
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause
@@ -70645,7 +70619,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
   // now. Its entry, when it has one, reloads from it unless it digests as the
   // one the entry last loaded, and a reload whose load inputs did not move
-  // keeps the state it serves (`loadChain`).
+  // keeps the state it serves (`loadOrigin`).
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
@@ -70710,17 +70684,16 @@ var RenderCache = class {
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    const { projectDir, cwd: cwd2 } = origin;
     const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
-    const loaded = this.load(cwd2, snapshot, null);
+    const { projectDir, cwd: cwd2 } = origin;
+    const loaded = this.load(origin, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     const entry = {
       origin,
-      projectDir,
-      cwd: cwd2,
-      configFile: origin.target.path,
-      configLayers: loaded.layers,
+      get configLayers() {
+        return configPaths(this.snapshot);
+      },
       snapshot,
       digest: digest2,
       lastError: loaded.error,
@@ -70884,12 +70857,13 @@ var RenderCache = class {
   // the budget, once however many it opens.
   opened(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
+    const { cwd: cwd2 } = entry.origin;
     let view;
     try {
       const { currentRequest } = this.deps;
       view = openView(
         state,
-        entry.cwd,
+        cwd2,
         facts,
         {
           source: this.deps.source,
@@ -70908,7 +70882,7 @@ var RenderCache = class {
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${cwd2} views=${this.views.size}`
     );
     return view;
   }
@@ -71019,9 +70993,9 @@ var RenderCache = class {
   // `config` turn after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(cwd2, snapshot, served) {
+  load(origin, snapshot, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(cwd2, snapshot, this.deps, served);
+    return loadOrigin(origin.cwd, snapshot, this.deps, served);
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
   // snapshot the host handed in for its origin. None is an event the renderer
@@ -71179,10 +71153,9 @@ var RenderCache = class {
   reloadInto(entry, { snapshot, digest: digest2 }, cause) {
     const sessions = this.sessionsOn(entry);
     const served = entry.state;
-    const loaded = this.load(entry.cwd, snapshot, served);
+    const loaded = this.load(entry.origin, snapshot, served);
     entry.snapshot = snapshot;
     entry.digest = digest2;
-    entry.configLayers = loaded.layers;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
