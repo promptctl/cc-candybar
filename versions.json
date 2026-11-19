@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-892",
+      "ref": "refs/pull/892/merge",
+      "sha": "17e4ba755c5fdd1138e8157e8d10003640742d14",
+      "timestamp": "2026-11-19T18:00:13.090Z",
+      "commits": [
+        {
+          "sha": "17e4ba755c5fdd1138e8157e8d10003640742d14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:59:20Z",
+          "message": "Merge 29ba9bde41753e33e40225474e2da9a2c50b6fa4 into 39d25534f33645fbb1e93f152dd556dfba425eb3\n"
+        },
+        {
+          "sha": "29ba9bde41753e33e40225474e2da9a2c50b6fa4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:33:16-07:00",
+          "message": "fix(daemon): preserve Git checkout read errors\n"
+        }
+      ]
+    },
+    {
       "version": "pr-894",
       "ref": "refs/pull/894/merge",
       "sha": "855c70b31d5dcca4bd60e916c24318c8f0d650c7",
@@ -57,28 +79,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T17:54:38Z",
           "message": "chore(release): set `package.json` to 1.235.5\n\n## [1.235.5](https://github.com/promptctl/cc-candybar/compare/v1.235.4...v1.235.5) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** recover pinned pane views on config delivery ([#891](https://github.com/promptctl/cc-candybar/issues/891)) ([da639d7](https://github.com/promptctl/cc-candybar/commit/da639d74bdb0798ffa62eec23cd0beee4614be6f))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-892",
-      "ref": "refs/pull/892/merge",
-      "sha": "a54bf11251390cdba395dab4b0e629a269b66f4e",
-      "timestamp": "2026-11-19T17:44:55.021Z",
-      "commits": [
-        {
-          "sha": "a54bf11251390cdba395dab4b0e629a269b66f4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:43:45Z",
-          "message": "Merge 37ba3903eaa576f1d6aae2ea0d6ec9e4ed368365 into 1b747e5500b197edd1e1a626e5634c0f35723f44\n"
-        },
-        {
-          "sha": "37ba3903eaa576f1d6aae2ea0d6ec9e4ed368365",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:33:16-07:00",
-          "message": "fix(daemon): preserve Git checkout read errors\n"
         }
       ]
     },
