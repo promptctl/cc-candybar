@@ -135,8 +135,9 @@ Subcommands:
                            Record one renderer on the running daemon.
                            Stop publishes the recording to FILE. NAME
                            defaults to CC_CANDYBAR_NAME or main.
-  replay FILE [--frames]   Verify an entire recording offline. --frames
-                           prints the verified frames as JSON lines.
+  replay FILE [--frames]   Verify a recording offline with its renderer
+                           build. --frames prints verified frames as JSON
+                           lines, up to 32 MiB.
   frames --lane LANE [--config PATH | --config-only PATH]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a

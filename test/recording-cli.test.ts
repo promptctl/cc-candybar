@@ -126,6 +126,44 @@ test("an incomplete or unreadable recording sends no frames", () =>
     });
   }));
 
+test("frame export caps UTF-8 bytes and discards an accepted prefix", () =>
+  fixture(async (dir) => {
+    const file = path.join(dir, "many-frame-bytes.jsonl");
+    await writeFile(file, "turn\nend\n");
+    const manyBytes: typeof replay = async (lines, onTurn) => {
+      for await (const line of lines) {
+        if (line !== "turn" || onTurn === undefined) continue;
+        onTurn(input, output);
+        onTurn(input, {
+          ...output,
+          effects: [],
+          frames: [
+            {
+              session,
+              frame: {
+                kind: "drawn",
+                receipt: 3 as EffectId,
+                bar: frame("é".repeat(16 * 1024 * 1024)),
+                handoff: null,
+              },
+            },
+          ],
+        });
+      }
+      return { turns: 2 };
+    };
+    expect(await replayPlan([file, "--frames"], manyBytes)).toMatchObject({
+      stdout: "",
+      stderr: expect.stringContaining("frame output exceeds 32 MiB"),
+      code: 1,
+    });
+    expect(await replayPlan([file], manyBytes)).toEqual({
+      stdout: "Verified 2 renderer turns.\n",
+      stderr: "",
+      code: 0,
+    });
+  }));
+
 test("the record CLI refuses invalid arguments and uses only the running socket", () =>
   fixture(async (dir) => {
     const world = {

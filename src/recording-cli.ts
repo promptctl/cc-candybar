@@ -1,6 +1,6 @@
-import { open } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { Buffer } from "node:buffer";
 import type { CliPlan } from "./cli-plan.js";
 import {
   describeFailure,
@@ -18,11 +18,14 @@ import type {
   EventInput,
   RendererOutput,
 } from "./renderer-interface/interface.js";
+import { readRegularTextLines } from "./utils/regular-text.js";
 
 const RECORD_USAGE =
   "Usage: cc-candybar record start <file> [--renderer NAME]\n" +
   "       cc-candybar record stop [--renderer NAME]";
 const REPLAY_USAGE = "Usage: cc-candybar replay <file> [--frames]";
+const FRAME_EXPORT_MIB = 32;
+const FRAME_EXPORT_BYTES = FRAME_EXPORT_MIB * 1024 * 1024;
 
 // Recording can queue behind a turn, replace a process, or publish a file.
 const RECORD_BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 5_000 };
@@ -51,8 +54,7 @@ function recordCommand(
   });
   const [action, file, ...extra] = positionals;
   const renderer = rendererNameOf(values.renderer ?? defaultRenderer);
-  if (action === "stop" && file === undefined)
-    return { action, renderer };
+  if (action === "stop" && file === undefined) return { action, renderer };
   if (
     action === "start" &&
     file !== undefined &&
@@ -118,29 +120,22 @@ function replayArgs(args: readonly string[]): {
   return { file, frames: values.frames };
 }
 
-// [LAW:effects-at-boundaries] The CLI opens the file once and gives the
-// replay engine lines. Reading ends on success, divergence, or an I/O error.
-async function* recordingLines(file: string): AsyncIterable<string> {
-  const handle = await open(file, "r");
-  try {
-    const lines = handle.readLines({ encoding: "utf8", autoClose: false });
-    try {
-      yield* lines;
-    } finally {
-      lines.close();
-    }
-  } finally {
-    await handle.close();
-  }
-}
-
 function collectFrames(lines: string[]): ReplayTurn {
+  let bytes = 0;
   const emit = (
     session: string,
     surface: "statusline" | "pane",
     frame: WireFrame,
   ): void => {
-    lines.push(JSON.stringify({ session, surface, frame }) + "\n");
+    const line = JSON.stringify({ session, surface, frame }) + "\n";
+    bytes += Buffer.byteLength(line);
+    // [LAW:carrying-cost] Frame export holds output until verification.
+    // Keep the optional buffer bounded. Summary mode allocates no buffer.
+    if (bytes > FRAME_EXPORT_BYTES)
+      throw new Error(
+        `frame output exceeds ${FRAME_EXPORT_MIB} MiB. Replay without --frames to verify the recording.`,
+      );
+    lines.push(line);
   };
   return (_input, output) => {
     for (const effect of output.effects) {
@@ -170,7 +165,7 @@ export async function replayPlan(
   const frames: string[] | null = chosen.frames ? [] : null;
   try {
     const { turns } = await replay(
-      recordingLines(chosen.file),
+      readRegularTextLines(chosen.file),
       frames === null ? undefined : collectFrames(frames),
     );
     const summary = `Verified ${turns} renderer ${turns === 1 ? "turn" : "turns"}.\n`;

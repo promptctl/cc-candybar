@@ -394,7 +394,7 @@ Every renderer's panel is the same, because there is one kind of renderer. Watch
 
 Recording preserves the original accepted data. It drops the entire capture if a declared `env` source has returned a value or a `run` action contains an environment overlay. Raw session environments stay with the host. A saved file can still contain project config, paths and displayed data and should be treated as private.
 
-`cc-candybar replay <file> [--frames]` recomputes each reply without executing its effects. A turn mismatch names the turn and field path and exits unsuccessfully. With `--frames`, the CLI publishes JSON lines for statusline presents, pane draws and distinct statusline handoffs only after verifying the terminal entry and the entire file. Its verification summary then goes to stderr.
+`cc-candybar replay <file> [--frames]` recomputes each reply without executing its effects. Use the same build as the recorded renderer. The private wire version checks compatibility between the host and worker. Replay also depends on the worker's drawing and state transition logic. A turn mismatch names the turn and field path and exits unsuccessfully. With `--frames`, the CLI publishes JSON lines for statusline presents, pane draws and distinct statusline handoffs only after verifying the terminal entry and the entire file. Its verification summary then goes to stderr. Frame exports over 32 MiB fail without emitting frames. Summary mode verifies incrementally without retaining frames.
 
 ## 12. Implementation plan
 
