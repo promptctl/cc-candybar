@@ -231,11 +231,17 @@ describe("runPlugin", () => {
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
     const url = `file://${repo}`;
 
-    // A hook's GIT_DIR names another repository; the clone ignores it.
+    // A hook's or a vcsh shell's environment names another repository; the
+    // clone ignores it.
     const other = path.join(dir, "other");
     execFileSync("git", ["init", "-q", other]);
     const hooked = worldOf(
-      hostOf({ ...world.host.env, GIT_DIR: path.join(other, ".git") }),
+      hostOf({
+        ...world.host.env,
+        GIT_DIR: path.join(other, ".git"),
+        GIT_WORK_TREE: other,
+        GH_REPO: "o/other",
+      }),
     );
     expect(runPlugin(["install", url], hooked)).toBe(0);
     expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(

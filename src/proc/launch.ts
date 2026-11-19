@@ -47,6 +47,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
+import { REPOSITORY_LOCAL_ENV } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -132,10 +133,26 @@ function checkRateLimit(
 // for a `shell` source never reached the shell it spawned
 // (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
 // null removes that variable: node's spawn skips undefined values.
-function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+function childEnv(
+  scope: LaunchScope,
+  opts: Pick<LaunchOpts, "environment" | "envOverlay">,
+): NodeJS.ProcessEnv {
+  const { base, withheld } =
+    opts.environment === undefined
+      ? // [LAW:single-enforcer] The owner's inherited environment is whichever
+        // shell spawned it, so the variables naming a repository there (a git
+        // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are withheld
+        // from every child that inherits it: a child's repository is its
+        // working directory's.
+        { base: scope.inherited, withheld: REPOSITORY_LOCAL_ENV }
+      : // [LAW:one-source-of-truth] A session's own environment passes as it
+        // is: the session owns its variables, a GIT_DIR in it included.
+        { base: opts.environment, withheld: [] };
+  const env: NodeJS.ProcessEnv = { ...base };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
+  // After the overlay, so no launch's overlay puts a withheld name back.
+  for (const name of withheld) delete env[name];
   return env;
 }
 
@@ -169,8 +186,8 @@ function rateLimitedResult(
 // Who a launcher's launches belong to.
 export interface LaunchScope {
   // The environment this owner's children inherit, under each launch's
-  // `envOverlay`. The owner's root passes the same environment it reads its own
-  // facts from, so a daemon has one.
+  // `envOverlay` and less the variables that name a repository. The owner's
+  // root passes the same environment it reads its own facts from, unedited.
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
@@ -417,6 +434,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
