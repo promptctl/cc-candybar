@@ -28477,6 +28477,84 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
+// src/config/loader/repo-gate.ts
+init_globals();
+var REPO_ANSWERS = ["approved", "declined"];
+function answerDir(d) {
+  return d.link.kind === "linked" ? d.link.main : d.dir;
+}
+var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
+function ruling(answers, d) {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo2 = answerOf(answers.value, key);
+  const own2 = answerOf(answers.value, d.dir);
+  if (repo2 === null) {
+    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
+  }
+  return {
+    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
+    under: key
+  };
+}
+function gateRepos(answers, dirs, project) {
+  const reached = reachedDirs(dirs, project);
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing2 = (s) => ruled.filter((r) => r.standing === s);
+  const repos = (s) => [
+    ...new Set(standing2(s).map((r) => r.under))
+  ];
+  return {
+    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
+    approved: standing2("approved").map((r) => r.dir),
+    awaiting: repos("awaiting"),
+    declined: repos("declined"),
+    unproven: reached.flatMap(
+      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
+    ),
+    unread: answers.kind === "failed" ? answers.reason : null
+  };
+}
+function reachedDirs(dirs, project) {
+  return [
+    ...new Map(
+      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
+    ).values()
+  ];
+}
+function repoQuestion(answers, dirs, project) {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === void 0) return null;
+  const { standing: standing2, under: under2 } = ruling(answers, reached);
+  return {
+    dir: under2,
+    standing: standing2,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+  };
+}
+function withAnswer(book, dir, answer2, superseded) {
+  if (book[dir] === answer2 && superseded.length === 0) return book;
+  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
+  return { ...Object.fromEntries(rest2), [dir]: answer2 };
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  for (const [dir, answer2] of Object.entries(doc)) {
+    if (!REPO_ANSWERS.includes(answer2)) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function repoUnreadNotice(gate2) {
+  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+}
+
 // src/daemon/foundations/verb-error.ts
 init_globals();
 
@@ -28602,6 +28680,14 @@ var VERB_REWIND = "rewind";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
@@ -28757,7 +28843,7 @@ var VERB_NAMES = Object.freeze([
 function isEffectVerb(verb) {
   return Object.hasOwn(SAYS, verb);
 }
-function admitClick(verb, value) {
+function admitClick(verb, value, signer) {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
@@ -28804,13 +28890,24 @@ function admitClick(verb, value) {
       const args = separator === -1 ? [] : decodeWire(
         () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
       );
-      scoped.steps.push({ kind: "session", verb: name, args });
+      scoped.steps.push(
+        name === VERB_REPO_CONFIG ? admitRepoAnswer(scoped.id, args, signer) : { kind: "session", verb: name, args }
+      );
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
   return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+}
+function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
+  const answer2 = REPO_ANSWERS.find((known) => known === value);
+  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
 }
 
 // src/host.ts
@@ -30014,7 +30111,13 @@ init_globals();
 function hrefOfDrawnLink(link) {
   if (typeof link === "string") return link;
   if (link.kind === "href") return link.url;
+  if (link.kind === "repo-answer") return repoAnswerUrl(link, "");
   return effectsUrl([link.effect]);
+}
+function repoAnswerUrl({ session, dir, answer: answer2 }, proof) {
+  return effectsUrl([
+    { verb: VERB_REPO_CONFIG, args: [session, dir, answer2, proof] }
+  ]);
 }
 
 // src/click/link-signer.ts
@@ -47146,7 +47249,7 @@ var LinkProof = class {
         verb: target.effect.verb,
         args: Object.freeze([...target.effect.args])
       })
-    }) : Object.freeze({ kind: "href", url: target.url });
+    }) : Object.freeze({ ...target });
     this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
   }
 };
@@ -49919,7 +50022,7 @@ function parseClick(url, delivery, links) {
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value),
+      click: admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery
     };
@@ -50275,7 +50378,7 @@ function perLane(value) {
   );
 }
 var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 function parseLane(raw) {
   return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
 }
@@ -67683,7 +67786,7 @@ var FrameFeeds = class {
   send(watched, sub2) {
     const follower = watched.followers.get(sub2);
     if (watched.last === null || follower === void 0) return;
-    const json2 = answerOf(watched.last, sub2.lane);
+    const json2 = answerOf2(watched.last, sub2.lane);
     if (follower.sent === json2) return;
     follower.sent = json2;
     this.pushed++;
@@ -68441,7 +68544,12 @@ function publishingFrames(signer) {
         ...row,
         runs: row.runs.map(({ link, ...run3 }) => {
           if (link === void 0) return run3;
-          const href = hrefOfDrawnLink(link);
+          const href = typeof link !== "string" && link.kind === "repo-answer" ? repoAnswerUrl(
+            link,
+            signer.sign(
+              repoAnswerFields(link.session, link.dir, link.answer)
+            )
+          ) : hrefOfDrawnLink(link);
           return {
             ...run3,
             link: isBarLink(href) ? signer.signLink(href) : href
@@ -68634,84 +68742,6 @@ function addressText(at) {
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
 var import_node_path24 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/repo-gate.ts
-init_globals();
-var REPO_ANSWERS = ["approved", "declined"];
-function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
-}
-var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
-function ruling(answers, d) {
-  const key = answerDir(d);
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf2(answers.value, key);
-  const own2 = answerOf2(answers.value, d.dir);
-  if (repo2 === null) {
-    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
-  }
-  return {
-    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
-    under: key
-  };
-}
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
-  return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
-  };
-}
-function withAnswer(book, dir, answer2, superseded) {
-  if (book[dir] === answer2 && superseded.length === 0) return book;
-  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
-  return { ...Object.fromEntries(rest2), [dir]: answer2 };
-}
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
-}
 
 // src/utils/presence.ts
 init_globals();
@@ -70266,7 +70296,7 @@ var ISSUE_INDENT = " ";
 function channelRows(message2, opts, trailing) {
   const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link) => link === null ? base : base.withLink(link);
+  const styled = (link) => link === null ? base : styleWithLink(base, link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message2.lines.flatMap((line, i2) => {
     const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
@@ -70279,33 +70309,17 @@ function channelRows(message2, opts, trailing) {
 }
 
 // src/config/repo-question.ts
-function repoAnswerFields(sessionId2, dir, answer2) {
-  return {
-    sessionId: sessionId2,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer2
-  };
-}
-function repoQuestions(question, sessionId2, signer) {
+function repoQuestions(question, sessionId2) {
   const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
   return awaiting.map((dir) => {
     const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
-      (answer2) => diagnosticSpan(
-        `[${answer2 === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
-          {
-            verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId2,
-              dir,
-              answer2,
-              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
-            ]
-          }
-        ])
-      )
+      (answer2) => diagnosticSpan(`[${answer2 === "approved" ? "approve" : "decline"}]`, {
+        kind: "repo-answer",
+        session: sessionId2,
+        dir,
+        answer: answer2
+      })
     );
     const line = [diagnosticSpan(message2, null), ...answers];
     return {
@@ -82629,7 +82643,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds, inspect2) {
-  const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
+  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
   const idleSince = menuIdle.since(sessionId2, readings);
@@ -82649,7 +82663,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const questions = repoQuestions(entry.snapshot.repo, sessionId2, linkSigner2);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const errors2 = [
@@ -83205,7 +83219,7 @@ function sameDraw(previous2, next2, lane) {
   if (next2.kind === "failed")
     return previous2?.kind === "failed" && previous2.message === next2.message;
   if (previous2?.kind !== "drawn") return false;
-  const forLane = ({ bar, handoff }) => answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const forLane = ({ bar, handoff }) => answerOf2({ resp: bar, statusline: handoff ?? bar }, lane);
   const before = forLane(previous2);
   const after = forLane(next2);
   return before.depth === after.depth && before.rows.length === after.rows.length && before.rows.every(
@@ -85729,17 +85743,6 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
   };
 }
 var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
-var repoConfig = (args, ctx) => {
-  const [dir = "", answer2 = "", mac = ""] = args;
-  const sid = ctx.session;
-  const answered = REPO_ANSWERS.find((known) => known === answer2);
-  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  ctx.configWrites.answer(dir, answered);
-};
 var SESSION_HANDLERS = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
@@ -85757,7 +85760,6 @@ var SESSION_HANDLERS = {
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
   [VERB_RUN]: run2,
-  [VERB_REPO_CONFIG]: repoConfig,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 function foldEffects(steps2, log, perform, recordErrors) {
@@ -85912,8 +85914,17 @@ function runClick(click2, ctx) {
         click2.steps,
         c.log,
         (step4) => {
-          if (step4.kind === "global") globalAct(step4, c, sid);
-          else SESSION_HANDLERS[step4.verb](step4.args, c);
+          switch (step4.kind) {
+            case "global":
+              globalAct(step4, c, sid);
+              break;
+            case "session":
+              SESSION_HANDLERS[step4.verb](step4.args, c);
+              break;
+            case "repo-answer":
+              c.configWrites.answer(step4.dir, step4.answer);
+              break;
+          }
         },
         (message2) => holdClickError(c.sessionState, sid, message2, c.now())
       );
@@ -88252,7 +88263,6 @@ function mainRendererOf(inputs, host) {
   const parts = {
     ...host,
     time,
-    linkSigner: linkSigner2,
     sessionState: edits.view,
     renderCache,
     worldStates,
