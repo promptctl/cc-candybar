@@ -17,8 +17,8 @@
 // statusline requests answered in this process by the daemon's own parts
 // (src/daemon/local-bar.ts) — the host's discovery, a collector over a faked
 // session's owners, the main renderer, and the request's answer — so "check
-// passes" and "the daemon renders" cannot diverge. Each request turn's record
-// notes every fault its frame met, which is what the verdict reads.
+// passes" and "the daemon renders" cannot diverge. The verdict reads the
+// inspection that accompanies each pass's frame.
 
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
@@ -33,7 +33,7 @@ import { explicitConfigPath } from "./utils/user-path.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import type { World } from "./host";
 import { ansiOf, parseFrame, type Frame } from "./render/frame.js";
-import type { TurnRecord } from "./renderer-interface/interface.js";
+import type { StatuslineAnswer } from "./daemon/statusline-answer.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { createGates } from "./daemon/foundations/gates.js";
 import { instantOf } from "./utils/instant.js";
@@ -46,16 +46,11 @@ import { PROTOCOL_VERSION } from "./daemon/foundations/protocol.js";
 import { plainEnvironment } from "./daemon/foundations/session-env.js";
 import { checkRenderRequest } from "./daemon/render-checkpoint.js";
 import { EMPTY_STORED_STATE } from "./renderer-interface/stored-state.js";
-import {
-  readFaults,
-  KEPT_FAULTS,
-  type Fault,
-} from "./renderer-interface/noted-faults.js";
+import type { Fault } from "./renderer-interface/noted-faults.js";
 import { columnsReserving } from "./utils/terminal-width.js";
 import {
   commandDaemonFacts,
   localBar,
-  type LocalDraw,
   type RendererBuilder,
 } from "./daemon/local-bar.js";
 import {
@@ -265,7 +260,7 @@ function passesOf(
   };
 }
 
-// What one pass's draw met, read off its request turn's record.
+// What one pass's draw met, from the inspection it presented.
 interface PassReading {
   readonly pass: Pass;
   readonly frame: Frame | null;
@@ -276,30 +271,24 @@ interface PassReading {
   readonly advisories: readonly string[];
 }
 
-// The value a record notes under `key`, last as noted.
-function noted(record: TurnRecord, key: string): string | undefined {
-  return record.findLast(([k]) => k === key)?.[1];
-}
-
 // [LAW:types-are-the-program] Each fault's meaning for the verdict, by kind.
 // An error is the config's failure; a warning the walk met is a render error
 // the bar draws past; a warning about what the bar stands on is an advisory.
 // A kind this list does not name fails the verdict, naming it, until it says.
-function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
-  const threw = draw.turns.find((t) => t.kind === "threw");
-  const { answer } = draw;
-  // [LAW:no-silent-failure] A draw that threw is the renderer's own bug: it
-  // is that pass's one failure, so it neither loses what the other passes
-  // find nor drops the preset that reached it.
-  if (threw?.kind === "threw" || !answer.resp.ok || !("frame" in answer.resp))
+function readPass(
+  pass: Pass,
+  answer: StatuslineAnswer,
+  settleMs: number,
+): PassReading {
+  if (!answer.resp.ok || !("frame" in answer.resp))
     return {
       pass,
       frame: null,
       fatal: null,
       failures: [
         `render: ${
-          threw?.kind === "threw"
-            ? threw.failure.message
+          answer.outcome.kind !== "ok"
+            ? answer.outcome.message
             : answer.resp.ok
               ? "the answer carried no frame"
               : answer.resp.error
@@ -307,21 +296,13 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
       ],
       advisories: [],
     };
+
   const frame = parseFrame(answer.resp.frame);
-  // The request's turn, which an answer that carried a frame took last.
-  const record = draw.turns.at(-1)?.record ?? [];
-  const note = noted(record, "faults");
-  if (note === undefined)
+  if (answer.inspection === undefined)
     throw new Error(
-      `the request turn for session ${pass.session} noted no faults`,
+      `renderer presented no inspection for session ${pass.session}`,
     );
-  const faults = readFaults(note);
-  // [LAW:no-silent-failure] Each pass's session is drawn once, so its record
-  // is its session's first and holds the list.
-  if (faults === KEPT_FAULTS)
-    throw new Error(
-      `the request turn for session ${pass.session} kept faults no record of it noted`,
-    );
+  const { preset, faults, unreadSources } = answer.inspection;
   const fatal: string[] = [];
   const dropped: string[] = [];
   const failures: string[] = [];
@@ -375,24 +356,13 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
     }
   };
   faults.forEach(met);
-  const drew = noted(record, "preset");
-  if (pass.preset !== null && drew !== pass.preset)
+  if (pass.preset !== null && preset !== pass.preset)
     failures.push(
-      `render: the session asked for preset "${pass.preset}" drew preset "${drew}"`,
+      `render: the session asked for preset "${pass.preset}" drew preset "${preset}"`,
     );
-  // The sources never answered when the wait ended, as the draw's record
-  // names them (`name:why`).
-  const out = (noted(record, "sourcesPending") ?? "-")
-    .split(",")
-    .flatMap((entry) => {
-      const colon = entry.lastIndexOf(":");
-      return colon > 0 && entry.slice(colon + 1) === "unread"
-        ? [entry.slice(0, colon)]
-        : [];
-    });
-  if (out.length > 0)
+  if (unreadSources.length > 0)
     advisories.push(
-      `source${out.length === 1 ? "" : "s"} still running after ${settleMs} ms, drawn as pending: ${out.join(", ")}`,
+      `source${unreadSources.length === 1 ? "" : "s"} still running after ${settleMs} ms, drawn as pending: ${unreadSources.join(", ")}`,
     );
   return {
     pass,
