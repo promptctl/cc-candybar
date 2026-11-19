@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-883",
+      "ref": "refs/pull/883/merge",
+      "sha": "ca97743391cfe8f1dafd5b256560501b6a725acd",
+      "timestamp": "2026-11-19T15:13:05.349Z",
+      "commits": [
+        {
+          "sha": "ca97743391cfe8f1dafd5b256560501b6a725acd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:12:13Z",
+          "message": "Merge f8140fe7d377d4db185e40978f1fca1416d5b551 into f10951d9400d761190b757a8dd55db47ac30e372\n"
+        },
+        {
+          "sha": "f8140fe7d377d4db185e40978f1fca1416d5b551",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:00:46-07:00",
+          "message": "refactor(renderer): boot from host-resolved locations\n"
+        }
+      ]
+    },
+    {
       "version": "pr-880",
       "ref": "refs/pull/880/merge",
       "sha": "15caa7ee2390009f7a845e8447d1ba74e64489f9",
@@ -106,28 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-883",
-      "ref": "refs/pull/883/merge",
-      "sha": "90379a1e0868f1c24213af8436c2a45cdb080fd7",
-      "timestamp": "2026-11-19T15:03:25.713Z",
-      "commits": [
-        {
-          "sha": "90379a1e0868f1c24213af8436c2a45cdb080fd7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:01:57-07:00",
-          "message": "Merge fc26d762185c5590dd5cd6f09d25f172b3571c6e into 4be48fcadb9a7a053dbeb12bdcfa3fc73e0af867\n"
-        },
-        {
-          "sha": "fc26d762185c5590dd5cd6f09d25f172b3571c6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:00:46-07:00",
-          "message": "refactor(renderer): boot from host-resolved locations\n"
         }
       ]
     },
