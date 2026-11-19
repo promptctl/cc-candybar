@@ -28820,6 +28820,17 @@ init_os();
 // src/proc/repository-local-env.ts
 init_globals();
 
+// src/proc/forge.ts
+init_globals();
+var FORGE_CLI = {
+  github: "gh",
+  gitlab: "glab"
+};
+var FORGE_REPOSITORY_VARS = {
+  github: ["GH_REPO"],
+  gitlab: ["GITLAB_REPO"]
+};
+
 // src/proc/launcher.ts
 init_globals();
 
@@ -28909,8 +28920,8 @@ function parseRepositoryLocalEnv(result) {
     reason: `git answered ${JSON.stringify(stray)}, which names no variable`
   };
 }
-var askGit = (limit) => (launcher) => parseRepositoryLocalEnv(
-  launcher.launchSync({
+var askGit = async (launcher, limit) => parseRepositoryLocalEnv(
+  await launcher.launch({
     bin: "git",
     args: ["rev-parse", "--local-env-vars"],
     environment: "inherited",
@@ -28918,7 +28929,21 @@ var askGit = (limit) => (launcher) => parseRepositoryLocalEnv(
     category: "repository-local-env"
   })
 );
-var repositoryLocalEnvFault = (answer2) => answer2.kind === "named" ? null : `git could not name its repository-local environment variables: ${answer2.reason}`;
+var withheldFor = (answer2) => [
+  ...Object.values(FORGE_REPOSITORY_VARS).flat(),
+  ...answer2.kind === "named" ? answer2.names : []
+];
+var CONSEQUENCE = {
+  daemon: "so the branch and PR shown may come from the repository of the shell that started the daemon, until the daemon restarts",
+  "plugin install": "so a clone could act on the repository of the shell it runs in"
+};
+var describeUnknown = (answer2, asker) => `git could not name its repository-local environment variables: ${answer2.reason}, ${CONSEQUENCE[asker]}`;
+var admissionWarnings = (answer2) => answer2.kind === "named" ? [] : [
+  {
+    kind: "repository-local-env",
+    message: describeUnknown(answer2, "daemon")
+  }
+];
 
 // src/proc/system-launcher.ts
 init_globals();
@@ -29884,10 +29909,10 @@ function landVerdict(status, end) {
     throw err;
   }
 }
-function createOneShotLauncher(owner, clock, spawner) {
+function createAdmittable(owner, clock, spawner) {
   const state = launchState(owner, clock, spawner);
   return {
-    ...oneShotOver(state, []),
+    launcher: oneShotOver(state, []),
     withhold: (names) => oneShotOver(state, names)
   };
 }
@@ -30098,312 +30123,32 @@ var systemSpawner = {
 };
 
 // src/proc/system-launcher.ts
-var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
-
-// src/segments/git.ts
-init_globals();
-function trackingOf(upstream, aheadBehind) {
-  if (upstream.kind === "absent") return ok("none");
-  if (upstream.kind === "failed") return upstream;
-  if (aheadBehind.kind === "failed") return aheadBehind;
-  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
-}
-function prOfHead(pr, head) {
-  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  if (head.kind === "failed")
-    return failed(`HEAD: ${head.reason}`, head.failedAt);
-  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
-}
-var GITHUB_PR_STATES = {
-  OPEN: "open",
-  MERGED: "merged",
-  CLOSED: "closed"
-};
-var GITLAB_MR_STATES = {
-  opened: "open",
-  locked: "open",
-  merged: "merged",
-  closed: "closed"
-};
-function prStateOf(cli, states, word) {
-  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
-}
-var READ_FIELD_NAMES = {
-  aheadBehind: "aheadBehind",
-  head: "head",
-  sha: "sha",
-  operation: "operation",
-  committedAt: "committedAt",
-  stashCount: "stash",
-  upstream: "upstream",
-  repoName: "repoName",
-  repoUrl: "repoUrl"
-};
-function gitInfoFailures(info) {
-  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
-    const outcome = info[field];
-    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
-  });
-}
-function classify(label2, result, nonZero) {
-  if (result.ok) return ok(result.stdout);
-  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
-  if (result.reason === "non-zero" && nonZero === result.exitCode)
-    return ABSENT;
-  return failed(launchFailure(label2, result), "read");
-}
-function launchFailure(label2, result) {
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return `${label2}: ${detail}`;
-}
-function firstLine(s) {
-  return s.trim().split("\n", 1)[0] ?? "";
-}
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
-var FORGE_REPOSITORY_VARS = {
-  github: ["GH_REPO"],
-  gitlab: ["GITLAB_REPO"]
-};
-var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
-function parseRemoteRef(raw) {
-  const trimmed = raw.trim();
-  if (DOS_DRIVE_PATH.test(trimmed)) return null;
-  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
-  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
-  let url;
-  try {
-    url = new URL(candidate);
-  } catch {
-    return null;
-  }
-  return {
-    scheme: url.protocol.replace(/:$/, ""),
-    host: url.hostname.toLowerCase(),
-    port: url.port,
-    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
-  };
-}
-function remoteHost(remoteUrl) {
-  return parseRemoteRef(remoteUrl)?.host || null;
-}
-function detectForge(remoteUrl) {
-  const host = remoteHost(remoteUrl);
-  if (!host) return null;
-  if (host === "github.com" || host.endsWith(".github.com")) return "github";
-  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
-  return null;
-}
-var REMOTES_ARGS = [
-  "config",
-  "--local",
-  "--get-regexp",
-  "^remote\\..*\\.url$"
-];
-function remotesOf(result) {
-  const r = classify("git config --get-regexp remote url", result, 1);
-  if (r.kind === "failed") return r;
-  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
-}
-function parseRemotes(stdout2) {
-  const urlsByName = /* @__PURE__ */ new Map();
-  for (const line of stdout2.split("\n")) {
-    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
-    if (!match) continue;
-    const urls = urlsByName.get(match[1]) ?? [];
-    urls.push(match[2].trim());
-    urlsByName.set(match[1], urls);
-  }
-  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
-}
-function identifyingUrl(remote) {
-  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
-}
-function pickRepoRemote(remotes) {
-  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
-}
-function repoRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  return remote ? identifyingUrl(remote) : null;
-}
-function forgeRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  if (!remote) return null;
-  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
-}
-function repoNameFromUrl(url) {
-  const parsed2 = parseRemoteRef(url);
-  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
-  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
-  return name || null;
-}
-function remoteWebUrl(raw) {
-  const ref = parseRemoteRef(raw);
-  if (!ref) return null;
-  const web = (() => {
-    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
-    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
-    if (ref.scheme === "ssh" || ref.scheme === "git")
-      return { scheme: "https", port: "" };
-    return null;
-  })();
-  if (!web || !ref.host) return null;
-  const repoPath = ref.path.replace(/\.git$/, "");
-  if (!repoPath) return null;
-  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
-  return `${web.scheme}://${authority}/${repoPath}`;
-}
-function repoWebUrl(remotes) {
-  const url = repoRemoteUrl(remotes);
-  return url === null ? null : remoteWebUrl(url);
-}
-function classifyForgePr(label2, result, noPrPattern, parse3) {
-  if (result.ok) return parse3(result.stdout);
-  if (isMissingCommand(result)) return ABSENT;
-  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
-    return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
-}
-function isRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function parseStatusV2(stdout2) {
-  let branch = "detached";
-  let oid = ABSENT;
-  let upstream = ABSENT;
-  let aheadBehind = ABSENT;
-  let staged = 0;
-  let unstaged = 0;
-  let untracked2 = 0;
-  let conflicts = 0;
-  for (const line of stdout2.split("\n")) {
-    if (!line) continue;
-    if (line.startsWith("# ")) {
-      const rest2 = line.slice(2);
-      if (rest2.startsWith("branch.oid ")) {
-        const v = rest2.slice("branch.oid ".length).trim();
-        oid = v === "(initial)" ? ABSENT : ok(v);
-      } else if (rest2.startsWith("branch.head ")) {
-        const v = rest2.slice("branch.head ".length).trim();
-        branch = v === "(detached)" ? "detached" : v;
-      } else if (rest2.startsWith("branch.upstream ")) {
-        upstream = ok(rest2.slice("branch.upstream ".length).trim());
-      } else if (rest2.startsWith("branch.ab ")) {
-        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
-        if (m) {
-          aheadBehind = ok({
-            ahead: parseInt(m[1], 10),
-            behind: parseInt(m[2], 10)
-          });
-        }
-      }
-      continue;
-    }
-    const kind = line[0];
-    if (kind === "1" || kind === "2") {
-      const xy = line.slice(2, 4);
-      if (xy[0] !== ".") staged++;
-      if (xy[1] !== ".") unstaged++;
-    } else if (kind === "u") {
-      conflicts++;
-    } else if (kind === "?") {
-      untracked2++;
-    }
-  }
-  let status = "clean";
-  if (conflicts > 0) status = "conflicts";
-  else if (staged || unstaged || untracked2) status = "dirty";
-  return {
-    branch,
-    status,
-    aheadBehind,
-    oid,
-    upstream,
-    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
-  };
-}
-function parseGithubPr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("gh pr view: JSON is not an object", "parse");
-  const { number, state, url, headRefOid: head } = json2;
-  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
-  }
-  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
-  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
-}
-function parseGitlabMr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("glab mr view: JSON is not an object", "parse");
-  const iid = json2.iid;
-  const state = json2.state;
-  const url = json2.web_url;
-  const head = json2.sha;
-  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
-  }
-  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
-  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
-}
+var systemAdmittable = (owner, clock) => createAdmittable(owner, clock, systemSpawner);
 
 // src/host.ts
+var WITHHOLD = /* @__PURE__ */ Symbol("withhold");
 var ADMITTED = /* @__PURE__ */ Symbol("admitted");
-function admit2(started2, ask2) {
-  const answer2 = ask2(started2.launcher);
-  const withheld = [
-    ...Object.values(FORGE_REPOSITORY_VARS).flat(),
-    ...answer2.kind === "named" ? answer2.names : []
-  ];
+function startWorld(host, clock) {
+  const { launcher, withhold } = systemAdmittable(
+    { inherited: host.env },
+    clock
+  );
+  return { host, clock, launcher, [WITHHOLD]: withhold };
+}
+function admit2(started2, answer2) {
   return {
     host: started2.host,
     clock: started2.clock,
-    launcher: started2.launcher.withhold(withheld),
-    withheld,
-    fault: repositoryLocalEnvFault(answer2),
+    launcher: started2[WITHHOLD](withheldFor(answer2)),
+    answer: answer2,
     [ADMITTED]: true
   };
 }
 function processWorld() {
-  const host = {
-    env: process.env,
-    home: os_default.homedir(),
-    tmp: os_default.tmpdir()
-  };
-  const clock = systemTimekeeper;
-  return {
-    host,
-    launcher: systemOneShotLauncher({ inherited: process.env }, clock),
-    clock
-  };
+  return startWorld(
+    { env: process.env, home: os_default.homedir(), tmp: os_default.tmpdir() },
+    systemTimekeeper
+  );
 }
 
 // src/click/read.ts
@@ -50490,44 +50235,6 @@ async function readTail(path31, maxBytes) {
     }
   });
 }
-function readTailSync(path31, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code: code2 } = e;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
 
 // src/daemon/foundations/debug-types.ts
 init_globals();
@@ -51142,6 +50849,273 @@ init_globals();
 // src/daemon/cache/git.ts
 init_globals();
 var import_node_path13 = __toESM(require_path_browserify(), 1);
+
+// src/segments/git.ts
+init_globals();
+function trackingOf(upstream, aheadBehind) {
+  if (upstream.kind === "absent") return ok("none");
+  if (upstream.kind === "failed") return upstream;
+  if (aheadBehind.kind === "failed") return aheadBehind;
+  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
+}
+function prOfHead(pr, head) {
+  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
+  if (head.kind === "failed")
+    return failed(`HEAD: ${head.reason}`, head.failedAt);
+  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
+}
+var GITHUB_PR_STATES = {
+  OPEN: "open",
+  MERGED: "merged",
+  CLOSED: "closed"
+};
+var GITLAB_MR_STATES = {
+  opened: "open",
+  locked: "open",
+  merged: "merged",
+  closed: "closed"
+};
+function prStateOf(cli, states, word) {
+  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
+}
+var READ_FIELD_NAMES = {
+  aheadBehind: "aheadBehind",
+  head: "head",
+  sha: "sha",
+  operation: "operation",
+  committedAt: "committedAt",
+  stashCount: "stash",
+  upstream: "upstream",
+  repoName: "repoName",
+  repoUrl: "repoUrl"
+};
+function gitInfoFailures(info) {
+  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
+    const outcome = info[field];
+    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
+  });
+}
+function classify(label2, result, nonZero) {
+  if (result.ok) return ok(result.stdout);
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  if (result.reason === "non-zero" && nonZero === result.exitCode)
+    return ABSENT;
+  return failed(launchFailure(label2, result), "read");
+}
+function launchFailure(label2, result) {
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return `${label2}: ${detail}`;
+}
+function firstLine(s) {
+  return s.trim().split("\n", 1)[0] ?? "";
+}
+var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+function parseRemoteRef(raw) {
+  const trimmed = raw.trim();
+  if (DOS_DRIVE_PATH.test(trimmed)) return null;
+  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
+  let url;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  return {
+    scheme: url.protocol.replace(/:$/, ""),
+    host: url.hostname.toLowerCase(),
+    port: url.port,
+    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
+  };
+}
+function remoteHost(remoteUrl) {
+  return parseRemoteRef(remoteUrl)?.host || null;
+}
+function detectForge(remoteUrl) {
+  const host = remoteHost(remoteUrl);
+  if (!host) return null;
+  if (host === "github.com" || host.endsWith(".github.com")) return "github";
+  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
+  return null;
+}
+var REMOTES_ARGS = [
+  "config",
+  "--local",
+  "--get-regexp",
+  "^remote\\..*\\.url$"
+];
+function remotesOf(result) {
+  const r = classify("git config --get-regexp remote url", result, 1);
+  if (r.kind === "failed") return r;
+  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
+}
+function parseRemotes(stdout2) {
+  const urlsByName = /* @__PURE__ */ new Map();
+  for (const line of stdout2.split("\n")) {
+    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
+    if (!match) continue;
+    const urls = urlsByName.get(match[1]) ?? [];
+    urls.push(match[2].trim());
+    urlsByName.set(match[1], urls);
+  }
+  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
+}
+function identifyingUrl(remote) {
+  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
+}
+function pickRepoRemote(remotes) {
+  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
+}
+function repoRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  return remote ? identifyingUrl(remote) : null;
+}
+function forgeRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  if (!remote) return null;
+  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
+}
+function repoNameFromUrl(url) {
+  const parsed2 = parseRemoteRef(url);
+  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
+  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
+  return name || null;
+}
+function remoteWebUrl(raw) {
+  const ref = parseRemoteRef(raw);
+  if (!ref) return null;
+  const web = (() => {
+    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
+    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
+    if (ref.scheme === "ssh" || ref.scheme === "git")
+      return { scheme: "https", port: "" };
+    return null;
+  })();
+  if (!web || !ref.host) return null;
+  const repoPath = ref.path.replace(/\.git$/, "");
+  if (!repoPath) return null;
+  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
+  return `${web.scheme}://${authority}/${repoPath}`;
+}
+function repoWebUrl(remotes) {
+  const url = repoRemoteUrl(remotes);
+  return url === null ? null : remoteWebUrl(url);
+}
+function classifyForgePr(label2, result, noPrPattern, parse3) {
+  if (result.ok) return parse3(result.stdout);
+  if (isMissingCommand(result)) return ABSENT;
+  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
+    return ABSENT;
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return failed(`${label2}: ${detail}`, "read");
+}
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseStatusV2(stdout2) {
+  let branch = "detached";
+  let oid = ABSENT;
+  let upstream = ABSENT;
+  let aheadBehind = ABSENT;
+  let staged = 0;
+  let unstaged = 0;
+  let untracked2 = 0;
+  let conflicts = 0;
+  for (const line of stdout2.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith("# ")) {
+      const rest2 = line.slice(2);
+      if (rest2.startsWith("branch.oid ")) {
+        const v = rest2.slice("branch.oid ".length).trim();
+        oid = v === "(initial)" ? ABSENT : ok(v);
+      } else if (rest2.startsWith("branch.head ")) {
+        const v = rest2.slice("branch.head ".length).trim();
+        branch = v === "(detached)" ? "detached" : v;
+      } else if (rest2.startsWith("branch.upstream ")) {
+        upstream = ok(rest2.slice("branch.upstream ".length).trim());
+      } else if (rest2.startsWith("branch.ab ")) {
+        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
+        if (m) {
+          aheadBehind = ok({
+            ahead: parseInt(m[1], 10),
+            behind: parseInt(m[2], 10)
+          });
+        }
+      }
+      continue;
+    }
+    const kind = line[0];
+    if (kind === "1" || kind === "2") {
+      const xy = line.slice(2, 4);
+      if (xy[0] !== ".") staged++;
+      if (xy[1] !== ".") unstaged++;
+    } else if (kind === "u") {
+      conflicts++;
+    } else if (kind === "?") {
+      untracked2++;
+    }
+  }
+  let status = "clean";
+  if (conflicts > 0) status = "conflicts";
+  else if (staged || unstaged || untracked2) status = "dirty";
+  return {
+    branch,
+    status,
+    aheadBehind,
+    oid,
+    upstream,
+    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
+  };
+}
+function parseGithubPr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("gh pr view: JSON is not an object", "parse");
+  const { number, state, url, headRefOid: head } = json2;
+  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
+  }
+  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
+  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
+}
+function parseGitlabMr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("glab mr view: JSON is not an object", "parse");
+  const iid = json2.iid;
+  const state = json2.state;
+  const url = json2.web_url;
+  const head = json2.sha;
+  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
+  }
+  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
+  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
+}
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -55357,31 +55331,44 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
+// src/utils/regular-text.ts
+init_globals();
+function readRegularTextSync(path31) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error("not a file");
+    return readFileSync(fd, "utf8");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+
 // src/claude-settings-read.ts
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
+  try {
+    return readRegularTextSync(settingsPath);
+  } catch (e) {
+    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
       return "";
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return read2.value.buf.toString("utf8");
+    throw cannotRead(settingsPath, e);
   }
 }
 function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
   let text4;
   try {
     text4 = readClaudeSettingsText(settingsPath);
   } catch (e) {
-    return failed(reason(e), "read");
+    return failed(messageOf(e), "read");
   }
   try {
     return ok(parseSettings(settingsPath, text4));
   } catch (e) {
-    return failed(reason(e), "parse");
+    return failed(messageOf(e), "parse");
   }
 }
 function parseSettings(settingsPath, text4) {
@@ -55397,7 +55384,7 @@ function parseSettings(settingsPath, text4) {
   }
   return parsed2;
 }
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
+var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
 // src/segments/autocompact.ts
 init_globals();
@@ -66064,7 +66051,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.0";
+var PACKAGE_VERSION = "1.233.2";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -82724,6 +82711,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   );
   const standing2 = [
     ...daemon2.fileEvents,
+    ...daemon2.admission,
     ...launched,
     ...held,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
@@ -88534,12 +88522,11 @@ var diskFiles = {
   folders: listFolders,
   text(file) {
     try {
-      return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
+      return { kind: "text", text: readRegularTextSync(file) };
     } catch (e) {
-      const err = e;
       return {
         kind: "unreadable",
-        error: err.code === "EISDIR" ? "not a file" : err.message
+        error: types.isNativeError(e) ? e.message : String(e)
       };
     }
   },
@@ -89126,25 +89113,27 @@ function createDaemon(inputs) {
     logger: log,
     clock
   });
+  const admission = admissionWarnings(world.answer);
+  log("info", `launches withhold ${withheldFor(world.answer).join(",")}`);
+  for (const warning of admission) log("warn", warning.message);
   const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      admission,
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null
+    },
     { deep: false, equals: compareStructural }
   );
   let rendererEnded = null;
   let actFailed = null;
-  log("info", `launches withhold ${world.withheld.join(",")}`);
-  const admissionFaults = world.fault === null ? [] : [
-    {
-      kind: "repository-local-env",
-      message: `${world.fault}, so the branch and PR shown may come from the repository of the shell that started the daemon, until the daemon restarts`
-    }
-  ];
-  for (const fault of admissionFaults) log("warn", fault.message);
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: [...admissionFaults, ...launcher.standing()],
+        admission,
+        launcher: launcher.standing(),
         rendererEnded,
         actFailed
       })
@@ -91097,7 +91086,8 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-var WORLD = admit2(processWorld(), askGit("unbounded"));
+var STARTED = processWorld();
+var WORLD = admit2(STARTED, await askGit(STARTED.launcher, "unbounded"));
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD);

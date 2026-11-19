@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-857",
+      "ref": "refs/pull/857/merge",
+      "sha": "b7b9ede18926abd5ba7edd97f0a0984c9c02e7f5",
+      "timestamp": "2026-11-19T13:04:47.982Z",
+      "commits": [
+        {
+          "sha": "b7b9ede18926abd5ba7edd97f0a0984c9c02e7f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:03:54Z",
+          "message": "Merge b03af819bdab8a886fbc361fca2862b42a74eb17 into 16eb7713b80a9c10567f515cf183025faeca7db4\n"
+        },
+        {
+          "sha": "b03af819bdab8a886fbc361fca2862b42a74eb17",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:35:29-07:00",
+          "message": "fix(daemon): launches withhold the spawning shell's repository-local environment variables, asked of git once its socket is bound\n"
+        }
+      ]
+    },
+    {
       "version": "pr-867",
       "ref": "refs/pull/867/merge",
       "sha": "fcaea0cf3aac38f192b3cdd8aadca32169ad04db",
@@ -150,28 +172,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:10:16-07:00",
           "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-857",
-      "ref": "refs/pull/857/merge",
-      "sha": "5f3abc81ed49e51b87c2c6d940011720247ef2c3",
-      "timestamp": "2026-11-19T12:30:48.833Z",
-      "commits": [
-        {
-          "sha": "5f3abc81ed49e51b87c2c6d940011720247ef2c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:29:52Z",
-          "message": "Merge 5a909aaf46730f99a977fcbde9c59cb61456470b into 2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8\n"
-        },
-        {
-          "sha": "5a909aaf46730f99a977fcbde9c59cb61456470b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:35:29-07:00",
-          "message": "fix(daemon): launches withhold the spawning shell's repository-local environment variables, asked of git once its socket is bound\n"
         }
       ]
     },
