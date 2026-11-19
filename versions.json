@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f2035fdda3d7aced7e27f485137b01e28691e13f",
+      "timestamp": "2026-11-19T11:38:30.391Z",
+      "commits": [
+        {
+          "sha": "f2035fdda3d7aced7e27f485137b01e28691e13f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T11:37:16Z",
+          "message": "chore(release): set `package.json` to 1.232.15\n\n## [1.232.15](https://github.com/promptctl/cc-candybar/compare/v1.232.14...v1.232.15) (2026-11-19)\n\n### Bug Fixes\n\n* **test:** a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo) ([#838](https://github.com/promptctl/cc-candybar/issues/838)) ([67f9c32](https://github.com/promptctl/cc-candybar/commit/67f9c326810383c223b62ad696c55bb3e1087dc2))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-856",
       "ref": "refs/pull/856/merge",
       "sha": "870f140b8963c621d75e205ffb4a99200a984be6",
@@ -139,21 +154,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:45:50-07:00",
           "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "67f9c326810383c223b62ad696c55bb3e1087dc2",
-      "timestamp": "2026-11-19T11:29:48.160Z",
-      "commits": [
-        {
-          "sha": "67f9c326810383c223b62ad696c55bb3e1087dc2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:28:40-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo) (#838)"
         }
       ]
     },
