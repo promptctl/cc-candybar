@@ -12,7 +12,6 @@ import { textOf, type WireFrame } from "../../../src/render/frame";
 import type { RecordingEntry } from "../../../src/renderer-interface/recording";
 import { replayRecording } from "../../../src/renderer/replay";
 import { click, frameRequest, observePane, renderBody } from "../../helpers/daemon-e2e";
-import { TEST_ENV } from "../../helpers/session-environment";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
 
@@ -20,6 +19,7 @@ const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");
 const ENV_NAME = "CCB_RECORDING_TEST_VALUE";
 const ENV_VALUE = "only-the-live-bar-may-see-this";
+const LOCALIZED = "50.000 1969-12-31 19:00 -0500";
 
 function replayedFrames(stdout: string): readonly {
   readonly session: string;
@@ -52,7 +52,9 @@ test("the running host records two independent renderer sessions for offline rep
       },
       variables: { remembered: { kind: "state", key: "remembered", default: "empty" } },
       segments: {
-        sample: { template: 'recorded-source padding={{ .padding.effective }} {{ action "wider" "WIDER" }} {{ frames 0.1 "phase-a" 0.1 "phase-b" }} {{ .remembered }} {{ action "remember" "REMEMBER" }}' },
+        sample: {
+          template: 'recorded-source padding={{ .padding.effective }} {{ action "wider" "WIDER" }} {{ frames 0.1 "phase-a" 0.1 "phase-b" }} {{ .remembered }} {{ action "remember" "REMEMBER" }} {{ formatInteger 50000 }} {{ date "2006-01-02 15:04 -0700" 0 }}',
+        },
       },
       root: { h: ["sample"] },
     });
@@ -65,14 +67,13 @@ test("the running host records two independent renderer sessions for offline rep
     }));
     const command = (...args: string[]) => exec(process.execPath, [BUNDLE, ...args], {
       cwd: dir,
-      env: isolated.env,
+      env: { ...isolated.env, CC_CANDYBAR_NAME: undefined },
       timeout: 10_000,
     });
     const draw = (session: string, file = config, renderer?: string) =>
       frameRequest(isolated.sockPath, {
-        ...renderBody(session, project, {}, ["cc-candybar", "--config", file]),
+        ...renderBody(session, project, { termCols: 160 }, ["cc-candybar", "--config", file]),
         env: {
-          ...TEST_ENV,
           [ENV_NAME]: ENV_VALUE,
           ...(renderer === undefined ? {} : { CC_CANDYBAR_NAME: renderer }),
         },
@@ -85,7 +86,8 @@ test("the running host records two independent renderer sessions for offline rep
       liveLog().matchAll(/renderer main\[\d+\] started pid=(\d+)/g), (match) => match[1],
     );
 
-    daemon = await spawnDaemonWithEnv(isolated.env, (env) => ({
+    const liveEnv = { ...isolated.env, LANG: "de_DE.UTF-8", LC_ALL: "de_DE.UTF-8", TZ: "America/New_York" };
+    daemon = await spawnDaemonWithEnv(liveEnv, (env) => ({
       bin: process.execPath,
       args: daemonArgs(BUNDLE, env),
     }));
@@ -99,12 +101,14 @@ test("the running host records two independent renderer sessions for offline rep
     await command("record", "start", namedCapture, "--renderer", "worktree");
     const frame = await draw(primarySession);
     expect(textOf(frame)).toContain("recorded-source padding=1");
+    expect(textOf(frame)).toContain(LOCALIZED);
     const afterStart = mainStarts();
     expect(afterStart).toHaveLength(2);
     expect(afterStart[1]).not.toBe(first[0]);
 
     const named = await draw(namedSession, config, "worktree");
     expect(textOf(named)).toContain("recorded-source padding=1");
+    expect(textOf(named)).toContain(LOCALIZED);
     const links = linksOf(named);
     const wider = links.find(({ text }) => text === "WIDER");
     const remember = links.find(({ text }) => text === "REMEMBER");
@@ -154,19 +158,22 @@ test("the running host records two independent renderer sessions for offline rep
     await daemon.stop();
     daemon = undefined;
     fs.rmSync(project, { recursive: true });
+    const replayEnv = { ...isolated.env, LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8", TZ: "UTC" };
     const replay = (file: string, bundle: string) => exec(process.execPath, [bundle, "replay", file, "--frames"], {
       cwd: relocated,
-      env: isolated.env,
+      env: replayEnv,
       timeout: 10_000,
     });
     const primaryReplay = await replay(mainCapture, alternate);
     const primaryFrames = replayedFrames(primaryReplay.stdout);
     expect(new Set(primaryFrames.map(({ session }) => session))).toEqual(new Set([primarySession]));
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes("recorded-source padding=1"))).toBe(true);
+    expect(primaryFrames.some(({ frame }) => textOf(frame).includes(LOCALIZED))).toBe(true);
     const namedReplay = await replay(namedCapture, BUNDLE);
     const frames = replayedFrames(namedReplay.stdout);
     expect(new Set(frames.map(({ session }) => session))).toEqual(new Set([namedSession]));
     expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes("recorded-source padding=1"))).toBe(true);
+    expect(frames.some(({ surface, frame }) => surface === "statusline" && textOf(frame).includes(LOCALIZED))).toBe(true);
     const panes = frames.filter(({ surface }) => surface === "pane").map(({ frame }) => textOf(frame));
     expect(panes).toEqual(expect.arrayContaining([
       expect.stringContaining("recorded-source padding=2 WIDER phase-a saved-by-click"),
