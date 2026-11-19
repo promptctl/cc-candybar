@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-868",
-      "ref": "refs/pull/868/merge",
-      "sha": "537abb905ab29eace4deba874eb2a07c33d6759d",
-      "timestamp": "2026-11-19T13:45:47.237Z",
-      "commits": [
-        {
-          "sha": "537abb905ab29eace4deba874eb2a07c33d6759d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:44:43Z",
-          "message": "Merge bcc2c85d7abbba7e0b43460382d61d9d0ca97f8d into 99011b4404fa32d0625c7e687de5550d1012e734\n"
-        },
-        {
-          "sha": "bcc2c85d7abbba7e0b43460382d61d9d0ca97f8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:29:09-07:00",
-          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "99011b4404fa32d0625c7e687de5550d1012e734",
-      "timestamp": "2026-11-19T13:45:11.183Z",
+      "sha": "6b98f5c610697d392140c302f633044ebe7a2aac",
+      "timestamp": "2026-11-19T13:52:20.553Z",
       "commits": [
         {
-          "sha": "99011b4404fa32d0625c7e687de5550d1012e734",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T13:43:43Z",
-          "message": "chore(release): set `package.json` to 1.234.1\n\n## [1.234.1](https://github.com/promptctl/cc-candybar/compare/v1.234.0...v1.234.1) (2026-11-19)\n\n### Performance Improvements\n\n* **host:** share physical transcript observations across sessions ([#866](https://github.com/promptctl/cc-candybar/issues/866)) ([6125487](https://github.com/promptctl/cc-candybar/commit/6125487488e90cbd9bd119f83430408afd97f01f))\n"
+          "sha": "6b98f5c610697d392140c302f633044ebe7a2aac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:51:18-07:00",
+          "message": "refactor(click): authorize drawn runs and keep signing in the host (#868)\n\nrefactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)"
         }
       ]
     },
