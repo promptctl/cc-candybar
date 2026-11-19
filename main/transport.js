@@ -28347,16 +28347,35 @@ function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
 }
+var TEXT_LIMIT = 2048;
+var OMITTED = "\u2026\n";
+function heldEventText(text4) {
+  if (text4.length <= TEXT_LIMIT) return text4;
+  const split2 = Math.floor((TEXT_LIMIT - OMITTED.length - 1) / 2);
+  const tail = TEXT_LIMIT - OMITTED.length - 1 - split2;
+  return `${text4.slice(0, split2)}
+${OMITTED}${text4.slice(-tail)}`.toWellFormed();
+}
+function appendText(previous2, text4) {
+  if (previous2 === null) return heldEventText(text4);
+  const room = TEXT_LIMIT - text4.length;
+  if (previous2.length + 1 <= room) return `${previous2}
+${text4}`;
+  if (room < OMITTED.length) return heldEventText(text4);
+  const tail = room - OMITTED.length - 1;
+  return tail > 0 ? `${OMITTED}${previous2.slice(-tail)}
+${text4}`.toWellFormed() : `${OMITTED}${text4}`;
+}
 function joinedEvent(last2, text4, at) {
   return {
-    text: last2 === null || last2.answered ? text4 : `${last2.text}
-${text4}`,
+    text: appendText(last2 === null || last2.answered ? null : last2.text, text4),
     at,
+    revision: (last2?.revision ?? 0) + 1,
     answered: false
   };
 }
 function answeredBy(last2, shown) {
-  return !last2.answered && last2.at === shown.at && last2.text === shown.text;
+  return !last2.answered && last2.at === shown.at && last2.text === shown.text && last2.revision === shown.revision;
 }
 
 // src/proc/launcher.ts
@@ -70534,7 +70553,9 @@ var registrySubscriptions = (registry) => [
 ];
 var draftKey = (sessionId2) => `edit:${sessionId2}`;
 var RenderCache = class {
-  entries = /* @__PURE__ */ new Map();
+  entries = observable.map(void 0, {
+    deep: false
+  });
   // [LAW:one-source-of-truth] The latest delivery of each retained origin
   // gates admission and writes, including controls on an already live view.
   configDeliveries = observable.map(
@@ -70555,7 +70576,10 @@ var RenderCache = class {
   storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  views = /* @__PURE__ */ new Map();
+  views = observable.map(
+    void 0,
+    { deep: false }
+  );
   presentations = new PresentedFrames((session) => {
     const view = this.views.get(session);
     if (view !== void 0) {
@@ -70663,8 +70687,10 @@ var RenderCache = class {
     const priorRepo = existing?.snapshot.repo;
     const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
     if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
-      this.entries.delete(key);
-      this.entries.set(key, existing);
+      runInAction(() => {
+        this.entries.delete(key);
+        this.entries.set(key, existing);
+      });
       if (draft !== null && existing.snapshot !== draft)
         this.reloadInto(
           existing,
@@ -70690,9 +70716,9 @@ var RenderCache = class {
       lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
     };
-    makeObservable(entry, { lastError: observable });
+    makeObservable(entry, { lastError: observable, state: observableRef });
     this.serve(entry.state);
-    this.entries.set(key, entry);
+    runInAction(() => this.entries.set(key, entry));
     this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
@@ -70786,6 +70812,10 @@ var RenderCache = class {
       lease
     );
   }
+  // The shared committed state, without changing the cache's use order.
+  committedState(origin) {
+    return this.entries.get(originKey(origin))?.state ?? null;
+  }
   // `held` with `lease` on `view` beside it, both released by the one
   // `using`. Nothing in it throws, so `held` is never stranded.
   holdViewOf(held, view, lease) {
@@ -70844,12 +70874,14 @@ var RenderCache = class {
     const sessionId2 = facts.hookData.session_id;
     const current = this.views.get(sessionId2);
     if (current?.state === state) {
-      this.views.delete(sessionId2);
-      this.views.set(sessionId2, current);
+      runInAction(() => {
+        this.views.delete(sessionId2);
+        this.views.set(sessionId2, current);
+      });
       current.requested?.(facts);
       return current;
     }
-    this.views.delete(sessionId2);
+    runInAction(() => this.views.delete(sessionId2));
     let view;
     try {
       view = this.opened(entry, state, facts, by);
@@ -70891,7 +70923,7 @@ var RenderCache = class {
       throw error;
     }
     this.openFailures.delete(sessionId2);
-    this.views.set(sessionId2, view);
+    runInAction(() => this.views.set(sessionId2, view));
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
@@ -70930,7 +70962,7 @@ var RenderCache = class {
   // last render holding it returns.
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
+      runInAction(() => this.views.delete(view.sessionId));
     const successor = this.views.has(view.sessionId);
     this.presentations.retireView(
       view.sessionId,
@@ -70963,9 +70995,8 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their storage folders, the runs
   // its `shell` and `file` sources name, and the variables of the session's
-  // environment its `env` sources read. Read
-  // off the views each turn, so a view that opened, moved or closed is the
-  // next output's.
+  // environment its `env` sources read. A declaration observes the current
+  // views and what each sources from the host.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's
   // config is held as long as an entry at it lives, not as long as a session:
   // a session retires when idle while its entry stays to draw it again.
@@ -71032,7 +71063,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
   // serving it, and its state is retired.
   drop(key, entry, reason) {
-    this.entries.delete(key);
+    runInAction(() => this.entries.delete(key));
     for (const [session, failure2] of this.openFailures)
       if (failure2.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
@@ -71191,8 +71222,11 @@ var RenderCache = class {
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
-      entry.state = loaded.state;
-      this.serve(loaded.state);
+      const state = loaded.state;
+      runInAction(() => {
+        entry.state = state;
+      });
+      this.serve(state);
     }
     this.holdFolders(entry.state);
     if (loaded.kind === "built") this.retire(served, "reload", entry);
@@ -73164,8 +73198,15 @@ function recordOf(raw) {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
+  const { text: text4, at, answered, revision } = value;
+  if (typeof text4 !== "string" || typeof at !== "number" || answered !== void 0 && typeof answered !== "boolean")
+    return null;
+  return {
+    text: heldEventText(text4),
+    at,
+    answered: answered === true,
+    ...typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0 ? { revision } : {}
+  };
 }
 
 // src/daemon/foundations/request-event.ts
@@ -73291,20 +73332,18 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
     };
   }
 }
-function viewLanes(parts, sessionId2, committed, editing) {
+function viewLanes(parts, sessionId2, committed) {
   var _stack = [];
   try {
     const { renderCache } = parts;
     const hold2 = __using(_stack, renderCache.holdView(sessionId2));
     if (hold2 === null) return null;
-    if (!editing) return laneSwitches(hold2.view.source.effective());
-    const { config, authoredRoots: authoredRoots2 } = renderCache.getOrCreate(
-      hold2.entry.origin
-    ).state;
+    if (committed === null) return laneSwitches(hold2.view.source.effective());
+    const { config, authoredRoots: authoredRoots2 } = committed.state;
     return laneSwitches(
       resolveEffectiveGlobals(
         config,
-        (key) => committed.get(sessionId2, key),
+        (key) => committed.settings.get(sessionId2, key),
         (preset) => authoredRoots2.has(preset)
       )
     );
@@ -73950,18 +73989,20 @@ var Feeds = class {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
+    const { kind, next: next2 } = feed2.schedule;
     const soonest = Math.max(tick, feed2.last + this.spacingOf(feed2));
-    if (feed2.next !== null && feed2.next <= soonest) {
+    if (kind === "retry" || next2 !== null && next2 <= soonest) {
       feed2.coalesced++;
       return;
     }
-    feed2.next = soonest;
-    feed2.change = null;
+    feed2.schedule = { kind: "frame", next: soonest, change: null };
   }
   // The earliest tick a feed's next frame falls due, or null when none waits
   // on a tick.
   next() {
-    return earliestOf([...this.feeds.values()].map((feed2) => feed2.next));
+    return earliestOf(
+      [...this.feeds.values()].map((feed2) => feed2.schedule.next)
+    );
   }
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
   // drawn into `frames` and its next set, in the order the feeds opened. Each
@@ -73971,9 +74012,10 @@ var Feeds = class {
   drawDue(readings, frames, prepare) {
     const { tick } = readings;
     runEach(
-      [...this.feeds.values()].flatMap(
-        (feed2) => feed2.next !== null && feed2.next <= tick ? [{ feed: feed2, next: feed2.next }] : []
-      ).map(({ feed: feed2, next: next2 }) => () => {
+      [...this.feeds.values()].flatMap((feed2) => {
+        const { next: next2 } = feed2.schedule;
+        return next2 !== null && next2 <= tick ? [{ feed: feed2, next: next2 }] : [];
+      }).map(({ feed: feed2, next: next2 }) => () => {
         recordMs(feed2.lateness, (tick - next2) * 1e3);
         try {
           const frame2 = this.drawOne(feed2, readings, prepare);
@@ -73981,7 +74023,10 @@ var Feeds = class {
           if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S)
             this.summarize(feed2, "running", tick);
         } catch (thrown2) {
-          feed2.next = tick + this.deps.periods.still / 1e3;
+          feed2.schedule = {
+            kind: "retry",
+            next: tick + this.deps.periods.still / 1e3
+          };
           throw thrown2;
         }
       })
@@ -74019,8 +74064,7 @@ var Feeds = class {
     const feed2 = {
       sessionId: sessionId2,
       viewers,
-      next: tick,
-      change: null,
+      schedule: { kind: "frame", next: tick, change: null },
       last: -Infinity,
       frame: null,
       rates: /* @__PURE__ */ new Map(),
@@ -74069,7 +74113,8 @@ var Feeds = class {
   }
   drawOne(feed2, readings, prepare) {
     const { at, tick } = readings;
-    const drawAt = feed2.change !== null && feed2.change >= at && feed2.change - at <= TIMER_RESOLUTION_S ? feed2.change : at;
+    const change = feed2.schedule.kind === "frame" ? feed2.schedule.change : null;
+    const drawAt = change !== null && change >= at && change - at <= TIMER_RESOLUTION_S ? change : at;
     const drawn = this.deps.draw(
       feed2.sessionId,
       paceOf(this.spacingOf(feed2) * 1e3),
@@ -74080,8 +74125,7 @@ var Feeds = class {
     );
     if (drawn === null) {
       feed2.noView++;
-      feed2.next = null;
-      feed2.change = null;
+      feed2.schedule = { kind: "waiting", next: null };
       return null;
     }
     feed2.last = tick;
@@ -74124,8 +74168,11 @@ var Feeds = class {
     if (shownPeriod < still && shown) feed2.moving++;
     if (shownPeriod < still && !shown) feed2.unseen++;
     const period = shown ? shownPeriod : still;
-    feed2.next = tick + period / 1e3;
-    feed2.change = Number.isFinite(nextChange) ? nextChange : null;
+    feed2.schedule = {
+      kind: "frame",
+      next: tick + period / 1e3,
+      change: Number.isFinite(nextChange) ? nextChange : null
+    };
   }
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they
   // write no render event each: a feed says what it drew in a summary, when
@@ -74542,6 +74589,7 @@ var noLayers = () => {
 var ConfigWrites = class {
   constructor(mint) {
     this.mint = mint;
+    makeObservable(this, { inFlight: observableRef });
   }
   mint;
   // The open click's writes, by file: what it read first, and wrote last.
@@ -74659,11 +74707,13 @@ var ConfigWrites = class {
         answer: answer2
       }))
     ];
-    this.inFlight = {
-      of: { session, origin, files, consequence },
-      owed: new Set(landing.map((c) => c.id)),
-      missed: null
-    };
+    runInAction(() => {
+      this.inFlight = {
+        of: { session, origin, files, consequence },
+        owed: new Set(landing.map((c) => c.id)),
+        missed: null
+      };
+    });
     effects.push(...landing);
   }
   // A change's `effect-done`: the landing once its last change is settled,
@@ -74674,7 +74724,9 @@ var ConfigWrites = class {
     if (landing === null || !landing.owed.delete(id2)) return void 0;
     if (outcome.kind !== "ok") landing.missed ??= outcome;
     if (landing.owed.size > 0) return "owed";
-    this.inFlight = null;
+    runInAction(() => {
+      this.inFlight = null;
+    });
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
   // The origin of the click whose changes are on their way, if one's are.
@@ -77372,11 +77424,16 @@ function mainRenderer(parts, pushed, drained) {
   let subscriptions = {
     sources: {},
     lanes: {},
-    configs: [],
-    wake: null
+    configs: []
   };
+  let wake = null;
   const opening = /* @__PURE__ */ new Set();
-  let parked = [];
+  const parked = observable.box([], { deep: false });
+  const keepParked = (keep) => {
+    const prior = parked.get();
+    const next2 = prior.filter(keep);
+    if (next2.length !== prior.length) runInAction(() => parked.set(next2));
+  };
   const parkedContext = (click2) => {
     const { session } = click2;
     if (click2.kind === "live")
@@ -77389,7 +77446,7 @@ function mainRenderer(parts, pushed, drained) {
   };
   const takeClicks = (matches) => {
     const ready = [];
-    parked = parked.filter((click2) => {
+    keepParked((click2) => {
       if (!matches(click2)) return true;
       ready.push(click2);
       return false;
@@ -77423,7 +77480,7 @@ function mainRenderer(parts, pushed, drained) {
       throw thrown2;
     }
   });
-  const parkedClickSessions = () => new Set(parked.map((click2) => click2.session));
+  const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start":
@@ -77533,7 +77590,7 @@ function mainRenderer(parts, pushed, drained) {
         return;
       case "retire":
         opening.delete(event.session);
-        parked = parked.filter((click2) => click2.session !== event.session);
+        keepParked((click2) => click2.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -77562,10 +77619,12 @@ function mainRenderer(parts, pushed, drained) {
           if (configForTurn(origin).kind === "pending") {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
-            parked = [
-              ...parked,
-              live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
-            ];
+            runInAction(
+              () => parked.set([
+                ...parked.get(),
+                live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
+              ])
+            );
             record2.push(["parked", "click"]);
             return;
           }
@@ -77588,67 +77647,95 @@ function mainRenderer(parts, pushed, drained) {
       }
     }
   };
-  const subscribed = () => {
-    const views = parts.renderCache.subscriptions().sources;
-    const lanes = {};
-    for (const session of Object.keys(views)) {
-      const editing = parts.edits.draft(session) !== null;
-      if (editing) {
-        const { requested } = parts.worldStates.requestOf(session);
-        if (parts.renderCache.configDelivery(requested).kind === "failed") {
-          const held = subscriptions.lanes[session];
-          if (held !== void 0) lanes[session] = held;
-          continue;
+  const sources = computed(() => parts.renderCache.subscriptions().sources, {
+    equals: compareStructural
+  });
+  const laneDeclaration = computed(
+    () => {
+      const lanes = {};
+      const unprepared = /* @__PURE__ */ new Map();
+      for (const session of Object.keys(sources.get())) {
+        const editing = parts.edits.draft(session) !== null;
+        let committed = null;
+        if (editing) {
+          const { requested } = parts.worldStates.requestOf(session);
+          const delivery = parts.renderCache.configDelivery(requested);
+          const state = parts.renderCache.committedState(requested);
+          if (delivery.kind !== "received" || state === null) {
+            if (delivery.kind === "received")
+              unprepared.set(originKey(requested), requested);
+            const held = subscriptions.lanes[session];
+            if (held !== void 0) lanes[session] = held;
+            continue;
+          }
+          committed = { settings: parts.edits.committed, state };
         }
+        const switches = viewLanes(parts, session, committed);
+        if (switches !== null) lanes[session] = switches;
       }
-      const switches = viewLanes(
-        parts,
-        session,
-        parts.edits.committed,
-        editing
-      );
-      if (switches !== null) lanes[session] = switches;
-    }
-    const configs = /* @__PURE__ */ new Map();
-    const landing = parts.verbs.landing();
-    for (const origin of [
-      ...parts.worldStates.sessions().flatMap((session) => {
-        const context = parts.worldStates.contextOf(session);
-        return context === null ? [] : [context.durable.origin];
-      }),
-      ...landing === null ? [] : [landing]
-    ])
-      configs.set(originKey(origin), origin);
-    for (const origin of parts.renderCache.origins())
-      configs.set(originKey(origin), origin);
-    for (const click2 of parked) {
-      const origin = parkedContext(click2).durable.origin;
-      configs.set(originKey(origin), origin);
-    }
-    return {
-      sources: views,
-      lanes,
-      configs: [...configs.values()],
-      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
-      // at: the earliest any owner of a tick holds.
-      wake: earliestOf([
-        time.next(),
-        menuIdle.next(parked.length === 0 ? void 0 : parkedClickSessions()),
-        feeds.next()
+      return { lanes, unprepared: [...unprepared.values()] };
+    },
+    { equals: compareStructural }
+  );
+  const configOrigins = computed(
+    () => {
+      const configs = /* @__PURE__ */ new Map();
+      const landing = parts.verbs.landing();
+      for (const origin of [
+        ...parts.worldStates.sessions().flatMap((session) => {
+          const context = parts.worldStates.contextOf(session);
+          return context === null ? [] : [context.durable.origin];
+        }),
+        ...landing === null ? [] : [landing]
       ])
+        configs.set(originKey(origin), origin);
+      for (const origin of parts.renderCache.origins())
+        configs.set(originKey(origin), origin);
+      for (const click2 of parked.get()) {
+        const origin = parkedContext(click2).durable.origin;
+        configs.set(originKey(origin), origin);
+      }
+      return [...configs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, origin]) => origin);
+    },
+    { equals: compareStructural }
+  );
+  const declaration = new Kept("renderer subscriptions", () => {
+    const { lanes, unprepared } = laneDeclaration.get();
+    return {
+      plan: { sources: sources.get(), lanes, configs: configOrigins.get() },
+      unprepared
     };
+  });
+  let observed2;
+  const declare = (configOffered) => {
+    let next2 = declaration.read();
+    if (next2 !== observed2 && next2.unprepared.length > 0) {
+      for (const origin of next2.unprepared)
+        parts.renderCache.getOrCreate(origin);
+      next2 = declaration.read();
+    }
+    const before = subscriptions.configs;
+    observed2 = next2;
+    subscriptions = next2.plan;
+    if (configOffered || before !== subscriptions.configs)
+      parts.renderCache.prune(new Set(subscriptions.configs.map(originKey)));
   };
   let stored = [];
-  const ending = (run2) => {
+  const ending = (run2, configOffered = false) => {
     try {
       let value;
       try {
         value = run2();
       } finally {
         stored = drained();
-        subscriptions = subscribed();
-        const origins = new Set(subscriptions.configs.map(originKey));
-        parts.renderCache.prune(origins);
+        declare(configOffered);
+        wake = earliestOf([
+          time.next(),
+          menuIdle.next(
+            parked.get().length === 0 ? void 0 : parkedClickSessions()
+          ),
+          feeds.next()
+        ]);
       }
       return { kind: "answered", value };
     } catch (thrown2) {
@@ -77661,14 +77748,17 @@ function mainRenderer(parts, pushed, drained) {
     adapter: async (input) => time.during(input, () => {
       const ended = ending(
         () => pushed(input.push, {
-          parked: opening.size + parked.length,
+          parked: opening.size + parked.get().length,
           presents: deliveries.size,
           deferrals: time.deferrals()
         })
       );
+      if (input.push.kind === "close-views")
+        runInAction(() => declaration.release());
       return {
         ...ended.kind === "answered" ? { kind: "replied", reply: ended.value } : ended,
         subscriptions,
+        wake,
         stored
       };
     }),
@@ -77676,12 +77766,16 @@ function mainRenderer(parts, pushed, drained) {
       const record2 = [];
       const effects = [];
       const frames = [];
-      const ended = ending(() => turn(input.event, record2, effects, frames));
+      const ended = ending(
+        () => turn(input.event, record2, effects, frames),
+        input.event.kind === "config"
+      );
       return {
         ...ended.kind === "answered" ? { kind: "answered" } : ended,
         effects,
         record: record2,
         subscriptions,
+        wake,
         frames,
         stored
       };
@@ -87331,7 +87425,7 @@ var Collector = class {
     const record2 = this.records.get(session);
     if (record2?.phase.kind === "live") record2.active = true;
   }
-  // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
+  // [LAW:one-source-of-truth] The aggregate of the renderers' subscriptions:
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
@@ -87674,7 +87768,7 @@ var FrameFeeds = class {
   // The viewers as the renderer was last handed them, serialized; null when
   // what it holds is unknown (a delivery failed).
   handed = JSON.stringify({});
-  joins = 0;
+  frameDemands = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
@@ -87690,10 +87784,14 @@ var FrameFeeds = class {
     const before = this.watched.has(sessionId2) ? this.shown(sessionId2) : null;
     this.requests.delete(sessionId2);
     this.requests.set(sessionId2, { req, order: order2 });
-    for (const oldest of this.requests.keys()) {
+    for (const [oldest, previous2] of this.requests) {
       if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.requests.delete(oldest);
+      if (!this.watched.has(oldest)) {
+        this.requests.delete(oldest);
+        this.deps.requestChanged(oldest, previous2.req);
+      }
     }
+    this.deps.requestChanged(sessionId2, held?.req);
     if (before !== null && before !== this.shown(sessionId2)) this.announce();
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -87717,24 +87815,36 @@ var FrameFeeds = class {
     }
     let watched = this.watched.get(sessionId2);
     if (watched === void 0) {
-      watched = { followers: /* @__PURE__ */ new Map(), last: null, pushed: 0 };
+      watched = { followers: /* @__PURE__ */ new Map(), last: null, frameDemand: 0, pushed: 0 };
       this.watched.set(sessionId2, watched);
       this.stopWatching ??= this.deps.watching();
     }
     if (watched.followers.has(sub2))
       return () => this.unsubscribe(sessionId2, sub2);
-    watched.followers.set(sub2, {
-      confirmed: null,
-      joined: ++this.joins,
-      writes: /* @__PURE__ */ new Set()
-    });
-    if (watched.last !== null) this.send(sessionId2, watched, sub2, watched.last);
+    const follower = { confirmed: null, writes: /* @__PURE__ */ new Set() };
+    watched.followers.set(sub2, follower);
+    this.handover(sessionId2, watched, sub2, follower);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${watched.followers.size} view=${sessionId2 in this.lanes ? "Y" : "N"}`
     );
     this.announce();
     return () => this.unsubscribe(sessionId2, sub2);
+  }
+  // [LAW:single-enforcer] A hot join takes the encoded frame from the host.
+  // A missing frame or a declined handover still needs a draw. A newer write
+  // or a departing subscriber has already settled the need for this offer.
+  handover(sessionId2, watched, sub2, follower) {
+    if (watched.last === null) {
+      watched.frameDemand = ++this.frameDemands;
+      return;
+    }
+    this.send(sessionId2, watched, sub2, watched.last, (delivered) => {
+      if (!delivered && watched.followers.get(sub2) === follower && follower.confirmed === null && follower.writes.size === 0) {
+        watched.frameDemand = ++this.frameDemands;
+        this.announce();
+      }
+    });
   }
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
   // its world state read.
@@ -87759,16 +87869,23 @@ var FrameFeeds = class {
   }
   seen(sessionId2, watched) {
     const lanes = {};
-    let joined = 0;
-    for (const [sub2, follower] of watched.followers) {
+    for (const sub2 of watched.followers.keys()) {
       const seen = lanes[sub2.lane];
       lanes[sub2.lane] = {
         subscribers: (seen?.subscribers ?? 0) + 1,
         drawing: (seen?.drawing ?? false) || sub2.drawing()
       };
-      joined = Math.max(joined, follower.joined);
     }
-    return { lanes, shown: this.shown(sessionId2), joined };
+    return {
+      lanes: Object.fromEntries(
+        LANE_NAMES.flatMap((lane) => {
+          const viewed = lanes[lane];
+          return viewed === void 0 ? [] : [[lane, viewed]];
+        })
+      ),
+      shown: this.shown(sessionId2),
+      joined: watched.frameDemand
+    };
   }
   // [LAW:single-enforcer] Who watches may have changed, or how: the renderer
   // is handed the viewers whole, once for every announcement made before its
@@ -88596,9 +88713,32 @@ var DeclaredBarPanes = class {
   clock;
   log;
   held = /* @__PURE__ */ new Map();
+  lanes = {};
   declare(lanes) {
+    this.lanes = lanes;
+    this.reconcileDemands();
+  }
+  // [LAW:no-ambient-temporal-coupling] A statusline request moves the host's
+  // pane observation, and can retry its effect, under an unchanged policy.
+  // Re-elect demand only when a session changed panes or can take ownership.
+  reported(session, previous2) {
+    if (!Object.hasOwn(this.lanes, session)) return;
+    const reported = this.paneOf(session);
+    if (reported === void 0 && previous2 === null) return;
+    if (reported !== void 0 && previous2 !== null) {
+      const key = paneKey(reported.pane);
+      const held = this.held.get(key);
+      if (paneKey(previous2) === key && held?.demand.session === session) {
+        held.demand = { ...reported, session, on: held.demand.on };
+        this.reconcile(key, held);
+        return;
+      }
+    }
+    this.reconcileDemands();
+  }
+  reconcileDemands() {
     const next2 = /* @__PURE__ */ new Map();
-    for (const [session, switches] of Object.entries(lanes)) {
+    for (const [session, switches] of Object.entries(this.lanes)) {
       const reported = this.paneOf(session);
       if (reported === void 0) continue;
       const key = paneKey(reported.pane);
@@ -89232,6 +89372,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let queued = 0;
   const pendingClicks = /* @__PURE__ */ new Map();
   let configs = /* @__PURE__ */ new Map();
+  let declared;
+  let origins;
+  let followFailure = null;
   const inMailbox = (slot, at = "last") => {
     const asked = clock.monotonic();
     queued++;
@@ -89284,7 +89427,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       const key = originKey(input.event.origin);
       if (configs.has(key)) configs.set(key, "received");
     }
-    const { subscriptions, frames, stored, turnMs, ...answer3 } = output;
+    const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
     const turn = {
       ...answer3,
       settlePresentation: receipt,
@@ -89314,9 +89457,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       (effect) => effect.kind === "approve-repo"
     );
     const landed = landConfig(changes, answers);
-    const requested = event.kind === "context" ? originKey(event.context.requested) : null;
+    const requested = event.kind === "context" ? event.context.requested : null;
+    const requestedKey = requested === null ? null : originKey(requested);
     const followed = took(
       output.subscriptions,
+      output.wake,
       output.frames,
       output.stored,
       requested,
@@ -89326,12 +89471,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const waited = [];
     const unreceived = [];
     if (followed.kind === "failed") {
-      if (requested !== null && configs.get(requested) !== "received")
+      if (requestedKey !== null && configs.get(requestedKey) !== "received")
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
         const config = await configInSlot(origin, "config-subscribed");
-        if (originKey(origin) === requested) configFailure = config.failure;
+        if (originKey(origin) === requestedKey) configFailure = config.failure;
         if (config.kind === "unreceived") unreceived.push(origin);
         waited.push(config.settled);
       }
@@ -89429,10 +89574,14 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return null;
     }
   };
-  const took = (subscriptions, frames, stored, requested, receipt) => {
-    recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
+  const took = (subscriptions, nextWake, frames, stored, requested, receipt) => {
+    recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    recordTaken("subscriptions", () => collector.subscribed(subscriptions));
+    if ((declared?.sources !== subscriptions.sources || declared?.lanes !== subscriptions.lanes) && recordTaken(
+      "subscriptions",
+      () => collector.subscribed(subscriptions)
+    ) !== null)
+      declared = subscriptions;
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(
@@ -89450,22 +89599,37 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         for (const frame2 of frames) settled3(frame2, false);
     }
     const named2 = [];
-    try {
+    const moved3 = origins !== subscriptions.configs;
+    if (moved3) {
       const next2 = /* @__PURE__ */ new Map();
       for (const origin of subscriptions.configs) {
         const key = originKey(origin);
         const before = configs.get(key);
-        if (before === void 0 || key === requested && before === "unreceived") {
+        if (before === void 0) {
           named2.push(origin);
           next2.set(key, "scheduled");
         } else next2.set(key, before);
       }
       configs = next2;
-      world.configs.follow(subscriptions.configs);
+      origins = subscriptions.configs;
+    }
+    if (requested !== null) {
+      const key = originKey(requested);
+      if (configs.get(key) === "unreceived") {
+        named2.push(requested);
+        configs.set(key, "scheduled");
+      }
+    }
+    try {
+      if (moved3 || requested !== null && followFailure !== null) {
+        world.configs.follow(subscriptions.configs);
+        followFailure = null;
+      }
       return { kind: "following", named: named2 };
     } catch (thrown2) {
       for (const origin of named2) markUnreceived(origin);
       const failure2 = failureOf(thrown2);
+      followFailure = failure2;
       notTaken("configs", failure2);
       return { kind: "failed", failure: failure2 };
     }
@@ -89592,8 +89756,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         } catch (thrown2) {
           made = failureOf(thrown2);
         }
-        if (at === "first" || made.kind === "event" && made.event.kind === "start")
+        if (at === "first" || made.kind === "event" && made.event.kind === "start") {
           configs.clear();
+          declared = void 0;
+          origins = void 0;
+          followFailure = null;
+        }
         if (made.kind !== "event")
           return { event: null, slotted: unanswered(made, queuedMs) };
         holds2(made.event.kind);
@@ -89635,13 +89803,14 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
       try {
-        const { subscriptions, stored, ...answered } = await renderer.answer({
+        const { subscriptions, wake: wake2, stored, ...answered } = await renderer.answer({
           kind: "adapter",
           push,
           ...readingsAt(clock)
         });
         const followed = took(
           subscriptions,
+          wake2,
           [],
           stored,
           null,
@@ -89680,8 +89849,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const failure2 = failureOf(thrown2);
     if (failure2.kind !== "down") log("error", failure2.detail);
   });
-  const moved2 = (origins) => {
-    for (const origin of origins)
+  const moved2 = (origins2) => {
+    for (const origin of origins2)
       unawaited(
         "config",
         deliver2(configMade(origin), [["why", "config-moved"]])
@@ -90763,6 +90932,7 @@ function createDaemon(inputs) {
   );
   const frameFeeds = new FrameFeeds({
     publishFrame,
+    requestChanged: (session, previous2) => declaredBarPanes.reported(session, previous2?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {
@@ -91019,6 +91189,7 @@ function createDaemon(inputs) {
     if (route === void 0 || order2 >= route.order) {
       routes.set(session, { name, order: order2 });
       if (route !== void 0 && route.name !== name) {
+        aggregate();
         const former = renderers.get(route.name);
         if (former !== void 0)
           void former.renderer.deliver(
