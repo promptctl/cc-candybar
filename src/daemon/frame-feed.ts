@@ -30,7 +30,7 @@ import {
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
-import type { Level } from "../renderer-interface/adapter";
+import type { LogLevel } from "../utils/logger";
 import type {
   FeedFrame,
   LaneViewers,
@@ -67,7 +67,7 @@ export interface FeedDeps<Req> {
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
   deliver(make: () => Viewers): Promise<{ readonly kind: string }>;
-  log(level: Level, line: string): void;
+  log(level: LogLevel, line: string): void;
 }
 
 // Sessions whose latest request is kept, least recently noted evicted first —

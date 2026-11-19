@@ -4,6 +4,7 @@
 // silent renderer is ended, and whose ids cross.
 
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -44,6 +45,11 @@ import {
 } from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import { inertHost } from "../helpers/renderer-parts";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../helpers/oversized-renderer-history";
+import type { LogLine } from "../../src/utils/logger";
 
 // One renderer process as the test plays it: what the host wrote to it, and
 // what it says back.
@@ -177,6 +183,37 @@ const PINNED: Timed<AdapterOutput> = {
 };
 
 describe("a renderer process's start", () => {
+  test.each(["started", "refused"] as const)(
+    "takes %s boot diagnostics before the boot record, once",
+    (kind) => {
+      const { link, children, logs, levels } = rig();
+      const diagnostic: LogLine = { level: "warn", line: "construction warning" };
+      link.arm();
+      const child = children[0]!;
+      const boot: RendererLine =
+        kind === "started"
+          ? {
+              kind,
+              pid: 9001,
+              wireVersion: RENDERER_WIRE_VERSION,
+              diagnostics: [diagnostic],
+            }
+          : {
+              kind,
+              failure: failureOf(new Error("refused by fixture")),
+              diagnostics: [diagnostic],
+            };
+      child.say(boot);
+      child.say(boot);
+      const index = logs.indexOf(diagnostic.line);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(levels[index]).toBe(diagnostic.level);
+      expect(logs[index + 1]).toContain(
+        kind === "started" ? "started pid=" : "refused its boot:",
+      );
+      expect(logs.filter((line) => line === diagnostic.line)).toHaveLength(1);
+    },
+  );
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the wire version", () => {
     const { link, children } = rig();
     link.arm();
@@ -329,6 +366,35 @@ describe("a renderer process's start", () => {
     ]);
     expect(children[0]!.opts.signal?.aborted).toBe(true);
   });
+});
+
+test("the in-process link logs construction diagnostics once before its first answer", async () => {
+  const logs: LogLine[] = [];
+  const link = inProcessRenderer()({
+    name: MAIN_RENDERER,
+    boot: () => ({ ...RENDERER_BOOT, stored: oversizedRendererHistory() }),
+    entry: "/app/index.mjs",
+    node: ["/bin/node"],
+  }).start({
+    reaches: inertHost(),
+    log: (level, line) => void logs.push({ level, line }),
+    clock: heldClock(new Date(0)),
+    start: async () => {},
+    ended: () => {},
+  });
+  link.serve();
+  link.serve();
+  expect(logs).toEqual([
+    {
+      level: "info",
+      line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+    },
+  ]);
+  const answered = await link.renderer.answer(pin);
+  expect(answered).not.toHaveProperty("diagnostics");
+  expect(answered.stored).toEqual([
+    { store: "settings-history", key: oversizedSession, value: null },
+  ]);
 });
 
 describe("a renderer process's end", () => {

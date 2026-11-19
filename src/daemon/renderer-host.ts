@@ -44,7 +44,7 @@ import { readingsAt } from "../utils/instant.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
-import type { DaemonLogger } from "../utils/logger";
+import { writeLogLines, type DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
@@ -380,7 +380,15 @@ export function rendererHost(
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
-    const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
+    const {
+      subscriptions,
+      wake,
+      frames,
+      stored,
+      diagnostics,
+      turnMs,
+      ...answer
+    } = output;
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -397,6 +405,7 @@ export function rendererHost(
       endedStart(
         turn.kind === "threw" ? turn : { kind: "answered", event: input.event },
       );
+    recordDiagnostics(diagnostics);
     recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
@@ -579,6 +588,15 @@ export function rendererHost(
       notTaken(what, failureOf(thrown));
       return null;
     }
+  };
+
+  // [LAW:single-enforcer] The accepting slot writes each line once, at its
+  // original level, before the turn's effects can produce further input.
+  const recordDiagnostics = (
+    diagnostics: RendererOutput["diagnostics"],
+  ): void => {
+    if (diagnostics === undefined) return;
+    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
   };
 
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
@@ -986,12 +1004,13 @@ export function rendererHost(
       holds(`push:${push.kind}`);
       try {
         if (startFailure !== null) throw new CrossedFailure(startFailure);
-        const { subscriptions, wake, stored, ...answered } =
+        const { subscriptions, wake, stored, diagnostics, ...answered } =
           await renderer.answer({
             kind: "adapter",
             push,
             ...readingsAt(clock),
           });
+        recordDiagnostics(diagnostics);
         // [LAW:no-ambient-temporal-coupling] A push's newly named configs
         // enter before the next queued slot, as they do for an event.
         const followed = took(

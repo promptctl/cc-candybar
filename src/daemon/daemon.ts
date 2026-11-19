@@ -555,7 +555,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const reaches: AdapterToHost = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice.
-    log,
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))

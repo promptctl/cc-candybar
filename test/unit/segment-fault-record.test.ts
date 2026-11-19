@@ -43,8 +43,8 @@ const CONFIG = `{
   root: { h: ["broken"] },
 }`;
 
-const rendererOf = (): Renderer =>
-  mainRendererOf(
+const rendererOf = (): Renderer => {
+  const result = mainRendererOf(
     {
       stored: EMPTY_STORED_STATE,
       locations: {
@@ -56,10 +56,12 @@ const rendererOf = (): Renderer =>
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
     {
-      log: () => {},
       eventAnswered: () => {},
     },
   );
+  if (result.kind === "refused") throw new Error(result.failure.detail);
+  return result.renderer;
+};
 
 function contextOf(session: string): CheckedRenderRequest {
   const checked = checkRenderRequest(
