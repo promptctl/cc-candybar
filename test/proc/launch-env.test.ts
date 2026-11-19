@@ -1,7 +1,7 @@
 // What environment a child starts from, through the real launcher over the
 // real OS: every child a launcher's owner launches lacks the variables that
 // name a repository in the owner's own environment, whichever launch form
-// started it and whatever its overlay says; a program launched in a session's
+// started it, unless its overlay sets one; a program launched in a session's
 // own environment gets that environment as it is.
 
 import { execFileSync } from "node:child_process";
@@ -149,27 +149,17 @@ describe("a child that inherits its owner's environment", () => {
     expect(withheld(env)).toEqual([]);
   });
 
-  // The overlay's type refuses a withheld name written in the source.
-  it("cannot name one in an overlay written in the source", () => {
-    const opts: LaunchOpts = {
-      ...printsEnv(),
-      // @ts-expect-error a variable that names a repository is not overlaid
-      envOverlay: { GIT_DIR: "/overlaid" },
-      category: "git",
-    };
-    expect(opts.envOverlay).toEqual({ GIT_DIR: "/overlaid" });
-  });
-
-  it("lacks them whatever an overlay built at run time names", async () => {
-    const overlay: Record<string, string> = Object.fromEntries(
-      REPOSITORY_NAMING_ENV.map((name) => [name, "/overlaid"]),
-    );
+  // An overlay is the launch's own intent: what it names arrives as given,
+  // and only what it names.
+  it("gets one its overlay names, and still lacks the rest", async () => {
     const r = await launcher().launch({
       ...printsEnv(),
-      envOverlay: overlay,
+      envOverlay: { GIT_DIR: "/overlaid" },
       category: "git",
     });
-    expect(withheld(parsed(r.stdout))).toEqual([]);
+    const env = parsed(r.stdout);
+    expect(env.GIT_DIR).toBe("/overlaid");
+    expect(withheld(env)).toEqual(["GIT_DIR"]);
   });
 });
 

@@ -137,24 +137,19 @@ function childEnv(
   scope: LaunchScope,
   opts: Pick<LaunchOpts, "environment" | "envOverlay">,
 ): NodeJS.ProcessEnv {
-  const { base, withheld } =
-    opts.environment === undefined
-      ? // [LAW:single-enforcer] The owner's inherited environment is whichever
-        // shell spawned it, so the variables naming a repository there (a git
-        // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are withheld
-        // from every child that inherits it: a child's repository is its
-        // working directory's.
-        { base: scope.inherited, withheld: REPOSITORY_NAMING_ENV }
-      : // [LAW:one-source-of-truth] A session's own environment passes as it
-        // is: the session owns its variables, a GIT_DIR in it included.
-        { base: opts.environment, withheld: [] };
-  const env: NodeJS.ProcessEnv = { ...base };
+  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+  // [LAW:single-enforcer] The owner's inherited environment is whichever
+  // shell spawned it, so the variables naming a repository there (a git
+  // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are withheld from
+  // every child that inherits it: a child's repository is its working
+  // directory's. Only the inherited base loses them. An overlay below is the
+  // launch's own intent and is set as given.
+  // [LAW:one-source-of-truth] A session's own environment passes as it is:
+  // the session owns its variables, a GIT_DIR in it included.
+  const withheld = opts.environment === undefined ? REPOSITORY_NAMING_ENV : [];
+  for (const name of withheld) delete env[name];
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
-  // After the overlay: its type refuses a withheld name written in the
-  // source, and a record built at run time passes that type, so this order is
-  // what keeps such a record from putting one back.
-  for (const name of withheld) delete env[name];
   return env;
 }
 
@@ -187,8 +182,8 @@ function rateLimitedResult(
 
 // Who a launcher's launches belong to.
 export interface LaunchScope {
-  // The environment this owner's children inherit, under each launch's
-  // `envOverlay` and less the variables that name a repository. The owner's
+  // The environment this owner's children inherit, less the variables that
+  // name a repository and under each launch's `envOverlay`. The owner's
   // root passes the same environment it reads its own facts from, unedited.
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
