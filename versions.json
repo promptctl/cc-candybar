@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "302fc64ce5feb571dec1d018b9b3b3bf45535802",
+      "timestamp": "2026-11-19T11:48:06.951Z",
+      "commits": [
+        {
+          "sha": "302fc64ce5feb571dec1d018b9b3b3bf45535802",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:47:10-07:00",
+          "message": "refactor(daemon): consolidate the shared host and renderer boundary (#856)\n\n* refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n\n* refactor(config): share discovery observations and file reads (ibyq.i9x)\n\n(cherry picked from commit e56a941f91b0811fc646ab2b566ba4382ee5b03b)\n\n* fix(config): share reads through file symlinks (ibyq.i9x)\n\n(cherry picked from commit a4215b5c35f12fe55532cd286dd228a093ed46a8)\n\n* refactor(config): share origin watches across renderer names (ibyq.5lt)\n\n(cherry picked from commit b68a964c35f8c6900dd53785162bb633ea09c633)\n\n* refactor(click): admit one typed session at the host (ibyq.afa)\n\n(cherry picked from commit bddc650f29b188140220a688d7d0793b476b58c1)\n\n* fix(renderer): keep one live context per session (ibyq.n91)\n\n(cherry picked from commit 11d9f23b6672f8ac6c0a2a319cda153dd5030fcb)\n\n* refactor(check): use typed render inspection (ibyq.62x)\n\n(cherry picked from commit afa093c1e080872aa399f0dd08e769156dcd8f0f)\n\n* fix(renderer): bound scheduled work in a busy mailbox (ibyq.4nf)\n\n(cherry picked from commit 4196b831ad87f5443878a742f56a780f9b328e6f)\n\n* refactor(renderer): publish pushed frame presentations in the host (ibyq.vne)\n\n(cherry picked from commit 5f85d9fe4b4c8a0bf2a35539cc1ec4bade8d9d42)\n\n* refactor(click): sign published frame links in the host (ibyq.vne)\n\n(cherry picked from commit 34a2a2df324817b0940f2349d570ba1bb8935508)\n\n* fix(tmux): admit pane acts at the head of the queue (ibyq.6n3)\n\n(cherry picked from commit b8ed01b20393872eb821b991b0f4213620f00527)\n\n* test: verify the composed host and renderer boundary\n\n* fix(daemon): publish presents only for the requested session\n\n* fix(daemon): resolve statusline config readiness in the host (ibyq.n91)\n\n(cherry picked from commit 325247e0dead22e60437d1ac1955db1de8b8a634)\n\n* test: run readiness through host frame publication\n\n* refactor(renderer): agree on the private wire version at boot (ibyq.cg5)\n\n(cherry picked from commit 39bb98fbe5f4ac3054f8bc86fb507d1a58a0abd4)\n\n* fix: batch shared config watch invalidation\n\n(cherry picked from commit f12d7bf54165a690553e0f0c0caa5eaadf47d763)\n\n* fix(renderer): keep requesting client dimensions for its draw (ibyq.n91)\n\n(cherry picked from commit fd59c7b498ae8c8e8054d718d3344b45cff22e22)"
+        }
+      ]
+    },
+    {
       "version": "pr-858",
       "ref": "refs/pull/858/merge",
       "sha": "c023d50395bf3be742b50dfaa5827fc58f99ed78",
@@ -24,147 +39,6 @@
       ]
     },
     {
-      "version": "pr-856",
-      "ref": "refs/pull/856/merge",
-      "sha": "b6d5eeb3c6e31001de3fcd7b5bebe3167566953d",
-      "timestamp": "2026-11-19T11:39:34.854Z",
-      "commits": [
-        {
-          "sha": "b6d5eeb3c6e31001de3fcd7b5bebe3167566953d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:38:40Z",
-          "message": "Merge 691e3250cbe3876105a06383db22f17c213cf6b4 into f2035fdda3d7aced7e27f485137b01e28691e13f\n"
-        },
-        {
-          "sha": "691e3250cbe3876105a06383db22f17c213cf6b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:24:47-07:00",
-          "message": "fix(renderer): keep requesting client dimensions for its draw (ibyq.n91)\n\n(cherry picked from commit fd59c7b498ae8c8e8054d718d3344b45cff22e22)\n"
-        },
-        {
-          "sha": "349c67926a51f1425b599dd113d8f1bda7a492e2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:20:46-07:00",
-          "message": "fix: batch shared config watch invalidation\n\n(cherry picked from commit f12d7bf54165a690553e0f0c0caa5eaadf47d763)\n"
-        },
-        {
-          "sha": "576be8db7c8f5156e7d6eb62ff9248e40bec613c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:18:42-07:00",
-          "message": "refactor(renderer): agree on the private wire version at boot (ibyq.cg5)\n\n(cherry picked from commit 39bb98fbe5f4ac3054f8bc86fb507d1a58a0abd4)\n"
-        },
-        {
-          "sha": "03622ff8740ef72c4ddb7101dfed546d9f28b70c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:16:40-07:00",
-          "message": "test: run readiness through host frame publication\n"
-        },
-        {
-          "sha": "0c51b38cfd34c918ecda54117450e6bd6bc2c2f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:12:20-07:00",
-          "message": "fix(daemon): resolve statusline config readiness in the host (ibyq.n91)\n\n(cherry picked from commit 325247e0dead22e60437d1ac1955db1de8b8a634)\n"
-        },
-        {
-          "sha": "5a47fadce43eebf49280280081f2779160bc6026",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:15:19-07:00",
-          "message": "fix(daemon): publish presents only for the requested session\n"
-        },
-        {
-          "sha": "b58214aeaa090334c864f0a4ff4b9db0c1faf9c4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:10:44-07:00",
-          "message": "test: verify the composed host and renderer boundary\n"
-        },
-        {
-          "sha": "9e907c96dd0160a4ce7d76f2c970d35520db2703",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:06:31-07:00",
-          "message": "fix(tmux): admit pane acts at the head of the queue (ibyq.6n3)\n\n(cherry picked from commit b8ed01b20393872eb821b991b0f4213620f00527)\n"
-        },
-        {
-          "sha": "f9239736f341950805c2bf2353dbd180bec11eec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:05:34-07:00",
-          "message": "refactor(click): sign published frame links in the host (ibyq.vne)\n\n(cherry picked from commit 34a2a2df324817b0940f2349d570ba1bb8935508)\n"
-        },
-        {
-          "sha": "0244a4dac139d6d40e76076f0281a46ef7a2e5bd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:57:11-07:00",
-          "message": "refactor(renderer): publish pushed frame presentations in the host (ibyq.vne)\n\n(cherry picked from commit 5f85d9fe4b4c8a0bf2a35539cc1ec4bade8d9d42)\n"
-        },
-        {
-          "sha": "45a32b6f79466b1dbb59705c82569e4f0faff0a2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:02:54-07:00",
-          "message": "fix(renderer): bound scheduled work in a busy mailbox (ibyq.4nf)\n\n(cherry picked from commit 4196b831ad87f5443878a742f56a780f9b328e6f)\n"
-        },
-        {
-          "sha": "a9ccdcf8783d973410e1839c91b12628ced175c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:01:36-07:00",
-          "message": "refactor(check): use typed render inspection (ibyq.62x)\n\n(cherry picked from commit afa093c1e080872aa399f0dd08e769156dcd8f0f)\n"
-        },
-        {
-          "sha": "d4d20977d41dd75443f5f0db9f9aaf5b177d8cde",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:52:49-07:00",
-          "message": "fix(renderer): keep one live context per session (ibyq.n91)\n\n(cherry picked from commit 11d9f23b6672f8ac6c0a2a319cda153dd5030fcb)\n"
-        },
-        {
-          "sha": "831aaf39105ba693989b3c3c12b5e1f2803d3e13",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:54:28-07:00",
-          "message": "refactor(click): admit one typed session at the host (ibyq.afa)\n\n(cherry picked from commit bddc650f29b188140220a688d7d0793b476b58c1)\n"
-        },
-        {
-          "sha": "feb9ecd6810806caf68d3b26cb999e5f9f3c161c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:40:26-07:00",
-          "message": "refactor(config): share origin watches across renderer names (ibyq.5lt)\n\n(cherry picked from commit b68a964c35f8c6900dd53785162bb633ea09c633)\n"
-        },
-        {
-          "sha": "82fb400cb501441f55c7eafa7084e91c9f739caa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:32:41-07:00",
-          "message": "fix(config): share reads through file symlinks (ibyq.i9x)\n\n(cherry picked from commit a4215b5c35f12fe55532cd286dd228a093ed46a8)\n"
-        },
-        {
-          "sha": "29b9e1e8e3dd750dc6d670fa479c68157ef0a5a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:29:09-07:00",
-          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n\n(cherry picked from commit e56a941f91b0811fc646ab2b566ba4382ee5b03b)\n"
-        },
-        {
-          "sha": "6515b17d1b41c3bb668d3eef2e5a3047d6507114",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:45:50-07:00",
-          "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-857",
       "ref": "refs/pull/857/merge",
       "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
@@ -183,21 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T04:35:29-07:00",
           "message": "fix(daemon): launches withhold the spawning shell's repository variables, asked of git once after admission\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "f2035fdda3d7aced7e27f485137b01e28691e13f",
-      "timestamp": "2026-11-19T11:38:30.391Z",
-      "commits": [
-        {
-          "sha": "f2035fdda3d7aced7e27f485137b01e28691e13f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T11:37:16Z",
-          "message": "chore(release): set `package.json` to 1.232.15\n\n## [1.232.15](https://github.com/promptctl/cc-candybar/compare/v1.232.14...v1.232.15) (2026-11-19)\n\n### Bug Fixes\n\n* **test:** a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo) ([#838](https://github.com/promptctl/cc-candybar/issues/838)) ([67f9c32](https://github.com/promptctl/cc-candybar/commit/67f9c326810383c223b62ad696c55bb3e1087dc2))\n"
         }
       ]
     },
