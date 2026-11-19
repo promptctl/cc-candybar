@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-878",
+      "ref": "refs/pull/878/merge",
+      "sha": "341e4fe4895b633fe2126f1d7eb8d4ddc917559d",
+      "timestamp": "2026-11-19T15:42:12.111Z",
+      "commits": [
+        {
+          "sha": "341e4fe4895b633fe2126f1d7eb8d4ddc917559d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:41:09-07:00",
+          "message": "Merge bd8cebab55341cbe109363b5e14859d36074951d into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+        },
+        {
+          "sha": "bd8cebab55341cbe109363b5e14859d36074951d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:35:11-07:00",
+          "message": "fix(renderer): inspect the newest accepted layout in the active view\n"
+        },
+        {
+          "sha": "90b4aa3ba5a23e313947b3390aa05f94aa46ee77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:32:49-07:00",
+          "message": "test(renderer): distinguish late receipts with a changing frame clock\n"
+        },
+        {
+          "sha": "b45e209fcbf4bc5ee30807d342bf9e65f72d2956",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:25:45-07:00",
+          "message": "test(renderer): confirm frame delivery before comparing diagnostics\n"
+        },
+        {
+          "sha": "7fe8257204a0a87e4aaa671f086cbbb7b09082e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:19:05-07:00",
+          "message": "test(daemon): verify named feed publication retains its delivery receipt\n"
+        },
+        {
+          "sha": "38c33617de2ef3e5c7d238e39db5ed19fe60e427",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:15:29-07:00",
+          "message": "refactor(renderer): own each accepted draw in one presentation record\n"
+        },
+        {
+          "sha": "a3bb93c5dbd739f4c70dd62466db8671ddbeaa48",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:59:19-07:00",
+          "message": "fix(renderer): retain delivered diagnostics and give each message one copy key\n"
+        },
+        {
+          "sha": "132708670082acb793e67e9e6cb6b38dbb0b0a7a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:34:55-07:00",
+          "message": "fix(renderer): settle pushed frame memory on actual subscriber delivery\n"
+        },
+        {
+          "sha": "33dcfdeeb4324eee2e50382799fe8a1ad99fd219",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:00:18-07:00",
+          "message": "fix(renderer): commit request frame memory on delivery\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "72652bd631655794e7e9adc79fe7ffbddceb93f3",
@@ -106,56 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:24:34-07:00",
           "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-878",
-      "ref": "refs/pull/878/merge",
-      "sha": "985c59ed29780c6c8cd92c62060197ad2bb62431",
-      "timestamp": "2026-11-19T15:23:58.665Z",
-      "commits": [
-        {
-          "sha": "985c59ed29780c6c8cd92c62060197ad2bb62431",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:19:24Z",
-          "message": "Merge f3a257f25477a9af6097fa029cba080a02ccb9ae into 53453112ae58ddddcd39dca83f2f94c90b7165df\n"
-        },
-        {
-          "sha": "f3a257f25477a9af6097fa029cba080a02ccb9ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:19:05-07:00",
-          "message": "test(daemon): verify named feed publication retains its delivery receipt\n"
-        },
-        {
-          "sha": "ed3bc364cb4e84bbc54771699598b61b3d9cf655",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:15:29-07:00",
-          "message": "refactor(renderer): own each accepted draw in one presentation record\n"
-        },
-        {
-          "sha": "68663cc68904ab3d0fff42a16f5131830bb3a97c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:59:19-07:00",
-          "message": "fix(renderer): retain delivered diagnostics and give each message one copy key\n"
-        },
-        {
-          "sha": "845ce6cbd78d4b0a2f63002409b57bd0624f8b3f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:34:55-07:00",
-          "message": "fix(renderer): settle pushed frame memory on actual subscriber delivery\n"
-        },
-        {
-          "sha": "4964f22c50bc4d6bf76ddf73f021226659ca54e3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:00:18-07:00",
-          "message": "fix(renderer): commit request frame memory on delivery\n"
         }
       ]
     },
