@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-839",
+      "ref": "refs/pull/839/merge",
+      "sha": "938840fd083a826a488c1223d30a25fd23b2685c",
+      "timestamp": "2026-11-19T10:07:32.976Z",
+      "commits": [
+        {
+          "sha": "938840fd083a826a488c1223d30a25fd23b2685c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:06:23Z",
+          "message": "Merge 7ee53e6edd28fbd4910006e4620165f784a3c619 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "7ee53e6edd28fbd4910006e4620165f784a3c619",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:06:15-07:00",
+          "message": "fix(tmux): reconcile existing panes and retry interrupted splits\n"
+        },
+        {
+          "sha": "b1f095e21bef78df16336c65a3253c20d65ad42d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:56:16-07:00",
+          "message": "fix(settings): satisfy pane reconciliation lint\n"
+        },
+        {
+          "sha": "b3b9c11985f0523e3781506a45fa5a3b95ec3324",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:52:27-07:00",
+          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-841",
       "ref": "refs/pull/841/merge",
       "sha": "9e1dd9c9b2bdc8af715de6fc2df921a60aab9b76",
@@ -75,35 +111,6 @@
       ]
     },
     {
-      "version": "pr-839",
-      "ref": "refs/pull/839/merge",
-      "sha": "b48194c6a746ae31c30ae7b843eb8030f8ca55a5",
-      "timestamp": "2026-11-19T09:57:31.561Z",
-      "commits": [
-        {
-          "sha": "b48194c6a746ae31c30ae7b843eb8030f8ca55a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:56:24Z",
-          "message": "Merge b1f095e21bef78df16336c65a3253c20d65ad42d into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "b1f095e21bef78df16336c65a3253c20d65ad42d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:56:16-07:00",
-          "message": "fix(settings): satisfy pane reconciliation lint\n"
-        },
-        {
-          "sha": "b3b9c11985f0523e3781506a45fa5a3b95ec3324",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:52:27-07:00",
-          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-838",
       "ref": "refs/pull/838/merge",
       "sha": "9a5e1ff947d4433ff5508b0fc0bfc0c0b9426c50",
@@ -129,42 +136,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:38:14-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-836",
-      "ref": "refs/pull/836/merge",
-      "sha": "cc22b658a57819734c1881c3574c2bc1e4517771",
-      "timestamp": "2026-11-19T09:50:22.951Z",
-      "commits": [
-        {
-          "sha": "cc22b658a57819734c1881c3574c2bc1e4517771",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:49:34Z",
-          "message": "Merge 0884824c6ff0f7a1eb8d04d60819ccde57b705f2 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "0884824c6ff0f7a1eb8d04d60819ccde57b705f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:39:00-07:00",
-          "message": "fix(edit): a placement's session state is owned by the file that authored its node\n\n- The merge decides authorship per row: the root cascade now yields each row's\n  author alongside the row itself, from the same branch. A node is its row's\n  author's, or its insert cell's file's; the bundled base authors its own.\n- The owner is the authoring file's digest. Each file is measured on the trees of\n  the chain up to it, so a file appearing that writes no row leaves every owner as\n  it was, and a file above that re-places a node ends nothing of the file below.\n- A view owns only what its chain renders, by the highest file authoring it; a\n  write to a placement nothing owns is refused.\n- Back restores only a step whose placements are owned now by the owners it names.\n"
-        },
-        {
-          "sha": "9576759040586c561776143c234b3a4da5735c85",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:15:18-07:00",
-          "message": "fix(edit): placements are measured on the trees each prefix renders, and history records keys as the store holds them\n\n- Each chain prefix is measured on its placed tree, insert cells included, from the\n  loader's own insert placing; the click's holds use the same measure.\n- Navigation records owned keys below the owner, so a step needs no owner of its own;\n  the gate reads a step through its owner-free spelling. A draft key is the owned form\n  only, so a history step over an owner-free draft retires at load.\n- A release that ends nothing logs that it ran; a click's release lines are logged once\n  the click landed.\n- Each key family is one template that generates its minting and readings; the owner is\n  a digest of the prefix's files; the regex escaper is shared.\n"
-        },
-        {
-          "sha": "3ab1a2cebb3a998e15de855cea8d0ed6a2d22a92",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:35:58-07:00",
-          "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
         }
       ]
     },

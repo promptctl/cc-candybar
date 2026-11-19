@@ -75318,16 +75318,19 @@ var Acts = class {
 
 // src/daemon/declared-bar-panes.ts
 init_globals();
+var RETRY_MS = 1e3;
 var DeclaredBarPanes = class {
-  constructor(paneOf, setPane, log) {
+  constructor(paneOf, setPane, clock, log) {
     this.paneOf = paneOf;
     this.setPane = setPane;
+    this.clock = clock;
     this.log = log;
   }
   paneOf;
   setPane;
+  clock;
   log;
-  desired = /* @__PURE__ */ new Map();
+  held = /* @__PURE__ */ new Map();
   declare(lanes) {
     const next = /* @__PURE__ */ new Map();
     for (const [session, switches] of Object.entries(lanes)) {
@@ -75338,18 +75341,55 @@ var DeclaredBarPanes = class {
       if (competing === void 0 || competing.order < reported.order)
         next.set(key, { ...reported, session, on: switches.pane });
     }
-    const before = this.desired;
-    this.desired = next;
-    for (const [key, demand] of before)
-      if (demand.on && next.get(key)?.on !== true) this.apply(demand, false);
-    for (const [key, demand] of next)
-      if (demand.on && before.get(key)?.on !== true) this.apply(demand, true);
+    for (const [key, demand] of next) {
+      const held2 = this.held.get(key);
+      if (held2 === void 0)
+        this.held.set(key, {
+          demand,
+          listed: true,
+          application: { kind: "unchecked" }
+        });
+      else {
+        held2.demand = demand;
+        held2.listed = true;
+      }
+    }
+    for (const [key, held2] of this.held) {
+      if (!next.has(key)) {
+        held2.listed = false;
+        held2.demand = { ...held2.demand, on: false };
+      }
+      this.reconcile(key, held2);
+    }
   }
-  apply({ session, pane }, on2) {
+  reconcile(key, held2) {
+    const { application, demand } = held2;
+    if (application.kind === "running") return;
+    if (application.kind === "applied" && application.on === demand.on) {
+      if (!held2.listed) this.held.delete(key);
+      return;
+    }
+    if (application.kind === "retry" && application.on === demand.on && this.clock.monotonic() < application.after)
+      return;
+    const { session, pane, on: on2 } = demand;
     const event = `bar-pane sid=${JSON.stringify(session)} pane=${JSON.stringify(pane.pane)} desired=${on2 ? "on" : "off"}`;
+    held2.application = { kind: "running" };
     void this.setPane(pane, on2).then(
-      (said2) => this.log("info", `${event} \u2014 ${said2}`),
-      (error) => this.log("warn", `${event} \u2014 ${failureOf(error).detail}`)
+      (said2) => {
+        held2.application = { kind: "applied", on: on2 };
+        this.log("info", `${event} \u2014 ${said2}`);
+        this.reconcile(key, held2);
+      },
+      (error) => {
+        held2.application = {
+          kind: "retry",
+          on: on2,
+          after: this.clock.monotonic() + RETRY_MS
+        };
+        this.log("warn", `${event} \u2014 ${failureOf(error).detail}`);
+        if (!held2.listed && !on2) this.held.delete(key);
+        else this.reconcile(key, held2);
+      }
     );
   }
 };
@@ -94604,6 +94644,7 @@ function createDaemon(inputs) {
       return latest !== void 0 && pane != null ? { pane, order: latest.order } : void 0;
     },
     (pane, on2) => acts.setBarPane(pane, on2),
+    clock,
     log
   );
   const frameFeeds = new FrameFeeds({
