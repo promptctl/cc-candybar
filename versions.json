@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-890",
+      "ref": "refs/pull/890/merge",
+      "sha": "70cf474e4b6b4db9fbe09bfe6d1c037c1dd0397f",
+      "timestamp": "2026-11-19T17:28:08.815Z",
+      "commits": [
+        {
+          "sha": "70cf474e4b6b4db9fbe09bfe6d1c037c1dd0397f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:27:00Z",
+          "message": "Merge b695411fb46e10851802f7bfaa5ce48595e7dfd1 into 9da36ac5cf93db8fc262b083c7e18134a3a833b9\n"
+        },
+        {
+          "sha": "b695411fb46e10851802f7bfaa5ce48595e7dfd1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:49:37-07:00",
+          "message": "refactor(config): derive project layers and plugins from one decision\n"
+        }
+      ]
+    },
+    {
       "version": "pr-888",
       "ref": "refs/pull/888/merge",
       "sha": "e48d7fd5392adab390c779c4277fdc51f826a71e",
@@ -64,28 +86,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-890",
-      "ref": "refs/pull/890/merge",
-      "sha": "a90fb10f30c7d74a7e3b10d837c9086ae64795a0",
-      "timestamp": "2026-11-19T16:59:29.469Z",
-      "commits": [
-        {
-          "sha": "a90fb10f30c7d74a7e3b10d837c9086ae64795a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:58:17Z",
-          "message": "Merge 71c4b6243621232c63447a497120de4efe1f4f3e into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
-        },
-        {
-          "sha": "71c4b6243621232c63447a497120de4efe1f4f3e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:49:37-07:00",
-          "message": "refactor(config): derive project layers and plugins from one decision\n"
         }
       ]
     },

@@ -28580,14 +28580,18 @@ function ruling(answers, d) {
   const legacy = answerOf(answers.value, d.dir);
   return legacy === null ? { standing: "awaiting", under: key } : { standing: legacy, under: d.dir };
 }
-function projectAccess(answers, project, hasConfig) {
-  const unread2 = answers?.kind === "failed" ? answers.reason : null;
-  if (project === null || answers === null)
-    return { approved: null, question: null, unread: unread2 };
+var NO_PROJECT_ACCESS = {
+  approved: null,
+  question: null,
+  unread: null
+};
+function projectAccess(answers, project) {
+  const unread2 = answers.kind === "failed" ? answers.reason : null;
+  if (project === null) return { ...NO_PROJECT_ACCESS, unread: unread2 };
   const { standing: standing2, under: under2 } = ruling(answers, project);
   return {
     approved: standing2 === "approved" ? project.path : null,
-    question: hasConfig || project.hasPlugins ? {
+    question: project.contributes ? {
       dir: under2,
       standing: standing2,
       unproven: project.link.kind === "unproven" ? project.link.reason : null
@@ -61917,14 +61921,15 @@ var PROJECT_BASES = {
 function xdgConfigBase(locs) {
   return import_node_path6.default.join(locs.configHome, "cc-candybar", "config");
 }
+var admitsLayer = (project, role) => role === "user" || project.approved !== null;
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
 function userConfigDefault(locs) {
   return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
 function chainPlaces(resolved, locations2) {
   return LAYER_ROLES.flatMap((role) => {
+    if (!admitsLayer(resolved.project, role)) return [];
     if (role === "user") return [{ path: resolved.home, role }];
-    if (resolved.project.approved === null) return [];
     const place = resolved.layers.find((layer) => layer.role === role)?.path ?? locations2.find((location) => location.role === role)?.candidates[0]?.file;
     return place === void 0 ? [] : [{ path: place, role }];
   });
@@ -86184,7 +86189,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.2";
+var PACKAGE_VERSION = "1.235.4";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -88288,13 +88293,12 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
 async function clickLaunch(launch, opts, what, said2) {
   const result = await launch(opts);
   if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
-  const held = clickFailed(result, what);
-  return { outcome: { kind: "skipped", reason: held }, said: held };
-}
-function clickFailed(r, what) {
-  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
-  if (r.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(`${what} failed (${failureText(r)})`);
+  if (result.reason === "aborted") {
+    const reason2 = new DaemonClosing(what).message;
+    return { outcome: { kind: "closing", reason: reason2 }, said: reason2 };
+  }
+  const reason = result.reason === "rate-limited" ? `${what} not run: ${failureText(result)}` : `${what} failed (${failureText(result)})`;
+  return { outcome: { kind: "failed", reason }, said: reason };
 }
 
 // src/daemon/acts.ts
@@ -89707,20 +89711,24 @@ var import_node_path32 = __toESM(require_path_browserify(), 1);
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
+function installedPluginDirs(locs) {
   const installed = [
     ...[...locs.dataDirs].reverse().map((d) => import_node_path30.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path30.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
+  return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
   return import_node_path30.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
 var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path30.default.join(project, REPO_PLUGIN_DIR);
+function listedRepoRoot(approved, entries) {
+  if (entries === null) return null;
+  if ("error" in entries)
+    return { root: entries.path, scope: "repo", listed: entries };
+  return approved === null ? null : { root: repoPluginDir(approved), scope: "repo", listed: entries };
+}
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -89858,15 +89866,12 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   );
   const seen = repoProject(
     query.kind === "chain" ? query.projectDir : void 0,
+    found2.some(({ role }) => role !== "user"),
     files
   );
   const book = query.kind === "file" ? null : readAnswers();
-  const project = projectAccess(
-    book?.result ?? null,
-    seen.project,
-    found2.some(({ role }) => role !== "user")
-  );
-  const layers = found2.filter(({ role }) => role === "user" || project.approved !== null).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
+  const project = book === null ? NO_PROJECT_ACCESS : projectAccess(book.result, seen.project);
+  const layers = found2.filter(({ role }) => admitsLayer(project, role)).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
   const user = locations2.find(({ role }) => role === "user");
   const home = user?.kind === "found" ? user.winner.file : query.path ?? userConfigDefault(locs);
   const namedFailure = query.path !== void 0 && user?.kind !== "found";
@@ -89883,34 +89888,34 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const resolution = !namedFailure ? { ...common, kind: "chain" } : problem === void 0 ? { ...common, kind: "missing", path: home } : { ...common, kind: "unreadable", ...problem };
   return {
     resolution,
-    unlisted: seen.unlisted,
+    repoRoot: listedRepoRoot(project.approved, seen.entries),
     locations: locations2,
     watchedFiles: [...candidates, ...book?.paths ?? []]
   };
 }
-function repoProject(projectDir, files = discoveryFiles()) {
+function repoProject(projectDir, hasConfig, files) {
   if (projectDir === void 0)
-    return { project: null, unchecked: null, unlisted: null };
+    return { project: null, unchecked: null, entries: null };
   const present = files.presence(projectDir);
   if (present !== "present")
     return {
       project: null,
       unchecked: present === "absent" ? null : present,
-      unlisted: null
+      entries: null
     };
   const dir = files.realpath(projectDir);
   if (typeof dir !== "string")
-    return { project: null, unchecked: dir, unlisted: null };
-  const listed = files.folders(import_node_path32.default.join(projectDir, REPO_PLUGIN_DIR));
+    return { project: null, unchecked: dir, entries: null };
+  const entries = files.folders(repoPluginDir(projectDir));
   return {
     project: {
       dir,
       link: files.worktree(dir),
       path: projectDir,
-      hasPlugins: !("error" in listed) && listed.folders.length > 0
+      contributes: hasConfig || !("error" in entries) && entries.folders.length > 0
     },
     unchecked: null,
-    unlisted: "error" in listed ? listed : null
+    entries
   };
 }
 function configCollisionNotice(locations2) {
@@ -89945,17 +89950,21 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return pluginRoots(locs, null).map((root) => listRoot(root, files));
+  return installedPluginDirs(locs).map(
+    (root) => readDefinitions(
+      { root, scope: "plugins", listed: files.folders(root) },
+      files
+    )
+  );
 }
-function listRoot({ dir, scope }, files) {
-  const listed = files.folders(dir);
+function readDefinitions({ root, scope, listed }, files) {
   return {
-    root: dir,
+    root,
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
         (name) => readDefinition(
-          import_node_path33.default.join(dir, name, DEFINITION_FILE),
+          import_node_path33.default.join(root, name, DEFINITION_FILE),
           scope,
           files
         )
@@ -89986,12 +89995,11 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) {
-  const repoRoots = repo2 !== null && typeof repo2 !== "string" ? [{ root: repo2.path, scope: "repo", listed: repo2 }] : pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map((root) => listRoot(root, files));
+function sessionPlugins(roots, checkout) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
-  for (const { root, scope, listed } of [...installed, ...repoRoots]) {
+  for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
       notices.push(
         `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
@@ -90010,12 +90018,7 @@ function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) 
     plugins: [...byNs.values()],
     strays,
     notices,
-    // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
-    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
-    // above it, since an ancestor watch per session is the cost; the next
-    // rediscovery reads the new checkout.
-    checkout: files.checkout(cwd2)
+    checkout
   };
 }
 function layerOf(role, file, content, home, batch = {
@@ -90055,14 +90058,13 @@ function snapshotOf(session, chain2) {
 function discover(query, shared) {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, unlisted, locations: locations2, watchedFiles } = search;
+  const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
   const { project } = resolution;
   const session = sessionPlugins(
-    locs,
-    shared.installed,
-    unlisted ?? project.approved,
-    query.cwd,
-    files
+    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
+    // on its next pass. Watching every parent would add a watch per ancestor.
+    files.checkout(query.cwd)
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)
@@ -90086,9 +90088,9 @@ function discover(query, shared) {
       files: watchedFiles,
       roots: [
         .../* @__PURE__ */ new Set([
-          ...pluginRoots(locs, project.approved).map((r) => r.dir),
+          ...shared.installed.map((r) => r.root),
           // A chain must hear a new repository plugin even before approval.
-          ...query.kind === "chain" && query.projectDir !== void 0 ? [import_node_path33.default.join(query.projectDir, REPO_PLUGIN_DIR)] : []
+          ...query.kind === "chain" && query.projectDir !== void 0 ? [repoPluginDir(query.projectDir)] : []
         ])
       ]
     }
