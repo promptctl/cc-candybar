@@ -707,6 +707,7 @@ function productionAnswer(
     () =>
       answerStatusline(
         host,
+        publishingFrames(TEST_SIGNER),
         t.rig.served.collector,
         systemTimekeeper,
         closing,
