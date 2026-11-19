@@ -1,3 +1,9 @@
+## [1.235.6](https://github.com/promptctl/cc-candybar/compare/v1.235.5...v1.235.6) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** preserve Git checkout read errors ([#892](https://github.com/promptctl/cc-candybar/issues/892)) ([b430a64](https://github.com/promptctl/cc-candybar/commit/b430a64a7ab7be113b28a91192cf47cb2e26835f))
+
 ## [1.235.5](https://github.com/promptctl/cc-candybar/compare/v1.235.4...v1.235.5) (2026-11-19)
 
 ### Bug Fixes
