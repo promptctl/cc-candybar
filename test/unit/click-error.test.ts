@@ -17,8 +17,12 @@ import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 const SID = sessionIdOf("s");
 const at = (seconds: number): Instant => seconds as Instant;
 const END = 100 + CLICK_ERROR_HOLD_S;
-const legacyError = { text: "set-state: refused", at: at(100), answered: false };
-const error = { ...legacyError, revision: 1 };
+const error = {
+  text: "set-state: refused",
+  at: at(100),
+  answered: false,
+  revision: 1,
+};
 
 test("a click's errors show at every instant before the hold ends, and to no frame after", () => {
   const state = new SessionState();
@@ -77,12 +81,8 @@ test("reading a click's errors writes nothing, so a later render inside the hold
   expect(clickErrorAt(state, SID, at(101), "feed").kind).toBe("held");
 });
 
-test("a session with no click error, or a value an older daemon wrote, holds none", () => {
+test("a session with no click error holds none", () => {
   const state = new SessionState();
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
-    kind: "none",
-  });
-  state.set(SID, "candybar.clickError", 'set-state: placement "block" refused');
   expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
     kind: "none",
   });
@@ -95,52 +95,46 @@ test("an answer carrying another failure at the same instant leaves this one owe
   expect(clickErrorAt(state, SID, at(END + 1), "request").kind).toBe("owed");
 });
 
-test("a record an older daemon wrote with no answered mark is owed to the next request", () => {
+test("a record this build did not write is said, not read as none", () => {
   const state = new SessionState();
-  state.set(
-    SID,
-    "candybar.clickError",
-    JSON.stringify({ text: "set-state: refused", at: 100 }),
+  state.set(SID, "candybar.clickError", JSON.stringify({ text: "x", at: 1 }));
+  expect(() => clickErrorAt(state, SID, at(100), "request")).toThrow(
+    /not one this build writes/,
   );
-  expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
-    kind: "owed",
-    error: legacyError,
-  });
 });
 
-test.each([undefined, 6])("an old oversized stored record with revision %s is bounded when read and marked", (revision) => {
-  const original = JSON.stringify({
-    text: `first action: ${"old details\n".repeat(300)}last action: refused`,
-    at: 100,
-    revision,
-  });
-  const state = new SessionState({ [SID]: { "click.error": original } });
+test("an oversized failure is bounded when held, and the answer that carried it marks it", () => {
+  const state = new SessionState();
+  holdClickError(
+    state,
+    SID,
+    `first action: ${"details\n".repeat(600)}last action: refused`,
+    at(100),
+  );
   const shown = clickErrorAt(state, SID, at(END + 1), "request");
-  expect(shown.kind).toBe("owed");
-  if (shown.kind !== "owed") throw new Error("expected the stored diagnostic");
+  if (shown.kind !== "owed") throw new Error("expected the held diagnostic");
   expect(shown.error.text.length).toBeLessThanOrEqual(2048);
   expect(shown.error.text).toMatch(/^first action:/u);
   expect(shown.error.text).toMatch(/last action: refused$/u);
-  expect(state.get(SID, "click.error")).toBe(original);
   answeredClickError(state, SID, shown.error);
-  expect(clickErrorAt(state, SID, at(END + 1), "request")).toEqual({ kind: "over" });
-  expect(lastClickError(state, SID)).toEqual({ ...shown.error, answered: true });
-  expect(state.get(SID, "click.error")?.length).toBeLessThan(original.length);
+  expect(clickErrorAt(state, SID, at(END + 1), "request")).toEqual({
+    kind: "over",
+  });
 });
 
-test.each([undefined, 6])("an older serialized error with revision %s cannot acknowledge a newer clipped error at the same instant", (revision) => {
+test("an answer that carried an older clipped error cannot mark a newer one at the same instant", () => {
   const message = `spawn tool ${"x".repeat(3000)}: failed`;
-  const raw = JSON.stringify({ text: message, at: 100, revision });
-  const state = new SessionState({ [SID]: { "click.error": raw } });
+  const state = new SessionState();
+  holdClickError(state, SID, message, at(100));
   const previous = lastClickError(state, SID);
-  if (previous === null) throw new Error("expected the stored diagnostic");
+  if (previous === null) throw new Error("expected the held diagnostic");
   holdClickError(state, SID, message, at(100));
   const newer = lastClickError(state, SID);
   if (newer === null) throw new Error("expected the replacement diagnostic");
   expect(newer.text).toBe(previous.text);
-  const stored = state.get(SID, "click.error");
+  const stored = state.get(SID, "candybar.clickError");
   answeredClickError(state, SID, previous);
-  expect(state.get(SID, "click.error")).toBe(stored);
+  expect(state.get(SID, "candybar.clickError")).toBe(stored);
   expect(clickErrorAt(state, SID, at(END + 1), "request").kind).toBe("owed");
   answeredClickError(state, SID, newer);
   expect(clickErrorAt(state, SID, at(END + 1), "request").kind).toBe("over");

@@ -1,5 +1,6 @@
 import {
-  outsideEdit,
+  heldAside,
+  routedWrites,
   type EditFinish,
   type EditTransactions,
 } from "../edit-transaction.js";
@@ -73,6 +74,7 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import type {
+  EndedVisits,
   MenuContext,
   NavigationHistory,
   NavigationTurn,
@@ -83,7 +85,7 @@ import {
   type Globals,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
+import { isEditModeKey, sessionKeyKind } from "../../config/session-key";
 import {
   durableLanding,
   placementDrafts,
@@ -92,6 +94,7 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
+  unsavedCount,
   themeDefaultSave,
 } from "../setting-drafts";
 import {
@@ -467,7 +470,10 @@ function refuseDisorderedPicks(
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => {
+    const kind = sessionKeyKind(w.key);
+    return kind.kind === "edit" && kind.part === "draft";
+  });
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -1259,12 +1265,21 @@ function journaled<C extends DaemonContext>(
     proveLoadsAsLayer(scoped, origin, file, text, read),
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
-  // [LAW:single-enforcer] Where the click's session writes go is decided
-  // here, with its journal: a click in an open edit writes the edit whole,
-  // and any other holds edit mode's keys aside for the edit it may open.
-  const outside =
-    edit === undefined ? outsideEdit(journal.sessionState) : undefined;
-  const writes = outside?.sessionState ?? journal.sessionState;
+  // [LAW:single-enforcer] The click's session writes pass the one router,
+  // over its journal: a click in an open edit writes the edit's journal, and
+  // any other holds edit mode's keys aside, for the edit it may open.
+  const click =
+    edit === undefined
+      ? { kind: "outside" as const, aside: heldAside() }
+      : { kind: "edit" as const, edit };
+  const writes =
+    click.kind === "edit"
+      ? journal.sessionState
+      : routedWrites(
+          journal.sessionState,
+          (s) => ctx.edits.draftWrites(s),
+          click.aside,
+        );
   const requested: { finish?: EditFinish } = {};
   const failures: unknown[] = [];
   const sessionState = closingView(
@@ -1273,9 +1288,13 @@ function journaled<C extends DaemonContext>(
     (line) => ctx.log("info", line),
   );
   // [LAW:single-enforcer] Choosing a menu uses the same disclosure rules as
-  // any state write. Back receives the bare writes so it can install an
-  // already computed view without applying new closure rules to it.
-  const navigation = ctx.navigation.begin(writes, sessionState.setBatch);
+  // any state write. Back receives the bare journal so it can install an
+  // already computed view without applying new closure rules to it. An open
+  // edit holds its own Back steps, which end with it; outside one, Back sees
+  // the journal, which no edit-mode key reaches.
+  const navigation = (
+    click.kind === "edit" ? click.edit.navigation : ctx.navigation
+  ).begin(journal.sessionState, sessionState.setBatch);
   try {
     handler({
       ...scoped,
@@ -1312,39 +1331,46 @@ function journaled<C extends DaemonContext>(
   const consequence = (): void => {
     if (requested.finish === "save" && saved === null) return;
     const failed: unknown[] = [];
+    let visits: EndedVisits = new Map();
     try {
-      navigation.commit();
+      visits = navigation.commit();
     } catch (e) {
       failed.push(e);
     }
     try {
-      const own = new Map(journal.writes(sid));
-      const aside = outside?.held(sid) ?? new Map<string, string | null>();
-      const mode = (outside === undefined ? own : aside).get(EDIT_MODE_KEY);
-      const entering =
-        outside !== undefined && mode === EDIT_MODE_ARRANGE && origin !== null;
-      // [LAW:no-silent-failure] A click outside an edit that opens none (one
-      // drawn before its edit closed) has no edit for those writes to mean
-      // anything in.
-      if (entering) ctx.edits.open(sid, origin, ctx.snapshotFor(origin), aside);
-      else if (aside.size > 0)
-        ctx.log(
-          "warn",
-          `edit: dropped ${[...aside.keys()].join(",")} — no edit is open (session=${sid})`,
+      if (click.kind === "outside") {
+        const clicked = new Map([
+          ...(journal.commit().get(sid) ?? []),
+          ...click.aside.held(sid),
+        ]);
+        const entering =
+          clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
+        const edited = new Map(
+          [...clicked].filter(([key]) => isEditModeKey(key)),
         );
-      let moved = false;
-      if (edit === undefined) journal.commit();
-      else if (saved !== null) saved.commit();
-      else moved = edit.commit();
-      if (origin !== null) {
-        if (
-          edit !== undefined &&
-          (saved !== null || (mode !== undefined && mode !== EDIT_MODE_ARRANGE))
-        ) {
-          if (saved === null) edit.leave(own);
-          ctx.edits.close(sid);
+        // [LAW:no-silent-failure] A click outside an edit that opens none
+        // (one drawn before its edit closed) has no edit for those writes to
+        // mean anything in.
+        if (entering) {
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (entering) {
+        } else if (edited.size > 0)
+          ctx.log(
+            "warn",
+            `edit: dropped ${[...edited.keys()].join(",")} — no edit is open (session=${sid})`,
+          );
+      } else if (saved !== null) {
+        saved.commit();
+        ctx.navigation.landOutsideEdit(visits);
+        ctx.edits.close(sid);
+        ctx.editViewChanged(sid);
+      } else {
+        const { moved, clicked } = click.edit.commit();
+        const mode = clicked.get(EDIT_MODE_KEY);
+        if (mode !== undefined && mode !== EDIT_MODE_ARRANGE) {
+          click.edit.leave(clicked);
+          ctx.navigation.landOutsideEdit(visits);
+          ctx.edits.close(sid);
           ctx.editViewChanged(sid);
         } else if (moved) {
           ctx.edits.changed(sid);
@@ -1418,8 +1444,15 @@ export function closeIdleMenus(
 ): void {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const nest = nestOf(c, c.context?.durable.origin ?? null);
+    // [LAW:one-source-of-truth] An edit's work is what the save cell counts:
+    // the files it changed and the drafts a save would write.
     const depth = c.edits.draft(sid)?.depth();
-    const hasWork = depth !== undefined && depth.sinceEdit + depth.redo > 0;
+    const hasWork =
+      depth !== undefined &&
+      depth.sinceEdit +
+        depth.redo +
+        unsavedCount(sessionConfig(c), (key) => c.sessionState.get(sid, key)) >
+        0;
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key))
       // [LAW:no-ambient-temporal-coupling] A timer cannot abandon an
       // edit with work to keep or redo. Other disclosures still time out.

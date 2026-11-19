@@ -103,11 +103,12 @@ export function mintPlacement(
   return { seg: segment, id: mintPlacementId(segment, taken, suffix) };
 }
 
-// What a click, or a load suggesting an id, draws a suffix from.
+// What a click draws a suffix from.
 export const randomSuffix = (): string => randomBytes(3).toString("hex");
 
-// Suffixes drawn before a mint gives up: a draw from a million meets a taken
-// one this often only from a source that is not random.
+// Suffixes drawn before a mint gives up: three random bytes give 16,777,216
+// suffixes, so a draw meets a taken one this often only from a source that
+// is not random.
 const MINT_TRIES = 16;
 
 // [LAW:single-enforcer] THE spelling of a new placement's id, free of `taken`.

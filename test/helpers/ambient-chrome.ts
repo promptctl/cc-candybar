@@ -18,8 +18,8 @@
 
 import type { ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
+import { isEditModeKey } from "../../src/config/session-key";
 import {
-  isEditModeKey,
   isReservedName,
   MENU_PAGE_NS,
   SETTINGS_NS,

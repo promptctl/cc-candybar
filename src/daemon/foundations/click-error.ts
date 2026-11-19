@@ -24,7 +24,6 @@ import { SETTINGS_NS } from "../../config/reserved-names.js";
 import {
   answeredBy,
   eventHoldAt,
-  heldEventText,
   joinedEvent,
   type HeldEvent,
 } from "../../utils/event-hold.js";
@@ -79,11 +78,7 @@ export function answeredClickError(
 }
 
 // [LAW:parse-dont-validate] The session's last click error, whether or not a
-// render still shows it. Session state outlives a daemon: a record with no
-// `answered` is one a daemon from before it wrote, which cleared each once a
-// request past its hold had shown it, so it reads as unanswered; bare text was
-// written before the hold was a time, so its hold is long over, and it reads
-// as none.
+// render still shows it.
 export function lastClickError(
   state: SessionStateReader,
   sessionId: SessionId,
@@ -106,29 +101,24 @@ export function clickErrorAt(
   return kind === "over" ? { kind } : { kind, error: last };
 }
 
-function recordOf(raw: string): ClickErrorRecord | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { text, at, answered, revision } = value as Record<string, unknown>;
+// [LAW:no-silent-failure] Only this module writes the key, and no authored
+// key reaches the namespace it sits in, so a record that does not parse is
+// this module's bug, said. Text is as the writer bounded it and revision is
+// always there, since the answer's identity is the revision.
+function recordOf(raw: string): ClickErrorRecord {
+  const value: unknown = JSON.parse(raw);
+  const { text, at, answered, revision } = (value ?? {}) as Record<
+    string,
+    unknown
+  >;
   if (
     typeof text !== "string" ||
     typeof at !== "number" ||
-    (answered !== undefined && typeof answered !== "boolean")
+    typeof answered !== "boolean" ||
+    typeof revision !== "number" ||
+    !Number.isSafeInteger(revision) ||
+    revision < 1
   )
-    return null;
-  return {
-    text: heldEventText(text),
-    at: at as Instant,
-    answered: answered === true,
-    ...(typeof revision === "number" &&
-    Number.isSafeInteger(revision) &&
-    revision > 0
-      ? { revision }
-      : {}),
-  };
+    throw new Error(`click error record ${raw} is not one this build writes`);
+  return { text, at: at as Instant, answered, revision };
 }

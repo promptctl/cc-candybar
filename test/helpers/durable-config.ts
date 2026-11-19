@@ -100,10 +100,13 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   let made: SettingsHistory | null = null;
   // The host's stores over this fixture's history file, as a daemon loads them.
   const profile = (): HeldStores => {
-    const stores = new HeldStores({
-      session: ephemeralSessionFile(),
-      history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
-    });
+    const stores = new HeldStores(
+      {
+        session: ephemeralSessionFile(),
+        history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
+      },
+      () => {},
+    );
     stores.load();
     return stores;
   };

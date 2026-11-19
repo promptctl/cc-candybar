@@ -7,17 +7,23 @@ import {
   type ProfileStorage,
 } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 const STEP = { past: [], future: [] };
 
 function held(storage: Partial<ProfileStorage>): HeldStores {
-  const stores = new HeldStores({
-    session: ephemeralSessionFile(),
-    history: EPHEMERAL_HISTORY_STORAGE,
-    ...storage,
-  });
+  const stores = new HeldStores(
+    {
+      session: ephemeralSessionFile(),
+      history: EPHEMERAL_HISTORY_STORAGE,
+      ...storage,
+    },
+    () => {},
+  );
   stores.load();
   return stores;
 }
@@ -64,4 +70,26 @@ test("writes taken after the close are held, and none is written", async () => {
   stores.take([{ store: "settings-history", key: S1, value: STEP }]);
   expect(saves).toBe(0);
   expect(stores.current().history[S1]).toEqual(STEP);
+});
+
+test("a profile loads without edit mode's keys, and a session left holding nothing takes no slot", () => {
+  const S2 = sessionIdOf("s2");
+  const logged: string[] = [];
+  const stores = new HeldStores(
+    {
+      session: {
+        ...ephemeralSessionFile(),
+        load: () =>
+          new Map<SessionId, Record<string, string>>([
+            [S1, { "edit.mode": "arrange", theme: "nord" }],
+            [S2, { "edit.configure": "default:clock" }],
+          ]),
+      },
+      history: EPHEMERAL_HISTORY_STORAGE,
+    },
+    (_level, line) => logged.push(line),
+  );
+  stores.load();
+  expect(stores.current().sessions).toEqual({ [S1]: { theme: "nord" } });
+  expect(logged).toHaveLength(2);
 });

@@ -78,11 +78,14 @@ const droppedKey = (store: string, key: string) =>
 
 // The host's held stores over the file, loaded as the daemon serves.
 const heldOver = (storage: Partial<ProfileStorage>): HeldStores => {
-  const stores = new HeldStores({
-    session: ephemeralSessionFile(),
-    history: EPHEMERAL_HISTORY_STORAGE,
-    ...storage,
-  });
+  const stores = new HeldStores(
+    {
+      session: ephemeralSessionFile(),
+      history: EPHEMERAL_HISTORY_STORAGE,
+      ...storage,
+    },
+    () => {},
+  );
   stores.load();
   return stores;
 };

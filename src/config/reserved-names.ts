@@ -22,6 +22,12 @@ export const EDIT_NS = "edit.";
 // live under that name.
 export const SETTINGS_NS = "candybar.";
 
+// Whether edit mode is open, and the namespace every placement's unsaved
+// setting value lives under (edit-mode.ts). No scalar is declared at
+// `edit.draft`, so nothing under it can be shadowed by one.
+export const EDIT_MODE_KEY = `${EDIT_NS}mode`;
+export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+
 export const RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
@@ -30,24 +36,17 @@ export const RESERVED_NAMESPACES = [
   SETTINGS_NS,
 ] as const;
 
-// The namespace a name sits in, spelled as written: every synthesized
-// artifact and every key the bar mints lives under one of the prefixes above,
-// so membership alone proves "synthesized, not declared" — the fact edit
-// chrome (structural, not removable content), the delta-able segment set (a
-// delta targets an authorable name), the load's refusal of authored keys and
-// the test helpers all read from here rather than re-spelling the prefix list.
+// The namespace a name sits in, spelled as written: every artifact a
+// synthesis pass names lives under one of the prefixes above, so membership
+// proves a segment, variable or action "synthesized, not declared" — the fact
+// edit chrome (structural, not removable content), the delta-able segment set
+// (a delta targets an authorable name) and the test helpers read from here
+// rather than re-spelling the prefix list. What a session key is, the session
+// state's readers ask of session-key.ts.
 export function reservedNamespaceOf(name: string): string | undefined {
   return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }
 
 export function isReservedName(name: string): boolean {
   return reservedNamespaceOf(name) !== undefined;
-}
-
-// [LAW:single-enforcer] THE classifier of edit mode's own session state: its
-// toggles, panes, lists, libraries, page cursors and placement drafts are all
-// minted under `edit.`, so whether a key is edit mode's is a fact of the key
-// alone. Such a key lives only in an open edit and never in the session store.
-export function isEditModeKey(key: string): boolean {
-  return key.startsWith(EDIT_NS);
 }

@@ -8,7 +8,7 @@ import { isPlainObject } from "../config/loader/validate-core";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
 import type { DaemonLogger } from "../utils/logger";
-import { isEditModeKey } from "../config/reserved-names";
+import { isEditModeKey } from "../config/session-key";
 import {
   parseSessionHistory,
   type HistoryState,
@@ -37,27 +37,25 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
 }
 
 // [LAW:no-silent-failure] Edit mode's own keys live only in an open edit, and
-// no edit outlives the renderer, so a profile an older build stored one in
-// loads without it, and says which it dropped: one kept would reopen a panel
-// or a library on a bar with no edit.
+// no edit outlives the renderer, so a profile that holds one loads without
+// it, and says which it dropped: one kept would reopen a panel or a library
+// on a bar with no edit. A session left holding nothing takes no slot.
 export function withoutEditModeKeys(
   sessions: ReadonlyMap<SessionId, SessionPicks>,
   log: DaemonLogger,
 ): Map<SessionId, SessionPicks> {
   return new Map(
-    [...sessions].map(([session, picks]) => {
+    [...sessions].flatMap(([session, picks]) => {
       const dropped = Object.keys(picks).filter(isEditModeKey);
-      if (dropped.length === 0) return [session, picks];
+      if (dropped.length === 0) return [[session, picks] as const];
       log(
         "info",
         `session-state load: dropped ${dropped.join(",")} — no edit outlives the renderer (session=${session})`,
       );
-      return [
-        session,
-        Object.fromEntries(
-          Object.entries(picks).filter(([key]) => !isEditModeKey(key)),
-        ),
-      ];
+      const kept = Object.entries(picks).filter(([key]) => !isEditModeKey(key));
+      return kept.length === 0
+        ? []
+        : [[session, Object.fromEntries(kept)] as const];
     }),
   );
 }
