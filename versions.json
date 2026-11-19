@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "53453112ae58ddddcd39dca83f2f94c90b7165df",
+      "timestamp": "2026-11-19T15:18:54.471Z",
+      "commits": [
+        {
+          "sha": "53453112ae58ddddcd39dca83f2f94c90b7165df",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T15:17:50Z",
+          "message": "chore(release): set `package.json` to 1.235.0\n\n## [1.235.0](https://github.com/promptctl/cc-candybar/compare/v1.234.4...v1.235.0) (2026-11-19)\n\n### Features\n\n* **click:** route actions to their drawing renderer ([#875](https://github.com/promptctl/cc-candybar/issues/875)) ([f10951d](https://github.com/promptctl/cc-candybar/commit/f10951d9400d761190b757a8dd55db47ac30e372))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-882",
       "ref": "refs/pull/882/merge",
       "sha": "6d2f1829ca6ed9e3808298e9956af67566490f55",
@@ -171,21 +186,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:01:09-07:00",
           "message": "refactor(config): resolve write layers before rendering\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "f10951d9400d761190b757a8dd55db47ac30e372",
-      "timestamp": "2026-11-19T15:10:13.266Z",
-      "commits": [
-        {
-          "sha": "f10951d9400d761190b757a8dd55db47ac30e372",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:09:01-07:00",
-          "message": "feat(click): route actions to their drawing renderer (#875)\n\nfeat(click): route actions to their drawing renderer (x96a.m85)"
         }
       ]
     },
