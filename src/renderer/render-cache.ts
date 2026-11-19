@@ -23,8 +23,10 @@ import {
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
   layerForRole,
+  retainsConfig,
   writable,
   type ConfigSnapshot,
+  type RepoQuestion,
 } from "../config/config-snapshot.js";
 import type { Drawing, LaneSwitches } from "../config/lanes.js";
 import { laneDefaultsAfterReset } from "./lane-handoff.js";
@@ -456,12 +458,19 @@ export interface CacheEntry {
   // are read off it.
   snapshot: ConfigSnapshot;
   digest: string;
-  // [LAW:one-source-of-truth] The authored input that can rebuild `state`.
-  // A failed attempt moves the diagnostic and snapshot without moving this.
-  selectedDigest: string | null;
+  selected: SelectedState;
   lastError: string | null;
   lastWarnings: readonly string[];
-  state: DslRenderState;
+  readonly state: DslRenderState;
+}
+
+// [LAW:one-source-of-truth] State travels with the revision and approval it
+// was built from. A failed attempt can move the latest snapshot without
+// moving either fact about the selected build. A fallback has no revision.
+interface SelectedState {
+  readonly state: DslRenderState;
+  readonly digest: string | null;
+  readonly repo: RepoQuestion | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -1302,16 +1311,8 @@ export class RenderCache<
       if (draft !== null) key = draftKey(editing);
     }
     const existing = this.entries.get(key);
-    const priorRepo = existing?.snapshot.repo;
-    // [LAW:types-are-the-program] A draft can fall back to its last good
-    // render only while that render's repository approval still holds.
-    const lostApproval =
-      draft !== null &&
-      priorRepo?.standing === "approved" &&
-      (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
     if (
       existing !== undefined &&
-      !lostApproval &&
       originKey(existing.origin) === originKey(origin)
     ) {
       runInAction(() => {
@@ -1328,38 +1329,33 @@ export class RenderCache<
     }
     if (existing !== undefined) this.drop(key, existing, "evict");
 
-    const { snapshot, digest } =
+    const held =
       draft === null
         ? this.held(origin)
         : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd } = origin;
-    const loaded = this.load(origin, snapshot, null);
+    const { loaded, selected } = this.selectState(origin, held, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    // [LAW:no-silent-failure] A config that fails its FIRST load still yields
-    // a bar: the bundled default, built exactly here and only then — the error
-    // is counted by the indicator beside its settings door, loud, and the
-    // settings menu is the door back to the file. The default validates by program invariant
-    // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
-    // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
       origin,
       get configLayers() {
         return configPaths(this.snapshot);
       },
-      snapshot,
-      digest,
-      selectedDigest: loaded.state === null ? null : digest,
+      snapshot: held.snapshot,
+      digest: held.digest,
+      selected,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
-      state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
+      get state() {
+        return this.selected.state;
+      },
     };
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
     makeObservable(entry, {
-      selectedDigest: observable,
+      selected: observableRef,
       lastError: observable,
-      state: observableRef,
     });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
@@ -1736,9 +1732,9 @@ export class RenderCache<
     return [...this.entries]
       .filter(([key, entry]) => key === originKey(entry.origin))
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([, { origin, selectedDigest }]) => ({
+      .map(([, { origin, selected }]) => ({
         origin,
-        digest: selectedDigest,
+        digest: selected.digest,
       }));
   }
 
@@ -1771,18 +1767,37 @@ export class RenderCache<
     );
   }
 
-  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
-  // cache refuses every way one would be built — a new entry, a reload, a
-  // `config` turn after the close.
+  // [LAW:single-enforcer] Opening an entry, reloading a committed config,
+  // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  private load(
+  private selectState(
     origin: RenderOrigin,
-    snapshot: ConfigSnapshot,
-    served: DslRenderState | null,
-  ): LoadOutcome {
+    { snapshot, digest }: HeldSnapshot,
+    previous: SelectedState | null,
+  ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(origin.cwd, snapshot, this.deps, served);
+    const retained =
+      previous !== null &&
+      retainsConfig(origin.target, previous.repo, snapshot.repo)
+        ? previous
+        : null;
+    const { cwd } = origin;
+    const { repo } = snapshot;
+    const loaded = loadOrigin(
+      cwd,
+      snapshot,
+      this.deps,
+      retained?.state ?? null,
+    );
+    if (loaded.state !== null)
+      return { loaded, selected: { state: loaded.state, digest, repo } };
+    const selected = retained ?? {
+      state: fallbackState(cwd, snapshot, this.deps),
+      digest: null,
+      repo,
+    };
+    return { loaded, selected };
   }
 
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
@@ -1970,8 +1985,8 @@ export class RenderCache<
   // Re-populate `entry` from `snapshot`, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
-  // - Load failure: keep the prior state (the bundled default before any
-  //   config has loaded), set lastError.
+  // - Load failure: keep the prior state if still approved, otherwise serve
+  //   the current snapshot's bundled default. Both report the load error.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
   // new DslConfig retires the old state, and `reclaim` disposes its
@@ -1984,7 +1999,7 @@ export class RenderCache<
   // arm the load took.
   private reloadInto(
     entry: CacheEntry,
-    { snapshot, digest }: HeldSnapshot,
+    held: HeldSnapshot,
     cause: LoadCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
@@ -1998,22 +2013,25 @@ export class RenderCache<
     ];
     // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
-    const loaded = this.load(entry.origin, snapshot, served);
-    entry.snapshot = snapshot;
-    entry.digest = digest;
+    const { loaded, selected } = this.selectState(
+      entry.origin,
+      held,
+      entry.selected,
+    );
+    entry.snapshot = held.snapshot;
+    entry.digest = held.digest;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
-      if (loaded.state !== null) entry.selectedDigest = digest;
-      if (loaded.kind === "built") entry.state = loaded.state;
+      entry.selected = selected;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (loaded.kind === "built") {
-      this.serve(loaded.state);
+    if (selected.state !== served) {
+      this.serve(selected.state);
+      this.retire(served, "reload", entry);
     }
-    if (loaded.kind === "built") this.retire(served, "reload", entry);
-    if (loaded.state !== null)
+    if (selected.state !== served || loaded.state !== null)
       for (const [session, failure] of retry)
         this.reopen(entry, session, failure.requestOf);
     // A reload can move the entry onto a compile no other entry carries, and
