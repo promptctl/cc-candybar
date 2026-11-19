@@ -127,6 +127,13 @@ export interface StatsSnapshot {
   // turn and for how long, and how many wait behind it. A holder held long is
   // a turn the renderer has not answered.
   mailbox: MailboxStats;
+  // [LAW:nothing-unseen] Renderer work awaiting config, an effect result,
+  // or a future tick. Growth without new inputs signals a stuck lifetime.
+  rendererTurns: {
+    parked: number;
+    presents: number;
+    deferrals: number;
+  };
   // `run` acts (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, and runs in flight now.
   runs: RunStats;

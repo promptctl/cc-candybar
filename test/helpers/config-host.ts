@@ -128,7 +128,7 @@ export class DiscoveringCache<
       stateDir,
       watchers,
       ...deps
-    }: RenderDeps<S> & {
+    }: RenderDeps<S, F> & {
       readonly stateDir: string;
       readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
     },
