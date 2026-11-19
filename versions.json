@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-873",
+      "ref": "refs/pull/873/merge",
+      "sha": "0452bc2d1204793beb158e78b2d8b5303f6b890c",
+      "timestamp": "2026-11-19T13:32:29.228Z",
+      "commits": [
+        {
+          "sha": "0452bc2d1204793beb158e78b2d8b5303f6b890c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:30:58-07:00",
+          "message": "Merge 03c9ffd1f5934f9b97dc6cd7ca9e4b1064dae10e into 6125487488e90cbd9bd119f83430408afd97f01f\n"
+        },
+        {
+          "sha": "03c9ffd1f5934f9b97dc6cd7ca9e4b1064dae10e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:30:05-07:00",
+          "message": "perf(config): share regular file bytes across discovery batches (ibyq.ysf)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-870",
       "ref": "refs/pull/870/merge",
       "sha": "11a6e602971353eb3e90ec7bfc6d4b77f2e4b2f5",
