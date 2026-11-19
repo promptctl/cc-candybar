@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-894",
+      "ref": "refs/pull/894/merge",
+      "sha": "ca228b897298dbf206a69a7ef0c5188625bc2243",
+      "timestamp": "2026-11-19T17:57:50.811Z",
+      "commits": [
+        {
+          "sha": "ca228b897298dbf206a69a7ef0c5188625bc2243",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:56:31-07:00",
+          "message": "Merge cafceaa501bf2a21313f02b89650595dde266ad2 into 39d25534f33645fbb1e93f152dd556dfba425eb3\n"
+        },
+        {
+          "sha": "cafceaa501bf2a21313f02b89650595dde266ad2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:49:05-07:00",
+          "message": "fix(renderer): use one outcome for each config delivery\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "39d25534f33645fbb1e93f152dd556dfba425eb3",
