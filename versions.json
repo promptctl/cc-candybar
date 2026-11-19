@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-843",
+      "ref": "refs/pull/843/merge",
+      "sha": "ab2887c4f3789b979277bc59b311444128eaea3d",
+      "timestamp": "2026-11-19T11:08:46.562Z",
+      "commits": [
+        {
+          "sha": "ab2887c4f3789b979277bc59b311444128eaea3d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:07:44Z",
+          "message": "Merge 3e5565431419a344593ad4add95074f912bfbcf6 into b2c14ebf42db01edd317ebe6cd8bedeee033c50f\n"
+        },
+        {
+          "sha": "3e5565431419a344593ad4add95074f912bfbcf6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:07:32-07:00",
+          "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\nA process started from a git hook, a `rebase --exec` or a vcsh shell\ncarries the repository variables (what `git rev-parse --local-env-vars`\nnames, and GH_REPO), so a daemon spawned from one read that shell's\nrepository for every session.\n\nA reader launcher owns git's answer: it asks once, at its first launch\nthat inherits the process's environment, holds it for its lifetime, and\nwithholds the forge's variable plus whatever git names from every child\nthat inherits the process's environment. A launch in a session's own\nenvironment keeps it whole. A plain launcher withholds nothing.\n\nThe daemon builds its reader after the fork-bomb breaker admits it and\nasks there, logging what its launches withhold; its own launcher\nwithholds by that same answer. git naming nothing stands as a ⚠ on every\nbar and a warning in the log. plugin install takes a reader and refuses\nthe clone with git's reason; a usage error or a path install runs no\ngit. The ask gives up inside the client's spawn cooldown.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b2c14ebf42db01edd317ebe6cd8bedeee033c50f",
@@ -137,57 +159,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:44:30-07:00",
           "message": "fix(edit): release a removed placement's session state at the session's own render\n\nA session's ✚ libraries and their pages, its configure key and its drafts\nare keyed by preset and placement id, so they outlived the placement and\nlanded on the next placement to reuse the id, whatever removed it.\n\nBefore drawing, a session now releases the keys it holds for placements\nits config no longer places in any preset, inserts included. The placed\nset is built once per loaded config, and a tick skips with one comparison\nof that set and the session's revision. A clicker's release runs inside\nits click's journal, so undo restores its drafts. A render over a failed\nload releases nothing. Each release is logged with the session and keys.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-846",
-      "ref": "refs/pull/846/merge",
-      "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
-      "timestamp": "2026-11-19T10:14:03.031Z",
-      "commits": [
-        {
-          "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:13:00-07:00",
-          "message": "Merge c9a506d0e423d6c0adc373e579bcc0b1ba1c704b into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "c9a506d0e423d6c0adc373e579bcc0b1ba1c704b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:11:37-07:00",
-          "message": "fix(renderer): keep live repository trust in edit previews\n"
-        },
-        {
-          "sha": "f94cfeaec2e12bff66870dc3a4bab3bdbac67b16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:06-07:00",
-          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-843",
-      "ref": "refs/pull/843/merge",
-      "sha": "d20c596aafba46b288667e4c704f4373f672fa96",
-      "timestamp": "2026-11-19T10:11:32.987Z",
-      "commits": [
-        {
-          "sha": "d20c596aafba46b288667e4c704f4373f672fa96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:41-07:00",
-          "message": "Merge b5e962253d0008d6ae6a5a1e2efc3181d8cd4cef into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "b5e962253d0008d6ae6a5a1e2efc3181d8cd4cef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:57-07:00",
-          "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\ngit finds its repository from GIT_DIR, GIT_WORK_TREE and the other names\n`git rev-parse --local-env-vars` prints, ahead of its working directory,\nand gh honours GH_REPO. A daemon, doctor, check or plugin install started\nfrom a git hook, a `rebase --exec` or a vcsh shell read every session's\nbranch, status and PR from that shell's repository.\n\nA launch scope now names what its children do not inherit. The child\nenvironment is the inherited environment, read at each launch, less those\nnames, under each launch's overlay: one place for every launch form. The\nprocess's own environment is untouched, since it is also what the process\nreports as the session's.\n\nThe daemon, doctor, check and plugin install ask git once, as they start,\nand withhold its names and GH_REPO; the relay and every other process ask\nnothing. A git that cannot answer (or an old one that echoes the flag) is a\nfault carrying git's words: the daemon logs it, still starts and draws, and\nstands a warning on every bar through its launcher's facts; the doctor\nfails a new \"repository reads\" row; plugin install exits 1 with the reason.\nPlugin install's own overlay that unset the same names is gone. The Pages\nsite's simulated git answers the ask.\n"
         }
       ]
     }
