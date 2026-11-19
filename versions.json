@@ -2,24 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-860",
-      "ref": "refs/pull/860/merge",
-      "sha": "5e7ba332c3cbf9c18564edfea0980c42db6da9f4",
-      "timestamp": "2026-11-19T11:52:54.031Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "8cd4ef708ff060a06d84d6ed558441d903a07806",
+      "timestamp": "2026-11-19T11:58:57.172Z",
       "commits": [
         {
-          "sha": "5e7ba332c3cbf9c18564edfea0980c42db6da9f4",
+          "sha": "8cd4ef708ff060a06d84d6ed558441d903a07806",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:51:52-07:00",
-          "message": "Merge d9e3062e817489f0b593dd2cfdff862c0b4c206c into 302fc64ce5feb571dec1d018b9b3b3bf45535802\n"
-        },
-        {
-          "sha": "d9e3062e817489f0b593dd2cfdff862c0b4c206c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:42:52-07:00",
-          "message": "refactor(render): carry disclosure clicks as drawn targets (ibyq.vne)\n"
+          "timestamp": "2026-11-19T04:57:47-07:00",
+          "message": "refactor(render): carry disclosure clicks as drawn targets (#860)\n\nrefactor(render): carry disclosure clicks as drawn targets (ibyq.vne)"
         }
       ]
     },
@@ -42,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T04:48:35-07:00",
           "message": "fix(renderer): edit chrome's open menus live and die with the edit transaction (3248.v73l)\n\nOpening and closing a transaction each drop every key in edit chrome's\nnamespaces (the configure key, chrome menus, their page cursors), and a\nlayout step that ends a placement drops that placement's chrome keys in\nthe same step as its drafts, named through the derivations that mint\nthem. Retire now ends through the one close. An authored menu whose key\nwould collapse into chrome's namespace is refused at load.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "302fc64ce5feb571dec1d018b9b3b3bf45535802",
-      "timestamp": "2026-11-19T11:48:06.951Z",
-      "commits": [
-        {
-          "sha": "302fc64ce5feb571dec1d018b9b3b3bf45535802",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:47:10-07:00",
-          "message": "refactor(daemon): consolidate the shared host and renderer boundary (#856)\n\n* refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n\n* refactor(config): share discovery observations and file reads (ibyq.i9x)\n\n(cherry picked from commit e56a941f91b0811fc646ab2b566ba4382ee5b03b)\n\n* fix(config): share reads through file symlinks (ibyq.i9x)\n\n(cherry picked from commit a4215b5c35f12fe55532cd286dd228a093ed46a8)\n\n* refactor(config): share origin watches across renderer names (ibyq.5lt)\n\n(cherry picked from commit b68a964c35f8c6900dd53785162bb633ea09c633)\n\n* refactor(click): admit one typed session at the host (ibyq.afa)\n\n(cherry picked from commit bddc650f29b188140220a688d7d0793b476b58c1)\n\n* fix(renderer): keep one live context per session (ibyq.n91)\n\n(cherry picked from commit 11d9f23b6672f8ac6c0a2a319cda153dd5030fcb)\n\n* refactor(check): use typed render inspection (ibyq.62x)\n\n(cherry picked from commit afa093c1e080872aa399f0dd08e769156dcd8f0f)\n\n* fix(renderer): bound scheduled work in a busy mailbox (ibyq.4nf)\n\n(cherry picked from commit 4196b831ad87f5443878a742f56a780f9b328e6f)\n\n* refactor(renderer): publish pushed frame presentations in the host (ibyq.vne)\n\n(cherry picked from commit 5f85d9fe4b4c8a0bf2a35539cc1ec4bade8d9d42)\n\n* refactor(click): sign published frame links in the host (ibyq.vne)\n\n(cherry picked from commit 34a2a2df324817b0940f2349d570ba1bb8935508)\n\n* fix(tmux): admit pane acts at the head of the queue (ibyq.6n3)\n\n(cherry picked from commit b8ed01b20393872eb821b991b0f4213620f00527)\n\n* test: verify the composed host and renderer boundary\n\n* fix(daemon): publish presents only for the requested session\n\n* fix(daemon): resolve statusline config readiness in the host (ibyq.n91)\n\n(cherry picked from commit 325247e0dead22e60437d1ac1955db1de8b8a634)\n\n* test: run readiness through host frame publication\n\n* refactor(renderer): agree on the private wire version at boot (ibyq.cg5)\n\n(cherry picked from commit 39bb98fbe5f4ac3054f8bc86fb507d1a58a0abd4)\n\n* fix: batch shared config watch invalidation\n\n(cherry picked from commit f12d7bf54165a690553e0f0c0caa5eaadf47d763)\n\n* fix(renderer): keep requesting client dimensions for its draw (ibyq.n91)\n\n(cherry picked from commit fd59c7b498ae8c8e8054d718d3344b45cff22e22)"
         }
       ]
     },

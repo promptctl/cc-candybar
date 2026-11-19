@@ -30009,6 +30009,14 @@ function processWorld() {
 // src/click/read.ts
 init_globals();
 
+// src/render/drawn-link.ts
+init_globals();
+function hrefOfDrawnLink(link) {
+  if (typeof link === "string") return link;
+  if (link.kind === "href") return link.url;
+  return effectsUrl([link.effect]);
+}
+
 // src/click/link-signer.ts
 init_globals();
 var LINK_KEY_BYTES = 32;
@@ -30111,9 +30119,10 @@ function linksOf({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
     for (const { link, text: text4 } of runs.filter((run3) => run3.text !== "")) {
+      const url = link === void 0 ? void 0 : hrefOfDrawnLink(link);
       const last2 = stretches.at(-1);
-      if (last2 !== void 0 && last2.url === link) last2.text += text4;
-      else stretches.push({ url: link, text: text4 });
+      if (last2 !== void 0 && last2.url === url) last2.text += text4;
+      else stretches.push({ url, text: text4 });
     }
     return stretches.flatMap(
       ({ url, text: text4 }) => url === void 0 ? [] : [{ url, text: text4.trim() }]
@@ -42856,156 +42865,6 @@ var FlexStrip = class {
   }
 };
 
-// src/render/diagnostic-style.ts
-init_globals();
-var DIAGNOSTIC_ERROR_COLORS = {
-  fg: "#ffffff",
-  bg: "#c82828"
-};
-var DIAGNOSTIC_WARNING_COLORS = {
-  fg: "#000000",
-  bg: "#dca028"
-};
-var DIAGNOSTIC_INFO_COLORS = {
-  fg: "#ffffff",
-  bg: "#2f6db5"
-};
-function sgrOf(layer, hex) {
-  const channels = [1, 3, 5].map(
-    (at) => Number.parseInt(hex.slice(at, at + 2), 16)
-  );
-  return `\x1B[${layer};2;${channels.join(";")}m`;
-}
-var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
-var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
-
-// src/render/diagnostic-text.ts
-init_globals();
-var NEUTRALIZED_RANGES = [
-  [0, 31],
-  [127, 159],
-  [8234, 8238],
-  [8294, 8303]
-];
-function isControlChar(code2) {
-  return NEUTRALIZED_RANGES.some(([lo, hi]) => code2 >= lo && code2 <= hi);
-}
-function sanitizeText(text4) {
-  let sanitized = "";
-  for (const ch of text4) {
-    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
-  }
-  return sanitized.replace(/\s+/g, " ").trim();
-}
-
-// src/render/error-glyph.ts
-init_globals();
-var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
-
-// src/render/frame.ts
-function parseFrame(wire) {
-  return { ...wire, nextChange: wire.nextChange ?? Infinity };
-}
-function standIn(frame2, rows) {
-  return {
-    depth: frame2.depth,
-    rows,
-    nextChange: Infinity,
-    motion: frame2.motion === "still" ? "still" : "can-move",
-    pending: []
-  };
-}
-function drawnColor(spec) {
-  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
-  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
-}
-var ATTRIBUTES = Object.keys(new Style().attributes);
-function lookOf(style, depth) {
-  const { color, bgcolor } = style.drawnColors(depth);
-  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
-  return {
-    ...color !== void 0 && { fg: drawnColor(color) },
-    ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
-    ...attrs.length > 0 && { attrs }
-  };
-}
-function runOf({ text: text4, style }, depth) {
-  return {
-    text: text4,
-    ...style !== void 0 && depth !== null && lookOf(style, depth),
-    ...style?.link !== void 0 && { link: style.link }
-  };
-}
-function runLines(segments, depth) {
-  const written3 = segments.filter((s) => !s.isControl && s.text.length > 0);
-  return Segment.splitLines(written3).map(
-    (line) => line.map((segment) => runOf(segment, depth))
-  );
-}
-function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
-  return new Segment(
-    text4,
-    new Style({
-      color: fg,
-      bgcolor: bg,
-      link,
-      ...Object.fromEntries(attrs.map((name) => [name, true]))
-    })
-  );
-}
-function encodeAnsi(lines2, depth) {
-  const destination = resolveDestination(depth);
-  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
-}
-function ansiOf(frame2) {
-  return encodeAnsi(
-    frame2.rows.map((row) => row.runs),
-    frame2.depth
-  );
-}
-function composeBar(frame2) {
-  return ansiOf(frame2) + "\n";
-}
-function plainOf2(runs) {
-  return runs.map((run3) => run3.text).join("");
-}
-
-// src/daemon/foundations/render-answers.ts
-function framed(value, encode, failure2) {
-  try {
-    return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
-  } catch (e) {
-    const sent = failure2(renderFailed(e));
-    return {
-      sent,
-      frame: encodeJsonFrame(encode(sent)),
-      unsent: e instanceof Error ? e : new Error(String(e))
-    };
-  }
-}
-var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
-var failedWith = (message2) => ({
-  ok: false,
-  error: message2,
-  code: "RENDER_FAILED",
-  daemonV: PROTOCOL_VERSION
-});
-var renderFailed = (err) => failedWith(failureOf(err).message);
-var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure2, kind: "threw" } : failure2;
-var RENDER_ANSWERS = {
-  ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
-  frame: (frame2) => ({ ok: true, frame: frame2 })
-};
-
-// src/daemon/reply.ts
-init_globals();
-
-// src/daemon/readings.ts
-init_globals();
-
-// src/utils/reading.ts
-init_globals();
-
 // node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
 init_globals();
 var __MOBX_DEV__ = true;
@@ -47220,7 +47079,224 @@ if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
   });
 }
 
+// src/render/diagnostic-style.ts
+init_globals();
+var DIAGNOSTIC_ERROR_COLORS = {
+  fg: "#ffffff",
+  bg: "#c82828"
+};
+var DIAGNOSTIC_WARNING_COLORS = {
+  fg: "#000000",
+  bg: "#dca028"
+};
+var DIAGNOSTIC_INFO_COLORS = {
+  fg: "#ffffff",
+  bg: "#2f6db5"
+};
+function sgrOf(layer, hex) {
+  const channels = [1, 3, 5].map(
+    (at) => Number.parseInt(hex.slice(at, at + 2), 16)
+  );
+  return `\x1B[${layer};2;${channels.join(";")}m`;
+}
+var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
+var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
+
+// src/render/diagnostic-text.ts
+init_globals();
+var NEUTRALIZED_RANGES = [
+  [0, 31],
+  [127, 159],
+  [8234, 8238],
+  [8294, 8303]
+];
+function isControlChar(code2) {
+  return NEUTRALIZED_RANGES.some(([lo, hi]) => code2 >= lo && code2 <= hi);
+}
+function sanitizeText(text4) {
+  let sanitized = "";
+  for (const ch of text4) {
+    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
+  }
+  return sanitized.replace(/\s+/g, " ").trim();
+}
+
+// src/render/error-glyph.ts
+init_globals();
+var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
+
+// src/render/link-style.ts
+init_globals();
+var PROOF = /* @__PURE__ */ Symbol("Candybar link target");
+var MARKER = "candybar-span:";
+var LinkProof = class {
+  marker;
+  target;
+  constructor(target) {
+    this.target = target.kind === "action" ? Object.freeze({
+      kind: "action",
+      effect: Object.freeze({
+        verb: target.effect.verb,
+        args: Object.freeze([...target.effect.args])
+      })
+    }) : Object.freeze({ kind: "href", url: target.url });
+    this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
+  }
+};
+function styleWithLink(style, link) {
+  if (typeof link === "string") return style.withLink(link);
+  const proof = new LinkProof(link);
+  return style.add(new Style({ link: proof.marker, meta: { [PROOF]: proof } }));
+}
+function linkFromStyle(style) {
+  const { link, meta } = style;
+  const proof = meta === void 0 ? void 0 : Reflect.get(meta, PROOF);
+  if (proof instanceof LinkProof && proof.marker === link) return proof.target;
+  return link?.startsWith(MARKER) ? void 0 : link;
+}
+function authoredLinks(funcs) {
+  const link = funcs.link;
+  const style = funcs.style;
+  if (link === void 0 || style === void 0) {
+    throw new Error("rich-js is missing its link or style template binding");
+  }
+  const project = (binding, input, child, setsLink) => {
+    const result = Reflect.apply(binding.fn, void 0, [
+      input,
+      child
+    ]);
+    if (!(result instanceof RichText)) {
+      throw new TypeError(
+        "rich-js link and style bindings must return RichText"
+      );
+    }
+    if (!setsLink || typeof result.style === "string") return result;
+    const layered = result.style;
+    const base = layered instanceof Style ? layered : layered.over;
+    const url = base.link;
+    if (url?.startsWith(MARKER)) {
+      const quoted2 = styleWithLink(base, { kind: "href", url });
+      result.style = layered instanceof Style ? quoted2 : { ...layered, over: quoted2 };
+    }
+    return result;
+  };
+  return {
+    ...funcs,
+    link: {
+      ...link,
+      fn: (url, child) => project(link, url, child, url !== "")
+    },
+    style: {
+      ...style,
+      fn: (spec, child) => project(style, spec, child, Style.parse(spec).link !== void 0)
+    }
+  };
+}
+
+// src/render/frame.ts
+function parseFrame(wire) {
+  return { ...wire, nextChange: wire.nextChange ?? Infinity };
+}
+function standIn(frame2, rows) {
+  return {
+    depth: frame2.depth,
+    rows,
+    nextChange: Infinity,
+    motion: frame2.motion === "still" ? "still" : "can-move",
+    pending: []
+  };
+}
+function drawnColor(spec) {
+  if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
+  return spec.number === void 0 ? spec.name : `color(${spec.number})`;
+}
+var ATTRIBUTES = Object.keys(new Style().attributes);
+function lookOf(style, depth) {
+  const { color, bgcolor } = style.drawnColors(depth);
+  const attrs = ATTRIBUTES.filter((name) => style[name] === true);
+  return {
+    ...color !== void 0 && { fg: drawnColor(color) },
+    ...bgcolor !== void 0 && { bg: drawnColor(bgcolor) },
+    ...attrs.length > 0 && { attrs }
+  };
+}
+function runOf({ text: text4, style }, depth) {
+  const link = style === void 0 ? void 0 : linkFromStyle(style);
+  return {
+    text: text4,
+    ...style !== void 0 && depth !== null && lookOf(style, depth),
+    ...link !== void 0 && { link }
+  };
+}
+function runLines(segments, depth) {
+  const written3 = segments.filter((s) => !s.isControl && s.text.length > 0);
+  return Segment.splitLines(written3).map(
+    (line) => line.map((segment) => runOf(segment, depth))
+  );
+}
+function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
+  return new Segment(
+    text4,
+    new Style({
+      color: fg,
+      bgcolor: bg,
+      link: link === void 0 ? void 0 : hrefOfDrawnLink(link),
+      ...Object.fromEntries(attrs.map((name) => [name, true]))
+    })
+  );
+}
+function encodeAnsi(lines2, depth) {
+  const destination = resolveDestination(depth);
+  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
+}
+function ansiOf(frame2) {
+  return encodeAnsi(
+    frame2.rows.map((row) => row.runs),
+    frame2.depth
+  );
+}
+function composeBar(frame2) {
+  return ansiOf(frame2) + "\n";
+}
+function plainOf2(runs) {
+  return runs.map((run3) => run3.text).join("");
+}
+
+// src/daemon/foundations/render-answers.ts
+function framed(value, encode, failure2) {
+  try {
+    return { sent: value, frame: encodeJsonFrame(encode(value)), unsent: null };
+  } catch (e) {
+    const sent = failure2(renderFailed(e));
+    return {
+      sent,
+      frame: encodeJsonFrame(encode(sent)),
+      unsent: e instanceof Error ? e : new Error(String(e))
+    };
+  }
+}
+var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
+var failedWith = (message2) => ({
+  ok: false,
+  error: message2,
+  code: "RENDER_FAILED",
+  daemonV: PROTOCOL_VERSION
+});
+var renderFailed = (err) => failedWith(failureOf(err).message);
+var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure2, kind: "threw" } : failure2;
+var RENDER_ANSWERS = {
+  ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
+  frame: (frame2) => ({ ok: true, frame: frame2 })
+};
+
+// src/daemon/reply.ts
+init_globals();
+
+// src/daemon/readings.ts
+init_globals();
+
 // src/utils/reading.ts
+init_globals();
 function unread() {
   return observable.box(pending("unread"), { deep: false });
 }
@@ -68280,9 +68356,14 @@ function publishingFrames(signer) {
       ...frame2,
       rows: frame2.rows.map((row) => ({
         ...row,
-        runs: row.runs.map(
-          (run3) => run3.link !== void 0 && isBarLink(run3.link) ? { ...run3, link: signer.signLink(run3.link) } : run3
-        )
+        runs: row.runs.map(({ link, ...run3 }) => {
+          if (link === void 0) return run3;
+          const href = hrefOfDrawnLink(link);
+          return {
+            ...run3,
+            link: isBarLink(href) ? signer.signLink(href) : href
+          };
+        })
       }))
     };
   };
@@ -70907,7 +70988,7 @@ function createCcCandybarEngine(opts) {
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
-      ...richTextFuncs(depth),
+      ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
           name,
@@ -72451,9 +72532,12 @@ function clickSession(runtime, reader) {
 function evalTemplate(tpl, scope) {
   return tpl.evaluate(scope).map((f) => f.plain).join("");
 }
-function linkFragment(text4, url, active2, base) {
+function linkFragment(text4, link, active2, base) {
   const rt = new RichText(text4, {
-    style: Style.combine([base, new Style({ link: url, bold: active2 })])
+    style: Style.combine([
+      base,
+      styleWithLink(new Style({ bold: active2 }), link)
+    ])
   });
   rt.overflow = "ignore";
   rt.end = "";
@@ -75963,12 +76047,13 @@ init_globals();
 function disclosureCloseFragment(sessionId2, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
-      {
+    {
+      kind: "action",
+      effect: {
         verb: VERB_SET_STATE,
         args: [sessionId2, key, DISCLOSURE_CLOSED]
       }
-    ]),
+    },
     false
   );
 }
