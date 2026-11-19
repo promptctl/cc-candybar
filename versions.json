@@ -2,144 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-909",
-      "ref": "refs/pull/909/merge",
-      "sha": "535c8510045270d51762cec71e29a8f994eaed25",
-      "timestamp": "2026-11-19T21:52:36.038Z",
-      "commits": [
-        {
-          "sha": "535c8510045270d51762cec71e29a8f994eaed25",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T21:51:20Z",
-          "message": "Merge 9efe832ff1122b592fc8ae6041c166dc9bfdd44c into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
-        },
-        {
-          "sha": "9efe832ff1122b592fc8ae6041c166dc9bfdd44c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:51:05-07:00",
-          "message": "docs(renderer): distinguish authored and bundled recovery\n"
-        },
-        {
-          "sha": "62daf67e439d6f68dc30bf4bea54a9c559be5e8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:50:42-07:00",
-          "message": "fix(renderer): refresh bundled fallback from current discovery\n"
-        },
-        {
-          "sha": "7107fbc98638207792f42f0d741a504c49e55887",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:41:21-07:00",
-          "message": "docs(renderer): describe last-good state across project decisions\n"
-        },
-        {
-          "sha": "9a65b53ebc5cfcc2964e50577e0563515880e73d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:40:42-07:00",
-          "message": "fix(renderer): retire last-good config after approval withdrawal\n"
-        },
-        {
-          "sha": "97cddc4efd65e098f70bf84fbbcfe0602cd0464d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:38:38-07:00",
-          "message": "docs(renderer): describe config and state delivery on replacement\n"
-        },
-        {
-          "sha": "ff393a8c2ab4a994243a886b8bb7fba425255483",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:35:44-07:00",
-          "message": "fix(host): restore discovery demand after failed renderer start\n"
-        },
-        {
-          "sha": "adf00f488a833ffcab804db5cbada687da0c32ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:35:46-07:00",
-          "message": "fix(protocol): distinguish worktree builds that carry selected config\n"
-        },
-        {
-          "sha": "725e10af02cffbcbdd977d72fa299d0b8d0a8b45",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:33:31-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/managed-source-declarations\n"
-        },
-        {
-          "sha": "f0401b818e6620b82f42b84fc07bec8c037df309",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:33:09-07:00",
-          "message": "fix(host): admit managed sources through renderer discoveries\n"
-        },
-        {
-          "sha": "6566dd14fe6f9a25af31f103d5ef73b5c5cf43c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:33:30-07:00",
-          "message": "test(renderer): replay the boundary before removing the last callbacks\n"
-        },
-        {
-          "sha": "c99c5254a1d5f7cf7862cd0b8bade53d8f6c9161",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:30:44-07:00",
-          "message": "fix(host): resolve config authority before publishing resource demand\n"
-        },
-        {
-          "sha": "e1d651690d65d709eabc2a7f2087a3967eaadab4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:27:27-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/managed-source-declarations\n\n# Conflicts:\n#\tsrc/daemon/renderer-host.ts\n"
-        },
-        {
-          "sha": "4efb7d83cfc8f832f096caae2c71166e85128c89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:26:48-07:00",
-          "message": "test(daemon): measure shared disk reads across a bad config and restart\n"
-        },
-        {
-          "sha": "8a8e63346960aef1cef97309cccfeabb5bb1ed5a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:25:02-07:00",
-          "message": "test(renderer): exercise replacement from a known host generation\n"
-        },
-        {
-          "sha": "eca6999ec7b0edc2d63fcdfb29ed413bb56a54d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:20:45-07:00",
-          "message": "fix(renderer): replay the last selected config observation\n"
-        },
-        {
-          "sha": "08d76b81c6f79776db1666fc3ac8a44f9a67ffba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:16:05-07:00",
-          "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "21ad3ab8defc9a580a0798d45c3295daef3e11e7",
-      "timestamp": "2026-11-19T21:31:12.138Z",
+      "sha": "30e873263e903714b0febd0021507e4d0bc6b95a",
+      "timestamp": "2026-11-19T22:00:17.404Z",
       "commits": [
         {
-          "sha": "21ad3ab8defc9a580a0798d45c3295daef3e11e7",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T21:30:04Z",
-          "message": "chore(release): set `package.json` to 1.235.13\n\n## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** keep writes and failures attached to their turn ([#908](https://github.com/promptctl/cc-candybar/issues/908)) ([4680c55](https://github.com/promptctl/cc-candybar/commit/4680c55df0a0905e549e817bb85a273c8c6dc221))\n"
+          "sha": "30e873263e903714b0febd0021507e4d0bc6b95a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:59:05-07:00",
+          "message": "fix(daemon): share managed plugin watches across renderer lifetimes (#909)\n\n* fix(daemon): share managed plugin watches across renderer lifetimes\n\n* fix(renderer): replay the last selected config observation\n\n* test(renderer): exercise replacement from a known host generation\n\n* test(daemon): measure shared disk reads across a bad config and restart\n\n* fix(host): resolve config authority before publishing resource demand\n\n* test(renderer): replay the boundary before removing the last callbacks\n\n* fix(host): admit managed sources through renderer discoveries\n\n* fix(protocol): distinguish worktree builds that carry selected config\n\n* fix(host): restore discovery demand after failed renderer start\n\n* docs(renderer): describe config and state delivery on replacement\n\n* fix(renderer): retire last-good config after approval withdrawal\n\n* docs(renderer): describe last-good state across project decisions\n\n* fix(renderer): refresh bundled fallback from current discovery\n\n* docs(renderer): distinguish authored and bundled recovery"
         }
       ]
     },

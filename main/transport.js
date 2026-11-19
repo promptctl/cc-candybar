@@ -60392,7 +60392,7 @@ function applyPlugins(files, ctx, base, validate) {
         const config = mergeWithDefault(
           fragmentOf(
             file,
-            read2.dir,
+            read2,
             definition,
             { source, json: import_json53.default.parse(source) },
             ctx
@@ -60607,7 +60607,7 @@ function settingFor(label2, values2) {
     default: first2
   };
 }
-function fragmentOf(file, dir, id2, { source, json: json2 }, { checkout, home }) {
+function fragmentOf(file, { dir, storage }, id2, { source, json: json2 }, { checkout, home }) {
   const ns = pluginNs(id2);
   const issues = [];
   const fail2 = () => {
@@ -60629,7 +60629,7 @@ function fragmentOf(file, dir, id2, { source, json: json2 }, { checkout, home })
     }
   }
   const dataPath = json2.data === void 0 ? void 0 : dataPathOf(json2.data, file, checkout, home, issues);
-  const sources = json2.sources === void 0 ? {} : sourcesOf(json2.sources, dir, issues);
+  const sources = json2.sources === void 0 ? {} : sourcesOf(json2.sources, storage, issues);
   if (issues.length > 0) return fail2();
   const ctx = {
     source,
@@ -60895,7 +60895,7 @@ var BUILT_SOURCE = {
   refresh: { watch: true },
   read: { file: { json: true } }
 };
-function sourcesOf(sources, dir, issues) {
+function sourcesOf(sources, storage, issues) {
   if (!isPlainObject2(sources)) {
     issues.push({
       path: "sources",
@@ -60903,7 +60903,6 @@ function sourcesOf(sources, dir, issues) {
     });
     return {};
   }
-  const storage = import_node_path5.default.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered = {};
   for (const [name, source] of Object.entries(sources)) {
@@ -64228,6 +64227,9 @@ function contentOfText(text4) {
 }
 function writable(content) {
   return content.kind !== "unreadable";
+}
+function retainsConfig(target, selected, current) {
+  return selected?.standing !== "approved" || target.source !== "argument-only" && current?.standing === "approved" && current.dir === selected.dir;
 }
 
 // src/renderer/lane-handoff.ts
@@ -70457,8 +70459,8 @@ function loadOrigin(cwd2, snapshot, deps, served = null) {
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
   return settle(snapshot, resolved.warnings, attempt4);
 }
-function fallbackState(cwd2, snapshot, deps) {
-  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps);
+function fallbackState(cwd2, snapshot, deps, served) {
+  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps, served);
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause
@@ -70571,9 +70573,12 @@ var RenderCache = class {
     return this.closing.aborted;
   }
   // Every state the map serves or served, until reclaimed.
-  holds = /* @__PURE__ */ new Map();
-  // The last storage hold id minted.
-  storageHolds = 0;
+  holds = observable.map(
+    void 0,
+    {
+      deep: false
+    }
+  );
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = observable.map(
@@ -70684,9 +70689,7 @@ var RenderCache = class {
       if (draft !== null) key = draftKey(editing);
     }
     const existing = this.entries.get(key);
-    const priorRepo = existing?.snapshot.repo;
-    const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
-    if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
+    if (existing !== void 0 && originKey(existing.origin) === originKey(origin)) {
       runInAction(() => {
         this.entries.delete(key);
         this.entries.set(key, existing);
@@ -70700,9 +70703,9 @@ var RenderCache = class {
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
+    const held = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd: cwd2 } = origin;
-    const loaded = this.load(origin, snapshot, null);
+    const { loaded, selected } = this.selectState(origin, held, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     const entry = {
@@ -70710,16 +70713,21 @@ var RenderCache = class {
       get configLayers() {
         return configPaths(this.snapshot);
       },
-      snapshot,
-      digest: digest2,
+      snapshot: held.snapshot,
+      digest: held.digest,
+      selected,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
-      state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
+      get state() {
+        return this.selected.state;
+      }
     };
-    makeObservable(entry, { lastError: observable, state: observableRef });
+    makeObservable(entry, {
+      selected: observableRef,
+      lastError: observable
+    });
     this.serve(entry.state);
     runInAction(() => this.entries.set(key, entry));
-    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -71009,6 +71017,20 @@ var RenderCache = class {
       ).values()
     ];
   }
+  // [LAW:one-source-of-truth] A retired state can still serve an in-flight
+  // draw. Its folders go with its last holder, just like its compile.
+  managedFolders() {
+    const folders = /* @__PURE__ */ new Set();
+    for (const state of this.holds.keys())
+      for (const folder of state.sources.values()) folders.add(folder);
+    return [...folders].sort();
+  }
+  configSelections() {
+    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, selected }]) => ({
+      origin,
+      digest: selected.kind === "authored" ? selected.digest : null
+    }));
+  }
   subscriptions() {
     return {
       sources: Object.fromEntries(
@@ -71034,14 +71056,38 @@ var RenderCache = class {
       `render-cache closed entries=${entries} deferred=${this.stats.retired}`
     );
   }
-  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
-  // cache refuses every way one would be built — a new entry, a reload, a
-  // `config` turn after the close.
+  // [LAW:single-enforcer] Opening an entry, reloading a committed config,
+  // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(origin, snapshot, served) {
+  selectState(origin, { snapshot, digest: digest2 }, previous2) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(origin.cwd, snapshot, this.deps, served);
+    const retained = previous2?.kind === "authored" && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
+    const bundled = previous2?.kind === "bundled" ? previous2 : null;
+    const { cwd: cwd2 } = origin;
+    const { repo: repo2 } = snapshot;
+    const loaded = loadOrigin(
+      cwd2,
+      snapshot,
+      this.deps,
+      (retained ?? bundled)?.state ?? null
+    );
+    if (loaded.state !== null)
+      return {
+        loaded,
+        selected: { kind: "authored", state: loaded.state, digest: digest2, repo: repo2 }
+      };
+    if (retained !== null) return { loaded, selected: retained };
+    const state = fallbackState(
+      cwd2,
+      snapshot,
+      this.deps,
+      bundled?.state ?? null
+    );
+    return {
+      loaded,
+      selected: bundled?.state === state ? bundled : { kind: "bundled", state }
+    };
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
   // snapshot the host handed in for its origin. None is an event the renderer
@@ -71124,21 +71170,13 @@ var RenderCache = class {
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
       );
-    this.holds.set(state, {
-      id: ++this.storageHolds,
-      holders: 0,
-      retired: null
-    });
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
     this.compiles.set(state.compileKey, state.compiled);
     if (held === void 0)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`
       );
-  }
-  // The host holds the storage folders a served state's latest load named.
-  holdFolders(state) {
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
   holdOf(state) {
     const hold2 = this.holds.get(state);
@@ -71177,8 +71215,7 @@ var RenderCache = class {
   // without dispose leaks every handle the config declared.
   reclaim(state, hold2) {
     if (hold2.retired === null || hold2.holders > 0) return;
-    this.holds.delete(state);
-    this.deps.storage.release(hold2.id);
+    runInAction(() => this.holds.delete(state));
     this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
     if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
       this.compiles.delete(state.compileKey);
@@ -71191,8 +71228,8 @@ var RenderCache = class {
   // Re-populate `entry` from `snapshot`, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
-  // - Load failure: keep the prior state (the bundled default before any
-  //   config has loaded), set lastError.
+  // - Load failure: keep the prior state if still approved, otherwise serve
+  //   the current snapshot's bundled default. Both report the load error.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
   // new DslConfig retires the old state, and `reclaim` disposes its
@@ -71203,7 +71240,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  reloadInto(entry, { snapshot, digest: digest2 }, cause) {
+  reloadInto(entry, held, cause) {
     const retry = [...this.openFailures].filter(
       ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
     );
@@ -71212,25 +71249,25 @@ var RenderCache = class {
       ...retry.map(([session]) => session)
     ];
     const served = entry.state;
-    const loaded = this.load(entry.origin, snapshot, served);
-    entry.snapshot = snapshot;
-    entry.digest = digest2;
+    const { loaded, selected } = this.selectState(
+      entry.origin,
+      held,
+      entry.selected
+    );
+    entry.snapshot = held.snapshot;
+    entry.digest = held.digest;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
+      entry.selected = selected;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (loaded.kind === "built") {
-      const state = loaded.state;
-      runInAction(() => {
-        entry.state = state;
-      });
-      this.serve(state);
+    if (selected.state !== served) {
+      this.serve(selected.state);
+      this.retire(served, "reload", entry);
     }
-    this.holdFolders(entry.state);
-    if (loaded.kind === "built") this.retire(served, "reload", entry);
-    if (loaded.state !== null)
+    if (selected.state !== served || loaded.state !== null)
       for (const [session, failure2] of retry)
         this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
@@ -77423,6 +77460,8 @@ function mainRenderer(parts, pushed, drains) {
   };
   let subscriptions = {
     sources: {},
+    managedFolders: [],
+    configSelections: [],
     lanes: {},
     configs: []
   };
@@ -77483,19 +77522,45 @@ function mainRenderer(parts, pushed, drains) {
   const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
-      case "start":
+      case "start": {
+        const configs = new Map(
+          event.configs.map((offer) => [originKey(offer.origin), offer])
+        );
+        const offered = (at) => {
+          const key = originKey(at);
+          const offer = configs.get(key);
+          if (offer === void 0) return;
+          configs.delete(key);
+          const { origin, config, retained } = offer;
+          if (typeof retained === "object") {
+            parts.renderCache.configure(origin, retained);
+            parts.renderCache.getOrCreate(origin);
+          }
+          parts.renderCache.configure(origin, config);
+        };
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(
-            ({ context, worldState }) => () => turn(
+          ...event.sessions.map(({ context, worldState }) => () => {
+            offered(context.requested);
+            turn(
               { kind: "context", context, worldState },
               record2,
               effects,
               frames
-            )
+            );
+          }),
+          // A live session gets its cache entry before idle entries warm,
+          // so they cannot take the budget a pinned view needs.
+          () => runEach(
+            [...configs.values()].map(({ origin, retained }) => () => {
+              offered(origin);
+              if (retained !== void 0)
+                parts.renderCache.getOrCreate(origin);
+            })
           )
         ]);
         return;
+      }
       case "context": {
         const { context, worldState } = event;
         const session = context.hookData.session_id;
@@ -77650,6 +77715,15 @@ function mainRenderer(parts, pushed, drains) {
   const sources = computed(() => parts.renderCache.subscriptions().sources, {
     equals: compareStructural
   });
+  const managedFolders = computed(() => parts.renderCache.managedFolders(), {
+    equals: compareStructural
+  });
+  const configSelections = computed(
+    () => parts.renderCache.configSelections(),
+    {
+      equals: compareStructural
+    }
+  );
   const laneDeclaration = computed(
     () => {
       const lanes = {};
@@ -77702,7 +77776,13 @@ function mainRenderer(parts, pushed, drains) {
   const declaration = new Kept("renderer subscriptions", () => {
     const { lanes, unprepared } = laneDeclaration.get();
     return {
-      plan: { sources: sources.get(), lanes, configs: configOrigins.get() },
+      plan: {
+        sources: sources.get(),
+        managedFolders: managedFolders.get(),
+        lanes,
+        configs: configOrigins.get(),
+        configSelections: configSelections.get()
+      },
       unprepared
     };
   });
@@ -77851,7 +77931,6 @@ function mainRendererOf(inputs, host) {
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
-      storage: host.storage,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -85856,13 +85935,12 @@ var ManagedStorage = class {
   files;
   sessions;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
-  // a hold names.
+  // a loaded config declares.
   folders = /* @__PURE__ */ new Map();
   // By folder: the faults last logged and counted, so each is told once as it
   // starts, changes and clears.
   told = /* @__PURE__ */ new Map();
-  // The folders each render state's latest load named.
-  holds = /* @__PURE__ */ new Map();
+  closed = false;
   faultCounts = {
     unusable: 0,
     unreadable: 0,
@@ -85906,22 +85984,33 @@ var ManagedStorage = class {
       clock: opts.clock
     });
   }
-  // A render state's load names its folders: held under its id until the next
-  // load replaces the list or its `release`. Each named folder is asked again
-  // before any unheld one closes, so a folder two states name is never closed
-  // between them.
-  hold(id2, folders) {
-    this.holds.set(id2, folders);
-    const changed = this.reconcile(new Set(folders), "hold");
-    this.closeUnheld(changed);
+  // [LAW:one-source-of-truth] The host supplies the union of its renderers'
+  // declared folders. The keys of this owner's live table are the prior union.
+  follow(wanted) {
+    if (this.closed) return;
+    const changed = /* @__PURE__ */ new Set();
+    for (const folder of wanted)
+      if (!this.folders.has(folder) && this.asked(folder, "config"))
+        changed.add(folder);
+    for (const folder of this.folders.keys()) {
+      if (wanted.has(folder)) continue;
+      if (this.moved(folder, void 0)) changed.add(folder);
+    }
     this.refreshFolders(changed);
+  }
+  // A physical config observation retries only the retained plugin folders it
+  // observed. A renderer redraw or another holder joining reads no directory.
+  recheck(observed2) {
+    if (this.closed) return;
+    const held = [...observed2].filter((folder) => this.folders.has(folder));
+    this.refreshFolders(this.reconcile(held, "config"));
   }
   // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
   // A generation's folder is read, never made: a stat that fails keeps the
   // generation, and the registry judges its watch again, as it does for an
   // acquire joining the slot, so a deaf watch reopens on the owner's own
-  // triggers. A folder found gone or replaced is lost, except at a hold, which
-  // makes it again at once. Any other state is made and read again, and a
+  // triggers. A config observation reprovisions a missing or replaced folder
+  // immediately. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
   asked(folder, trigger) {
     const was = this.folders.get(folder);
@@ -85934,7 +86023,7 @@ var ManagedStorage = class {
         return this.settle(folder);
       }
       this.lostAt(was, read2);
-      if (trigger === "hold") this.moved(folder, this.made(folder));
+      if (trigger === "config") this.moved(folder, this.made(folder));
       return true;
     }
     return this.moved(folder, this.made(folder));
@@ -85945,14 +86034,9 @@ var ManagedStorage = class {
       if (this.asked(folder, trigger)) changed.add(folder);
     return changed;
   }
-  // A render state reclaimed: the folders only it named close.
-  release(id2) {
-    this.holds.delete(id2);
-    this.refreshFolders(this.closeUnheld());
-  }
   // A session's declaration of one session's file: held at (folder, session
-  // id) until the session's next declaration takes it no more. A folder no
-  // hold names has no standing failure: its file reads the path.
+  // id) until the session's next declaration takes it no more. If its folder
+  // demand leaves first, the remaining lane refreshes as absent.
   declare(holds2, folder, sessionId2) {
     return this.sessions.declare(holds2, { folder, sessionId: sessionId2 });
   }
@@ -85970,10 +86054,11 @@ var ManagedStorage = class {
     };
   }
   close() {
+    if (this.closed) return;
+    this.closed = true;
     this.unsubscribe();
     this.sessions.close();
-    this.holds.clear();
-    this.closeUnheld();
+    for (const folder of this.folders.keys()) this.moved(folder, void 0);
   }
   // What a folder's path holds once made: the storage folder is made first,
   // so its program has somewhere to write before any session reads it.
@@ -86014,16 +86099,6 @@ var ManagedStorage = class {
   // Whether a read found the folder a generation's watch opened on.
   present(was, read2) {
     return read2.kind === "found" && sameIdentity(read2.identity, was.identity);
-  }
-  // Closes every folder no hold names.
-  closeUnheld(changed = /* @__PURE__ */ new Set()) {
-    const named2 = new Set([...this.holds.values()].flat());
-    for (const folder of this.folders.keys()) {
-      if (named2.has(folder)) continue;
-      this.moved(folder, void 0);
-      changed.add(folder);
-    }
-    return changed;
   }
   refreshFolders(changed) {
     if (changed.size > 0) this.sessions.changed((f) => changed.has(f.folder));
@@ -86168,11 +86243,8 @@ var ManagedStorage = class {
     }
   }
   // The folder's standing failure, which every source in it reads first:
-  // every fault standing, else the stall. A folder no hold names has none:
-  // its files read the path.
-  standing(folder) {
-    const state = this.folders.get(folder);
-    if (state === void 0) return null;
+  // every fault standing, else the stall.
+  standing(folder, state) {
     const faults = faultsOf(state);
     const reasons = SOURCES.flatMap((source) => {
       const fault = faults[source];
@@ -86184,7 +86256,9 @@ var ManagedStorage = class {
     return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
   async read(f, signal) {
-    const fault = this.standing(f.folder);
+    const state = this.folders.get(f.folder);
+    if (state === void 0) return ABSENT2;
+    const fault = this.standing(f.folder, state);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     const read2 = await this.files.read(file, signal);
@@ -89399,7 +89473,45 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let configs = /* @__PURE__ */ new Map();
   let declared;
   let origins;
+  let followedOrigins = [];
+  let selected;
   let followFailure = null;
+  let startFailure = null;
+  const endedStart = (result) => {
+    startFailure = result.kind === "threw" ? result.failure : null;
+    if (result.kind === "threw") return;
+    configs.clear();
+    for (const { origin, config } of result.event.configs)
+      configs.set(originKey(origin), { kind: "received", config });
+    declared = void 0;
+    origins = void 0;
+    selected = void 0;
+    followFailure = null;
+  };
+  const follow = (wanted) => {
+    world.configs.follow(wanted);
+    followedOrigins = wanted;
+  };
+  const prepareStart = (event, borrow) => {
+    const wanted = new Map(followedOrigins.map((o) => [originKey(o), o]));
+    for (const origin of origins ?? []) wanted.set(originKey(origin), origin);
+    for (const { context } of event.sessions)
+      wanted.set(originKey(context.requested), context.requested);
+    if (wanted.size > followedOrigins.length || followFailure !== null)
+      borrow([...wanted.values()]);
+    const configs2 = [...wanted].map(([key, origin]) => {
+      const config = world.configs.snapshotOf(origin);
+      if (config === null)
+        throw new Error(`no config snapshot for renderer start origin ${key}`);
+      const retained = world.configs.retainedOf(origin);
+      return {
+        origin,
+        config,
+        ...retained === void 0 ? {} : { retained }
+      };
+    });
+    return { ...event, configs: configs2 };
+  };
   const inMailbox = (slot, at = "last") => {
     const asked = clock.monotonic();
     queued++;
@@ -89446,11 +89558,14 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       output = await renderer.answer(input);
     } catch (thrown2) {
       recordTaken("session release", release3);
-      return unanswered(failureOf(thrown2), queuedMs);
+      const failure2 = failureOf(thrown2);
+      if (input.event.kind === "start") endedStart({ kind: "threw", failure: failure2 });
+      return unanswered(failure2, queuedMs);
     }
-    if (input.event.kind === "config") {
+    if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
-      if (configs.has(key)) configs.set(key, "received");
+      if (configs.has(key))
+        configs.set(key, { kind: "received", config: input.event.config });
     }
     const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
     const finalization = finalizationFields(answer3);
@@ -89462,6 +89577,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
     };
+    if (input.event.kind === "start")
+      endedStart(
+        turn.kind === "threw" ? turn : { kind: "answered", event: input.event }
+      );
     recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled: settled3, configFailure } = await landInSlot(
       input.event,
@@ -89498,7 +89617,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const waited = [];
     const unreceived = [];
     if (followed.kind === "failed") {
-      if (requestedKey !== null && configs.get(requestedKey) !== "received")
+      if (requestedKey !== null && configs.get(requestedKey)?.kind !== "received")
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
@@ -89602,13 +89721,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
   };
   const took = (subscriptions, nextWake, frames, stored, requested, receipt) => {
-    recordTaken("wake declaration", () => wake.declare(nextWake));
+    const adoptDemand = startFailure === null;
+    if (adoptDemand)
+      recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    if ((declared?.sources !== subscriptions.sources || declared?.lanes !== subscriptions.lanes) && recordTaken(
-      "subscriptions",
-      () => collector.subscribed(subscriptions)
-    ) !== null)
-      declared = subscriptions;
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(
@@ -89625,6 +89741,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (recordTaken("frames", () => collector.frames(frames, settled3)) === null)
         for (const frame2 of frames) settled3(frame2, false);
     }
+    if (!adoptDemand) return { kind: "following", named: [] };
     const named2 = [];
     const moved3 = origins !== subscriptions.configs;
     if (moved3) {
@@ -89634,7 +89751,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const before = configs.get(key);
         if (before === void 0) {
           named2.push(origin);
-          next2.set(key, "scheduled");
+          next2.set(key, { kind: "scheduled" });
         } else next2.set(key, before);
       }
       configs = next2;
@@ -89642,16 +89759,32 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (requested !== null) {
       const key = originKey(requested);
-      if (configs.get(key) === "unreceived") {
+      if (configs.get(key)?.kind === "unreceived") {
         named2.push(requested);
-        configs.set(key, "scheduled");
+        configs.set(key, { kind: "scheduled" });
       }
     }
     try {
       if (moved3 || requested !== null && followFailure !== null) {
-        world.configs.follow(subscriptions.configs);
+        if (subscriptions.configs.length > 0 || followedOrigins.length > 0 || followFailure !== null)
+          follow(subscriptions.configs);
         followFailure = null;
       }
+      if (followFailure !== null)
+        return { kind: "failed", failure: followFailure };
+      const entries = subscriptions.configSelections;
+      if (selected !== entries) {
+        world.configs.selected(entries, (origin) => {
+          const delivered = configs.get(originKey(origin));
+          return delivered?.kind === "received" ? delivered.config : void 0;
+        });
+        selected = entries;
+      }
+      if ((declared?.sources !== subscriptions.sources || declared?.managedFolders !== subscriptions.managedFolders || declared?.lanes !== subscriptions.lanes) && recordTaken(
+        "subscriptions",
+        () => collector.subscribed(subscriptions)
+      ) !== null)
+        declared = subscriptions;
       return { kind: "following", named: named2 };
     } catch (thrown2) {
       for (const origin of named2) markUnreceived(origin);
@@ -89663,7 +89796,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const markUnreceived = (origin) => {
     const key = originKey(origin);
-    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
+    if (configs.get(key)?.kind === "scheduled")
+      configs.set(key, { kind: "unreceived" });
   };
   const configMade = (origin) => () => {
     const config = world.configs.snapshotOf(origin);
@@ -89776,31 +89910,45 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       pendingClicks.set(held.session, held);
     }
     return inMailbox(async (queuedMs, holds2) => {
+      let restore;
       try {
         let made;
+        let starting = at === "first";
         try {
-          made = make();
+          const captured2 = make();
+          if (captured2.kind === "event") {
+            const { event } = captured2;
+            if (event.kind === "start") {
+              starting = true;
+              const ready = prepareStart(event, (wanted) => {
+                restore = followedOrigins;
+                follow(wanted);
+              });
+              made = { ...captured2, event: ready };
+            } else made = { ...captured2, event };
+          } else made = captured2;
         } catch (thrown2) {
           made = failureOf(thrown2);
         }
-        if (at === "first" || made.kind === "event" && made.event.kind === "start") {
-          configs.clear();
-          declared = void 0;
-          origins = void 0;
-          followFailure = null;
-        }
-        if (made.kind !== "event")
+        if (made.kind !== "event") {
+          if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
+        }
+        if (!starting && startFailure !== null && made.event.kind !== "effect-done")
+          return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds2(made.event.kind);
-        return {
-          event: made.event,
-          slotted: await inSlot(
-            stamped(made),
-            queuedMs,
-            made.event.kind === "click" ? made.runEvidence : void 0
-          )
-        };
+        const slotted = await inSlot(
+          stamped(made),
+          queuedMs,
+          made.event.kind === "click" ? made.runEvidence : void 0
+        );
+        if (starting && slotted.turn.kind === "answered") restore = void 0;
+        return { event: made.event, slotted };
       } finally {
+        if (restore !== void 0) {
+          const previous2 = restore;
+          recordTaken("start config demand rollback", () => follow(previous2));
+        }
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
       }
@@ -89830,6 +89978,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
       try {
+        if (startFailure !== null) throw new CrossedFailure(startFailure);
         const { subscriptions, wake: wake2, stored, ...answered } = await renderer.answer({
           kind: "adapter",
           push,
@@ -90324,7 +90473,7 @@ function readDefinition(file, scope, files = diskFiles) {
   return {
     scope,
     path: file,
-    definition: read2.kind === "text" ? { ...read2, dir } : read2
+    definition: read2.kind === "text" ? { ...read2, dir, storage: import_node_path32.default.join(dir, STORAGE_FOLDER) } : read2
   };
 }
 function sessionPlugins(roots, checkout, files = discoveryFiles()) {
@@ -90504,11 +90653,14 @@ var ConfigDiscovery = class {
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys2, "config-watch");
+      this.heard(keys2, "config-watch", "observed");
     });
   }
   deps;
   followed = /* @__PURE__ */ new Map();
+  // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
+  // snapshot. A weak key cannot hold an old revision after its last owner.
+  observations = /* @__PURE__ */ new WeakMap();
   watches;
   invalidated = /* @__PURE__ */ new Set();
   texts;
@@ -90524,6 +90676,8 @@ var ConfigDiscovery = class {
     return {
       follow: (origins) => this.follow(renderer, origins),
       snapshotOf: (origin) => held(origin) ?? null,
+      selected: (entries, delivered) => this.select(renderer, entries, delivered),
+      retainedOf: (origin) => this.retainedOf(renderer, origin),
       path: (origin, role) => {
         const snapshot = held(origin);
         return snapshot === void 0 ? void 0 : snapshot.chain.find((layer) => layer.role === role)?.path ?? null;
@@ -90538,6 +90692,35 @@ var ConfigDiscovery = class {
       landed: (files) => this.landed(renderer, files)
     };
   }
+  // [LAW:single-enforcer] Only discoveries held by this renderer can
+  // introduce a folder. A still-declared folder can outlive a discovery when
+  // a last-good or retired in-flight config uses it. Once let go, that prior
+  // admission gives no authority to acquire it anew.
+  admitManagedFolders(renderer, requested, previous2) {
+    if (this.closed) return /* @__PURE__ */ new Set();
+    const wanted = new Set(requested);
+    if (previous2?.size === wanted.size && [...wanted].every((f) => previous2.has(f)))
+      return previous2;
+    const admitted = /* @__PURE__ */ new Set();
+    const take = (known) => {
+      for (const folder of wanted)
+        if (known.has(folder)) {
+          wanted.delete(folder);
+          admitted.add(folder);
+        }
+    };
+    if (previous2 !== void 0) take(previous2);
+    for (const followed of this.followed.values()) {
+      if (wanted.size === 0) break;
+      if (!followed.renderers.has(renderer)) continue;
+      take(followed.managedFolders);
+      const retained = this.retainedOf(renderer, followed.origin);
+      if (retained === "current" || retained === void 0) continue;
+      const observation = this.observations.get(retained);
+      if (observation !== void 0) take(observation.managedFolders);
+    }
+    return admitted;
+  }
   // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
   // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
@@ -90547,18 +90730,25 @@ var ConfigDiscovery = class {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
-      for (const [key, origin] of fresh)
+      const observed2 = [];
+      for (const [key, origin] of fresh) {
+        const found2 = this.discovered(origin, shared, null);
         this.followed.set(key, {
-          ...this.discovered(origin, shared, null),
-          renderers: /* @__PURE__ */ new Set([renderer])
+          ...found2,
+          renderers: /* @__PURE__ */ new Set([renderer]),
+          selected: /* @__PURE__ */ new Map()
         });
+        observed2.push(found2);
+      }
+      this.reloaded(observed2);
     }
     let released = 0;
-    for (const [key, { renderers, watch: watch2 }] of this.followed) {
+    for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
+      selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
       watch2.handle.release();
@@ -90570,6 +90760,48 @@ var ConfigDiscovery = class {
       `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`
     );
   }
+  // [LAW:single-enforcer] The renderer can keep its earlier selection or
+  // select an input actually delivered to it. Resolve the whole declaration
+  // before replacing its references, including a release with no selection.
+  select(renderer, entries, delivered) {
+    if (this.closed) return;
+    const next2 = /* @__PURE__ */ new Map();
+    for (const { origin, digest: digest2 } of entries) {
+      const key = originKey(origin);
+      const followed = this.followed.get(key);
+      if (!followed?.renderers.has(renderer))
+        throw new Error(`selected config origin is not followed: ${key}`);
+      if (digest2 === null) {
+        next2.set(key, null);
+        continue;
+      }
+      const previous2 = followed.selected.get(renderer);
+      const offered = delivered(origin);
+      const observation = previous2?.digest === digest2 ? previous2 : offered === void 0 ? void 0 : this.observations.get(offered);
+      if (observation?.digest !== digest2 || originKey(observation.origin) !== key)
+        throw new Error(`selected config revision was not delivered: ${key}`);
+      const shared = [...followed.selected.values()].find(
+        (held) => held?.digest === digest2
+      );
+      next2.set(key, shared ?? observation);
+    }
+    for (const [key, { selected }] of this.followed) {
+      const observation = next2.get(key);
+      if (observation === void 0) selected.delete(renderer);
+      else selected.set(renderer, observation);
+    }
+  }
+  retainedOf(renderer, origin) {
+    const followed = this.followed.get(originKey(origin));
+    const old = followed?.selected.get(renderer);
+    if (followed === void 0 || old === void 0) return void 0;
+    if (old === null || old.digest === followed.digest) return "current";
+    return retainsConfig(
+      origin.target,
+      old.snapshot.repo,
+      followed.snapshot.repo
+    ) ? old.snapshot : "current";
+  }
   // Rediscover origins watching one of the files the turn actually wrote.
   // The writer reloads in this slot; the other holders get their own turns.
   landed(writer, files) {
@@ -90577,12 +90809,15 @@ var ConfigDiscovery = class {
     const touched = [...this.followed].filter(
       ([, { filePaths }]) => filePaths.some((file) => changed.has(file))
     ).map(([key]) => key);
-    return this.publish(this.rediscovered(touched, "landed"), writer);
+    return this.publish(
+      this.rediscovered(touched, "landed", "observed"),
+      writer
+    );
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
-    this.heard([...this.followed.keys()], why);
+    this.heard([...this.followed.keys()], why, "moved");
   }
   close() {
     if (this.closed) return;
@@ -90594,9 +90829,9 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why) {
+  heard(keys2, why, recover) {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys2, why), null);
+    this.publish(this.rediscovered(keys2, why, recover), null);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -90615,19 +90850,24 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why) {
+  rediscovered(keys2, why, recover) {
     if (keys2.length === 0) return [];
     const shared = this.batch();
     const moved2 = [];
+    const observed2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
       try {
+        const found2 = this.discovered(was.origin, shared, was.watch);
         const now2 = {
-          ...this.discovered(was.origin, shared, was.watch),
-          renderers: was.renderers
+          ...found2,
+          snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+          renderers: was.renderers,
+          selected: was.selected
         };
         this.followed.set(key, now2);
+        observed2.push(now2);
         if (now2.digest !== was.digest) moved2.push(now2);
       } catch (thrown2) {
         this.deps.log(
@@ -90640,7 +90880,15 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
+    this.reloaded(recover === "observed" ? observed2 : moved2);
     return moved2;
+  }
+  reloaded(observed2) {
+    if (this.deps.reloaded === void 0) return;
+    const folders = /* @__PURE__ */ new Set();
+    for (const { managedFolders } of observed2)
+      for (const folder of managedFolders) folders.add(folder);
+    if (folders.size > 0) this.deps.reloaded(folders);
   }
   // [LAW:single-enforcer] The observation supplied to a poll watch comes
   // from the same descriptor as the snapshot's text.
@@ -90694,10 +90942,20 @@ var ConfigDiscovery = class {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
     };
-    return {
+    const managedFolders = new Set(
+      pluginFiles(snapshot).flatMap(
+        ({ definition }) => definition.kind === "text" ? [definition.storage] : []
+      )
+    );
+    const observed2 = {
       origin,
       snapshot,
       digest: digestOf(snapshot),
+      managedFolders
+    };
+    this.observations.set(snapshot, observed2);
+    return {
+      ...observed2,
       watch: watch2,
       filePaths: paths2.targets.polled
     };
@@ -90725,13 +90983,16 @@ function watchTargetsFor(found2) {
     named: [
       ...targets.files,
       ...roots,
-      ...snapshot.plugins.map((p2) => p2.path),
-      ...snapshot.chain.flatMap(
-        (l) => Object.values(l.listed).map((p2) => p2.path)
-      )
+      ...pluginFiles(snapshot).map((p2) => p2.path)
     ],
     whole: roots
   });
+}
+function pluginFiles(snapshot) {
+  return [
+    ...snapshot.plugins,
+    ...snapshot.chain.flatMap((layer) => Object.values(layer.listed))
+  ];
 }
 
 // src/daemon/checkout-observations.ts
@@ -91048,10 +91309,6 @@ function createDaemon(inputs) {
       if (actFailed !== null && answeredBy(actFailed, event))
         actFailed = { ...actFailed, answered: true };
       restateFaults();
-    },
-    storage: {
-      hold: (id2, folders) => managedStorage.hold(id2, folders),
-      release: (id2) => managedStorage.release(id2)
     }
   };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
@@ -91061,18 +91318,26 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
-    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
+    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
+    reloaded: (folders) => managedStorage.recheck(folders)
   });
   const declared = /* @__PURE__ */ new Map();
   const aggregate = () => {
     const sources = {};
     const lanes = {};
+    const folders = /* @__PURE__ */ new Set();
     for (const [name, subscription2] of declared) {
-      for (const [id2, values2] of Object.entries(subscription2.sources))
-        if (nameOf2(id2) === name) sources[id2] = values2;
+      for (const folder of subscription2.managedFolders) folders.add(folder);
+      for (const [id2, values2] of Object.entries(subscription2.sources)) {
+        if (nameOf2(id2) !== name) continue;
+        sources[id2] = values2.filter(
+          (source) => source.kind !== "plugin" || subscription2.managedFolders.has(source.folder)
+        );
+      }
       for (const [id2, values2] of Object.entries(subscription2.lanes))
         if (nameOf2(id2) === name) lanes[id2] = values2;
     }
+    managedStorage.follow(folders);
     collector.subscribed({ sources });
     frameFeeds.switched(lanes);
     declaredBarPanes.declare(lanes);
@@ -91139,8 +91404,14 @@ function createDaemon(inputs) {
       log,
       {
         subscribed: (subscriptions) => {
+          const managedFolders = configDiscovery.admitManagedFolders(
+            name,
+            subscriptions.managedFolders,
+            declared.get(name)?.managedFolders
+          );
           declared.set(name, {
             sources: subscriptions.sources,
+            managedFolders,
             lanes: subscriptions.lanes
           });
           aggregate();
