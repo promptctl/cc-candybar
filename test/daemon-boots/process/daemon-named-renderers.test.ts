@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { textOf } from "../../../src/render/frame";
+import { daemonArgs } from "../../../src/daemon/acquire";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { frameRequest, hookData, renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
@@ -44,7 +45,7 @@ interface Read {
   readonly pid: number;
 }
 
-// The probe counts successful entry into the filesystem API for the exact
+// The probe counts filesystem calls for the exact
 // fixture paths. Child renderers inherit the preload as well.
 function readProbe(
   file: string,
@@ -59,7 +60,7 @@ function readProbe(
     const { syncBuiltinESMExports } = require("node:module");
     const wanted = ${JSON.stringify(selected)};
     const append = fs.appendFileSync;
-    for (const [api, name] of [[fs,"readFileSync"], [fs,"openSync"], [fsp,"open"], [fsp,"readFile"]]) {
+    for (const [api, name] of [[fs,"openSync"], [fsp,"open"], [fsp,"readFile"]]) {
       const original = api[name];
       api[name] = function (file, ...rest) {
         if (typeof file === "string" && wanted[file]?.includes(name)) append(${JSON.stringify(output)}, JSON.stringify({file,pid:process.pid}) + "\\n");
@@ -131,19 +132,25 @@ test("two named renderer processes draw separately and share config, transcript 
     worktreeBundle(alternate);
     const shared = [config, definition, source];
     readProbe(probe, reads, {
-      [config]: ["readFileSync"],
-      [definition]: ["readFileSync"],
+      [config]: ["openSync"],
+      [definition]: ["openSync"],
       [source]: ["readFile"],
       [firstTranscript]: ["open", "openSync"],
       [secondTranscript]: ["open", "openSync"],
     });
-    daemon = await spawnDaemonWithEnv({
-      ...isolated.env,
-      XDG_DATA_HOME: data,
-      NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
-        .filter(Boolean)
-        .join(" "),
-    });
+    daemon = await spawnDaemonWithEnv(
+      {
+        ...isolated.env,
+        XDG_DATA_HOME: data,
+        NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
+          .filter(Boolean)
+          .join(" "),
+      },
+      (env) => ({
+        bin: process.execPath,
+        args: daemonArgs(path.join(process.cwd(), "dist", "index.mjs"), env),
+      }),
+    );
 
     const args = ["cc-candybar", "--config", config];
     const request = (
