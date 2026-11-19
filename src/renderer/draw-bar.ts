@@ -515,10 +515,11 @@ export function drawRender(
     daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
     daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
   ].flatMap((w) => (w === undefined ? [] : [w]));
-  const eventsShown = [...launchEvents, ...held].map(({ kind, event }) => ({
-    kind,
-    event,
-  }));
+  // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
+  // warning's display hold still runs after the host has confirmed it.
+  const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
+    event.answered ? [] : [{ kind, event }],
+  );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,

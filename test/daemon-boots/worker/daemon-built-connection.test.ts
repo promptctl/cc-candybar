@@ -37,6 +37,7 @@ import {
 import { openedOn, type Opened } from "../../helpers/opened-connection";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
+import { fakeLauncher } from "../../helpers/fake-launcher";
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
@@ -155,6 +156,7 @@ describe("a connection to a daemon built in this worker", () => {
   function daemonWithWarning() {
     let owner: LinkOwner | undefined;
     let observed: HeldEvent | null = null;
+    let standingReads = 0;
     const inProcess = inProcessRenderer((real) =>
       hearingEvents(real, ({ event }) => {
         if (event.kind === "context" && event.worldState.session === "observe")
@@ -162,6 +164,16 @@ describe("a connection to a daemon built in this worker", () => {
       }),
     );
     const running = startDaemon(process.env, {
+      launcher: (own) => {
+        const { launcher } = fakeLauncher(systemTimekeeper, own);
+        return {
+          ...launcher,
+          standing: () => {
+            standingReads++;
+            return launcher.standing();
+          },
+        };
+      },
       renderer: (prepared) => ({
         start: (link) => {
           owner = link;
@@ -199,6 +211,7 @@ describe("a connection to a daemon built in this worker", () => {
       held,
       report: () => link.ended(warning),
       replace: () => link.start(),
+      standingReads: () => standingReads,
     };
   }
 
@@ -246,6 +259,24 @@ describe("a connection to a daemon built in this worker", () => {
     } finally {
       feed.client.destroy();
     }
+  });
+
+  test("an already answered event stays visible without rereading daemon warnings", async () => {
+    const { reply, report, standingReads } = daemonWithWarning();
+    report();
+    const first = await reply();
+    const concurrent = await reply();
+    expect(drawn(first.resp)).toMatch(/⚠\s+1/);
+    const before = standingReads();
+    first.settled(true);
+    expect(standingReads()).toBe(before + 1);
+    concurrent.settled(true);
+    expect(standingReads()).toBe(before + 1);
+
+    const insideHold = await reply();
+    expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
+    insideHold.settled(true);
+    expect(standingReads()).toBe(before + 1);
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

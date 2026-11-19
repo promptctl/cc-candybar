@@ -25,7 +25,7 @@ export interface HeldEvent {
   // clipped text. Advance their own revision without relying on a clock.
   // Other event sources and older saved click records have no revision.
   readonly revision?: number;
-  // Whether a request's answer has carried it to its client.
+  // Whether a confirmed client write carried it.
   readonly answered: boolean;
 }
 

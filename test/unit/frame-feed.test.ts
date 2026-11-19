@@ -855,36 +855,41 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   pane.finish(true);
   expect(acknowledged).toEqual([first, second]);
 
-  const unchanged = frame(S, "warning", null, 4, [
-    { ...second, event: { ...second.event, answered: true } },
-  ]);
+  const unchanged = frame(S, "warning", null, 4);
   took([unchanged]);
   expect(pane.sent).toHaveLength(3);
   expect(settled.at(-1)).toEqual([unchanged, true]);
   expect(acknowledged).toEqual([first, second]);
 });
 
-test("a hot pane replay can acknowledge the event in its cached frame", () => {
-  const { feeds, took, settled, acknowledged } = rig();
-  const initial = deferredSubscriber("pane");
-  feeds.subscribe(S, initial.sub);
-  const shown: DisplayedEvent = {
-    kind: "renderer-ended",
-    event: { text: "the renderer ended", at: 7 as Instant, answered: false },
-  };
-  const offered = frame(S, "warning", null, 1, [shown]);
-  took([offered]);
-  initial.finish(false);
-  expect(acknowledged).toEqual([]);
+test.each([
+  ["pane", "warning"],
+  ["statusline", "handoff warning"],
+] as const)(
+  "a hot %s replay can acknowledge the event in its cached frame",
+  (lane, text) => {
+    const { feeds, took, settled, acknowledged } = rig();
+    const initial = deferredSubscriber(lane);
+    feeds.subscribe(S, initial.sub);
+    const shown: DisplayedEvent = {
+      kind: "renderer-ended",
+      event: { text: "the renderer ended", at: 7 as Instant, answered: false },
+    };
+    const offered = frame(S, "warning", "handoff warning", 1, [shown]);
+    took([offered]);
+    initial.finish(false);
+    expect(acknowledged).toEqual([]);
 
-  const fresh = deferredSubscriber("pane");
-  feeds.subscribe(S, fresh.sub);
-  expect(fresh.sent).toEqual(initial.sent);
-  expect(acknowledged).toEqual([]);
-  fresh.finish(true);
-  expect(acknowledged).toEqual([shown]);
-  expect(settled).toEqual([[offered, false]]);
-});
+    const fresh = deferredSubscriber(lane);
+    feeds.subscribe(S, fresh.sub);
+    expect(initial.sent).toEqual([ansiAnswer(text)]);
+    expect(fresh.sent).toEqual([ansiAnswer(text)]);
+    expect(acknowledged).toEqual([]);
+    fresh.finish(true);
+    expect(acknowledged).toEqual([shown]);
+    expect(settled).toEqual([[offered, false]]);
+  },
+);
 
 test("a slower pane confirmation reports its own event after another pane confirmed a later one", () => {
   const { feeds, took, settled, acknowledged } = rig();
@@ -918,4 +923,41 @@ test("a slower pane confirmation reports its own event after another pane confir
     [older, true],
   ]);
   expect(acknowledged).toEqual([second, first]);
+});
+
+test("a pane write confirmed while its lane's refusal is flushing still answers its event", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const ended = jest.fn();
+  const writes: Array<() => void> = [];
+  const out = new Writable({
+    highWaterMark: 1,
+    write(_bytes: Buffer, _encoding, complete) {
+      writes.push(complete);
+    },
+  });
+  const push = newestWins(out);
+  feeds.subscribe(S, {
+    ...subscriber("pane").sub,
+    frame: (json, done) =>
+      push(json, (delivered) => {
+        ended(delivered);
+        done(delivered);
+      }),
+    refused: (resp) => out.end(JSON.stringify(resp)),
+  });
+  const shown: DisplayedEvent = {
+    kind: "act-failed",
+    event: { text: "an act failed", at: 7 as Instant, answered: false },
+  };
+  const offered = frame(S, "warning", null, 1, [shown]);
+  took([offered]);
+  feeds.switched({ [S]: { pane: false, statusline: true } });
+  expect(settled).toEqual([[offered, false]]);
+  expect(acknowledged).toEqual([]);
+
+  writes.shift()!();
+  expect(ended).toHaveBeenCalledWith(true);
+  expect(acknowledged).toEqual([shown]);
+  expect(settled).toEqual([[offered, false]]);
+  writes.shift()!();
 });
