@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "03baa57993b3a897e0b565221c250228f2873fb9",
+      "timestamp": "2026-11-19T16:24:45.875Z",
+      "commits": [
+        {
+          "sha": "03baa57993b3a897e0b565221c250228f2873fb9",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T16:23:38Z",
+          "message": "chore(release): set `package.json` to 1.235.2\n\n## [1.235.2](https://github.com/promptctl/cc-candybar/compare/v1.235.1...v1.235.2) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** drain live renderers before closing links ([#882](https://github.com/promptctl/cc-candybar/issues/882)) ([67617a1](https://github.com/promptctl/cc-candybar/commit/67617a157063c21dd274bfef57d3c5f64d5d4c47))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-888",
       "ref": "refs/pull/888/merge",
       "sha": "b03354fe6f305fb25008b2eef9e70b6dfb6c7cbc",
@@ -56,21 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:51:01-07:00",
           "message": "fix(config): share one project decision across renderers and worktrees\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "bcc3f89dc35c1a9482586ed4a130a627b6c7962e",
-      "timestamp": "2026-11-19T16:18:08.158Z",
-      "commits": [
-        {
-          "sha": "bcc3f89dc35c1a9482586ed4a130a627b6c7962e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:17:06-07:00",
-          "message": "refactor(config): share file observations with config writes (#885)\n\nrefactor(config): share the host text reader with config writes (ibyq.auw)"
         }
       ]
     },
