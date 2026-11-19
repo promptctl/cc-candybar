@@ -425,6 +425,7 @@ Every renderer's panel is the same, because there is one kind of renderer. Watch
 
 ## 11. Testing
 
+- The production build follows the renderer entry’s runtime imports, including shared modules and packages, and fails if they reach the Node filesystem. The host owns the transcript reader and its cache. The renderer combines the supplied context and metrics with the hook values reported by Claude Code.
 - **The seam test.** The recorder captures a renderer's whole input stream. Replaying it into a fresh renderer gives byte-identical outputs, frames, effects, subscriptions and records, with zero filesystem reads, zero clock reads and zero spawned processes over the entire run, not only over draws. This is the acceptance test for the split, and it holds forever. [LAW:verifiable-goals]
 - **Renderer tests** feed inputs and assert outputs. They need no mocks, because the renderer has nothing to mock.
 - **Host part tests** run each part over fake ports for the world.
