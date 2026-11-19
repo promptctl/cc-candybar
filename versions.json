@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-865",
+      "ref": "refs/pull/865/merge",
+      "sha": "44991210d5070ae32afd4bbf7321d09481fbe4ef",
+      "timestamp": "2026-11-19T12:19:55.742Z",
+      "commits": [
+        {
+          "sha": "44991210d5070ae32afd4bbf7321d09481fbe4ef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:40-07:00",
+          "message": "Merge 5b003b5d347c234d2cd9ae29b065b61885260a36 into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
+        },
+        {
+          "sha": "5b003b5d347c234d2cd9ae29b065b61885260a36",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:15-07:00",
+          "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-864",
       "ref": "refs/pull/864/merge",
       "sha": "1ad807491bc9673e88cc2aa943a46031418932d2",
