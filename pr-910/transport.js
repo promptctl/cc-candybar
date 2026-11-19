@@ -5073,6 +5073,5712 @@ var require_dist = __commonJS({
   }
 });
 
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/common.js
+var require_common = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/common.js"(exports2) {
+    "use strict";
+    init_globals();
+    var TYPED_OK = typeof Uint8Array !== "undefined" && typeof Uint16Array !== "undefined" && typeof Int32Array !== "undefined";
+    function _has(obj, key) {
+      return Object.prototype.hasOwnProperty.call(obj, key);
+    }
+    exports2.assign = function(obj) {
+      var sources = Array.prototype.slice.call(arguments, 1);
+      while (sources.length) {
+        var source = sources.shift();
+        if (!source) {
+          continue;
+        }
+        if (typeof source !== "object") {
+          throw new TypeError(source + "must be non-object");
+        }
+        for (var p2 in source) {
+          if (_has(source, p2)) {
+            obj[p2] = source[p2];
+          }
+        }
+      }
+      return obj;
+    };
+    exports2.shrinkBuf = function(buf, size) {
+      if (buf.length === size) {
+        return buf;
+      }
+      if (buf.subarray) {
+        return buf.subarray(0, size);
+      }
+      buf.length = size;
+      return buf;
+    };
+    var fnTyped = {
+      arraySet: function(dest, src, src_offs, len3, dest_offs) {
+        if (src.subarray && dest.subarray) {
+          dest.set(src.subarray(src_offs, src_offs + len3), dest_offs);
+          return;
+        }
+        for (var i2 = 0; i2 < len3; i2++) {
+          dest[dest_offs + i2] = src[src_offs + i2];
+        }
+      },
+      // Join array of chunks to single array.
+      flattenChunks: function(chunks) {
+        var i2, l, len3, pos, chunk3, result;
+        len3 = 0;
+        for (i2 = 0, l = chunks.length; i2 < l; i2++) {
+          len3 += chunks[i2].length;
+        }
+        result = new Uint8Array(len3);
+        pos = 0;
+        for (i2 = 0, l = chunks.length; i2 < l; i2++) {
+          chunk3 = chunks[i2];
+          result.set(chunk3, pos);
+          pos += chunk3.length;
+        }
+        return result;
+      }
+    };
+    var fnUntyped = {
+      arraySet: function(dest, src, src_offs, len3, dest_offs) {
+        for (var i2 = 0; i2 < len3; i2++) {
+          dest[dest_offs + i2] = src[src_offs + i2];
+        }
+      },
+      // Join array of chunks to single array.
+      flattenChunks: function(chunks) {
+        return [].concat.apply([], chunks);
+      }
+    };
+    exports2.setTyped = function(on2) {
+      if (on2) {
+        exports2.Buf8 = Uint8Array;
+        exports2.Buf16 = Uint16Array;
+        exports2.Buf32 = Int32Array;
+        exports2.assign(exports2, fnTyped);
+      } else {
+        exports2.Buf8 = Array;
+        exports2.Buf16 = Array;
+        exports2.Buf32 = Array;
+        exports2.assign(exports2, fnUntyped);
+      }
+    };
+    exports2.setTyped(TYPED_OK);
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/trees.js
+var require_trees = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/trees.js"(exports2) {
+    "use strict";
+    init_globals();
+    var utils = require_common();
+    var Z_FIXED = 4;
+    var Z_BINARY = 0;
+    var Z_TEXT = 1;
+    var Z_UNKNOWN = 2;
+    function zero(buf) {
+      var len3 = buf.length;
+      while (--len3 >= 0) {
+        buf[len3] = 0;
+      }
+    }
+    var STORED_BLOCK = 0;
+    var STATIC_TREES = 1;
+    var DYN_TREES = 2;
+    var MIN_MATCH = 3;
+    var MAX_MATCH = 258;
+    var LENGTH_CODES = 29;
+    var LITERALS = 256;
+    var L_CODES = LITERALS + 1 + LENGTH_CODES;
+    var D_CODES = 30;
+    var BL_CODES = 19;
+    var HEAP_SIZE = 2 * L_CODES + 1;
+    var MAX_BITS = 15;
+    var Buf_size = 16;
+    var MAX_BL_BITS = 7;
+    var END_BLOCK = 256;
+    var REP_3_6 = 16;
+    var REPZ_3_10 = 17;
+    var REPZ_11_138 = 18;
+    var extra_lbits = (
+      /* extra bits for each length code */
+      [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0]
+    );
+    var extra_dbits = (
+      /* extra bits for each distance code */
+      [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13]
+    );
+    var extra_blbits = (
+      /* extra bits for each bit length code */
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7]
+    );
+    var bl_order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    var DIST_CODE_LEN = 512;
+    var static_ltree = new Array((L_CODES + 2) * 2);
+    zero(static_ltree);
+    var static_dtree = new Array(D_CODES * 2);
+    zero(static_dtree);
+    var _dist_code = new Array(DIST_CODE_LEN);
+    zero(_dist_code);
+    var _length_code = new Array(MAX_MATCH - MIN_MATCH + 1);
+    zero(_length_code);
+    var base_length = new Array(LENGTH_CODES);
+    zero(base_length);
+    var base_dist = new Array(D_CODES);
+    zero(base_dist);
+    function StaticTreeDesc(static_tree, extra_bits, extra_base, elems, max_length) {
+      this.static_tree = static_tree;
+      this.extra_bits = extra_bits;
+      this.extra_base = extra_base;
+      this.elems = elems;
+      this.max_length = max_length;
+      this.has_stree = static_tree && static_tree.length;
+    }
+    var static_l_desc;
+    var static_d_desc;
+    var static_bl_desc;
+    function TreeDesc(dyn_tree, stat_desc) {
+      this.dyn_tree = dyn_tree;
+      this.max_code = 0;
+      this.stat_desc = stat_desc;
+    }
+    function d_code(dist) {
+      return dist < 256 ? _dist_code[dist] : _dist_code[256 + (dist >>> 7)];
+    }
+    function put_short(s, w) {
+      s.pending_buf[s.pending++] = w & 255;
+      s.pending_buf[s.pending++] = w >>> 8 & 255;
+    }
+    function send_bits(s, value, length) {
+      if (s.bi_valid > Buf_size - length) {
+        s.bi_buf |= value << s.bi_valid & 65535;
+        put_short(s, s.bi_buf);
+        s.bi_buf = value >> Buf_size - s.bi_valid;
+        s.bi_valid += length - Buf_size;
+      } else {
+        s.bi_buf |= value << s.bi_valid & 65535;
+        s.bi_valid += length;
+      }
+    }
+    function send_code(s, c, tree) {
+      send_bits(
+        s,
+        tree[c * 2],
+        tree[c * 2 + 1]
+        /*.Len*/
+      );
+    }
+    function bi_reverse(code2, len3) {
+      var res = 0;
+      do {
+        res |= code2 & 1;
+        code2 >>>= 1;
+        res <<= 1;
+      } while (--len3 > 0);
+      return res >>> 1;
+    }
+    function bi_flush(s) {
+      if (s.bi_valid === 16) {
+        put_short(s, s.bi_buf);
+        s.bi_buf = 0;
+        s.bi_valid = 0;
+      } else if (s.bi_valid >= 8) {
+        s.pending_buf[s.pending++] = s.bi_buf & 255;
+        s.bi_buf >>= 8;
+        s.bi_valid -= 8;
+      }
+    }
+    function gen_bitlen(s, desc) {
+      var tree = desc.dyn_tree;
+      var max_code = desc.max_code;
+      var stree = desc.stat_desc.static_tree;
+      var has_stree = desc.stat_desc.has_stree;
+      var extra = desc.stat_desc.extra_bits;
+      var base = desc.stat_desc.extra_base;
+      var max_length = desc.stat_desc.max_length;
+      var h;
+      var n, m;
+      var bits;
+      var xbits;
+      var f;
+      var overflow = 0;
+      for (bits = 0; bits <= MAX_BITS; bits++) {
+        s.bl_count[bits] = 0;
+      }
+      tree[s.heap[s.heap_max] * 2 + 1] = 0;
+      for (h = s.heap_max + 1; h < HEAP_SIZE; h++) {
+        n = s.heap[h];
+        bits = tree[tree[n * 2 + 1] * 2 + 1] + 1;
+        if (bits > max_length) {
+          bits = max_length;
+          overflow++;
+        }
+        tree[n * 2 + 1] = bits;
+        if (n > max_code) {
+          continue;
+        }
+        s.bl_count[bits]++;
+        xbits = 0;
+        if (n >= base) {
+          xbits = extra[n - base];
+        }
+        f = tree[n * 2];
+        s.opt_len += f * (bits + xbits);
+        if (has_stree) {
+          s.static_len += f * (stree[n * 2 + 1] + xbits);
+        }
+      }
+      if (overflow === 0) {
+        return;
+      }
+      do {
+        bits = max_length - 1;
+        while (s.bl_count[bits] === 0) {
+          bits--;
+        }
+        s.bl_count[bits]--;
+        s.bl_count[bits + 1] += 2;
+        s.bl_count[max_length]--;
+        overflow -= 2;
+      } while (overflow > 0);
+      for (bits = max_length; bits !== 0; bits--) {
+        n = s.bl_count[bits];
+        while (n !== 0) {
+          m = s.heap[--h];
+          if (m > max_code) {
+            continue;
+          }
+          if (tree[m * 2 + 1] !== bits) {
+            s.opt_len += (bits - tree[m * 2 + 1]) * tree[m * 2];
+            tree[m * 2 + 1] = bits;
+          }
+          n--;
+        }
+      }
+    }
+    function gen_codes(tree, max_code, bl_count) {
+      var next_code = new Array(MAX_BITS + 1);
+      var code2 = 0;
+      var bits;
+      var n;
+      for (bits = 1; bits <= MAX_BITS; bits++) {
+        next_code[bits] = code2 = code2 + bl_count[bits - 1] << 1;
+      }
+      for (n = 0; n <= max_code; n++) {
+        var len3 = tree[n * 2 + 1];
+        if (len3 === 0) {
+          continue;
+        }
+        tree[n * 2] = bi_reverse(next_code[len3]++, len3);
+      }
+    }
+    function tr_static_init() {
+      var n;
+      var bits;
+      var length;
+      var code2;
+      var dist;
+      var bl_count = new Array(MAX_BITS + 1);
+      length = 0;
+      for (code2 = 0; code2 < LENGTH_CODES - 1; code2++) {
+        base_length[code2] = length;
+        for (n = 0; n < 1 << extra_lbits[code2]; n++) {
+          _length_code[length++] = code2;
+        }
+      }
+      _length_code[length - 1] = code2;
+      dist = 0;
+      for (code2 = 0; code2 < 16; code2++) {
+        base_dist[code2] = dist;
+        for (n = 0; n < 1 << extra_dbits[code2]; n++) {
+          _dist_code[dist++] = code2;
+        }
+      }
+      dist >>= 7;
+      for (; code2 < D_CODES; code2++) {
+        base_dist[code2] = dist << 7;
+        for (n = 0; n < 1 << extra_dbits[code2] - 7; n++) {
+          _dist_code[256 + dist++] = code2;
+        }
+      }
+      for (bits = 0; bits <= MAX_BITS; bits++) {
+        bl_count[bits] = 0;
+      }
+      n = 0;
+      while (n <= 143) {
+        static_ltree[n * 2 + 1] = 8;
+        n++;
+        bl_count[8]++;
+      }
+      while (n <= 255) {
+        static_ltree[n * 2 + 1] = 9;
+        n++;
+        bl_count[9]++;
+      }
+      while (n <= 279) {
+        static_ltree[n * 2 + 1] = 7;
+        n++;
+        bl_count[7]++;
+      }
+      while (n <= 287) {
+        static_ltree[n * 2 + 1] = 8;
+        n++;
+        bl_count[8]++;
+      }
+      gen_codes(static_ltree, L_CODES + 1, bl_count);
+      for (n = 0; n < D_CODES; n++) {
+        static_dtree[n * 2 + 1] = 5;
+        static_dtree[n * 2] = bi_reverse(n, 5);
+      }
+      static_l_desc = new StaticTreeDesc(static_ltree, extra_lbits, LITERALS + 1, L_CODES, MAX_BITS);
+      static_d_desc = new StaticTreeDesc(static_dtree, extra_dbits, 0, D_CODES, MAX_BITS);
+      static_bl_desc = new StaticTreeDesc(new Array(0), extra_blbits, 0, BL_CODES, MAX_BL_BITS);
+    }
+    function init_block(s) {
+      var n;
+      for (n = 0; n < L_CODES; n++) {
+        s.dyn_ltree[n * 2] = 0;
+      }
+      for (n = 0; n < D_CODES; n++) {
+        s.dyn_dtree[n * 2] = 0;
+      }
+      for (n = 0; n < BL_CODES; n++) {
+        s.bl_tree[n * 2] = 0;
+      }
+      s.dyn_ltree[END_BLOCK * 2] = 1;
+      s.opt_len = s.static_len = 0;
+      s.last_lit = s.matches = 0;
+    }
+    function bi_windup(s) {
+      if (s.bi_valid > 8) {
+        put_short(s, s.bi_buf);
+      } else if (s.bi_valid > 0) {
+        s.pending_buf[s.pending++] = s.bi_buf;
+      }
+      s.bi_buf = 0;
+      s.bi_valid = 0;
+    }
+    function copy_block(s, buf, len3, header) {
+      bi_windup(s);
+      if (header) {
+        put_short(s, len3);
+        put_short(s, ~len3);
+      }
+      utils.arraySet(s.pending_buf, s.window, buf, len3, s.pending);
+      s.pending += len3;
+    }
+    function smaller(tree, n, m, depth) {
+      var _n2 = n * 2;
+      var _m2 = m * 2;
+      return tree[_n2] < tree[_m2] || tree[_n2] === tree[_m2] && depth[n] <= depth[m];
+    }
+    function pqdownheap(s, tree, k) {
+      var v = s.heap[k];
+      var j = k << 1;
+      while (j <= s.heap_len) {
+        if (j < s.heap_len && smaller(tree, s.heap[j + 1], s.heap[j], s.depth)) {
+          j++;
+        }
+        if (smaller(tree, v, s.heap[j], s.depth)) {
+          break;
+        }
+        s.heap[k] = s.heap[j];
+        k = j;
+        j <<= 1;
+      }
+      s.heap[k] = v;
+    }
+    function compress_block(s, ltree, dtree) {
+      var dist;
+      var lc;
+      var lx = 0;
+      var code2;
+      var extra;
+      if (s.last_lit !== 0) {
+        do {
+          dist = s.pending_buf[s.d_buf + lx * 2] << 8 | s.pending_buf[s.d_buf + lx * 2 + 1];
+          lc = s.pending_buf[s.l_buf + lx];
+          lx++;
+          if (dist === 0) {
+            send_code(s, lc, ltree);
+          } else {
+            code2 = _length_code[lc];
+            send_code(s, code2 + LITERALS + 1, ltree);
+            extra = extra_lbits[code2];
+            if (extra !== 0) {
+              lc -= base_length[code2];
+              send_bits(s, lc, extra);
+            }
+            dist--;
+            code2 = d_code(dist);
+            send_code(s, code2, dtree);
+            extra = extra_dbits[code2];
+            if (extra !== 0) {
+              dist -= base_dist[code2];
+              send_bits(s, dist, extra);
+            }
+          }
+        } while (lx < s.last_lit);
+      }
+      send_code(s, END_BLOCK, ltree);
+    }
+    function build_tree(s, desc) {
+      var tree = desc.dyn_tree;
+      var stree = desc.stat_desc.static_tree;
+      var has_stree = desc.stat_desc.has_stree;
+      var elems = desc.stat_desc.elems;
+      var n, m;
+      var max_code = -1;
+      var node;
+      s.heap_len = 0;
+      s.heap_max = HEAP_SIZE;
+      for (n = 0; n < elems; n++) {
+        if (tree[n * 2] !== 0) {
+          s.heap[++s.heap_len] = max_code = n;
+          s.depth[n] = 0;
+        } else {
+          tree[n * 2 + 1] = 0;
+        }
+      }
+      while (s.heap_len < 2) {
+        node = s.heap[++s.heap_len] = max_code < 2 ? ++max_code : 0;
+        tree[node * 2] = 1;
+        s.depth[node] = 0;
+        s.opt_len--;
+        if (has_stree) {
+          s.static_len -= stree[node * 2 + 1];
+        }
+      }
+      desc.max_code = max_code;
+      for (n = s.heap_len >> 1; n >= 1; n--) {
+        pqdownheap(s, tree, n);
+      }
+      node = elems;
+      do {
+        n = s.heap[
+          1
+          /*SMALLEST*/
+        ];
+        s.heap[
+          1
+          /*SMALLEST*/
+        ] = s.heap[s.heap_len--];
+        pqdownheap(
+          s,
+          tree,
+          1
+          /*SMALLEST*/
+        );
+        m = s.heap[
+          1
+          /*SMALLEST*/
+        ];
+        s.heap[--s.heap_max] = n;
+        s.heap[--s.heap_max] = m;
+        tree[node * 2] = tree[n * 2] + tree[m * 2];
+        s.depth[node] = (s.depth[n] >= s.depth[m] ? s.depth[n] : s.depth[m]) + 1;
+        tree[n * 2 + 1] = tree[m * 2 + 1] = node;
+        s.heap[
+          1
+          /*SMALLEST*/
+        ] = node++;
+        pqdownheap(
+          s,
+          tree,
+          1
+          /*SMALLEST*/
+        );
+      } while (s.heap_len >= 2);
+      s.heap[--s.heap_max] = s.heap[
+        1
+        /*SMALLEST*/
+      ];
+      gen_bitlen(s, desc);
+      gen_codes(tree, max_code, s.bl_count);
+    }
+    function scan_tree(s, tree, max_code) {
+      var n;
+      var prevlen = -1;
+      var curlen;
+      var nextlen = tree[0 * 2 + 1];
+      var count = 0;
+      var max_count = 7;
+      var min_count = 4;
+      if (nextlen === 0) {
+        max_count = 138;
+        min_count = 3;
+      }
+      tree[(max_code + 1) * 2 + 1] = 65535;
+      for (n = 0; n <= max_code; n++) {
+        curlen = nextlen;
+        nextlen = tree[(n + 1) * 2 + 1];
+        if (++count < max_count && curlen === nextlen) {
+          continue;
+        } else if (count < min_count) {
+          s.bl_tree[curlen * 2] += count;
+        } else if (curlen !== 0) {
+          if (curlen !== prevlen) {
+            s.bl_tree[curlen * 2]++;
+          }
+          s.bl_tree[REP_3_6 * 2]++;
+        } else if (count <= 10) {
+          s.bl_tree[REPZ_3_10 * 2]++;
+        } else {
+          s.bl_tree[REPZ_11_138 * 2]++;
+        }
+        count = 0;
+        prevlen = curlen;
+        if (nextlen === 0) {
+          max_count = 138;
+          min_count = 3;
+        } else if (curlen === nextlen) {
+          max_count = 6;
+          min_count = 3;
+        } else {
+          max_count = 7;
+          min_count = 4;
+        }
+      }
+    }
+    function send_tree(s, tree, max_code) {
+      var n;
+      var prevlen = -1;
+      var curlen;
+      var nextlen = tree[0 * 2 + 1];
+      var count = 0;
+      var max_count = 7;
+      var min_count = 4;
+      if (nextlen === 0) {
+        max_count = 138;
+        min_count = 3;
+      }
+      for (n = 0; n <= max_code; n++) {
+        curlen = nextlen;
+        nextlen = tree[(n + 1) * 2 + 1];
+        if (++count < max_count && curlen === nextlen) {
+          continue;
+        } else if (count < min_count) {
+          do {
+            send_code(s, curlen, s.bl_tree);
+          } while (--count !== 0);
+        } else if (curlen !== 0) {
+          if (curlen !== prevlen) {
+            send_code(s, curlen, s.bl_tree);
+            count--;
+          }
+          send_code(s, REP_3_6, s.bl_tree);
+          send_bits(s, count - 3, 2);
+        } else if (count <= 10) {
+          send_code(s, REPZ_3_10, s.bl_tree);
+          send_bits(s, count - 3, 3);
+        } else {
+          send_code(s, REPZ_11_138, s.bl_tree);
+          send_bits(s, count - 11, 7);
+        }
+        count = 0;
+        prevlen = curlen;
+        if (nextlen === 0) {
+          max_count = 138;
+          min_count = 3;
+        } else if (curlen === nextlen) {
+          max_count = 6;
+          min_count = 3;
+        } else {
+          max_count = 7;
+          min_count = 4;
+        }
+      }
+    }
+    function build_bl_tree(s) {
+      var max_blindex;
+      scan_tree(s, s.dyn_ltree, s.l_desc.max_code);
+      scan_tree(s, s.dyn_dtree, s.d_desc.max_code);
+      build_tree(s, s.bl_desc);
+      for (max_blindex = BL_CODES - 1; max_blindex >= 3; max_blindex--) {
+        if (s.bl_tree[bl_order[max_blindex] * 2 + 1] !== 0) {
+          break;
+        }
+      }
+      s.opt_len += 3 * (max_blindex + 1) + 5 + 5 + 4;
+      return max_blindex;
+    }
+    function send_all_trees(s, lcodes, dcodes, blcodes) {
+      var rank2;
+      send_bits(s, lcodes - 257, 5);
+      send_bits(s, dcodes - 1, 5);
+      send_bits(s, blcodes - 4, 4);
+      for (rank2 = 0; rank2 < blcodes; rank2++) {
+        send_bits(s, s.bl_tree[bl_order[rank2] * 2 + 1], 3);
+      }
+      send_tree(s, s.dyn_ltree, lcodes - 1);
+      send_tree(s, s.dyn_dtree, dcodes - 1);
+    }
+    function detect_data_type(s) {
+      var black_mask = 4093624447;
+      var n;
+      for (n = 0; n <= 31; n++, black_mask >>>= 1) {
+        if (black_mask & 1 && s.dyn_ltree[n * 2] !== 0) {
+          return Z_BINARY;
+        }
+      }
+      if (s.dyn_ltree[9 * 2] !== 0 || s.dyn_ltree[10 * 2] !== 0 || s.dyn_ltree[13 * 2] !== 0) {
+        return Z_TEXT;
+      }
+      for (n = 32; n < LITERALS; n++) {
+        if (s.dyn_ltree[n * 2] !== 0) {
+          return Z_TEXT;
+        }
+      }
+      return Z_BINARY;
+    }
+    var static_init_done = false;
+    function _tr_init(s) {
+      if (!static_init_done) {
+        tr_static_init();
+        static_init_done = true;
+      }
+      s.l_desc = new TreeDesc(s.dyn_ltree, static_l_desc);
+      s.d_desc = new TreeDesc(s.dyn_dtree, static_d_desc);
+      s.bl_desc = new TreeDesc(s.bl_tree, static_bl_desc);
+      s.bi_buf = 0;
+      s.bi_valid = 0;
+      init_block(s);
+    }
+    function _tr_stored_block(s, buf, stored_len, last2) {
+      send_bits(s, (STORED_BLOCK << 1) + (last2 ? 1 : 0), 3);
+      copy_block(s, buf, stored_len, true);
+    }
+    function _tr_align(s) {
+      send_bits(s, STATIC_TREES << 1, 3);
+      send_code(s, END_BLOCK, static_ltree);
+      bi_flush(s);
+    }
+    function _tr_flush_block(s, buf, stored_len, last2) {
+      var opt_lenb, static_lenb;
+      var max_blindex = 0;
+      if (s.level > 0) {
+        if (s.strm.data_type === Z_UNKNOWN) {
+          s.strm.data_type = detect_data_type(s);
+        }
+        build_tree(s, s.l_desc);
+        build_tree(s, s.d_desc);
+        max_blindex = build_bl_tree(s);
+        opt_lenb = s.opt_len + 3 + 7 >>> 3;
+        static_lenb = s.static_len + 3 + 7 >>> 3;
+        if (static_lenb <= opt_lenb) {
+          opt_lenb = static_lenb;
+        }
+      } else {
+        opt_lenb = static_lenb = stored_len + 5;
+      }
+      if (stored_len + 4 <= opt_lenb && buf !== -1) {
+        _tr_stored_block(s, buf, stored_len, last2);
+      } else if (s.strategy === Z_FIXED || static_lenb === opt_lenb) {
+        send_bits(s, (STATIC_TREES << 1) + (last2 ? 1 : 0), 3);
+        compress_block(s, static_ltree, static_dtree);
+      } else {
+        send_bits(s, (DYN_TREES << 1) + (last2 ? 1 : 0), 3);
+        send_all_trees(s, s.l_desc.max_code + 1, s.d_desc.max_code + 1, max_blindex + 1);
+        compress_block(s, s.dyn_ltree, s.dyn_dtree);
+      }
+      init_block(s);
+      if (last2) {
+        bi_windup(s);
+      }
+    }
+    function _tr_tally(s, dist, lc) {
+      s.pending_buf[s.d_buf + s.last_lit * 2] = dist >>> 8 & 255;
+      s.pending_buf[s.d_buf + s.last_lit * 2 + 1] = dist & 255;
+      s.pending_buf[s.l_buf + s.last_lit] = lc & 255;
+      s.last_lit++;
+      if (dist === 0) {
+        s.dyn_ltree[lc * 2]++;
+      } else {
+        s.matches++;
+        dist--;
+        s.dyn_ltree[(_length_code[lc] + LITERALS + 1) * 2]++;
+        s.dyn_dtree[d_code(dist) * 2]++;
+      }
+      return s.last_lit === s.lit_bufsize - 1;
+    }
+    exports2._tr_init = _tr_init;
+    exports2._tr_stored_block = _tr_stored_block;
+    exports2._tr_flush_block = _tr_flush_block;
+    exports2._tr_tally = _tr_tally;
+    exports2._tr_align = _tr_align;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/adler32.js
+var require_adler32 = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/adler32.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function adler32(adler, buf, len3, pos) {
+      var s1 = adler & 65535 | 0, s2 = adler >>> 16 & 65535 | 0, n = 0;
+      while (len3 !== 0) {
+        n = len3 > 2e3 ? 2e3 : len3;
+        len3 -= n;
+        do {
+          s1 = s1 + buf[pos++] | 0;
+          s2 = s2 + s1 | 0;
+        } while (--n);
+        s1 %= 65521;
+        s2 %= 65521;
+      }
+      return s1 | s2 << 16 | 0;
+    }
+    module2.exports = adler32;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/crc32.js
+var require_crc32 = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/crc32.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function makeTable() {
+      var c, table = [];
+      for (var n = 0; n < 256; n++) {
+        c = n;
+        for (var k = 0; k < 8; k++) {
+          c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+        }
+        table[n] = c;
+      }
+      return table;
+    }
+    var crcTable = makeTable();
+    function crc32(crc, buf, len3, pos) {
+      var t2 = crcTable, end = pos + len3;
+      crc ^= -1;
+      for (var i2 = pos; i2 < end; i2++) {
+        crc = crc >>> 8 ^ t2[(crc ^ buf[i2]) & 255];
+      }
+      return crc ^ -1;
+    }
+    module2.exports = crc32;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/messages.js
+var require_messages = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/messages.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    module2.exports = {
+      2: "need dictionary",
+      /* Z_NEED_DICT       2  */
+      1: "stream end",
+      /* Z_STREAM_END      1  */
+      0: "",
+      /* Z_OK              0  */
+      "-1": "file error",
+      /* Z_ERRNO         (-1) */
+      "-2": "stream error",
+      /* Z_STREAM_ERROR  (-2) */
+      "-3": "data error",
+      /* Z_DATA_ERROR    (-3) */
+      "-4": "insufficient memory",
+      /* Z_MEM_ERROR     (-4) */
+      "-5": "buffer error",
+      /* Z_BUF_ERROR     (-5) */
+      "-6": "incompatible version"
+      /* Z_VERSION_ERROR (-6) */
+    };
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/deflate.js
+var require_deflate = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/deflate.js"(exports2) {
+    "use strict";
+    init_globals();
+    var utils = require_common();
+    var trees = require_trees();
+    var adler32 = require_adler32();
+    var crc32 = require_crc32();
+    var msg = require_messages();
+    var Z_NO_FLUSH = 0;
+    var Z_PARTIAL_FLUSH = 1;
+    var Z_FULL_FLUSH = 3;
+    var Z_FINISH = 4;
+    var Z_BLOCK = 5;
+    var Z_OK = 0;
+    var Z_STREAM_END = 1;
+    var Z_STREAM_ERROR = -2;
+    var Z_DATA_ERROR = -3;
+    var Z_BUF_ERROR = -5;
+    var Z_DEFAULT_COMPRESSION = -1;
+    var Z_FILTERED = 1;
+    var Z_HUFFMAN_ONLY = 2;
+    var Z_RLE = 3;
+    var Z_FIXED = 4;
+    var Z_DEFAULT_STRATEGY = 0;
+    var Z_UNKNOWN = 2;
+    var Z_DEFLATED = 8;
+    var MAX_MEM_LEVEL = 9;
+    var MAX_WBITS = 15;
+    var DEF_MEM_LEVEL = 8;
+    var LENGTH_CODES = 29;
+    var LITERALS = 256;
+    var L_CODES = LITERALS + 1 + LENGTH_CODES;
+    var D_CODES = 30;
+    var BL_CODES = 19;
+    var HEAP_SIZE = 2 * L_CODES + 1;
+    var MAX_BITS = 15;
+    var MIN_MATCH = 3;
+    var MAX_MATCH = 258;
+    var MIN_LOOKAHEAD = MAX_MATCH + MIN_MATCH + 1;
+    var PRESET_DICT = 32;
+    var INIT_STATE = 42;
+    var EXTRA_STATE = 69;
+    var NAME_STATE = 73;
+    var COMMENT_STATE = 91;
+    var HCRC_STATE = 103;
+    var BUSY_STATE = 113;
+    var FINISH_STATE = 666;
+    var BS_NEED_MORE = 1;
+    var BS_BLOCK_DONE = 2;
+    var BS_FINISH_STARTED = 3;
+    var BS_FINISH_DONE = 4;
+    var OS_CODE = 3;
+    function err(strm, errorCode) {
+      strm.msg = msg[errorCode];
+      return errorCode;
+    }
+    function rank2(f) {
+      return (f << 1) - (f > 4 ? 9 : 0);
+    }
+    function zero(buf) {
+      var len3 = buf.length;
+      while (--len3 >= 0) {
+        buf[len3] = 0;
+      }
+    }
+    function flush_pending(strm) {
+      var s = strm.state;
+      var len3 = s.pending;
+      if (len3 > strm.avail_out) {
+        len3 = strm.avail_out;
+      }
+      if (len3 === 0) {
+        return;
+      }
+      utils.arraySet(strm.output, s.pending_buf, s.pending_out, len3, strm.next_out);
+      strm.next_out += len3;
+      s.pending_out += len3;
+      strm.total_out += len3;
+      strm.avail_out -= len3;
+      s.pending -= len3;
+      if (s.pending === 0) {
+        s.pending_out = 0;
+      }
+    }
+    function flush_block_only(s, last2) {
+      trees._tr_flush_block(s, s.block_start >= 0 ? s.block_start : -1, s.strstart - s.block_start, last2);
+      s.block_start = s.strstart;
+      flush_pending(s.strm);
+    }
+    function put_byte(s, b) {
+      s.pending_buf[s.pending++] = b;
+    }
+    function putShortMSB(s, b) {
+      s.pending_buf[s.pending++] = b >>> 8 & 255;
+      s.pending_buf[s.pending++] = b & 255;
+    }
+    function read_buf(strm, buf, start, size) {
+      var len3 = strm.avail_in;
+      if (len3 > size) {
+        len3 = size;
+      }
+      if (len3 === 0) {
+        return 0;
+      }
+      strm.avail_in -= len3;
+      utils.arraySet(buf, strm.input, strm.next_in, len3, start);
+      if (strm.state.wrap === 1) {
+        strm.adler = adler32(strm.adler, buf, len3, start);
+      } else if (strm.state.wrap === 2) {
+        strm.adler = crc32(strm.adler, buf, len3, start);
+      }
+      strm.next_in += len3;
+      strm.total_in += len3;
+      return len3;
+    }
+    function longest_match(s, cur_match) {
+      var chain_length = s.max_chain_length;
+      var scan = s.strstart;
+      var match;
+      var len3;
+      var best_len = s.prev_length;
+      var nice_match = s.nice_match;
+      var limit = s.strstart > s.w_size - MIN_LOOKAHEAD ? s.strstart - (s.w_size - MIN_LOOKAHEAD) : 0;
+      var _win = s.window;
+      var wmask = s.w_mask;
+      var prev = s.prev;
+      var strend = s.strstart + MAX_MATCH;
+      var scan_end1 = _win[scan + best_len - 1];
+      var scan_end = _win[scan + best_len];
+      if (s.prev_length >= s.good_match) {
+        chain_length >>= 2;
+      }
+      if (nice_match > s.lookahead) {
+        nice_match = s.lookahead;
+      }
+      do {
+        match = cur_match;
+        if (_win[match + best_len] !== scan_end || _win[match + best_len - 1] !== scan_end1 || _win[match] !== _win[scan] || _win[++match] !== _win[scan + 1]) {
+          continue;
+        }
+        scan += 2;
+        match++;
+        do {
+        } while (_win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && scan < strend);
+        len3 = MAX_MATCH - (strend - scan);
+        scan = strend - MAX_MATCH;
+        if (len3 > best_len) {
+          s.match_start = cur_match;
+          best_len = len3;
+          if (len3 >= nice_match) {
+            break;
+          }
+          scan_end1 = _win[scan + best_len - 1];
+          scan_end = _win[scan + best_len];
+        }
+      } while ((cur_match = prev[cur_match & wmask]) > limit && --chain_length !== 0);
+      if (best_len <= s.lookahead) {
+        return best_len;
+      }
+      return s.lookahead;
+    }
+    function fill_window(s) {
+      var _w_size = s.w_size;
+      var p2, n, m, more, str;
+      do {
+        more = s.window_size - s.lookahead - s.strstart;
+        if (s.strstart >= _w_size + (_w_size - MIN_LOOKAHEAD)) {
+          utils.arraySet(s.window, s.window, _w_size, _w_size, 0);
+          s.match_start -= _w_size;
+          s.strstart -= _w_size;
+          s.block_start -= _w_size;
+          n = s.hash_size;
+          p2 = n;
+          do {
+            m = s.head[--p2];
+            s.head[p2] = m >= _w_size ? m - _w_size : 0;
+          } while (--n);
+          n = _w_size;
+          p2 = n;
+          do {
+            m = s.prev[--p2];
+            s.prev[p2] = m >= _w_size ? m - _w_size : 0;
+          } while (--n);
+          more += _w_size;
+        }
+        if (s.strm.avail_in === 0) {
+          break;
+        }
+        n = read_buf(s.strm, s.window, s.strstart + s.lookahead, more);
+        s.lookahead += n;
+        if (s.lookahead + s.insert >= MIN_MATCH) {
+          str = s.strstart - s.insert;
+          s.ins_h = s.window[str];
+          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + 1]) & s.hash_mask;
+          while (s.insert) {
+            s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + MIN_MATCH - 1]) & s.hash_mask;
+            s.prev[str & s.w_mask] = s.head[s.ins_h];
+            s.head[s.ins_h] = str;
+            str++;
+            s.insert--;
+            if (s.lookahead + s.insert < MIN_MATCH) {
+              break;
+            }
+          }
+        }
+      } while (s.lookahead < MIN_LOOKAHEAD && s.strm.avail_in !== 0);
+    }
+    function deflate_stored(s, flush) {
+      var max_block_size = 65535;
+      if (max_block_size > s.pending_buf_size - 5) {
+        max_block_size = s.pending_buf_size - 5;
+      }
+      for (; ; ) {
+        if (s.lookahead <= 1) {
+          fill_window(s);
+          if (s.lookahead === 0 && flush === Z_NO_FLUSH) {
+            return BS_NEED_MORE;
+          }
+          if (s.lookahead === 0) {
+            break;
+          }
+        }
+        s.strstart += s.lookahead;
+        s.lookahead = 0;
+        var max_start = s.block_start + max_block_size;
+        if (s.strstart === 0 || s.strstart >= max_start) {
+          s.lookahead = s.strstart - max_start;
+          s.strstart = max_start;
+          flush_block_only(s, false);
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        }
+        if (s.strstart - s.block_start >= s.w_size - MIN_LOOKAHEAD) {
+          flush_block_only(s, false);
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        }
+      }
+      s.insert = 0;
+      if (flush === Z_FINISH) {
+        flush_block_only(s, true);
+        if (s.strm.avail_out === 0) {
+          return BS_FINISH_STARTED;
+        }
+        return BS_FINISH_DONE;
+      }
+      if (s.strstart > s.block_start) {
+        flush_block_only(s, false);
+        if (s.strm.avail_out === 0) {
+          return BS_NEED_MORE;
+        }
+      }
+      return BS_NEED_MORE;
+    }
+    function deflate_fast(s, flush) {
+      var hash_head;
+      var bflush;
+      for (; ; ) {
+        if (s.lookahead < MIN_LOOKAHEAD) {
+          fill_window(s);
+          if (s.lookahead < MIN_LOOKAHEAD && flush === Z_NO_FLUSH) {
+            return BS_NEED_MORE;
+          }
+          if (s.lookahead === 0) {
+            break;
+          }
+        }
+        hash_head = 0;
+        if (s.lookahead >= MIN_MATCH) {
+          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
+          hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
+          s.head[s.ins_h] = s.strstart;
+        }
+        if (hash_head !== 0 && s.strstart - hash_head <= s.w_size - MIN_LOOKAHEAD) {
+          s.match_length = longest_match(s, hash_head);
+        }
+        if (s.match_length >= MIN_MATCH) {
+          bflush = trees._tr_tally(s, s.strstart - s.match_start, s.match_length - MIN_MATCH);
+          s.lookahead -= s.match_length;
+          if (s.match_length <= s.max_lazy_match && s.lookahead >= MIN_MATCH) {
+            s.match_length--;
+            do {
+              s.strstart++;
+              s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
+              hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
+              s.head[s.ins_h] = s.strstart;
+            } while (--s.match_length !== 0);
+            s.strstart++;
+          } else {
+            s.strstart += s.match_length;
+            s.match_length = 0;
+            s.ins_h = s.window[s.strstart];
+            s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + 1]) & s.hash_mask;
+          }
+        } else {
+          bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
+          s.lookahead--;
+          s.strstart++;
+        }
+        if (bflush) {
+          flush_block_only(s, false);
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        }
+      }
+      s.insert = s.strstart < MIN_MATCH - 1 ? s.strstart : MIN_MATCH - 1;
+      if (flush === Z_FINISH) {
+        flush_block_only(s, true);
+        if (s.strm.avail_out === 0) {
+          return BS_FINISH_STARTED;
+        }
+        return BS_FINISH_DONE;
+      }
+      if (s.last_lit) {
+        flush_block_only(s, false);
+        if (s.strm.avail_out === 0) {
+          return BS_NEED_MORE;
+        }
+      }
+      return BS_BLOCK_DONE;
+    }
+    function deflate_slow(s, flush) {
+      var hash_head;
+      var bflush;
+      var max_insert;
+      for (; ; ) {
+        if (s.lookahead < MIN_LOOKAHEAD) {
+          fill_window(s);
+          if (s.lookahead < MIN_LOOKAHEAD && flush === Z_NO_FLUSH) {
+            return BS_NEED_MORE;
+          }
+          if (s.lookahead === 0) {
+            break;
+          }
+        }
+        hash_head = 0;
+        if (s.lookahead >= MIN_MATCH) {
+          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
+          hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
+          s.head[s.ins_h] = s.strstart;
+        }
+        s.prev_length = s.match_length;
+        s.prev_match = s.match_start;
+        s.match_length = MIN_MATCH - 1;
+        if (hash_head !== 0 && s.prev_length < s.max_lazy_match && s.strstart - hash_head <= s.w_size - MIN_LOOKAHEAD) {
+          s.match_length = longest_match(s, hash_head);
+          if (s.match_length <= 5 && (s.strategy === Z_FILTERED || s.match_length === MIN_MATCH && s.strstart - s.match_start > 4096)) {
+            s.match_length = MIN_MATCH - 1;
+          }
+        }
+        if (s.prev_length >= MIN_MATCH && s.match_length <= s.prev_length) {
+          max_insert = s.strstart + s.lookahead - MIN_MATCH;
+          bflush = trees._tr_tally(s, s.strstart - 1 - s.prev_match, s.prev_length - MIN_MATCH);
+          s.lookahead -= s.prev_length - 1;
+          s.prev_length -= 2;
+          do {
+            if (++s.strstart <= max_insert) {
+              s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
+              hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
+              s.head[s.ins_h] = s.strstart;
+            }
+          } while (--s.prev_length !== 0);
+          s.match_available = 0;
+          s.match_length = MIN_MATCH - 1;
+          s.strstart++;
+          if (bflush) {
+            flush_block_only(s, false);
+            if (s.strm.avail_out === 0) {
+              return BS_NEED_MORE;
+            }
+          }
+        } else if (s.match_available) {
+          bflush = trees._tr_tally(s, 0, s.window[s.strstart - 1]);
+          if (bflush) {
+            flush_block_only(s, false);
+          }
+          s.strstart++;
+          s.lookahead--;
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        } else {
+          s.match_available = 1;
+          s.strstart++;
+          s.lookahead--;
+        }
+      }
+      if (s.match_available) {
+        bflush = trees._tr_tally(s, 0, s.window[s.strstart - 1]);
+        s.match_available = 0;
+      }
+      s.insert = s.strstart < MIN_MATCH - 1 ? s.strstart : MIN_MATCH - 1;
+      if (flush === Z_FINISH) {
+        flush_block_only(s, true);
+        if (s.strm.avail_out === 0) {
+          return BS_FINISH_STARTED;
+        }
+        return BS_FINISH_DONE;
+      }
+      if (s.last_lit) {
+        flush_block_only(s, false);
+        if (s.strm.avail_out === 0) {
+          return BS_NEED_MORE;
+        }
+      }
+      return BS_BLOCK_DONE;
+    }
+    function deflate_rle(s, flush) {
+      var bflush;
+      var prev;
+      var scan, strend;
+      var _win = s.window;
+      for (; ; ) {
+        if (s.lookahead <= MAX_MATCH) {
+          fill_window(s);
+          if (s.lookahead <= MAX_MATCH && flush === Z_NO_FLUSH) {
+            return BS_NEED_MORE;
+          }
+          if (s.lookahead === 0) {
+            break;
+          }
+        }
+        s.match_length = 0;
+        if (s.lookahead >= MIN_MATCH && s.strstart > 0) {
+          scan = s.strstart - 1;
+          prev = _win[scan];
+          if (prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan]) {
+            strend = s.strstart + MAX_MATCH;
+            do {
+            } while (prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && scan < strend);
+            s.match_length = MAX_MATCH - (strend - scan);
+            if (s.match_length > s.lookahead) {
+              s.match_length = s.lookahead;
+            }
+          }
+        }
+        if (s.match_length >= MIN_MATCH) {
+          bflush = trees._tr_tally(s, 1, s.match_length - MIN_MATCH);
+          s.lookahead -= s.match_length;
+          s.strstart += s.match_length;
+          s.match_length = 0;
+        } else {
+          bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
+          s.lookahead--;
+          s.strstart++;
+        }
+        if (bflush) {
+          flush_block_only(s, false);
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        }
+      }
+      s.insert = 0;
+      if (flush === Z_FINISH) {
+        flush_block_only(s, true);
+        if (s.strm.avail_out === 0) {
+          return BS_FINISH_STARTED;
+        }
+        return BS_FINISH_DONE;
+      }
+      if (s.last_lit) {
+        flush_block_only(s, false);
+        if (s.strm.avail_out === 0) {
+          return BS_NEED_MORE;
+        }
+      }
+      return BS_BLOCK_DONE;
+    }
+    function deflate_huff(s, flush) {
+      var bflush;
+      for (; ; ) {
+        if (s.lookahead === 0) {
+          fill_window(s);
+          if (s.lookahead === 0) {
+            if (flush === Z_NO_FLUSH) {
+              return BS_NEED_MORE;
+            }
+            break;
+          }
+        }
+        s.match_length = 0;
+        bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
+        s.lookahead--;
+        s.strstart++;
+        if (bflush) {
+          flush_block_only(s, false);
+          if (s.strm.avail_out === 0) {
+            return BS_NEED_MORE;
+          }
+        }
+      }
+      s.insert = 0;
+      if (flush === Z_FINISH) {
+        flush_block_only(s, true);
+        if (s.strm.avail_out === 0) {
+          return BS_FINISH_STARTED;
+        }
+        return BS_FINISH_DONE;
+      }
+      if (s.last_lit) {
+        flush_block_only(s, false);
+        if (s.strm.avail_out === 0) {
+          return BS_NEED_MORE;
+        }
+      }
+      return BS_BLOCK_DONE;
+    }
+    function Config(good_length, max_lazy, nice_length, max_chain, func) {
+      this.good_length = good_length;
+      this.max_lazy = max_lazy;
+      this.nice_length = nice_length;
+      this.max_chain = max_chain;
+      this.func = func;
+    }
+    var configuration_table;
+    configuration_table = [
+      /*      good lazy nice chain */
+      new Config(0, 0, 0, 0, deflate_stored),
+      /* 0 store only */
+      new Config(4, 4, 8, 4, deflate_fast),
+      /* 1 max speed, no lazy matches */
+      new Config(4, 5, 16, 8, deflate_fast),
+      /* 2 */
+      new Config(4, 6, 32, 32, deflate_fast),
+      /* 3 */
+      new Config(4, 4, 16, 16, deflate_slow),
+      /* 4 lazy matches */
+      new Config(8, 16, 32, 32, deflate_slow),
+      /* 5 */
+      new Config(8, 16, 128, 128, deflate_slow),
+      /* 6 */
+      new Config(8, 32, 128, 256, deflate_slow),
+      /* 7 */
+      new Config(32, 128, 258, 1024, deflate_slow),
+      /* 8 */
+      new Config(32, 258, 258, 4096, deflate_slow)
+      /* 9 max compression */
+    ];
+    function lm_init(s) {
+      s.window_size = 2 * s.w_size;
+      zero(s.head);
+      s.max_lazy_match = configuration_table[s.level].max_lazy;
+      s.good_match = configuration_table[s.level].good_length;
+      s.nice_match = configuration_table[s.level].nice_length;
+      s.max_chain_length = configuration_table[s.level].max_chain;
+      s.strstart = 0;
+      s.block_start = 0;
+      s.lookahead = 0;
+      s.insert = 0;
+      s.match_length = s.prev_length = MIN_MATCH - 1;
+      s.match_available = 0;
+      s.ins_h = 0;
+    }
+    function DeflateState() {
+      this.strm = null;
+      this.status = 0;
+      this.pending_buf = null;
+      this.pending_buf_size = 0;
+      this.pending_out = 0;
+      this.pending = 0;
+      this.wrap = 0;
+      this.gzhead = null;
+      this.gzindex = 0;
+      this.method = Z_DEFLATED;
+      this.last_flush = -1;
+      this.w_size = 0;
+      this.w_bits = 0;
+      this.w_mask = 0;
+      this.window = null;
+      this.window_size = 0;
+      this.prev = null;
+      this.head = null;
+      this.ins_h = 0;
+      this.hash_size = 0;
+      this.hash_bits = 0;
+      this.hash_mask = 0;
+      this.hash_shift = 0;
+      this.block_start = 0;
+      this.match_length = 0;
+      this.prev_match = 0;
+      this.match_available = 0;
+      this.strstart = 0;
+      this.match_start = 0;
+      this.lookahead = 0;
+      this.prev_length = 0;
+      this.max_chain_length = 0;
+      this.max_lazy_match = 0;
+      this.level = 0;
+      this.strategy = 0;
+      this.good_match = 0;
+      this.nice_match = 0;
+      this.dyn_ltree = new utils.Buf16(HEAP_SIZE * 2);
+      this.dyn_dtree = new utils.Buf16((2 * D_CODES + 1) * 2);
+      this.bl_tree = new utils.Buf16((2 * BL_CODES + 1) * 2);
+      zero(this.dyn_ltree);
+      zero(this.dyn_dtree);
+      zero(this.bl_tree);
+      this.l_desc = null;
+      this.d_desc = null;
+      this.bl_desc = null;
+      this.bl_count = new utils.Buf16(MAX_BITS + 1);
+      this.heap = new utils.Buf16(2 * L_CODES + 1);
+      zero(this.heap);
+      this.heap_len = 0;
+      this.heap_max = 0;
+      this.depth = new utils.Buf16(2 * L_CODES + 1);
+      zero(this.depth);
+      this.l_buf = 0;
+      this.lit_bufsize = 0;
+      this.last_lit = 0;
+      this.d_buf = 0;
+      this.opt_len = 0;
+      this.static_len = 0;
+      this.matches = 0;
+      this.insert = 0;
+      this.bi_buf = 0;
+      this.bi_valid = 0;
+    }
+    function deflateResetKeep(strm) {
+      var s;
+      if (!strm || !strm.state) {
+        return err(strm, Z_STREAM_ERROR);
+      }
+      strm.total_in = strm.total_out = 0;
+      strm.data_type = Z_UNKNOWN;
+      s = strm.state;
+      s.pending = 0;
+      s.pending_out = 0;
+      if (s.wrap < 0) {
+        s.wrap = -s.wrap;
+      }
+      s.status = s.wrap ? INIT_STATE : BUSY_STATE;
+      strm.adler = s.wrap === 2 ? 0 : 1;
+      s.last_flush = Z_NO_FLUSH;
+      trees._tr_init(s);
+      return Z_OK;
+    }
+    function deflateReset(strm) {
+      var ret = deflateResetKeep(strm);
+      if (ret === Z_OK) {
+        lm_init(strm.state);
+      }
+      return ret;
+    }
+    function deflateSetHeader(strm, head) {
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      if (strm.state.wrap !== 2) {
+        return Z_STREAM_ERROR;
+      }
+      strm.state.gzhead = head;
+      return Z_OK;
+    }
+    function deflateInit2(strm, level, method, windowBits, memLevel, strategy) {
+      if (!strm) {
+        return Z_STREAM_ERROR;
+      }
+      var wrap2 = 1;
+      if (level === Z_DEFAULT_COMPRESSION) {
+        level = 6;
+      }
+      if (windowBits < 0) {
+        wrap2 = 0;
+        windowBits = -windowBits;
+      } else if (windowBits > 15) {
+        wrap2 = 2;
+        windowBits -= 16;
+      }
+      if (memLevel < 1 || memLevel > MAX_MEM_LEVEL || method !== Z_DEFLATED || windowBits < 8 || windowBits > 15 || level < 0 || level > 9 || strategy < 0 || strategy > Z_FIXED) {
+        return err(strm, Z_STREAM_ERROR);
+      }
+      if (windowBits === 8) {
+        windowBits = 9;
+      }
+      var s = new DeflateState();
+      strm.state = s;
+      s.strm = strm;
+      s.wrap = wrap2;
+      s.gzhead = null;
+      s.w_bits = windowBits;
+      s.w_size = 1 << s.w_bits;
+      s.w_mask = s.w_size - 1;
+      s.hash_bits = memLevel + 7;
+      s.hash_size = 1 << s.hash_bits;
+      s.hash_mask = s.hash_size - 1;
+      s.hash_shift = ~~((s.hash_bits + MIN_MATCH - 1) / MIN_MATCH);
+      s.window = new utils.Buf8(s.w_size * 2);
+      s.head = new utils.Buf16(s.hash_size);
+      s.prev = new utils.Buf16(s.w_size);
+      s.lit_bufsize = 1 << memLevel + 6;
+      s.pending_buf_size = s.lit_bufsize * 4;
+      s.pending_buf = new utils.Buf8(s.pending_buf_size);
+      s.d_buf = 1 * s.lit_bufsize;
+      s.l_buf = (1 + 2) * s.lit_bufsize;
+      s.level = level;
+      s.strategy = strategy;
+      s.method = method;
+      return deflateReset(strm);
+    }
+    function deflateInit(strm, level) {
+      return deflateInit2(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY);
+    }
+    function deflate2(strm, flush) {
+      var old_flush, s;
+      var beg, val;
+      if (!strm || !strm.state || flush > Z_BLOCK || flush < 0) {
+        return strm ? err(strm, Z_STREAM_ERROR) : Z_STREAM_ERROR;
+      }
+      s = strm.state;
+      if (!strm.output || !strm.input && strm.avail_in !== 0 || s.status === FINISH_STATE && flush !== Z_FINISH) {
+        return err(strm, strm.avail_out === 0 ? Z_BUF_ERROR : Z_STREAM_ERROR);
+      }
+      s.strm = strm;
+      old_flush = s.last_flush;
+      s.last_flush = flush;
+      if (s.status === INIT_STATE) {
+        if (s.wrap === 2) {
+          strm.adler = 0;
+          put_byte(s, 31);
+          put_byte(s, 139);
+          put_byte(s, 8);
+          if (!s.gzhead) {
+            put_byte(s, 0);
+            put_byte(s, 0);
+            put_byte(s, 0);
+            put_byte(s, 0);
+            put_byte(s, 0);
+            put_byte(s, s.level === 9 ? 2 : s.strategy >= Z_HUFFMAN_ONLY || s.level < 2 ? 4 : 0);
+            put_byte(s, OS_CODE);
+            s.status = BUSY_STATE;
+          } else {
+            put_byte(
+              s,
+              (s.gzhead.text ? 1 : 0) + (s.gzhead.hcrc ? 2 : 0) + (!s.gzhead.extra ? 0 : 4) + (!s.gzhead.name ? 0 : 8) + (!s.gzhead.comment ? 0 : 16)
+            );
+            put_byte(s, s.gzhead.time & 255);
+            put_byte(s, s.gzhead.time >> 8 & 255);
+            put_byte(s, s.gzhead.time >> 16 & 255);
+            put_byte(s, s.gzhead.time >> 24 & 255);
+            put_byte(s, s.level === 9 ? 2 : s.strategy >= Z_HUFFMAN_ONLY || s.level < 2 ? 4 : 0);
+            put_byte(s, s.gzhead.os & 255);
+            if (s.gzhead.extra && s.gzhead.extra.length) {
+              put_byte(s, s.gzhead.extra.length & 255);
+              put_byte(s, s.gzhead.extra.length >> 8 & 255);
+            }
+            if (s.gzhead.hcrc) {
+              strm.adler = crc32(strm.adler, s.pending_buf, s.pending, 0);
+            }
+            s.gzindex = 0;
+            s.status = EXTRA_STATE;
+          }
+        } else {
+          var header = Z_DEFLATED + (s.w_bits - 8 << 4) << 8;
+          var level_flags = -1;
+          if (s.strategy >= Z_HUFFMAN_ONLY || s.level < 2) {
+            level_flags = 0;
+          } else if (s.level < 6) {
+            level_flags = 1;
+          } else if (s.level === 6) {
+            level_flags = 2;
+          } else {
+            level_flags = 3;
+          }
+          header |= level_flags << 6;
+          if (s.strstart !== 0) {
+            header |= PRESET_DICT;
+          }
+          header += 31 - header % 31;
+          s.status = BUSY_STATE;
+          putShortMSB(s, header);
+          if (s.strstart !== 0) {
+            putShortMSB(s, strm.adler >>> 16);
+            putShortMSB(s, strm.adler & 65535);
+          }
+          strm.adler = 1;
+        }
+      }
+      if (s.status === EXTRA_STATE) {
+        if (s.gzhead.extra) {
+          beg = s.pending;
+          while (s.gzindex < (s.gzhead.extra.length & 65535)) {
+            if (s.pending === s.pending_buf_size) {
+              if (s.gzhead.hcrc && s.pending > beg) {
+                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+              }
+              flush_pending(strm);
+              beg = s.pending;
+              if (s.pending === s.pending_buf_size) {
+                break;
+              }
+            }
+            put_byte(s, s.gzhead.extra[s.gzindex] & 255);
+            s.gzindex++;
+          }
+          if (s.gzhead.hcrc && s.pending > beg) {
+            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+          }
+          if (s.gzindex === s.gzhead.extra.length) {
+            s.gzindex = 0;
+            s.status = NAME_STATE;
+          }
+        } else {
+          s.status = NAME_STATE;
+        }
+      }
+      if (s.status === NAME_STATE) {
+        if (s.gzhead.name) {
+          beg = s.pending;
+          do {
+            if (s.pending === s.pending_buf_size) {
+              if (s.gzhead.hcrc && s.pending > beg) {
+                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+              }
+              flush_pending(strm);
+              beg = s.pending;
+              if (s.pending === s.pending_buf_size) {
+                val = 1;
+                break;
+              }
+            }
+            if (s.gzindex < s.gzhead.name.length) {
+              val = s.gzhead.name.charCodeAt(s.gzindex++) & 255;
+            } else {
+              val = 0;
+            }
+            put_byte(s, val);
+          } while (val !== 0);
+          if (s.gzhead.hcrc && s.pending > beg) {
+            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+          }
+          if (val === 0) {
+            s.gzindex = 0;
+            s.status = COMMENT_STATE;
+          }
+        } else {
+          s.status = COMMENT_STATE;
+        }
+      }
+      if (s.status === COMMENT_STATE) {
+        if (s.gzhead.comment) {
+          beg = s.pending;
+          do {
+            if (s.pending === s.pending_buf_size) {
+              if (s.gzhead.hcrc && s.pending > beg) {
+                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+              }
+              flush_pending(strm);
+              beg = s.pending;
+              if (s.pending === s.pending_buf_size) {
+                val = 1;
+                break;
+              }
+            }
+            if (s.gzindex < s.gzhead.comment.length) {
+              val = s.gzhead.comment.charCodeAt(s.gzindex++) & 255;
+            } else {
+              val = 0;
+            }
+            put_byte(s, val);
+          } while (val !== 0);
+          if (s.gzhead.hcrc && s.pending > beg) {
+            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
+          }
+          if (val === 0) {
+            s.status = HCRC_STATE;
+          }
+        } else {
+          s.status = HCRC_STATE;
+        }
+      }
+      if (s.status === HCRC_STATE) {
+        if (s.gzhead.hcrc) {
+          if (s.pending + 2 > s.pending_buf_size) {
+            flush_pending(strm);
+          }
+          if (s.pending + 2 <= s.pending_buf_size) {
+            put_byte(s, strm.adler & 255);
+            put_byte(s, strm.adler >> 8 & 255);
+            strm.adler = 0;
+            s.status = BUSY_STATE;
+          }
+        } else {
+          s.status = BUSY_STATE;
+        }
+      }
+      if (s.pending !== 0) {
+        flush_pending(strm);
+        if (strm.avail_out === 0) {
+          s.last_flush = -1;
+          return Z_OK;
+        }
+      } else if (strm.avail_in === 0 && rank2(flush) <= rank2(old_flush) && flush !== Z_FINISH) {
+        return err(strm, Z_BUF_ERROR);
+      }
+      if (s.status === FINISH_STATE && strm.avail_in !== 0) {
+        return err(strm, Z_BUF_ERROR);
+      }
+      if (strm.avail_in !== 0 || s.lookahead !== 0 || flush !== Z_NO_FLUSH && s.status !== FINISH_STATE) {
+        var bstate = s.strategy === Z_HUFFMAN_ONLY ? deflate_huff(s, flush) : s.strategy === Z_RLE ? deflate_rle(s, flush) : configuration_table[s.level].func(s, flush);
+        if (bstate === BS_FINISH_STARTED || bstate === BS_FINISH_DONE) {
+          s.status = FINISH_STATE;
+        }
+        if (bstate === BS_NEED_MORE || bstate === BS_FINISH_STARTED) {
+          if (strm.avail_out === 0) {
+            s.last_flush = -1;
+          }
+          return Z_OK;
+        }
+        if (bstate === BS_BLOCK_DONE) {
+          if (flush === Z_PARTIAL_FLUSH) {
+            trees._tr_align(s);
+          } else if (flush !== Z_BLOCK) {
+            trees._tr_stored_block(s, 0, 0, false);
+            if (flush === Z_FULL_FLUSH) {
+              zero(s.head);
+              if (s.lookahead === 0) {
+                s.strstart = 0;
+                s.block_start = 0;
+                s.insert = 0;
+              }
+            }
+          }
+          flush_pending(strm);
+          if (strm.avail_out === 0) {
+            s.last_flush = -1;
+            return Z_OK;
+          }
+        }
+      }
+      if (flush !== Z_FINISH) {
+        return Z_OK;
+      }
+      if (s.wrap <= 0) {
+        return Z_STREAM_END;
+      }
+      if (s.wrap === 2) {
+        put_byte(s, strm.adler & 255);
+        put_byte(s, strm.adler >> 8 & 255);
+        put_byte(s, strm.adler >> 16 & 255);
+        put_byte(s, strm.adler >> 24 & 255);
+        put_byte(s, strm.total_in & 255);
+        put_byte(s, strm.total_in >> 8 & 255);
+        put_byte(s, strm.total_in >> 16 & 255);
+        put_byte(s, strm.total_in >> 24 & 255);
+      } else {
+        putShortMSB(s, strm.adler >>> 16);
+        putShortMSB(s, strm.adler & 65535);
+      }
+      flush_pending(strm);
+      if (s.wrap > 0) {
+        s.wrap = -s.wrap;
+      }
+      return s.pending !== 0 ? Z_OK : Z_STREAM_END;
+    }
+    function deflateEnd(strm) {
+      var status;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      status = strm.state.status;
+      if (status !== INIT_STATE && status !== EXTRA_STATE && status !== NAME_STATE && status !== COMMENT_STATE && status !== HCRC_STATE && status !== BUSY_STATE && status !== FINISH_STATE) {
+        return err(strm, Z_STREAM_ERROR);
+      }
+      strm.state = null;
+      return status === BUSY_STATE ? err(strm, Z_DATA_ERROR) : Z_OK;
+    }
+    function deflateSetDictionary(strm, dictionary) {
+      var dictLength = dictionary.length;
+      var s;
+      var str, n;
+      var wrap2;
+      var avail;
+      var next2;
+      var input;
+      var tmpDict;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      s = strm.state;
+      wrap2 = s.wrap;
+      if (wrap2 === 2 || wrap2 === 1 && s.status !== INIT_STATE || s.lookahead) {
+        return Z_STREAM_ERROR;
+      }
+      if (wrap2 === 1) {
+        strm.adler = adler32(strm.adler, dictionary, dictLength, 0);
+      }
+      s.wrap = 0;
+      if (dictLength >= s.w_size) {
+        if (wrap2 === 0) {
+          zero(s.head);
+          s.strstart = 0;
+          s.block_start = 0;
+          s.insert = 0;
+        }
+        tmpDict = new utils.Buf8(s.w_size);
+        utils.arraySet(tmpDict, dictionary, dictLength - s.w_size, s.w_size, 0);
+        dictionary = tmpDict;
+        dictLength = s.w_size;
+      }
+      avail = strm.avail_in;
+      next2 = strm.next_in;
+      input = strm.input;
+      strm.avail_in = dictLength;
+      strm.next_in = 0;
+      strm.input = dictionary;
+      fill_window(s);
+      while (s.lookahead >= MIN_MATCH) {
+        str = s.strstart;
+        n = s.lookahead - (MIN_MATCH - 1);
+        do {
+          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + MIN_MATCH - 1]) & s.hash_mask;
+          s.prev[str & s.w_mask] = s.head[s.ins_h];
+          s.head[s.ins_h] = str;
+          str++;
+        } while (--n);
+        s.strstart = str;
+        s.lookahead = MIN_MATCH - 1;
+        fill_window(s);
+      }
+      s.strstart += s.lookahead;
+      s.block_start = s.strstart;
+      s.insert = s.lookahead;
+      s.lookahead = 0;
+      s.match_length = s.prev_length = MIN_MATCH - 1;
+      s.match_available = 0;
+      strm.next_in = next2;
+      strm.input = input;
+      strm.avail_in = avail;
+      s.wrap = wrap2;
+      return Z_OK;
+    }
+    exports2.deflateInit = deflateInit;
+    exports2.deflateInit2 = deflateInit2;
+    exports2.deflateReset = deflateReset;
+    exports2.deflateResetKeep = deflateResetKeep;
+    exports2.deflateSetHeader = deflateSetHeader;
+    exports2.deflate = deflate2;
+    exports2.deflateEnd = deflateEnd;
+    exports2.deflateSetDictionary = deflateSetDictionary;
+    exports2.deflateInfo = "pako deflate (from Nodeca project)";
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/strings.js
+var require_strings = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/strings.js"(exports2) {
+    "use strict";
+    init_globals();
+    var utils = require_common();
+    var STR_APPLY_OK = true;
+    var STR_APPLY_UIA_OK = true;
+    try {
+      String.fromCharCode.apply(null, [0]);
+    } catch (__) {
+      STR_APPLY_OK = false;
+    }
+    try {
+      String.fromCharCode.apply(null, new Uint8Array(1));
+    } catch (__) {
+      STR_APPLY_UIA_OK = false;
+    }
+    var _utf8len = new utils.Buf8(256);
+    for (q = 0; q < 256; q++) {
+      _utf8len[q] = q >= 252 ? 6 : q >= 248 ? 5 : q >= 240 ? 4 : q >= 224 ? 3 : q >= 192 ? 2 : 1;
+    }
+    var q;
+    _utf8len[254] = _utf8len[254] = 1;
+    exports2.string2buf = function(str) {
+      var buf, c, c2, m_pos, i2, str_len = str.length, buf_len = 0;
+      for (m_pos = 0; m_pos < str_len; m_pos++) {
+        c = str.charCodeAt(m_pos);
+        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
+          c2 = str.charCodeAt(m_pos + 1);
+          if ((c2 & 64512) === 56320) {
+            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
+            m_pos++;
+          }
+        }
+        buf_len += c < 128 ? 1 : c < 2048 ? 2 : c < 65536 ? 3 : 4;
+      }
+      buf = new utils.Buf8(buf_len);
+      for (i2 = 0, m_pos = 0; i2 < buf_len; m_pos++) {
+        c = str.charCodeAt(m_pos);
+        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
+          c2 = str.charCodeAt(m_pos + 1);
+          if ((c2 & 64512) === 56320) {
+            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
+            m_pos++;
+          }
+        }
+        if (c < 128) {
+          buf[i2++] = c;
+        } else if (c < 2048) {
+          buf[i2++] = 192 | c >>> 6;
+          buf[i2++] = 128 | c & 63;
+        } else if (c < 65536) {
+          buf[i2++] = 224 | c >>> 12;
+          buf[i2++] = 128 | c >>> 6 & 63;
+          buf[i2++] = 128 | c & 63;
+        } else {
+          buf[i2++] = 240 | c >>> 18;
+          buf[i2++] = 128 | c >>> 12 & 63;
+          buf[i2++] = 128 | c >>> 6 & 63;
+          buf[i2++] = 128 | c & 63;
+        }
+      }
+      return buf;
+    };
+    function buf2binstring(buf, len3) {
+      if (len3 < 65534) {
+        if (buf.subarray && STR_APPLY_UIA_OK || !buf.subarray && STR_APPLY_OK) {
+          return String.fromCharCode.apply(null, utils.shrinkBuf(buf, len3));
+        }
+      }
+      var result = "";
+      for (var i2 = 0; i2 < len3; i2++) {
+        result += String.fromCharCode(buf[i2]);
+      }
+      return result;
+    }
+    exports2.buf2binstring = function(buf) {
+      return buf2binstring(buf, buf.length);
+    };
+    exports2.binstring2buf = function(str) {
+      var buf = new utils.Buf8(str.length);
+      for (var i2 = 0, len3 = buf.length; i2 < len3; i2++) {
+        buf[i2] = str.charCodeAt(i2);
+      }
+      return buf;
+    };
+    exports2.buf2string = function(buf, max3) {
+      var i2, out, c, c_len;
+      var len3 = max3 || buf.length;
+      var utf16buf = new Array(len3 * 2);
+      for (out = 0, i2 = 0; i2 < len3; ) {
+        c = buf[i2++];
+        if (c < 128) {
+          utf16buf[out++] = c;
+          continue;
+        }
+        c_len = _utf8len[c];
+        if (c_len > 4) {
+          utf16buf[out++] = 65533;
+          i2 += c_len - 1;
+          continue;
+        }
+        c &= c_len === 2 ? 31 : c_len === 3 ? 15 : 7;
+        while (c_len > 1 && i2 < len3) {
+          c = c << 6 | buf[i2++] & 63;
+          c_len--;
+        }
+        if (c_len > 1) {
+          utf16buf[out++] = 65533;
+          continue;
+        }
+        if (c < 65536) {
+          utf16buf[out++] = c;
+        } else {
+          c -= 65536;
+          utf16buf[out++] = 55296 | c >> 10 & 1023;
+          utf16buf[out++] = 56320 | c & 1023;
+        }
+      }
+      return buf2binstring(utf16buf, out);
+    };
+    exports2.utf8border = function(buf, max3) {
+      var pos;
+      max3 = max3 || buf.length;
+      if (max3 > buf.length) {
+        max3 = buf.length;
+      }
+      pos = max3 - 1;
+      while (pos >= 0 && (buf[pos] & 192) === 128) {
+        pos--;
+      }
+      if (pos < 0) {
+        return max3;
+      }
+      if (pos === 0) {
+        return max3;
+      }
+      return pos + _utf8len[buf[pos]] > max3 ? pos : max3;
+    };
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/zstream.js
+var require_zstream = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/zstream.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function ZStream() {
+      this.input = null;
+      this.next_in = 0;
+      this.avail_in = 0;
+      this.total_in = 0;
+      this.output = null;
+      this.next_out = 0;
+      this.avail_out = 0;
+      this.total_out = 0;
+      this.msg = "";
+      this.state = null;
+      this.data_type = 2;
+      this.adler = 0;
+    }
+    module2.exports = ZStream;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/deflate.js
+var require_deflate2 = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/deflate.js"(exports2) {
+    "use strict";
+    init_globals();
+    var zlib_deflate = require_deflate();
+    var utils = require_common();
+    var strings = require_strings();
+    var msg = require_messages();
+    var ZStream = require_zstream();
+    var toString3 = Object.prototype.toString;
+    var Z_NO_FLUSH = 0;
+    var Z_FINISH = 4;
+    var Z_OK = 0;
+    var Z_STREAM_END = 1;
+    var Z_SYNC_FLUSH = 2;
+    var Z_DEFAULT_COMPRESSION = -1;
+    var Z_DEFAULT_STRATEGY = 0;
+    var Z_DEFLATED = 8;
+    function Deflate(options) {
+      if (!(this instanceof Deflate)) return new Deflate(options);
+      this.options = utils.assign({
+        level: Z_DEFAULT_COMPRESSION,
+        method: Z_DEFLATED,
+        chunkSize: 16384,
+        windowBits: 15,
+        memLevel: 8,
+        strategy: Z_DEFAULT_STRATEGY,
+        to: ""
+      }, options || {});
+      var opt = this.options;
+      if (opt.raw && opt.windowBits > 0) {
+        opt.windowBits = -opt.windowBits;
+      } else if (opt.gzip && opt.windowBits > 0 && opt.windowBits < 16) {
+        opt.windowBits += 16;
+      }
+      this.err = 0;
+      this.msg = "";
+      this.ended = false;
+      this.chunks = [];
+      this.strm = new ZStream();
+      this.strm.avail_out = 0;
+      var status = zlib_deflate.deflateInit2(
+        this.strm,
+        opt.level,
+        opt.method,
+        opt.windowBits,
+        opt.memLevel,
+        opt.strategy
+      );
+      if (status !== Z_OK) {
+        throw new Error(msg[status]);
+      }
+      if (opt.header) {
+        zlib_deflate.deflateSetHeader(this.strm, opt.header);
+      }
+      if (opt.dictionary) {
+        var dict2;
+        if (typeof opt.dictionary === "string") {
+          dict2 = strings.string2buf(opt.dictionary);
+        } else if (toString3.call(opt.dictionary) === "[object ArrayBuffer]") {
+          dict2 = new Uint8Array(opt.dictionary);
+        } else {
+          dict2 = opt.dictionary;
+        }
+        status = zlib_deflate.deflateSetDictionary(this.strm, dict2);
+        if (status !== Z_OK) {
+          throw new Error(msg[status]);
+        }
+        this._dict_set = true;
+      }
+    }
+    Deflate.prototype.push = function(data, mode) {
+      var strm = this.strm;
+      var chunkSize = this.options.chunkSize;
+      var status, _mode;
+      if (this.ended) {
+        return false;
+      }
+      _mode = mode === ~~mode ? mode : mode === true ? Z_FINISH : Z_NO_FLUSH;
+      if (typeof data === "string") {
+        strm.input = strings.string2buf(data);
+      } else if (toString3.call(data) === "[object ArrayBuffer]") {
+        strm.input = new Uint8Array(data);
+      } else {
+        strm.input = data;
+      }
+      strm.next_in = 0;
+      strm.avail_in = strm.input.length;
+      do {
+        if (strm.avail_out === 0) {
+          strm.output = new utils.Buf8(chunkSize);
+          strm.next_out = 0;
+          strm.avail_out = chunkSize;
+        }
+        status = zlib_deflate.deflate(strm, _mode);
+        if (status !== Z_STREAM_END && status !== Z_OK) {
+          this.onEnd(status);
+          this.ended = true;
+          return false;
+        }
+        if (strm.avail_out === 0 || strm.avail_in === 0 && (_mode === Z_FINISH || _mode === Z_SYNC_FLUSH)) {
+          if (this.options.to === "string") {
+            this.onData(strings.buf2binstring(utils.shrinkBuf(strm.output, strm.next_out)));
+          } else {
+            this.onData(utils.shrinkBuf(strm.output, strm.next_out));
+          }
+        }
+      } while ((strm.avail_in > 0 || strm.avail_out === 0) && status !== Z_STREAM_END);
+      if (_mode === Z_FINISH) {
+        status = zlib_deflate.deflateEnd(this.strm);
+        this.onEnd(status);
+        this.ended = true;
+        return status === Z_OK;
+      }
+      if (_mode === Z_SYNC_FLUSH) {
+        this.onEnd(Z_OK);
+        strm.avail_out = 0;
+        return true;
+      }
+      return true;
+    };
+    Deflate.prototype.onData = function(chunk3) {
+      this.chunks.push(chunk3);
+    };
+    Deflate.prototype.onEnd = function(status) {
+      if (status === Z_OK) {
+        if (this.options.to === "string") {
+          this.result = this.chunks.join("");
+        } else {
+          this.result = utils.flattenChunks(this.chunks);
+        }
+      }
+      this.chunks = [];
+      this.err = status;
+      this.msg = this.strm.msg;
+    };
+    function deflate2(input, options) {
+      var deflator = new Deflate(options);
+      deflator.push(input, true);
+      if (deflator.err) {
+        throw deflator.msg || msg[deflator.err];
+      }
+      return deflator.result;
+    }
+    function deflateRaw(input, options) {
+      options = options || {};
+      options.raw = true;
+      return deflate2(input, options);
+    }
+    function gzip(input, options) {
+      options = options || {};
+      options.gzip = true;
+      return deflate2(input, options);
+    }
+    exports2.Deflate = Deflate;
+    exports2.deflate = deflate2;
+    exports2.deflateRaw = deflateRaw;
+    exports2.gzip = gzip;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inffast.js
+var require_inffast = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inffast.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var BAD = 30;
+    var TYPE = 12;
+    module2.exports = function inflate_fast(strm, start) {
+      var state;
+      var _in;
+      var last2;
+      var _out;
+      var beg;
+      var end;
+      var dmax;
+      var wsize;
+      var whave;
+      var wnext;
+      var s_window;
+      var hold2;
+      var bits;
+      var lcode;
+      var dcode;
+      var lmask;
+      var dmask;
+      var here;
+      var op;
+      var len3;
+      var dist;
+      var from;
+      var from_source;
+      var input, output;
+      state = strm.state;
+      _in = strm.next_in;
+      input = strm.input;
+      last2 = _in + (strm.avail_in - 5);
+      _out = strm.next_out;
+      output = strm.output;
+      beg = _out - (start - strm.avail_out);
+      end = _out + (strm.avail_out - 257);
+      dmax = state.dmax;
+      wsize = state.wsize;
+      whave = state.whave;
+      wnext = state.wnext;
+      s_window = state.window;
+      hold2 = state.hold;
+      bits = state.bits;
+      lcode = state.lencode;
+      dcode = state.distcode;
+      lmask = (1 << state.lenbits) - 1;
+      dmask = (1 << state.distbits) - 1;
+      top:
+        do {
+          if (bits < 15) {
+            hold2 += input[_in++] << bits;
+            bits += 8;
+            hold2 += input[_in++] << bits;
+            bits += 8;
+          }
+          here = lcode[hold2 & lmask];
+          dolen:
+            for (; ; ) {
+              op = here >>> 24;
+              hold2 >>>= op;
+              bits -= op;
+              op = here >>> 16 & 255;
+              if (op === 0) {
+                output[_out++] = here & 65535;
+              } else if (op & 16) {
+                len3 = here & 65535;
+                op &= 15;
+                if (op) {
+                  if (bits < op) {
+                    hold2 += input[_in++] << bits;
+                    bits += 8;
+                  }
+                  len3 += hold2 & (1 << op) - 1;
+                  hold2 >>>= op;
+                  bits -= op;
+                }
+                if (bits < 15) {
+                  hold2 += input[_in++] << bits;
+                  bits += 8;
+                  hold2 += input[_in++] << bits;
+                  bits += 8;
+                }
+                here = dcode[hold2 & dmask];
+                dodist:
+                  for (; ; ) {
+                    op = here >>> 24;
+                    hold2 >>>= op;
+                    bits -= op;
+                    op = here >>> 16 & 255;
+                    if (op & 16) {
+                      dist = here & 65535;
+                      op &= 15;
+                      if (bits < op) {
+                        hold2 += input[_in++] << bits;
+                        bits += 8;
+                        if (bits < op) {
+                          hold2 += input[_in++] << bits;
+                          bits += 8;
+                        }
+                      }
+                      dist += hold2 & (1 << op) - 1;
+                      if (dist > dmax) {
+                        strm.msg = "invalid distance too far back";
+                        state.mode = BAD;
+                        break top;
+                      }
+                      hold2 >>>= op;
+                      bits -= op;
+                      op = _out - beg;
+                      if (dist > op) {
+                        op = dist - op;
+                        if (op > whave) {
+                          if (state.sane) {
+                            strm.msg = "invalid distance too far back";
+                            state.mode = BAD;
+                            break top;
+                          }
+                        }
+                        from = 0;
+                        from_source = s_window;
+                        if (wnext === 0) {
+                          from += wsize - op;
+                          if (op < len3) {
+                            len3 -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = _out - dist;
+                            from_source = output;
+                          }
+                        } else if (wnext < op) {
+                          from += wsize + wnext - op;
+                          op -= wnext;
+                          if (op < len3) {
+                            len3 -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = 0;
+                            if (wnext < len3) {
+                              op = wnext;
+                              len3 -= op;
+                              do {
+                                output[_out++] = s_window[from++];
+                              } while (--op);
+                              from = _out - dist;
+                              from_source = output;
+                            }
+                          }
+                        } else {
+                          from += wnext - op;
+                          if (op < len3) {
+                            len3 -= op;
+                            do {
+                              output[_out++] = s_window[from++];
+                            } while (--op);
+                            from = _out - dist;
+                            from_source = output;
+                          }
+                        }
+                        while (len3 > 2) {
+                          output[_out++] = from_source[from++];
+                          output[_out++] = from_source[from++];
+                          output[_out++] = from_source[from++];
+                          len3 -= 3;
+                        }
+                        if (len3) {
+                          output[_out++] = from_source[from++];
+                          if (len3 > 1) {
+                            output[_out++] = from_source[from++];
+                          }
+                        }
+                      } else {
+                        from = _out - dist;
+                        do {
+                          output[_out++] = output[from++];
+                          output[_out++] = output[from++];
+                          output[_out++] = output[from++];
+                          len3 -= 3;
+                        } while (len3 > 2);
+                        if (len3) {
+                          output[_out++] = output[from++];
+                          if (len3 > 1) {
+                            output[_out++] = output[from++];
+                          }
+                        }
+                      }
+                    } else if ((op & 64) === 0) {
+                      here = dcode[(here & 65535) + (hold2 & (1 << op) - 1)];
+                      continue dodist;
+                    } else {
+                      strm.msg = "invalid distance code";
+                      state.mode = BAD;
+                      break top;
+                    }
+                    break;
+                  }
+              } else if ((op & 64) === 0) {
+                here = lcode[(here & 65535) + (hold2 & (1 << op) - 1)];
+                continue dolen;
+              } else if (op & 32) {
+                state.mode = TYPE;
+                break top;
+              } else {
+                strm.msg = "invalid literal/length code";
+                state.mode = BAD;
+                break top;
+              }
+              break;
+            }
+        } while (_in < last2 && _out < end);
+      len3 = bits >> 3;
+      _in -= len3;
+      bits -= len3 << 3;
+      hold2 &= (1 << bits) - 1;
+      strm.next_in = _in;
+      strm.next_out = _out;
+      strm.avail_in = _in < last2 ? 5 + (last2 - _in) : 5 - (_in - last2);
+      strm.avail_out = _out < end ? 257 + (end - _out) : 257 - (_out - end);
+      state.hold = hold2;
+      state.bits = bits;
+      return;
+    };
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inftrees.js
+var require_inftrees = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inftrees.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var utils = require_common();
+    var MAXBITS = 15;
+    var ENOUGH_LENS = 852;
+    var ENOUGH_DISTS = 592;
+    var CODES = 0;
+    var LENS = 1;
+    var DISTS = 2;
+    var lbase = [
+      /* Length codes 257..285 base */
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      13,
+      15,
+      17,
+      19,
+      23,
+      27,
+      31,
+      35,
+      43,
+      51,
+      59,
+      67,
+      83,
+      99,
+      115,
+      131,
+      163,
+      195,
+      227,
+      258,
+      0,
+      0
+    ];
+    var lext = [
+      /* Length codes 257..285 extra */
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      17,
+      17,
+      18,
+      18,
+      18,
+      18,
+      19,
+      19,
+      19,
+      19,
+      20,
+      20,
+      20,
+      20,
+      21,
+      21,
+      21,
+      21,
+      16,
+      72,
+      78
+    ];
+    var dbase = [
+      /* Distance codes 0..29 base */
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      9,
+      13,
+      17,
+      25,
+      33,
+      49,
+      65,
+      97,
+      129,
+      193,
+      257,
+      385,
+      513,
+      769,
+      1025,
+      1537,
+      2049,
+      3073,
+      4097,
+      6145,
+      8193,
+      12289,
+      16385,
+      24577,
+      0,
+      0
+    ];
+    var dext = [
+      /* Distance codes 0..29 extra */
+      16,
+      16,
+      16,
+      16,
+      17,
+      17,
+      18,
+      18,
+      19,
+      19,
+      20,
+      20,
+      21,
+      21,
+      22,
+      22,
+      23,
+      23,
+      24,
+      24,
+      25,
+      25,
+      26,
+      26,
+      27,
+      27,
+      28,
+      28,
+      29,
+      29,
+      64,
+      64
+    ];
+    module2.exports = function inflate_table(type3, lens, lens_index, codes, table, table_index, work, opts) {
+      var bits = opts.bits;
+      var len3 = 0;
+      var sym = 0;
+      var min3 = 0, max3 = 0;
+      var root = 0;
+      var curr = 0;
+      var drop = 0;
+      var left = 0;
+      var used = 0;
+      var huff = 0;
+      var incr;
+      var fill;
+      var low;
+      var mask;
+      var next2;
+      var base = null;
+      var base_index = 0;
+      var end;
+      var count = new utils.Buf16(MAXBITS + 1);
+      var offs = new utils.Buf16(MAXBITS + 1);
+      var extra = null;
+      var extra_index = 0;
+      var here_bits, here_op, here_val;
+      for (len3 = 0; len3 <= MAXBITS; len3++) {
+        count[len3] = 0;
+      }
+      for (sym = 0; sym < codes; sym++) {
+        count[lens[lens_index + sym]]++;
+      }
+      root = bits;
+      for (max3 = MAXBITS; max3 >= 1; max3--) {
+        if (count[max3] !== 0) {
+          break;
+        }
+      }
+      if (root > max3) {
+        root = max3;
+      }
+      if (max3 === 0) {
+        table[table_index++] = 1 << 24 | 64 << 16 | 0;
+        table[table_index++] = 1 << 24 | 64 << 16 | 0;
+        opts.bits = 1;
+        return 0;
+      }
+      for (min3 = 1; min3 < max3; min3++) {
+        if (count[min3] !== 0) {
+          break;
+        }
+      }
+      if (root < min3) {
+        root = min3;
+      }
+      left = 1;
+      for (len3 = 1; len3 <= MAXBITS; len3++) {
+        left <<= 1;
+        left -= count[len3];
+        if (left < 0) {
+          return -1;
+        }
+      }
+      if (left > 0 && (type3 === CODES || max3 !== 1)) {
+        return -1;
+      }
+      offs[1] = 0;
+      for (len3 = 1; len3 < MAXBITS; len3++) {
+        offs[len3 + 1] = offs[len3] + count[len3];
+      }
+      for (sym = 0; sym < codes; sym++) {
+        if (lens[lens_index + sym] !== 0) {
+          work[offs[lens[lens_index + sym]]++] = sym;
+        }
+      }
+      if (type3 === CODES) {
+        base = extra = work;
+        end = 19;
+      } else if (type3 === LENS) {
+        base = lbase;
+        base_index -= 257;
+        extra = lext;
+        extra_index -= 257;
+        end = 256;
+      } else {
+        base = dbase;
+        extra = dext;
+        end = -1;
+      }
+      huff = 0;
+      sym = 0;
+      len3 = min3;
+      next2 = table_index;
+      curr = root;
+      drop = 0;
+      low = -1;
+      used = 1 << root;
+      mask = used - 1;
+      if (type3 === LENS && used > ENOUGH_LENS || type3 === DISTS && used > ENOUGH_DISTS) {
+        return 1;
+      }
+      for (; ; ) {
+        here_bits = len3 - drop;
+        if (work[sym] < end) {
+          here_op = 0;
+          here_val = work[sym];
+        } else if (work[sym] > end) {
+          here_op = extra[extra_index + work[sym]];
+          here_val = base[base_index + work[sym]];
+        } else {
+          here_op = 32 + 64;
+          here_val = 0;
+        }
+        incr = 1 << len3 - drop;
+        fill = 1 << curr;
+        min3 = fill;
+        do {
+          fill -= incr;
+          table[next2 + (huff >> drop) + fill] = here_bits << 24 | here_op << 16 | here_val | 0;
+        } while (fill !== 0);
+        incr = 1 << len3 - 1;
+        while (huff & incr) {
+          incr >>= 1;
+        }
+        if (incr !== 0) {
+          huff &= incr - 1;
+          huff += incr;
+        } else {
+          huff = 0;
+        }
+        sym++;
+        if (--count[len3] === 0) {
+          if (len3 === max3) {
+            break;
+          }
+          len3 = lens[lens_index + work[sym]];
+        }
+        if (len3 > root && (huff & mask) !== low) {
+          if (drop === 0) {
+            drop = root;
+          }
+          next2 += min3;
+          curr = len3 - drop;
+          left = 1 << curr;
+          while (curr + drop < max3) {
+            left -= count[curr + drop];
+            if (left <= 0) {
+              break;
+            }
+            curr++;
+            left <<= 1;
+          }
+          used += 1 << curr;
+          if (type3 === LENS && used > ENOUGH_LENS || type3 === DISTS && used > ENOUGH_DISTS) {
+            return 1;
+          }
+          low = huff & mask;
+          table[low] = root << 24 | curr << 16 | next2 - table_index | 0;
+        }
+      }
+      if (huff !== 0) {
+        table[next2 + huff] = len3 - drop << 24 | 64 << 16 | 0;
+      }
+      opts.bits = root;
+      return 0;
+    };
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inflate.js
+var require_inflate = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inflate.js"(exports2) {
+    "use strict";
+    init_globals();
+    var utils = require_common();
+    var adler32 = require_adler32();
+    var crc32 = require_crc32();
+    var inflate_fast = require_inffast();
+    var inflate_table = require_inftrees();
+    var CODES = 0;
+    var LENS = 1;
+    var DISTS = 2;
+    var Z_FINISH = 4;
+    var Z_BLOCK = 5;
+    var Z_TREES = 6;
+    var Z_OK = 0;
+    var Z_STREAM_END = 1;
+    var Z_NEED_DICT = 2;
+    var Z_STREAM_ERROR = -2;
+    var Z_DATA_ERROR = -3;
+    var Z_MEM_ERROR = -4;
+    var Z_BUF_ERROR = -5;
+    var Z_DEFLATED = 8;
+    var HEAD = 1;
+    var FLAGS = 2;
+    var TIME = 3;
+    var OS = 4;
+    var EXLEN = 5;
+    var EXTRA = 6;
+    var NAME = 7;
+    var COMMENT = 8;
+    var HCRC = 9;
+    var DICTID = 10;
+    var DICT = 11;
+    var TYPE = 12;
+    var TYPEDO = 13;
+    var STORED = 14;
+    var COPY_ = 15;
+    var COPY = 16;
+    var TABLE = 17;
+    var LENLENS = 18;
+    var CODELENS = 19;
+    var LEN_ = 20;
+    var LEN = 21;
+    var LENEXT = 22;
+    var DIST = 23;
+    var DISTEXT = 24;
+    var MATCH = 25;
+    var LIT = 26;
+    var CHECK = 27;
+    var LENGTH = 28;
+    var DONE = 29;
+    var BAD = 30;
+    var MEM = 31;
+    var SYNC = 32;
+    var ENOUGH_LENS = 852;
+    var ENOUGH_DISTS = 592;
+    var MAX_WBITS = 15;
+    var DEF_WBITS = MAX_WBITS;
+    function zswap32(q) {
+      return (q >>> 24 & 255) + (q >>> 8 & 65280) + ((q & 65280) << 8) + ((q & 255) << 24);
+    }
+    function InflateState() {
+      this.mode = 0;
+      this.last = false;
+      this.wrap = 0;
+      this.havedict = false;
+      this.flags = 0;
+      this.dmax = 0;
+      this.check = 0;
+      this.total = 0;
+      this.head = null;
+      this.wbits = 0;
+      this.wsize = 0;
+      this.whave = 0;
+      this.wnext = 0;
+      this.window = null;
+      this.hold = 0;
+      this.bits = 0;
+      this.length = 0;
+      this.offset = 0;
+      this.extra = 0;
+      this.lencode = null;
+      this.distcode = null;
+      this.lenbits = 0;
+      this.distbits = 0;
+      this.ncode = 0;
+      this.nlen = 0;
+      this.ndist = 0;
+      this.have = 0;
+      this.next = null;
+      this.lens = new utils.Buf16(320);
+      this.work = new utils.Buf16(288);
+      this.lendyn = null;
+      this.distdyn = null;
+      this.sane = 0;
+      this.back = 0;
+      this.was = 0;
+    }
+    function inflateResetKeep(strm) {
+      var state;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      strm.total_in = strm.total_out = state.total = 0;
+      strm.msg = "";
+      if (state.wrap) {
+        strm.adler = state.wrap & 1;
+      }
+      state.mode = HEAD;
+      state.last = 0;
+      state.havedict = 0;
+      state.dmax = 32768;
+      state.head = null;
+      state.hold = 0;
+      state.bits = 0;
+      state.lencode = state.lendyn = new utils.Buf32(ENOUGH_LENS);
+      state.distcode = state.distdyn = new utils.Buf32(ENOUGH_DISTS);
+      state.sane = 1;
+      state.back = -1;
+      return Z_OK;
+    }
+    function inflateReset(strm) {
+      var state;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      state.wsize = 0;
+      state.whave = 0;
+      state.wnext = 0;
+      return inflateResetKeep(strm);
+    }
+    function inflateReset2(strm, windowBits) {
+      var wrap2;
+      var state;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if (windowBits < 0) {
+        wrap2 = 0;
+        windowBits = -windowBits;
+      } else {
+        wrap2 = (windowBits >> 4) + 1;
+        if (windowBits < 48) {
+          windowBits &= 15;
+        }
+      }
+      if (windowBits && (windowBits < 8 || windowBits > 15)) {
+        return Z_STREAM_ERROR;
+      }
+      if (state.window !== null && state.wbits !== windowBits) {
+        state.window = null;
+      }
+      state.wrap = wrap2;
+      state.wbits = windowBits;
+      return inflateReset(strm);
+    }
+    function inflateInit2(strm, windowBits) {
+      var ret;
+      var state;
+      if (!strm) {
+        return Z_STREAM_ERROR;
+      }
+      state = new InflateState();
+      strm.state = state;
+      state.window = null;
+      ret = inflateReset2(strm, windowBits);
+      if (ret !== Z_OK) {
+        strm.state = null;
+      }
+      return ret;
+    }
+    function inflateInit(strm) {
+      return inflateInit2(strm, DEF_WBITS);
+    }
+    var virgin = true;
+    var lenfix;
+    var distfix;
+    function fixedtables(state) {
+      if (virgin) {
+        var sym;
+        lenfix = new utils.Buf32(512);
+        distfix = new utils.Buf32(32);
+        sym = 0;
+        while (sym < 144) {
+          state.lens[sym++] = 8;
+        }
+        while (sym < 256) {
+          state.lens[sym++] = 9;
+        }
+        while (sym < 280) {
+          state.lens[sym++] = 7;
+        }
+        while (sym < 288) {
+          state.lens[sym++] = 8;
+        }
+        inflate_table(LENS, state.lens, 0, 288, lenfix, 0, state.work, { bits: 9 });
+        sym = 0;
+        while (sym < 32) {
+          state.lens[sym++] = 5;
+        }
+        inflate_table(DISTS, state.lens, 0, 32, distfix, 0, state.work, { bits: 5 });
+        virgin = false;
+      }
+      state.lencode = lenfix;
+      state.lenbits = 9;
+      state.distcode = distfix;
+      state.distbits = 5;
+    }
+    function updatewindow(strm, src, end, copy2) {
+      var dist;
+      var state = strm.state;
+      if (state.window === null) {
+        state.wsize = 1 << state.wbits;
+        state.wnext = 0;
+        state.whave = 0;
+        state.window = new utils.Buf8(state.wsize);
+      }
+      if (copy2 >= state.wsize) {
+        utils.arraySet(state.window, src, end - state.wsize, state.wsize, 0);
+        state.wnext = 0;
+        state.whave = state.wsize;
+      } else {
+        dist = state.wsize - state.wnext;
+        if (dist > copy2) {
+          dist = copy2;
+        }
+        utils.arraySet(state.window, src, end - copy2, dist, state.wnext);
+        copy2 -= dist;
+        if (copy2) {
+          utils.arraySet(state.window, src, end - copy2, copy2, 0);
+          state.wnext = copy2;
+          state.whave = state.wsize;
+        } else {
+          state.wnext += dist;
+          if (state.wnext === state.wsize) {
+            state.wnext = 0;
+          }
+          if (state.whave < state.wsize) {
+            state.whave += dist;
+          }
+        }
+      }
+      return 0;
+    }
+    function inflate2(strm, flush) {
+      var state;
+      var input, output;
+      var next2;
+      var put;
+      var have, left;
+      var hold2;
+      var bits;
+      var _in, _out;
+      var copy2;
+      var from;
+      var from_source;
+      var here = 0;
+      var here_bits, here_op, here_val;
+      var last_bits, last_op, last_val;
+      var len3;
+      var ret;
+      var hbuf = new utils.Buf8(4);
+      var opts;
+      var n;
+      var order2 = (
+        /* permutation of code lengths */
+        [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
+      );
+      if (!strm || !strm.state || !strm.output || !strm.input && strm.avail_in !== 0) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if (state.mode === TYPE) {
+        state.mode = TYPEDO;
+      }
+      put = strm.next_out;
+      output = strm.output;
+      left = strm.avail_out;
+      next2 = strm.next_in;
+      input = strm.input;
+      have = strm.avail_in;
+      hold2 = state.hold;
+      bits = state.bits;
+      _in = have;
+      _out = left;
+      ret = Z_OK;
+      inf_leave:
+        for (; ; ) {
+          switch (state.mode) {
+            case HEAD:
+              if (state.wrap === 0) {
+                state.mode = TYPEDO;
+                break;
+              }
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if (state.wrap & 2 && hold2 === 35615) {
+                state.check = 0;
+                hbuf[0] = hold2 & 255;
+                hbuf[1] = hold2 >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+                hold2 = 0;
+                bits = 0;
+                state.mode = FLAGS;
+                break;
+              }
+              state.flags = 0;
+              if (state.head) {
+                state.head.done = false;
+              }
+              if (!(state.wrap & 1) || /* check if zlib header allowed */
+              (((hold2 & 255) << 8) + (hold2 >> 8)) % 31) {
+                strm.msg = "incorrect header check";
+                state.mode = BAD;
+                break;
+              }
+              if ((hold2 & 15) !== Z_DEFLATED) {
+                strm.msg = "unknown compression method";
+                state.mode = BAD;
+                break;
+              }
+              hold2 >>>= 4;
+              bits -= 4;
+              len3 = (hold2 & 15) + 8;
+              if (state.wbits === 0) {
+                state.wbits = len3;
+              } else if (len3 > state.wbits) {
+                strm.msg = "invalid window size";
+                state.mode = BAD;
+                break;
+              }
+              state.dmax = 1 << len3;
+              strm.adler = state.check = 1;
+              state.mode = hold2 & 512 ? DICTID : TYPE;
+              hold2 = 0;
+              bits = 0;
+              break;
+            case FLAGS:
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              state.flags = hold2;
+              if ((state.flags & 255) !== Z_DEFLATED) {
+                strm.msg = "unknown compression method";
+                state.mode = BAD;
+                break;
+              }
+              if (state.flags & 57344) {
+                strm.msg = "unknown header flags set";
+                state.mode = BAD;
+                break;
+              }
+              if (state.head) {
+                state.head.text = hold2 >> 8 & 1;
+              }
+              if (state.flags & 512) {
+                hbuf[0] = hold2 & 255;
+                hbuf[1] = hold2 >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+              }
+              hold2 = 0;
+              bits = 0;
+              state.mode = TIME;
+            /* falls through */
+            case TIME:
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if (state.head) {
+                state.head.time = hold2;
+              }
+              if (state.flags & 512) {
+                hbuf[0] = hold2 & 255;
+                hbuf[1] = hold2 >>> 8 & 255;
+                hbuf[2] = hold2 >>> 16 & 255;
+                hbuf[3] = hold2 >>> 24 & 255;
+                state.check = crc32(state.check, hbuf, 4, 0);
+              }
+              hold2 = 0;
+              bits = 0;
+              state.mode = OS;
+            /* falls through */
+            case OS:
+              while (bits < 16) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if (state.head) {
+                state.head.xflags = hold2 & 255;
+                state.head.os = hold2 >> 8;
+              }
+              if (state.flags & 512) {
+                hbuf[0] = hold2 & 255;
+                hbuf[1] = hold2 >>> 8 & 255;
+                state.check = crc32(state.check, hbuf, 2, 0);
+              }
+              hold2 = 0;
+              bits = 0;
+              state.mode = EXLEN;
+            /* falls through */
+            case EXLEN:
+              if (state.flags & 1024) {
+                while (bits < 16) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                state.length = hold2;
+                if (state.head) {
+                  state.head.extra_len = hold2;
+                }
+                if (state.flags & 512) {
+                  hbuf[0] = hold2 & 255;
+                  hbuf[1] = hold2 >>> 8 & 255;
+                  state.check = crc32(state.check, hbuf, 2, 0);
+                }
+                hold2 = 0;
+                bits = 0;
+              } else if (state.head) {
+                state.head.extra = null;
+              }
+              state.mode = EXTRA;
+            /* falls through */
+            case EXTRA:
+              if (state.flags & 1024) {
+                copy2 = state.length;
+                if (copy2 > have) {
+                  copy2 = have;
+                }
+                if (copy2) {
+                  if (state.head) {
+                    len3 = state.head.extra_len - state.length;
+                    if (!state.head.extra) {
+                      state.head.extra = new Array(state.head.extra_len);
+                    }
+                    utils.arraySet(
+                      state.head.extra,
+                      input,
+                      next2,
+                      // extra field is limited to 65536 bytes
+                      // - no need for additional size check
+                      copy2,
+                      /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
+                      len3
+                    );
+                  }
+                  if (state.flags & 512) {
+                    state.check = crc32(state.check, input, copy2, next2);
+                  }
+                  have -= copy2;
+                  next2 += copy2;
+                  state.length -= copy2;
+                }
+                if (state.length) {
+                  break inf_leave;
+                }
+              }
+              state.length = 0;
+              state.mode = NAME;
+            /* falls through */
+            case NAME:
+              if (state.flags & 2048) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                copy2 = 0;
+                do {
+                  len3 = input[next2 + copy2++];
+                  if (state.head && len3 && state.length < 65536) {
+                    state.head.name += String.fromCharCode(len3);
+                  }
+                } while (len3 && copy2 < have);
+                if (state.flags & 512) {
+                  state.check = crc32(state.check, input, copy2, next2);
+                }
+                have -= copy2;
+                next2 += copy2;
+                if (len3) {
+                  break inf_leave;
+                }
+              } else if (state.head) {
+                state.head.name = null;
+              }
+              state.length = 0;
+              state.mode = COMMENT;
+            /* falls through */
+            case COMMENT:
+              if (state.flags & 4096) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                copy2 = 0;
+                do {
+                  len3 = input[next2 + copy2++];
+                  if (state.head && len3 && state.length < 65536) {
+                    state.head.comment += String.fromCharCode(len3);
+                  }
+                } while (len3 && copy2 < have);
+                if (state.flags & 512) {
+                  state.check = crc32(state.check, input, copy2, next2);
+                }
+                have -= copy2;
+                next2 += copy2;
+                if (len3) {
+                  break inf_leave;
+                }
+              } else if (state.head) {
+                state.head.comment = null;
+              }
+              state.mode = HCRC;
+            /* falls through */
+            case HCRC:
+              if (state.flags & 512) {
+                while (bits < 16) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                if (hold2 !== (state.check & 65535)) {
+                  strm.msg = "header crc mismatch";
+                  state.mode = BAD;
+                  break;
+                }
+                hold2 = 0;
+                bits = 0;
+              }
+              if (state.head) {
+                state.head.hcrc = state.flags >> 9 & 1;
+                state.head.done = true;
+              }
+              strm.adler = state.check = 0;
+              state.mode = TYPE;
+              break;
+            case DICTID:
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              strm.adler = state.check = zswap32(hold2);
+              hold2 = 0;
+              bits = 0;
+              state.mode = DICT;
+            /* falls through */
+            case DICT:
+              if (state.havedict === 0) {
+                strm.next_out = put;
+                strm.avail_out = left;
+                strm.next_in = next2;
+                strm.avail_in = have;
+                state.hold = hold2;
+                state.bits = bits;
+                return Z_NEED_DICT;
+              }
+              strm.adler = state.check = 1;
+              state.mode = TYPE;
+            /* falls through */
+            case TYPE:
+              if (flush === Z_BLOCK || flush === Z_TREES) {
+                break inf_leave;
+              }
+            /* falls through */
+            case TYPEDO:
+              if (state.last) {
+                hold2 >>>= bits & 7;
+                bits -= bits & 7;
+                state.mode = CHECK;
+                break;
+              }
+              while (bits < 3) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              state.last = hold2 & 1;
+              hold2 >>>= 1;
+              bits -= 1;
+              switch (hold2 & 3) {
+                case 0:
+                  state.mode = STORED;
+                  break;
+                case 1:
+                  fixedtables(state);
+                  state.mode = LEN_;
+                  if (flush === Z_TREES) {
+                    hold2 >>>= 2;
+                    bits -= 2;
+                    break inf_leave;
+                  }
+                  break;
+                case 2:
+                  state.mode = TABLE;
+                  break;
+                case 3:
+                  strm.msg = "invalid block type";
+                  state.mode = BAD;
+              }
+              hold2 >>>= 2;
+              bits -= 2;
+              break;
+            case STORED:
+              hold2 >>>= bits & 7;
+              bits -= bits & 7;
+              while (bits < 32) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if ((hold2 & 65535) !== (hold2 >>> 16 ^ 65535)) {
+                strm.msg = "invalid stored block lengths";
+                state.mode = BAD;
+                break;
+              }
+              state.length = hold2 & 65535;
+              hold2 = 0;
+              bits = 0;
+              state.mode = COPY_;
+              if (flush === Z_TREES) {
+                break inf_leave;
+              }
+            /* falls through */
+            case COPY_:
+              state.mode = COPY;
+            /* falls through */
+            case COPY:
+              copy2 = state.length;
+              if (copy2) {
+                if (copy2 > have) {
+                  copy2 = have;
+                }
+                if (copy2 > left) {
+                  copy2 = left;
+                }
+                if (copy2 === 0) {
+                  break inf_leave;
+                }
+                utils.arraySet(output, input, next2, copy2, put);
+                have -= copy2;
+                next2 += copy2;
+                left -= copy2;
+                put += copy2;
+                state.length -= copy2;
+                break;
+              }
+              state.mode = TYPE;
+              break;
+            case TABLE:
+              while (bits < 14) {
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              state.nlen = (hold2 & 31) + 257;
+              hold2 >>>= 5;
+              bits -= 5;
+              state.ndist = (hold2 & 31) + 1;
+              hold2 >>>= 5;
+              bits -= 5;
+              state.ncode = (hold2 & 15) + 4;
+              hold2 >>>= 4;
+              bits -= 4;
+              if (state.nlen > 286 || state.ndist > 30) {
+                strm.msg = "too many length or distance symbols";
+                state.mode = BAD;
+                break;
+              }
+              state.have = 0;
+              state.mode = LENLENS;
+            /* falls through */
+            case LENLENS:
+              while (state.have < state.ncode) {
+                while (bits < 3) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                state.lens[order2[state.have++]] = hold2 & 7;
+                hold2 >>>= 3;
+                bits -= 3;
+              }
+              while (state.have < 19) {
+                state.lens[order2[state.have++]] = 0;
+              }
+              state.lencode = state.lendyn;
+              state.lenbits = 7;
+              opts = { bits: state.lenbits };
+              ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
+              state.lenbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid code lengths set";
+                state.mode = BAD;
+                break;
+              }
+              state.have = 0;
+              state.mode = CODELENS;
+            /* falls through */
+            case CODELENS:
+              while (state.have < state.nlen + state.ndist) {
+                for (; ; ) {
+                  here = state.lencode[hold2 & (1 << state.lenbits) - 1];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                if (here_val < 16) {
+                  hold2 >>>= here_bits;
+                  bits -= here_bits;
+                  state.lens[state.have++] = here_val;
+                } else {
+                  if (here_val === 16) {
+                    n = here_bits + 2;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold2 += input[next2++] << bits;
+                      bits += 8;
+                    }
+                    hold2 >>>= here_bits;
+                    bits -= here_bits;
+                    if (state.have === 0) {
+                      strm.msg = "invalid bit length repeat";
+                      state.mode = BAD;
+                      break;
+                    }
+                    len3 = state.lens[state.have - 1];
+                    copy2 = 3 + (hold2 & 3);
+                    hold2 >>>= 2;
+                    bits -= 2;
+                  } else if (here_val === 17) {
+                    n = here_bits + 3;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold2 += input[next2++] << bits;
+                      bits += 8;
+                    }
+                    hold2 >>>= here_bits;
+                    bits -= here_bits;
+                    len3 = 0;
+                    copy2 = 3 + (hold2 & 7);
+                    hold2 >>>= 3;
+                    bits -= 3;
+                  } else {
+                    n = here_bits + 7;
+                    while (bits < n) {
+                      if (have === 0) {
+                        break inf_leave;
+                      }
+                      have--;
+                      hold2 += input[next2++] << bits;
+                      bits += 8;
+                    }
+                    hold2 >>>= here_bits;
+                    bits -= here_bits;
+                    len3 = 0;
+                    copy2 = 11 + (hold2 & 127);
+                    hold2 >>>= 7;
+                    bits -= 7;
+                  }
+                  if (state.have + copy2 > state.nlen + state.ndist) {
+                    strm.msg = "invalid bit length repeat";
+                    state.mode = BAD;
+                    break;
+                  }
+                  while (copy2--) {
+                    state.lens[state.have++] = len3;
+                  }
+                }
+              }
+              if (state.mode === BAD) {
+                break;
+              }
+              if (state.lens[256] === 0) {
+                strm.msg = "invalid code -- missing end-of-block";
+                state.mode = BAD;
+                break;
+              }
+              state.lenbits = 9;
+              opts = { bits: state.lenbits };
+              ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
+              state.lenbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid literal/lengths set";
+                state.mode = BAD;
+                break;
+              }
+              state.distbits = 6;
+              state.distcode = state.distdyn;
+              opts = { bits: state.distbits };
+              ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
+              state.distbits = opts.bits;
+              if (ret) {
+                strm.msg = "invalid distances set";
+                state.mode = BAD;
+                break;
+              }
+              state.mode = LEN_;
+              if (flush === Z_TREES) {
+                break inf_leave;
+              }
+            /* falls through */
+            case LEN_:
+              state.mode = LEN;
+            /* falls through */
+            case LEN:
+              if (have >= 6 && left >= 258) {
+                strm.next_out = put;
+                strm.avail_out = left;
+                strm.next_in = next2;
+                strm.avail_in = have;
+                state.hold = hold2;
+                state.bits = bits;
+                inflate_fast(strm, _out);
+                put = strm.next_out;
+                output = strm.output;
+                left = strm.avail_out;
+                next2 = strm.next_in;
+                input = strm.input;
+                have = strm.avail_in;
+                hold2 = state.hold;
+                bits = state.bits;
+                if (state.mode === TYPE) {
+                  state.back = -1;
+                }
+                break;
+              }
+              state.back = 0;
+              for (; ; ) {
+                here = state.lencode[hold2 & (1 << state.lenbits) - 1];
+                here_bits = here >>> 24;
+                here_op = here >>> 16 & 255;
+                here_val = here & 65535;
+                if (here_bits <= bits) {
+                  break;
+                }
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if (here_op && (here_op & 240) === 0) {
+                last_bits = here_bits;
+                last_op = here_op;
+                last_val = here_val;
+                for (; ; ) {
+                  here = state.lencode[last_val + ((hold2 & (1 << last_bits + last_op) - 1) >> last_bits)];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (last_bits + here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                hold2 >>>= last_bits;
+                bits -= last_bits;
+                state.back += last_bits;
+              }
+              hold2 >>>= here_bits;
+              bits -= here_bits;
+              state.back += here_bits;
+              state.length = here_val;
+              if (here_op === 0) {
+                state.mode = LIT;
+                break;
+              }
+              if (here_op & 32) {
+                state.back = -1;
+                state.mode = TYPE;
+                break;
+              }
+              if (here_op & 64) {
+                strm.msg = "invalid literal/length code";
+                state.mode = BAD;
+                break;
+              }
+              state.extra = here_op & 15;
+              state.mode = LENEXT;
+            /* falls through */
+            case LENEXT:
+              if (state.extra) {
+                n = state.extra;
+                while (bits < n) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                state.length += hold2 & (1 << state.extra) - 1;
+                hold2 >>>= state.extra;
+                bits -= state.extra;
+                state.back += state.extra;
+              }
+              state.was = state.length;
+              state.mode = DIST;
+            /* falls through */
+            case DIST:
+              for (; ; ) {
+                here = state.distcode[hold2 & (1 << state.distbits) - 1];
+                here_bits = here >>> 24;
+                here_op = here >>> 16 & 255;
+                here_val = here & 65535;
+                if (here_bits <= bits) {
+                  break;
+                }
+                if (have === 0) {
+                  break inf_leave;
+                }
+                have--;
+                hold2 += input[next2++] << bits;
+                bits += 8;
+              }
+              if ((here_op & 240) === 0) {
+                last_bits = here_bits;
+                last_op = here_op;
+                last_val = here_val;
+                for (; ; ) {
+                  here = state.distcode[last_val + ((hold2 & (1 << last_bits + last_op) - 1) >> last_bits)];
+                  here_bits = here >>> 24;
+                  here_op = here >>> 16 & 255;
+                  here_val = here & 65535;
+                  if (last_bits + here_bits <= bits) {
+                    break;
+                  }
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                hold2 >>>= last_bits;
+                bits -= last_bits;
+                state.back += last_bits;
+              }
+              hold2 >>>= here_bits;
+              bits -= here_bits;
+              state.back += here_bits;
+              if (here_op & 64) {
+                strm.msg = "invalid distance code";
+                state.mode = BAD;
+                break;
+              }
+              state.offset = here_val;
+              state.extra = here_op & 15;
+              state.mode = DISTEXT;
+            /* falls through */
+            case DISTEXT:
+              if (state.extra) {
+                n = state.extra;
+                while (bits < n) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                state.offset += hold2 & (1 << state.extra) - 1;
+                hold2 >>>= state.extra;
+                bits -= state.extra;
+                state.back += state.extra;
+              }
+              if (state.offset > state.dmax) {
+                strm.msg = "invalid distance too far back";
+                state.mode = BAD;
+                break;
+              }
+              state.mode = MATCH;
+            /* falls through */
+            case MATCH:
+              if (left === 0) {
+                break inf_leave;
+              }
+              copy2 = _out - left;
+              if (state.offset > copy2) {
+                copy2 = state.offset - copy2;
+                if (copy2 > state.whave) {
+                  if (state.sane) {
+                    strm.msg = "invalid distance too far back";
+                    state.mode = BAD;
+                    break;
+                  }
+                }
+                if (copy2 > state.wnext) {
+                  copy2 -= state.wnext;
+                  from = state.wsize - copy2;
+                } else {
+                  from = state.wnext - copy2;
+                }
+                if (copy2 > state.length) {
+                  copy2 = state.length;
+                }
+                from_source = state.window;
+              } else {
+                from_source = output;
+                from = put - state.offset;
+                copy2 = state.length;
+              }
+              if (copy2 > left) {
+                copy2 = left;
+              }
+              left -= copy2;
+              state.length -= copy2;
+              do {
+                output[put++] = from_source[from++];
+              } while (--copy2);
+              if (state.length === 0) {
+                state.mode = LEN;
+              }
+              break;
+            case LIT:
+              if (left === 0) {
+                break inf_leave;
+              }
+              output[put++] = state.length;
+              left--;
+              state.mode = LEN;
+              break;
+            case CHECK:
+              if (state.wrap) {
+                while (bits < 32) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 |= input[next2++] << bits;
+                  bits += 8;
+                }
+                _out -= left;
+                strm.total_out += _out;
+                state.total += _out;
+                if (_out) {
+                  strm.adler = state.check = /*UPDATE(state.check, put - _out, _out);*/
+                  state.flags ? crc32(state.check, output, _out, put - _out) : adler32(state.check, output, _out, put - _out);
+                }
+                _out = left;
+                if ((state.flags ? hold2 : zswap32(hold2)) !== state.check) {
+                  strm.msg = "incorrect data check";
+                  state.mode = BAD;
+                  break;
+                }
+                hold2 = 0;
+                bits = 0;
+              }
+              state.mode = LENGTH;
+            /* falls through */
+            case LENGTH:
+              if (state.wrap && state.flags) {
+                while (bits < 32) {
+                  if (have === 0) {
+                    break inf_leave;
+                  }
+                  have--;
+                  hold2 += input[next2++] << bits;
+                  bits += 8;
+                }
+                if (hold2 !== (state.total & 4294967295)) {
+                  strm.msg = "incorrect length check";
+                  state.mode = BAD;
+                  break;
+                }
+                hold2 = 0;
+                bits = 0;
+              }
+              state.mode = DONE;
+            /* falls through */
+            case DONE:
+              ret = Z_STREAM_END;
+              break inf_leave;
+            case BAD:
+              ret = Z_DATA_ERROR;
+              break inf_leave;
+            case MEM:
+              return Z_MEM_ERROR;
+            case SYNC:
+            /* falls through */
+            default:
+              return Z_STREAM_ERROR;
+          }
+        }
+      strm.next_out = put;
+      strm.avail_out = left;
+      strm.next_in = next2;
+      strm.avail_in = have;
+      state.hold = hold2;
+      state.bits = bits;
+      if (state.wsize || _out !== strm.avail_out && state.mode < BAD && (state.mode < CHECK || flush !== Z_FINISH)) {
+        if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) {
+          state.mode = MEM;
+          return Z_MEM_ERROR;
+        }
+      }
+      _in -= strm.avail_in;
+      _out -= strm.avail_out;
+      strm.total_in += _in;
+      strm.total_out += _out;
+      state.total += _out;
+      if (state.wrap && _out) {
+        strm.adler = state.check = /*UPDATE(state.check, strm.next_out - _out, _out);*/
+        state.flags ? crc32(state.check, output, _out, strm.next_out - _out) : adler32(state.check, output, _out, strm.next_out - _out);
+      }
+      strm.data_type = state.bits + (state.last ? 64 : 0) + (state.mode === TYPE ? 128 : 0) + (state.mode === LEN_ || state.mode === COPY_ ? 256 : 0);
+      if ((_in === 0 && _out === 0 || flush === Z_FINISH) && ret === Z_OK) {
+        ret = Z_BUF_ERROR;
+      }
+      return ret;
+    }
+    function inflateEnd(strm) {
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      var state = strm.state;
+      if (state.window) {
+        state.window = null;
+      }
+      strm.state = null;
+      return Z_OK;
+    }
+    function inflateGetHeader(strm, head) {
+      var state;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if ((state.wrap & 2) === 0) {
+        return Z_STREAM_ERROR;
+      }
+      state.head = head;
+      head.done = false;
+      return Z_OK;
+    }
+    function inflateSetDictionary(strm, dictionary) {
+      var dictLength = dictionary.length;
+      var state;
+      var dictid;
+      var ret;
+      if (!strm || !strm.state) {
+        return Z_STREAM_ERROR;
+      }
+      state = strm.state;
+      if (state.wrap !== 0 && state.mode !== DICT) {
+        return Z_STREAM_ERROR;
+      }
+      if (state.mode === DICT) {
+        dictid = 1;
+        dictid = adler32(dictid, dictionary, dictLength, 0);
+        if (dictid !== state.check) {
+          return Z_DATA_ERROR;
+        }
+      }
+      ret = updatewindow(strm, dictionary, dictLength, dictLength);
+      if (ret) {
+        state.mode = MEM;
+        return Z_MEM_ERROR;
+      }
+      state.havedict = 1;
+      return Z_OK;
+    }
+    exports2.inflateReset = inflateReset;
+    exports2.inflateReset2 = inflateReset2;
+    exports2.inflateResetKeep = inflateResetKeep;
+    exports2.inflateInit = inflateInit;
+    exports2.inflateInit2 = inflateInit2;
+    exports2.inflate = inflate2;
+    exports2.inflateEnd = inflateEnd;
+    exports2.inflateGetHeader = inflateGetHeader;
+    exports2.inflateSetDictionary = inflateSetDictionary;
+    exports2.inflateInfo = "pako inflate (from Nodeca project)";
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/constants.js
+var require_constants = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/constants.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    module2.exports = {
+      /* Allowed flush values; see deflate() and inflate() below for details */
+      Z_NO_FLUSH: 0,
+      Z_PARTIAL_FLUSH: 1,
+      Z_SYNC_FLUSH: 2,
+      Z_FULL_FLUSH: 3,
+      Z_FINISH: 4,
+      Z_BLOCK: 5,
+      Z_TREES: 6,
+      /* Return codes for the compression/decompression functions. Negative values
+      * are errors, positive values are used for special but normal events.
+      */
+      Z_OK: 0,
+      Z_STREAM_END: 1,
+      Z_NEED_DICT: 2,
+      Z_ERRNO: -1,
+      Z_STREAM_ERROR: -2,
+      Z_DATA_ERROR: -3,
+      //Z_MEM_ERROR:     -4,
+      Z_BUF_ERROR: -5,
+      //Z_VERSION_ERROR: -6,
+      /* compression levels */
+      Z_NO_COMPRESSION: 0,
+      Z_BEST_SPEED: 1,
+      Z_BEST_COMPRESSION: 9,
+      Z_DEFAULT_COMPRESSION: -1,
+      Z_FILTERED: 1,
+      Z_HUFFMAN_ONLY: 2,
+      Z_RLE: 3,
+      Z_FIXED: 4,
+      Z_DEFAULT_STRATEGY: 0,
+      /* Possible values of the data_type field (though see inflate()) */
+      Z_BINARY: 0,
+      Z_TEXT: 1,
+      //Z_ASCII:                1, // = Z_TEXT (deprecated)
+      Z_UNKNOWN: 2,
+      /* The deflate compression method */
+      Z_DEFLATED: 8
+      //Z_NULL:                 null // Use -1 or null inline, depending on var type
+    };
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/gzheader.js
+var require_gzheader = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/gzheader.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function GZheader() {
+      this.text = 0;
+      this.time = 0;
+      this.xflags = 0;
+      this.os = 0;
+      this.extra = null;
+      this.extra_len = 0;
+      this.name = "";
+      this.comment = "";
+      this.hcrc = 0;
+      this.done = false;
+    }
+    module2.exports = GZheader;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/inflate.js
+var require_inflate2 = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/inflate.js"(exports2) {
+    "use strict";
+    init_globals();
+    var zlib_inflate = require_inflate();
+    var utils = require_common();
+    var strings = require_strings();
+    var c = require_constants();
+    var msg = require_messages();
+    var ZStream = require_zstream();
+    var GZheader = require_gzheader();
+    var toString3 = Object.prototype.toString;
+    function Inflate(options) {
+      if (!(this instanceof Inflate)) return new Inflate(options);
+      this.options = utils.assign({
+        chunkSize: 16384,
+        windowBits: 0,
+        to: ""
+      }, options || {});
+      var opt = this.options;
+      if (opt.raw && opt.windowBits >= 0 && opt.windowBits < 16) {
+        opt.windowBits = -opt.windowBits;
+        if (opt.windowBits === 0) {
+          opt.windowBits = -15;
+        }
+      }
+      if (opt.windowBits >= 0 && opt.windowBits < 16 && !(options && options.windowBits)) {
+        opt.windowBits += 32;
+      }
+      if (opt.windowBits > 15 && opt.windowBits < 48) {
+        if ((opt.windowBits & 15) === 0) {
+          opt.windowBits |= 15;
+        }
+      }
+      this.err = 0;
+      this.msg = "";
+      this.ended = false;
+      this.chunks = [];
+      this.strm = new ZStream();
+      this.strm.avail_out = 0;
+      var status = zlib_inflate.inflateInit2(
+        this.strm,
+        opt.windowBits
+      );
+      if (status !== c.Z_OK) {
+        throw new Error(msg[status]);
+      }
+      this.header = new GZheader();
+      zlib_inflate.inflateGetHeader(this.strm, this.header);
+      if (opt.dictionary) {
+        if (typeof opt.dictionary === "string") {
+          opt.dictionary = strings.string2buf(opt.dictionary);
+        } else if (toString3.call(opt.dictionary) === "[object ArrayBuffer]") {
+          opt.dictionary = new Uint8Array(opt.dictionary);
+        }
+        if (opt.raw) {
+          status = zlib_inflate.inflateSetDictionary(this.strm, opt.dictionary);
+          if (status !== c.Z_OK) {
+            throw new Error(msg[status]);
+          }
+        }
+      }
+    }
+    Inflate.prototype.push = function(data, mode) {
+      var strm = this.strm;
+      var chunkSize = this.options.chunkSize;
+      var dictionary = this.options.dictionary;
+      var status, _mode;
+      var next_out_utf8, tail, utf8str;
+      var allowBufError = false;
+      if (this.ended) {
+        return false;
+      }
+      _mode = mode === ~~mode ? mode : mode === true ? c.Z_FINISH : c.Z_NO_FLUSH;
+      if (typeof data === "string") {
+        strm.input = strings.binstring2buf(data);
+      } else if (toString3.call(data) === "[object ArrayBuffer]") {
+        strm.input = new Uint8Array(data);
+      } else {
+        strm.input = data;
+      }
+      strm.next_in = 0;
+      strm.avail_in = strm.input.length;
+      do {
+        if (strm.avail_out === 0) {
+          strm.output = new utils.Buf8(chunkSize);
+          strm.next_out = 0;
+          strm.avail_out = chunkSize;
+        }
+        status = zlib_inflate.inflate(strm, c.Z_NO_FLUSH);
+        if (status === c.Z_NEED_DICT && dictionary) {
+          status = zlib_inflate.inflateSetDictionary(this.strm, dictionary);
+        }
+        if (status === c.Z_BUF_ERROR && allowBufError === true) {
+          status = c.Z_OK;
+          allowBufError = false;
+        }
+        if (status !== c.Z_STREAM_END && status !== c.Z_OK) {
+          this.onEnd(status);
+          this.ended = true;
+          return false;
+        }
+        if (strm.next_out) {
+          if (strm.avail_out === 0 || status === c.Z_STREAM_END || strm.avail_in === 0 && (_mode === c.Z_FINISH || _mode === c.Z_SYNC_FLUSH)) {
+            if (this.options.to === "string") {
+              next_out_utf8 = strings.utf8border(strm.output, strm.next_out);
+              tail = strm.next_out - next_out_utf8;
+              utf8str = strings.buf2string(strm.output, next_out_utf8);
+              strm.next_out = tail;
+              strm.avail_out = chunkSize - tail;
+              if (tail) {
+                utils.arraySet(strm.output, strm.output, next_out_utf8, tail, 0);
+              }
+              this.onData(utf8str);
+            } else {
+              this.onData(utils.shrinkBuf(strm.output, strm.next_out));
+            }
+          }
+        }
+        if (strm.avail_in === 0 && strm.avail_out === 0) {
+          allowBufError = true;
+        }
+      } while ((strm.avail_in > 0 || strm.avail_out === 0) && status !== c.Z_STREAM_END);
+      if (status === c.Z_STREAM_END) {
+        _mode = c.Z_FINISH;
+      }
+      if (_mode === c.Z_FINISH) {
+        status = zlib_inflate.inflateEnd(this.strm);
+        this.onEnd(status);
+        this.ended = true;
+        return status === c.Z_OK;
+      }
+      if (_mode === c.Z_SYNC_FLUSH) {
+        this.onEnd(c.Z_OK);
+        strm.avail_out = 0;
+        return true;
+      }
+      return true;
+    };
+    Inflate.prototype.onData = function(chunk3) {
+      this.chunks.push(chunk3);
+    };
+    Inflate.prototype.onEnd = function(status) {
+      if (status === c.Z_OK) {
+        if (this.options.to === "string") {
+          this.result = this.chunks.join("");
+        } else {
+          this.result = utils.flattenChunks(this.chunks);
+        }
+      }
+      this.chunks = [];
+      this.err = status;
+      this.msg = this.strm.msg;
+    };
+    function inflate2(input, options) {
+      var inflator = new Inflate(options);
+      inflator.push(input, true);
+      if (inflator.err) {
+        throw inflator.msg || msg[inflator.err];
+      }
+      return inflator.result;
+    }
+    function inflateRaw(input, options) {
+      options = options || {};
+      options.raw = true;
+      return inflate2(input, options);
+    }
+    exports2.Inflate = Inflate;
+    exports2.inflate = inflate2;
+    exports2.inflateRaw = inflateRaw;
+    exports2.ungzip = inflate2;
+  }
+});
+
+// node_modules/.pnpm/pako@1.0.11/node_modules/pako/index.js
+var require_pako = __commonJS({
+  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/index.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    var assign2 = require_common().assign;
+    var deflate2 = require_deflate2();
+    var inflate2 = require_inflate2();
+    var constants2 = require_constants();
+    var pako2 = {};
+    assign2(pako2, deflate2, inflate2, constants2);
+    module2.exports = pako2;
+  }
+});
+
+// node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js
+var require_hdrhistogram_umd = __commonJS({
+  "node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js"(exports, module) {
+    init_globals();
+    !(function(t2, e) {
+      "object" == typeof exports && "undefined" != typeof module ? e(exports, require_pako()) : "function" == typeof define && define.amd ? define(["exports", "pako"], e) : e((t2 = "undefined" != typeof globalThis ? globalThis : t2 || self).hdr = {}, t2.pako);
+    })(exports, (function(exports, pako) {
+      "use strict";
+      function _interopNamespace(t2) {
+        if (t2 && t2.__esModule) return t2;
+        var e = /* @__PURE__ */ Object.create(null);
+        return t2 && Object.keys(t2).forEach((function(r) {
+          if ("default" !== r) {
+            var n = Object.getOwnPropertyDescriptor(t2, r);
+            Object.defineProperty(e, r, n.get ? n : { enumerable: true, get: function() {
+              return t2[r];
+            } });
+          }
+        })), e.default = t2, Object.freeze(e);
+      }
+      var pako__namespace = _interopNamespace(pako);
+      const { pow: pow$6, floor: floor$5 } = Math, TWO_POW_32 = pow$6(2, 32);
+      class ByteBuffer {
+        static allocate(t2 = 16) {
+          return new ByteBuffer(new Uint8Array(t2));
+        }
+        constructor(t2) {
+          this.position = 0, this.data = t2, this.int32ArrayForConvert = new Uint32Array(1), this.int8ArrayForConvert = new Uint8Array(this.int32ArrayForConvert.buffer);
+        }
+        put(t2) {
+          if (this.position === this.data.length) {
+            const t3 = this.data;
+            this.data = new Uint8Array(2 * this.data.length), this.data.set(t3);
+          }
+          this.data[this.position] = t2, this.position++;
+        }
+        putInt32(t2) {
+          if (this.data.length - this.position < 4) {
+            const t3 = this.data;
+            this.data = new Uint8Array(2 * this.data.length + 4), this.data.set(t3);
+          }
+          this.int32ArrayForConvert[0] = t2, this.data.set(this.int8ArrayForConvert.reverse(), this.position), this.position += 4;
+        }
+        putInt64(t2) {
+          this.putInt32(floor$5(t2 / TWO_POW_32)), this.putInt32(t2);
+        }
+        putArray(t2) {
+          if (this.data.length - this.position < t2.byteLength) {
+            const e = this.data;
+            this.data = new Uint8Array(this.position + t2.byteLength), this.data.set(e);
+          }
+          this.data.set(t2, this.position), this.position += t2.byteLength;
+        }
+        get() {
+          const t2 = this.data[this.position];
+          return this.position++, t2;
+        }
+        getInt32() {
+          this.int8ArrayForConvert.set(this.data.slice(this.position, this.position + 4).reverse());
+          const t2 = this.int32ArrayForConvert[0];
+          return this.position += 4, t2;
+        }
+        getInt64() {
+          const t2 = this.getInt32(), e = this.getInt32();
+          return t2 * TWO_POW_32 + e;
+        }
+        resetPosition() {
+          this.position = 0;
+        }
+      }
+      class HistogramIterationValue {
+        constructor() {
+          this.reset();
+        }
+        reset() {
+          this.valueIteratedTo = 0, this.valueIteratedFrom = 0, this.countAtValueIteratedTo = 0, this.countAddedInThisIterationStep = 0, this.totalCountToThisValue = 0, this.totalValueToThisValue = 0, this.percentile = 0, this.percentileLevelIteratedTo = 0;
+        }
+      }
+      class JsHistogramIterator {
+        constructor() {
+          this.currentIterationValue = new HistogramIterationValue();
+        }
+        resetIterator(t2) {
+          this.histogram = t2, this.savedHistogramTotalRawCount = t2.totalCount, this.arrayTotalCount = t2.totalCount, this.currentIndex = 0, this.currentValueAtIndex = 0, this.nextValueAtIndex = Math.pow(2, t2.unitMagnitude), this.prevValueIteratedTo = 0, this.totalCountToPrevIndex = 0, this.totalCountToCurrentIndex = 0, this.totalValueToCurrentIndex = 0, this.countAtThisValue = 0, this.freshSubBucket = true, this.currentIterationValue.reset();
+        }
+        hasNext() {
+          if (this.histogram.totalCount !== this.savedHistogramTotalRawCount) throw "Concurrent Modification Exception";
+          return this.totalCountToCurrentIndex < this.arrayTotalCount;
+        }
+        next() {
+          for (; !this.exhaustedSubBuckets(); ) {
+            if (this.countAtThisValue = this.histogram.getCountAtIndex(this.currentIndex), this.freshSubBucket && (this.totalCountToCurrentIndex += this.countAtThisValue, this.totalValueToCurrentIndex += this.countAtThisValue * this.histogram.highestEquivalentValue(this.currentValueAtIndex), this.freshSubBucket = false), this.reachedIterationLevel()) {
+              const t2 = this.getValueIteratedTo();
+              if (Object.assign(this.currentIterationValue, { valueIteratedTo: t2, valueIteratedFrom: this.prevValueIteratedTo, countAtValueIteratedTo: this.countAtThisValue, countAddedInThisIterationStep: this.totalCountToCurrentIndex - this.totalCountToPrevIndex, totalCountToThisValue: this.totalCountToCurrentIndex, totalValueToThisValue: this.totalValueToCurrentIndex, percentile: 100 * this.totalCountToCurrentIndex / this.arrayTotalCount, percentileLevelIteratedTo: this.getPercentileIteratedTo() }), this.prevValueIteratedTo = t2, this.totalCountToPrevIndex = this.totalCountToCurrentIndex, this.incrementIterationLevel(), this.histogram.totalCount !== this.savedHistogramTotalRawCount) throw new Error("Concurrent Modification Exception");
+              return this.currentIterationValue;
+            }
+            this.incrementSubBucket();
+          }
+          throw new Error("Index Out Of Bounds Exception");
+        }
+        getPercentileIteratedTo() {
+          return 100 * this.totalCountToCurrentIndex / this.arrayTotalCount;
+        }
+        getPercentileIteratedFrom() {
+          return 100 * this.totalCountToPrevIndex / this.arrayTotalCount;
+        }
+        getValueIteratedTo() {
+          return this.histogram.highestEquivalentValue(this.currentValueAtIndex);
+        }
+        exhaustedSubBuckets() {
+          return this.currentIndex >= this.histogram.countsArrayLength;
+        }
+        incrementSubBucket() {
+          this.freshSubBucket = true, this.currentIndex++, this.currentValueAtIndex = this.histogram.valueFromIndex(this.currentIndex), this.nextValueAtIndex = this.histogram.valueFromIndex(this.currentIndex + 1);
+        }
+      }
+      class RecordedValuesIterator extends JsHistogramIterator {
+        constructor(t2) {
+          super(), this.doReset(t2);
+        }
+        reset() {
+          this.doReset(this.histogram);
+        }
+        doReset(t2) {
+          super.resetIterator(t2), this.visitedIndex = -1;
+        }
+        incrementIterationLevel() {
+          this.visitedIndex = this.currentIndex;
+        }
+        reachedIterationLevel() {
+          return 0 != this.histogram.getCountAtIndex(this.currentIndex) && this.visitedIndex !== this.currentIndex;
+        }
+      }
+      const { pow: pow$5, floor: floor$4, log2: log2$2 } = Math;
+      class PercentileIterator extends JsHistogramIterator {
+        constructor(t2, e) {
+          super(), this.percentileTicksPerHalfDistance = 0, this.percentileLevelToIterateTo = 0, this.percentileLevelToIterateFrom = 0, this.reachedLastRecordedValue = false, this.doReset(t2, e);
+        }
+        reset(t2) {
+          this.doReset(this.histogram, t2);
+        }
+        doReset(t2, e) {
+          super.resetIterator(t2), this.percentileTicksPerHalfDistance = e, this.percentileLevelToIterateTo = 0, this.percentileLevelToIterateFrom = 0, this.reachedLastRecordedValue = false;
+        }
+        hasNext() {
+          return !!super.hasNext() || !this.reachedLastRecordedValue && this.arrayTotalCount > 0 && (this.percentileLevelToIterateTo = 100, this.reachedLastRecordedValue = true, true);
+        }
+        incrementIterationLevel() {
+          this.percentileLevelToIterateFrom = this.percentileLevelToIterateTo;
+          const t2 = this.percentileTicksPerHalfDistance * pow$5(2, floor$4(log2$2(100 / (100 - this.percentileLevelToIterateTo))) + 1);
+          this.percentileLevelToIterateTo += 100 / t2;
+        }
+        reachedIterationLevel() {
+          if (0 === this.countAtThisValue) return false;
+          return 100 * this.totalCountToCurrentIndex / this.arrayTotalCount >= this.percentileLevelToIterateTo;
+        }
+        getPercentileIteratedTo() {
+          return this.percentileLevelToIterateTo;
+        }
+        getPercentileIteratedFrom() {
+          return this.percentileLevelToIterateFrom;
+        }
+      }
+      const leftPadding = (t2) => (e) => e.length < t2 ? " ".repeat(t2 - e.length) + e : e, integerFormatter = (t2) => {
+        const e = leftPadding(t2);
+        return (t3) => e("" + t3);
+      }, { floor: floor$3, log10, pow: pow$4 } = Math, numberOfDigits = (t2) => floor$3(log10(t2) + 1), keepSignificantDigits = (t2) => (e) => {
+        const r = numberOfDigits(e);
+        if (r > t2) {
+          return e - e % pow$4(10, r - t2);
+        }
+        return e;
+      }, floatFormatter = (t2, e) => {
+        const r = new Intl.NumberFormat("en-US", { maximumFractionDigits: e, minimumFractionDigits: e, useGrouping: false }), n = leftPadding(t2);
+        return (t3) => n(r.format(t3));
+      }, ulp = (t2) => Math.pow(2, Math.floor(Math.log2(t2)) - 52), NO_TAG = "NO TAG", toSummary = (t2) => {
+        const { totalCount: e, maxValue: r, numberOfSignificantValueDigits: n } = t2, i2 = keepSignificantDigits(n);
+        return { p50: i2(t2.getValueAtPercentile(50)), p75: i2(t2.getValueAtPercentile(75)), p90: i2(t2.getValueAtPercentile(90)), p97_5: i2(t2.getValueAtPercentile(97.5)), p99: i2(t2.getValueAtPercentile(99)), p99_9: i2(t2.getValueAtPercentile(99.9)), p99_99: i2(t2.getValueAtPercentile(99.99)), p99_999: i2(t2.getValueAtPercentile(99.999)), max: r, totalCount: e };
+      }, { pow: pow$3, floor: floor$2, ceil: ceil$1, log2: log2$1, max: max$2, min } = Math;
+      class JsHistogram {
+        incrementTotalCount() {
+          this._totalCount++;
+        }
+        addToTotalCount(t2) {
+          this._totalCount += t2;
+        }
+        setTotalCount(t2) {
+          this._totalCount = t2;
+        }
+        get totalCount() {
+          return this._totalCount;
+        }
+        updatedMaxValue(t2) {
+          const e = t2 + this.unitMagnitudeMask;
+          this.maxValue = e;
+        }
+        updateMinNonZeroValue(t2) {
+          if (t2 <= this.unitMagnitudeMask) return;
+          const e = floor$2(t2 / this.lowestDiscernibleValueRounded) * this.lowestDiscernibleValueRounded;
+          this.minNonZeroValue = e;
+        }
+        constructor(t2, e, r) {
+          if (this.autoResize = false, this.startTimeStampMsec = Number.MAX_SAFE_INTEGER, this.endTimeStampMsec = 0, this.tag = NO_TAG, this.maxValue = 0, this.minNonZeroValue = Number.MAX_SAFE_INTEGER, this.identity = 0, this.highestTrackableValue = 0, this.lowestDiscernibleValue = 0, this.numberOfSignificantValueDigits = 0, this.bucketCount = 0, this.subBucketCount = 0, this.countsArrayLength = 0, this.wordSizeInBytes = 0, t2 < 1) throw new Error("lowestDiscernibleValue must be >= 1");
+          if (e < 2 * t2) throw new Error(`highestTrackableValue must be >= 2 * lowestDiscernibleValue ( 2 * ${t2} )`);
+          if (r < 0 || r > 5) throw new Error("numberOfSignificantValueDigits must be between 0 and 5");
+          this.identity = JsHistogram.identityBuilder++, this.init(t2, e, r);
+        }
+        init(t2, e, r) {
+          this.lowestDiscernibleValue = t2, this.highestTrackableValue = e, this.numberOfSignificantValueDigits = r;
+          const n = 2 * floor$2(pow$3(10, r));
+          this.unitMagnitude = floor$2(log2$1(t2)), this.lowestDiscernibleValueRounded = pow$3(2, this.unitMagnitude), this.unitMagnitudeMask = this.lowestDiscernibleValueRounded - 1;
+          const i2 = ceil$1(log2$1(n));
+          this.subBucketHalfCountMagnitude = (i2 > 1 ? i2 : 1) - 1, this.subBucketCount = pow$3(2, this.subBucketHalfCountMagnitude + 1), this.subBucketHalfCount = this.subBucketCount / 2, this.subBucketMask = (floor$2(this.subBucketCount) - 1) * pow$3(2, this.unitMagnitude), this.establishSize(e), this.leadingZeroCountBase = 53 - this.unitMagnitude - this.subBucketHalfCountMagnitude - 1, this.percentileIterator = new PercentileIterator(this, 1), this.recordedValuesIterator = new RecordedValuesIterator(this);
+        }
+        establishSize(t2) {
+          this.countsArrayLength = this.determineArrayLengthNeeded(t2), this.bucketCount = this.getBucketsNeededToCoverValue(t2), this.highestTrackableValue = t2;
+        }
+        determineArrayLengthNeeded(t2) {
+          if (t2 < 2 * this.lowestDiscernibleValue) throw new Error("highestTrackableValue (" + t2 + ") cannot be < (2 * lowestDiscernibleValue)");
+          return this.getLengthForNumberOfBuckets(this.getBucketsNeededToCoverValue(t2));
+        }
+        getLengthForNumberOfBuckets(t2) {
+          return (t2 + 1) * (this.subBucketCount / 2);
+        }
+        getBucketsNeededToCoverValue(t2) {
+          let e = this.subBucketCount * pow$3(2, this.unitMagnitude), r = 1;
+          for (; e <= t2; ) {
+            if (e > Number.MAX_SAFE_INTEGER / 2) return r + 1;
+            e *= 2, r++;
+          }
+          return r;
+        }
+        recordValue(t2) {
+          this.recordSingleValue(t2);
+        }
+        recordSingleValue(t2) {
+          const e = this.countsArrayIndex(t2);
+          e >= this.countsArrayLength ? this.handleRecordException(1, t2) : this.incrementCountAtIndex(e), this.updateMinAndMax(t2), this.incrementTotalCount();
+        }
+        handleRecordException(t2, e) {
+          if (!this.autoResize) throw new Error("Value " + e + " is outside of histogram covered range");
+          this.resize(e);
+          var r = this.countsArrayIndex(e);
+          this.addToCountAtIndex(r, t2), this.highestTrackableValue = this.highestEquivalentValue(this.valueFromIndex(this.countsArrayLength - 1));
+        }
+        countsArrayIndex(t2) {
+          if (t2 < 0) throw new Error("Histogram recorded value cannot be negative.");
+          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
+          return this.computeCountsArrayIndex(e, r);
+        }
+        computeCountsArrayIndex(t2, e) {
+          return (t2 + 1) * pow$3(2, this.subBucketHalfCountMagnitude) + (e - this.subBucketHalfCount);
+        }
+        getBucketIndex(t2) {
+          return max$2(floor$2(log2$1(t2)) - this.subBucketHalfCountMagnitude - this.unitMagnitude, 0);
+        }
+        getSubBucketIndex(t2, e) {
+          return floor$2(t2 / pow$3(2, e + this.unitMagnitude));
+        }
+        updateMinAndMax(t2) {
+          t2 > this.maxValue && this.updatedMaxValue(t2), t2 < this.minNonZeroValue && 0 !== t2 && this.updateMinNonZeroValue(t2);
+        }
+        getValueAtPercentile(t2) {
+          const e = min(t2, 100) / 100 * this.totalCount, r = max$2(ceil$1(e - ulp(e)), 1);
+          let n = 0;
+          for (let e2 = 0; e2 < this.countsArrayLength; e2++) if (n += this.getCountAtIndex(e2), n >= r) {
+            var i2 = this.valueFromIndex(e2);
+            return 0 === t2 ? this.lowestEquivalentValue(i2) : this.highestEquivalentValue(i2);
+          }
+          return 0;
+        }
+        valueFromIndexes(t2, e) {
+          return e * pow$3(2, t2 + this.unitMagnitude);
+        }
+        valueFromIndex(t2) {
+          let e = floor$2(t2 / this.subBucketHalfCount) - 1, r = t2 % this.subBucketHalfCount + this.subBucketHalfCount;
+          return e < 0 && (r -= this.subBucketHalfCount, e = 0), this.valueFromIndexes(e, r);
+        }
+        lowestEquivalentValue(t2) {
+          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
+          return this.valueFromIndexes(e, r);
+        }
+        highestEquivalentValue(t2) {
+          return this.nextNonEquivalentValue(t2) - 1;
+        }
+        nextNonEquivalentValue(t2) {
+          return this.lowestEquivalentValue(t2) + this.sizeOfEquivalentValueRange(t2);
+        }
+        sizeOfEquivalentValueRange(t2) {
+          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
+          return pow$3(2, this.unitMagnitude + (r >= this.subBucketCount ? e + 1 : e));
+        }
+        medianEquivalentValue(t2) {
+          return this.lowestEquivalentValue(t2) + floor$2(this.sizeOfEquivalentValueRange(t2) / 2);
+        }
+        get mean() {
+          if (0 === this.totalCount) return 0;
+          this.recordedValuesIterator.reset();
+          let t2 = 0;
+          for (; this.recordedValuesIterator.hasNext(); ) {
+            const e = this.recordedValuesIterator.next();
+            t2 += this.medianEquivalentValue(e.valueIteratedTo) * e.countAtValueIteratedTo;
+          }
+          return t2 / this.totalCount;
+        }
+        getStdDeviation(t2 = this.mean) {
+          if (0 === this.totalCount) return 0;
+          let e = 0;
+          for (this.recordedValuesIterator.reset(); this.recordedValuesIterator.hasNext(); ) {
+            const r = this.recordedValuesIterator.next(), n = this.medianEquivalentValue(r.valueIteratedTo) - t2;
+            e += n * n * r.countAddedInThisIterationStep;
+          }
+          return Math.sqrt(e / this.totalCount);
+        }
+        get stdDeviation() {
+          if (0 === this.totalCount) return 0;
+          const t2 = this.mean;
+          let e = 0;
+          for (this.recordedValuesIterator.reset(); this.recordedValuesIterator.hasNext(); ) {
+            const r = this.recordedValuesIterator.next(), n = this.medianEquivalentValue(r.valueIteratedTo) - t2;
+            e += n * n * r.countAddedInThisIterationStep;
+          }
+          return Math.sqrt(e / this.totalCount);
+        }
+        outputPercentileDistribution(t2 = 5, e = 1, r = false) {
+          let n = "";
+          n += r ? '"Value","Percentile","TotalCount","1/(1-Percentile)"\n' : "       Value     Percentile TotalCount 1/(1-Percentile)\n\n";
+          const i2 = this.percentileIterator;
+          let s, o;
+          if (i2.reset(t2), r) {
+            const t3 = floatFormatter(0, this.numberOfSignificantValueDigits), r2 = floatFormatter(0, 12), n2 = floatFormatter(0, 2);
+            s = (i3) => t3(i3.valueIteratedTo / e) + "," + r2(i3.percentileLevelIteratedTo / 100) + "," + i3.totalCountToThisValue + "," + n2(1 / (1 - i3.percentileLevelIteratedTo / 100)) + "\n", o = (n3) => t3(n3.valueIteratedTo / e) + "," + r2(n3.percentileLevelIteratedTo / 100) + "," + n3.totalCountToThisValue + ",Infinity\n";
+          } else {
+            const t3 = floatFormatter(12, this.numberOfSignificantValueDigits), r2 = floatFormatter(2, 12), n2 = integerFormatter(10), i3 = floatFormatter(14, 2);
+            s = (s2) => t3(s2.valueIteratedTo / e) + " " + r2(s2.percentileLevelIteratedTo / 100) + " " + n2(s2.totalCountToThisValue) + " " + i3(1 / (1 - s2.percentileLevelIteratedTo / 100)) + "\n", o = (i4) => t3(i4.valueIteratedTo / e) + " " + r2(i4.percentileLevelIteratedTo / 100) + " " + n2(i4.totalCountToThisValue) + "\n";
+          }
+          for (; i2.hasNext(); ) {
+            const t3 = i2.next();
+            t3.percentileLevelIteratedTo < 100 ? n += s(t3) : n += o(t3);
+          }
+          if (!r) {
+            const t3 = floatFormatter(12, this.numberOfSignificantValueDigits), r2 = this.mean, i3 = t3(r2 / e), s2 = t3(this.getStdDeviation(r2) / e), o2 = t3(this.maxValue / e), a = integerFormatter(12);
+            n += `#[Mean    = ${i3}, StdDeviation   = ${s2}]
+#[Max     = ${o2}, Total count    = ${a(this.totalCount)}]
+#[Buckets = ${a(this.bucketCount)}, SubBuckets     = ${a(this.subBucketCount)}]
+`;
+          }
+          return n;
+        }
+        get summary() {
+          return toSummary(this);
+        }
+        toJSON() {
+          return this.summary;
+        }
+        inspect() {
+          return this.toString();
+        }
+        [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+          return this.toString();
+        }
+        get estimatedFootprintInBytes() {
+          return this._getEstimatedFootprintInBytes();
+        }
+        recordSingleValueWithExpectedInterval(t2, e) {
+          if (this.recordSingleValue(t2), !(e <= 0)) for (let r = t2 - e; r >= e; r -= e) this.recordSingleValue(r);
+        }
+        recordCountAtValue(t2, e) {
+          const r = this.countsArrayIndex(e);
+          r >= this.countsArrayLength ? this.handleRecordException(t2, e) : this.addToCountAtIndex(r, t2), this.updateMinAndMax(e), this.addToTotalCount(t2);
+        }
+        recordValueWithCount(t2, e) {
+          this.recordCountAtValue(e, t2);
+        }
+        recordValueWithExpectedInterval(t2, e) {
+          this.recordSingleValueWithExpectedInterval(t2, e);
+        }
+        recordValueWithCountAndExpectedInterval(t2, e, r) {
+          if (this.recordCountAtValue(e, t2), !(r <= 0)) for (let n = t2 - r; n >= r; n -= r) this.recordCountAtValue(e, n);
+        }
+        addWhileCorrectingForCoordinatedOmission(t2, e) {
+          const r = this, n = new RecordedValuesIterator(t2);
+          for (; n.hasNext(); ) {
+            const t3 = n.next();
+            r.recordValueWithCountAndExpectedInterval(t3.valueIteratedTo, t3.countAtValueIteratedTo, e);
+          }
+        }
+        add(t2) {
+          if (!(t2 instanceof JsHistogram)) throw new Error("Cannot add a WASM histogram to a regular JS histogram");
+          if (this.highestEquivalentValue(this.valueFromIndex(this.countsArrayLength - 1)) < t2.maxValue) {
+            if (!this.autoResize) throw new Error("The other histogram includes values that do not fit in this histogram's range.");
+            this.resize(t2.maxValue);
+          }
+          if (this.bucketCount === t2.bucketCount && this.subBucketCount === t2.subBucketCount && this.unitMagnitude === t2.unitMagnitude) {
+            let e = 0;
+            for (let r = 0; r < t2.countsArrayLength; r++) {
+              const n = t2.getCountAtIndex(r);
+              n > 0 && (this.addToCountAtIndex(r, n), e += n);
+            }
+            this.setTotalCount(this.totalCount + e), this.updatedMaxValue(max$2(this.maxValue, t2.maxValue)), this.updateMinNonZeroValue(min(this.minNonZeroValue, t2.minNonZeroValue));
+          } else {
+            const e = t2.countsArrayIndex(t2.maxValue);
+            let r = t2.getCountAtIndex(e);
+            this.recordCountAtValue(r, t2.valueFromIndex(e));
+            for (let n = 0; n < e; n++) r = t2.getCountAtIndex(n), r > 0 && this.recordCountAtValue(r, t2.valueFromIndex(n));
+          }
+          this.startTimeStampMsec = min(this.startTimeStampMsec, t2.startTimeStampMsec), this.endTimeStampMsec = max$2(this.endTimeStampMsec, t2.endTimeStampMsec);
+        }
+        getCountAtValue(t2) {
+          const e = min(max$2(0, this.countsArrayIndex(t2)), this.countsArrayLength - 1);
+          return this.getCountAtIndex(e);
+        }
+        subtract(t2) {
+          const e = this.valueFromIndex(this.countsArrayLength - 1);
+          if (!(t2 instanceof JsHistogram)) throw new Error("Cannot subtract a WASM histogram to a regular JS histogram");
+          if (e < t2.maxValue) {
+            if (!this.autoResize) throw new Error("The other histogram includes values that do not fit in this histogram's range.");
+            this.resize(t2.maxValue);
+          }
+          if (this.bucketCount === t2.bucketCount && this.subBucketCount === t2.subBucketCount && this.unitMagnitude === t2.unitMagnitude) {
+            let e2 = 0;
+            for (let r = 0; r < t2.countsArrayLength; r++) {
+              const n = t2.getCountAtIndex(r);
+              n > 0 && (this.addToCountAtIndex(r, -n), e2 += n);
+            }
+            this.setTotalCount(this.totalCount - e2);
+          } else for (let e2 = 0; e2 < t2.countsArrayLength; e2++) {
+            const r = t2.getCountAtIndex(e2);
+            if (r > 0) {
+              const n = t2.valueFromIndex(e2);
+              if (this.getCountAtValue(n) < r) throw new Error("otherHistogram count (" + r + ") at value " + n + " is larger than this one's (" + this.getCountAtValue(n) + ")");
+              this.recordCountAtValue(-r, n);
+            }
+          }
+          (this.getCountAtValue(this.maxValue) <= 0 || this.getCountAtValue(this.minNonZeroValue) <= 0) && this.establishInternalTackingValues();
+        }
+        establishInternalTackingValues(t2 = this.countsArrayLength) {
+          this.maxValue = 0, this.minNonZeroValue = Number.MAX_VALUE;
+          let e = -1, r = -1, n = 0;
+          for (let i2 = 0; i2 < t2; i2++) {
+            const t3 = this.getCountAtIndex(i2);
+            t3 > 0 && (n += t3, e = i2, -1 == r && 0 != i2 && (r = i2));
+          }
+          e >= 0 && this.updatedMaxValue(this.highestEquivalentValue(this.valueFromIndex(e))), r >= 0 && this.updateMinNonZeroValue(this.valueFromIndex(r)), this.setTotalCount(n);
+        }
+        reset() {
+          this.clearCounts(), this.setTotalCount(0), this.startTimeStampMsec = 0, this.endTimeStampMsec = 0, this.tag = NO_TAG, this.maxValue = 0, this.minNonZeroValue = Number.MAX_SAFE_INTEGER;
+        }
+        destroy() {
+        }
+      }
+      function __awaiter(t2, e, r, n) {
+        return new (r || (r = Promise))((function(i2, s) {
+          function o(t3) {
+            try {
+              u(n.next(t3));
+            } catch (t4) {
+              s(t4);
+            }
+          }
+          function a(t3) {
+            try {
+              u(n.throw(t3));
+            } catch (t4) {
+              s(t4);
+            }
+          }
+          function u(t3) {
+            var e2;
+            t3.done ? i2(t3.value) : (e2 = t3.value, e2 instanceof r ? e2 : new r((function(t4) {
+              t4(e2);
+            }))).then(o, a);
+          }
+          u((n = n.apply(t2, e || [])).next());
+        }));
+      }
+      const BINARY = "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";
+      for (var toByteArray_1 = toByteArray, fromByteArray_1 = fromByteArray, lookup = [], revLookup = [], Arr = "undefined" != typeof Uint8Array ? Uint8Array : Array, code = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", i = 0, len = code.length; i < len; ++i) lookup[i] = code[i], revLookup[code.charCodeAt(i)] = i;
+      function getLens(t2) {
+        var e = t2.length;
+        if (e % 4 > 0) throw new Error("Invalid string. Length must be a multiple of 4");
+        var r = t2.indexOf("=");
+        return -1 === r && (r = e), [r, r === e ? 0 : 4 - r % 4];
+      }
+      function _byteLength(t2, e, r) {
+        return 3 * (e + r) / 4 - r;
+      }
+      function toByteArray(t2) {
+        var e, r, n = getLens(t2), i2 = n[0], s = n[1], o = new Arr(_byteLength(t2, i2, s)), a = 0, u = s > 0 ? i2 - 4 : i2;
+        for (r = 0; r < u; r += 4) e = revLookup[t2.charCodeAt(r)] << 18 | revLookup[t2.charCodeAt(r + 1)] << 12 | revLookup[t2.charCodeAt(r + 2)] << 6 | revLookup[t2.charCodeAt(r + 3)], o[a++] = e >> 16 & 255, o[a++] = e >> 8 & 255, o[a++] = 255 & e;
+        return 2 === s && (e = revLookup[t2.charCodeAt(r)] << 2 | revLookup[t2.charCodeAt(r + 1)] >> 4, o[a++] = 255 & e), 1 === s && (e = revLookup[t2.charCodeAt(r)] << 10 | revLookup[t2.charCodeAt(r + 1)] << 4 | revLookup[t2.charCodeAt(r + 2)] >> 2, o[a++] = e >> 8 & 255, o[a++] = 255 & e), o;
+      }
+      function tripletToBase64(t2) {
+        return lookup[t2 >> 18 & 63] + lookup[t2 >> 12 & 63] + lookup[t2 >> 6 & 63] + lookup[63 & t2];
+      }
+      function encodeChunk(t2, e, r) {
+        for (var n, i2 = [], s = e; s < r; s += 3) n = (t2[s] << 16 & 16711680) + (t2[s + 1] << 8 & 65280) + (255 & t2[s + 2]), i2.push(tripletToBase64(n));
+        return i2.join("");
+      }
+      function fromByteArray(t2) {
+        for (var e, r = t2.length, n = r % 3, i2 = [], s = 0, o = r - n; s < o; s += 16383) i2.push(encodeChunk(t2, s, s + 16383 > o ? o : s + 16383));
+        return 1 === n ? (e = t2[r - 1], i2.push(lookup[e >> 2] + lookup[e << 4 & 63] + "==")) : 2 === n && (e = (t2[r - 2] << 8) + t2[r - 1], i2.push(lookup[e >> 10] + lookup[e >> 4 & 63] + lookup[e << 2 & 63] + "=")), i2.join("");
+      }
+      revLookup["-".charCodeAt(0)] = 62, revLookup["_".charCodeAt(0)] = 63;
+      const ID_OFFSET = -8, SIZE_OFFSET = -4, ARRAYBUFFER_ID = 0, STRING_ID = 1, ARRAYBUFFERVIEW = 1, ARRAY = 2, STATICARRAY = 4, VAL_ALIGN_OFFSET = 6, VAL_SIGNED = 2048, VAL_FLOAT = 4096, VAL_MANAGED = 16384, ARRAYBUFFERVIEW_BUFFER_OFFSET = 0, ARRAYBUFFERVIEW_DATASTART_OFFSET = 4, ARRAYBUFFERVIEW_BYTELENGTH_OFFSET = 8, ARRAYBUFFERVIEW_SIZE = 12, ARRAY_LENGTH_OFFSET = 12, ARRAY_SIZE = 16, E_NO_EXPORT_TABLE = "Operation requires compiling with --exportTable", E_NO_EXPORT_RUNTIME = "Operation requires compiling with --exportRuntime", F_NO_EXPORT_RUNTIME = () => {
+        throw Error(E_NO_EXPORT_RUNTIME);
+      }, BIGINT = "undefined" != typeof BigUint64Array, THIS = /* @__PURE__ */ Symbol(), STRING_SMALLSIZE = 192, STRING_CHUNKSIZE = 1024, utf16 = new TextDecoder("utf-16le", { fatal: true });
+      function getStringImpl(t2, e) {
+        let r = new Uint32Array(t2)[e + SIZE_OFFSET >>> 2] >>> 1;
+        const n = new Uint16Array(t2, e, r);
+        if (r <= STRING_SMALLSIZE) return String.fromCharCode(...n);
+        try {
+          return utf16.decode(n);
+        } catch {
+          let t3 = "", e2 = 0;
+          for (; r - e2 > STRING_CHUNKSIZE; ) t3 += String.fromCharCode(...n.subarray(e2, e2 += STRING_CHUNKSIZE));
+          return t3 + String.fromCharCode(...n.subarray(e2));
+        }
+      }
+      function preInstantiate(t2) {
+        const e = {};
+        function r(t3, e2) {
+          return t3 ? getStringImpl(t3.buffer, e2) : "<yet unknown>";
+        }
+        const n = t2.env = t2.env || {};
+        return n.abort = n.abort || function(t3, i2, s, o) {
+          const a = e.memory || n.memory;
+          throw Error(`abort: ${r(a, t3)} at ${r(a, i2)}:${s}:${o}`);
+        }, n.trace = n.trace || function(t3, i2, ...s) {
+          const o = e.memory || n.memory;
+          console.log(`trace: ${r(o, t3)}${i2 ? " " : ""}${s.slice(0, i2).join(", ")}`);
+        }, n.seed = n.seed || Date.now, t2.Math = t2.Math || Math, t2.Date = t2.Date || Date, e;
+      }
+      function postInstantiate(t2, e) {
+        const r = e.exports, n = r.memory, i2 = r.table, s = r.__new || F_NO_EXPORT_RUNTIME, o = r.__pin || F_NO_EXPORT_RUNTIME, a = r.__unpin || F_NO_EXPORT_RUNTIME, u = r.__collect || F_NO_EXPORT_RUNTIME, l = r.__rtti_base, h = l ? (t3) => t3[l >>> 2] : F_NO_EXPORT_RUNTIME;
+        function c(t3) {
+          const e2 = new Uint32Array(n.buffer);
+          if ((t3 >>>= 0) >= h(e2)) throw Error("invalid id: " + t3);
+          return e2[(l + 4 >>> 2) + (t3 << 1) + 1];
+        }
+        function d(t3) {
+          const e2 = (function(t4) {
+            const e3 = new Uint32Array(n.buffer);
+            if ((t4 >>>= 0) >= h(e3)) throw Error("invalid id: " + t4);
+            return e3[(l + 4 >>> 2) + (t4 << 1)];
+          })(t3);
+          if (!(e2 & (ARRAYBUFFERVIEW | ARRAY | STATICARRAY))) throw Error(`not an array: ${t3}, flags=${e2}`);
+          return e2;
+        }
+        function g(t3) {
+          return 31 - Math.clz32(t3 >>> VAL_ALIGN_OFFSET & 31);
+        }
+        function m(t3, e2, r2) {
+          const i3 = n.buffer;
+          if (r2) switch (t3) {
+            case 2:
+              return new Float32Array(i3);
+            case 3:
+              return new Float64Array(i3);
+          }
+          else switch (t3) {
+            case 0:
+              return new (e2 ? Int8Array : Uint8Array)(i3);
+            case 1:
+              return new (e2 ? Int16Array : Uint16Array)(i3);
+            case 2:
+              return new (e2 ? Int32Array : Uint32Array)(i3);
+            case 3:
+              return new (e2 ? BigInt64Array : BigUint64Array)(i3);
+          }
+          throw Error("unsupported align: " + t3);
+        }
+        function p2(t3) {
+          const e2 = new Uint32Array(n.buffer), r2 = d(e2[t3 + ID_OFFSET >>> 2]), i3 = g(r2);
+          let s2 = r2 & STATICARRAY ? t3 : e2[t3 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2];
+          const o2 = r2 & ARRAY ? e2[t3 + ARRAY_LENGTH_OFFSET >>> 2] : e2[s2 + SIZE_OFFSET >>> 2] >>> i3;
+          return m(i3, r2 & VAL_SIGNED, r2 & VAL_FLOAT).subarray(s2 >>>= i3, s2 + o2);
+        }
+        function f(t3, e2, r2) {
+          return new t3(A(t3, e2, r2));
+        }
+        function A(t3, e2, r2) {
+          const i3 = n.buffer, s2 = new Uint32Array(i3);
+          return new t3(i3, s2[r2 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2], s2[r2 + ARRAYBUFFERVIEW_BYTELENGTH_OFFSET >>> 2] >>> e2);
+        }
+        function I(e2, r2, n2) {
+          t2["__get" + r2] = f.bind(null, e2, n2), t2[`__get${r2}View`] = A.bind(null, e2, n2);
+        }
+        return t2.__new = s, t2.__pin = o, t2.__unpin = a, t2.__collect = u, t2.__newString = function(t3) {
+          if (null == t3) return 0;
+          const e2 = t3.length, r2 = s(e2 << 1, STRING_ID), i3 = new Uint16Array(n.buffer);
+          for (var o2 = 0, a2 = r2 >>> 1; o2 < e2; ++o2) i3[a2 + o2] = t3.charCodeAt(o2);
+          return r2;
+        }, t2.__newArrayBuffer = function(t3) {
+          if (null == t3) return 0;
+          const e2 = new Uint8Array(t3), r2 = s(e2.length, ARRAYBUFFER_ID);
+          return new Uint8Array(n.buffer).set(e2, r2), r2;
+        }, t2.__getString = function(t3) {
+          if (!t3) return null;
+          const e2 = n.buffer;
+          if (new Uint32Array(e2)[t3 + ID_OFFSET >>> 2] !== STRING_ID) throw Error("not a string: " + t3);
+          return getStringImpl(e2, t3);
+        }, t2.__newArray = function(t3, e2 = 0) {
+          const r2 = e2, i3 = d(t3), u2 = g(i3), l2 = "number" != typeof r2, h2 = l2 ? r2.length : r2, c2 = s(h2 << u2, i3 & STATICARRAY ? t3 : ARRAYBUFFER_ID);
+          let p3;
+          if (i3 & STATICARRAY) p3 = c2;
+          else {
+            o(c2);
+            const e3 = s(i3 & ARRAY ? ARRAY_SIZE : ARRAYBUFFERVIEW_SIZE, t3);
+            a(c2);
+            const r3 = new Uint32Array(n.buffer);
+            r3[e3 + ARRAYBUFFERVIEW_BUFFER_OFFSET >>> 2] = c2, r3[e3 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2] = c2, r3[e3 + ARRAYBUFFERVIEW_BYTELENGTH_OFFSET >>> 2] = h2 << u2, i3 & ARRAY && (r3[e3 + ARRAY_LENGTH_OFFSET >>> 2] = h2), p3 = e3;
+          }
+          if (l2) {
+            const t4 = m(u2, i3 & VAL_SIGNED, i3 & VAL_FLOAT), e3 = c2 >>> u2;
+            if (i3 & VAL_MANAGED) for (let n2 = 0; n2 < h2; ++n2) t4[e3 + n2] = r2[n2];
+            else t4.set(r2, e3);
+          }
+          return p3;
+        }, t2.__getArrayView = p2, t2.__getArray = function(t3) {
+          const e2 = p2(t3), r2 = e2.length, n2 = new Array(r2);
+          for (let t4 = 0; t4 < r2; t4++) n2[t4] = e2[t4];
+          return n2;
+        }, t2.__getArrayBuffer = function(t3) {
+          const e2 = n.buffer, r2 = new Uint32Array(e2)[t3 + SIZE_OFFSET >>> 2];
+          return e2.slice(t3, t3 + r2);
+        }, t2.__getFunction = function(t3) {
+          if (!i2) throw Error(E_NO_EXPORT_TABLE);
+          const e2 = new Uint32Array(n.buffer)[t3 >>> 2];
+          return i2.get(e2);
+        }, [Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array].forEach((t3) => {
+          I(t3, t3.name, 31 - Math.clz32(t3.BYTES_PER_ELEMENT));
+        }), BIGINT && [BigUint64Array, BigInt64Array].forEach((t3) => {
+          I(t3, t3.name.slice(3), 3);
+        }), t2.__instanceof = function(t3, e2) {
+          const r2 = new Uint32Array(n.buffer);
+          let i3 = r2[t3 + ID_OFFSET >>> 2];
+          if (i3 <= h(r2)) do {
+            if (i3 == e2) return true;
+            i3 = c(i3);
+          } while (i3);
+          return false;
+        }, t2.memory = t2.memory || n, t2.table = t2.table || i2, demangle(r, t2);
+      }
+      function isResponse(t2) {
+        return "undefined" != typeof Response && t2 instanceof Response;
+      }
+      function isModule(t2) {
+        return t2 instanceof WebAssembly.Module;
+      }
+      async function instantiate(t2, e = {}) {
+        if (isResponse(t2 = await t2)) return instantiateStreaming(t2, e);
+        const r = isModule(t2) ? t2 : await WebAssembly.compile(t2), n = preInstantiate(e), i2 = await WebAssembly.instantiate(r, e);
+        return { module: r, instance: i2, exports: postInstantiate(n, i2) };
+      }
+      function instantiateSync(t2, e = {}) {
+        const r = isModule(t2) ? t2 : new WebAssembly.Module(t2), n = preInstantiate(e), i2 = new WebAssembly.Instance(r, e);
+        return { module: r, instance: i2, exports: postInstantiate(n, i2) };
+      }
+      async function instantiateStreaming(t2, e = {}) {
+        if (!WebAssembly.instantiateStreaming) return instantiate(isResponse(t2 = await t2) ? t2.arrayBuffer() : t2, e);
+        const r = preInstantiate(e), n = await WebAssembly.instantiateStreaming(t2, e), i2 = postInstantiate(r, n.instance);
+        return { ...n, exports: i2 };
+      }
+      function demangle(t2, e = {}) {
+        const r = t2.__argumentsLength ? (e2) => {
+          t2.__argumentsLength.value = e2;
+        } : t2.__setArgumentsLength || t2.__setargc || (() => {
+        });
+        for (let n of Object.keys(t2)) {
+          const i2 = t2[n];
+          let s = n.split("."), o = e;
+          for (; s.length > 1; ) {
+            let t3 = s.shift();
+            Object.hasOwn(o, t3) || (o[t3] = {}), o = o[t3];
+          }
+          let a = s[0], u = a.indexOf("#");
+          if (u >= 0) {
+            const e2 = a.substring(0, u), s2 = o[e2];
+            if (void 0 === s2 || !s2.prototype) {
+              const t3 = function(...e3) {
+                return t3.wrap(t3.prototype.constructor(0, ...e3));
+              };
+              t3.prototype = { valueOf() {
+                return this[THIS];
+              } }, t3.wrap = function(e3) {
+                return Object.create(t3.prototype, { [THIS]: { value: e3, writable: false } });
+              }, s2 && Object.getOwnPropertyNames(s2).forEach((e3) => Object.defineProperty(t3, e3, Object.getOwnPropertyDescriptor(s2, e3))), o[e2] = t3;
+            }
+            if (a = a.substring(u + 1), o = o[e2].prototype, /^(get|set):/.test(a)) {
+              if (!Object.hasOwn(o, a = a.substring(4))) {
+                let e3 = t2[n.replace("set:", "get:")], r2 = t2[n.replace("get:", "set:")];
+                Object.defineProperty(o, a, { get() {
+                  return e3(this[THIS]);
+                }, set(t3) {
+                  r2(this[THIS], t3);
+                }, enumerable: true });
+              }
+            } else "constructor" === a ? (o[a] = function(...t3) {
+              return r(t3.length), i2(...t3);
+            }).original = i2 : (o[a] = function(...t3) {
+              return r(t3.length), i2(this[THIS], ...t3);
+            }).original = i2;
+          } else /^(get|set):/.test(a) ? Object.hasOwn(o, a = a.substring(4)) || Object.defineProperty(o, a, { get: t2[n.replace("set:", "get:")], set: t2[n.replace("get:", "set:")], enumerable: true }) : "function" == typeof i2 && i2 !== r ? (o[a] = (...t3) => (r(t3.length), i2(...t3))).original = i2 : o[a] = i2;
+        }
+        return e;
+      }
+      Object.hasOwn = Object.hasOwn || function(t2, e) {
+        return Object.prototype.hasOwnProperty.call(t2, e);
+      };
+      const isNode = "undefined" != typeof process && process.version, isWorker = "function" == typeof importScripts, webAssemblyAvailable = (() => {
+        let t2 = false;
+        return t2 = isNode ? "WebAssembly" in globalThis : isWorker || "WebAssembly" in window, t2;
+      })();
+      let wasm = void 0;
+      const initWebAssembly = () => __awaiter(void 0, void 0, void 0, (function* () {
+        if (!webAssemblyAvailable) throw new Error("WebAssembly not available here!");
+        if (!wasm) return instantiate(pako__namespace.inflate(toByteArray_1(BINARY))).then((t2) => wasm = t2.exports || t2);
+      })), initWebAssemblySync = () => {
+        if (wasm) return;
+        const t2 = instantiateSync(pako__namespace.inflate(toByteArray_1(BINARY)));
+        wasm = t2.exports || t2;
+      }, webAssemblyReady = () => !!wasm, defaultRequest$1 = { bitBucketSize: 32, autoResize: true, lowestDiscernibleValue: 1, highestTrackableValue: 2, numberOfSignificantValueDigits: 3 }, remoteHistogramClassFor = (t2) => "packed" === t2 ? "PackedHistogram" : "Histogram" + t2, destroyedWasmHistogram = new Proxy({}, { get: function(t2, e) {
+        throw new Error("Cannot use a destroyed histogram");
+      } });
+      class WasmHistogram {
+        constructor(t2, e) {
+          this._wasmHistogram = t2, this._remoteHistogramClass = e, this.tag = NO_TAG, wasm.__pin(this._wasmHistogram);
+        }
+        static build(t2 = defaultRequest$1) {
+          if (!webAssemblyReady()) throw new Error("WebAssembly is not ready yet!");
+          const e = Object.assign({}, defaultRequest$1, t2), r = remoteHistogramClassFor(e.bitBucketSize);
+          return new WasmHistogram(new wasm[r](e.lowestDiscernibleValue, e.highestTrackableValue, e.numberOfSignificantValueDigits, e.autoResize), r);
+        }
+        static decode(t2, e = 32, r = 0) {
+          if (!webAssemblyReady()) throw new Error("WebAssembly is not ready yet!");
+          const n = remoteHistogramClassFor(e), i2 = "decode" + n, s = wasm.__newArray(wasm.UINT8ARRAY_ID, t2);
+          return new WasmHistogram(wasm[n].wrap(wasm[i2](s, r)), n);
+        }
+        get numberOfSignificantValueDigits() {
+          return this._wasmHistogram.numberOfSignificantValueDigits;
+        }
+        get autoResize() {
+          return !!this._wasmHistogram.autoResize;
+        }
+        set autoResize(t2) {
+          this._wasmHistogram.autoResize = t2;
+        }
+        get highestTrackableValue() {
+          return this._wasmHistogram.highestTrackableValue;
+        }
+        set highestTrackableValue(t2) {
+          this._wasmHistogram.highestTrackableValue = t2;
+        }
+        get startTimeStampMsec() {
+          return this._wasmHistogram.startTimeStampMsec;
+        }
+        set startTimeStampMsec(t2) {
+          this._wasmHistogram.startTimeStampMsec = t2;
+        }
+        get endTimeStampMsec() {
+          return this._wasmHistogram.endTimeStampMsec;
+        }
+        set endTimeStampMsec(t2) {
+          this._wasmHistogram.endTimeStampMsec = t2;
+        }
+        get totalCount() {
+          return this._wasmHistogram.totalCount;
+        }
+        get stdDeviation() {
+          return this._wasmHistogram.stdDeviation;
+        }
+        get mean() {
+          return this._wasmHistogram.mean;
+        }
+        get estimatedFootprintInBytes() {
+          return 192 + this._wasmHistogram.estimatedFootprintInBytes;
+        }
+        get minNonZeroValue() {
+          return this._wasmHistogram.minNonZeroValue;
+        }
+        get maxValue() {
+          return this._wasmHistogram.maxValue;
+        }
+        recordValue(t2) {
+          this._wasmHistogram.recordValue(t2);
+        }
+        recordValueWithCount(t2, e) {
+          this._wasmHistogram.recordValueWithCount(t2, e);
+        }
+        recordValueWithExpectedInterval(t2, e) {
+          this._wasmHistogram.recordValueWithExpectedInterval(t2, e);
+        }
+        getValueAtPercentile(t2) {
+          return this._wasmHistogram.getValueAtPercentile(t2);
+        }
+        outputPercentileDistribution(t2 = 5, e = 1, r = false) {
+          if (r) throw new Error("CSV output not supported by wasm histograms");
+          return wasm.__getString(this._wasmHistogram.outputPercentileDistribution(t2, e));
+        }
+        isDestroyed() {
+          return this._wasmHistogram === destroyedWasmHistogram;
+        }
+        get summary() {
+          return toSummary(this);
+        }
+        toJSON() {
+          return this.summary;
+        }
+        toString() {
+          return this.isDestroyed() ? "Destroyed WASM histogram" : `WASM ${this._remoteHistogramClass} ${JSON.stringify(this, null, 2)}`;
+        }
+        inspect() {
+          return this.toString();
+        }
+        [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
+          return this.toString();
+        }
+        addWhileCorrectingForCoordinatedOmission(t2, e) {
+          this._wasmHistogram.addWhileCorrectingForCoordinatedOmission(t2, e);
+        }
+        copyCorrectedForCoordinatedOmission(t2) {
+          return new WasmHistogram(wasm[this._remoteHistogramClass].wrap(this._wasmHistogram.copyCorrectedForCoordinatedOmission(t2)), this._remoteHistogramClass);
+        }
+        add(t2) {
+          if (!(t2 instanceof WasmHistogram)) throw new Error("Cannot add a regular JS histogram to a WASM histogram");
+          this._wasmHistogram["add" + t2._remoteHistogramClass](t2._wasmHistogram);
+        }
+        subtract(t2) {
+          if (!(t2 instanceof WasmHistogram)) throw new Error("Cannot subtract a regular JS histogram to a WASM histogram");
+          this._wasmHistogram["subtract" + t2._remoteHistogramClass](t2._wasmHistogram);
+        }
+        encode() {
+          const t2 = wasm.__pin(this._wasmHistogram.encode()), e = wasm.__getUint8Array(t2);
+          return wasm.__unpin(t2), e;
+        }
+        reset() {
+          this.tag = NO_TAG, this._wasmHistogram.reset();
+        }
+        destroy() {
+          wasm.__unpin(this._wasmHistogram), this._wasmHistogram = destroyedWasmHistogram;
+        }
+      }
+      const MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY = 16, MAX_SUPPORTED_PACKED_COUNTS_ARRAY_LENGTH = Math.pow(2, 13) - 1, SET_0_START_INDEX = 0, NUMBER_OF_SETS$1 = 8, LEAF_LEVEL_SHIFT = 3, NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET = 0, NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS = 1, PACKED_ARRAY_GROWTH_INCREMENT = 16, PACKED_ARRAY_GROWTH_FRACTION_POW2 = 4, { pow: pow$2, ceil, log2, max: max$1 } = Math, bitCount = (t2) => {
+        for (var e = 0; 0 !== t2; ) e += bitCount32(0 | t2), t2 /= 4294967296;
+        return e;
+      }, bitCount32 = (t2) => 16843009 * ((t2 = (858993459 & (t2 -= t2 >> 1 & 1431655765)) + (t2 >> 2 & 858993459)) + (t2 >> 4) & 252645135) >> 24;
+      class PackedArrayContext {
+        constructor(t2, e) {
+          this.populatedShortLength = 0, this.topLevelShift = Number.MAX_VALUE, this.physicalLength = Math.max(e, MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY), this.isPacked = this.physicalLength <= MAX_SUPPORTED_PACKED_COUNTS_ARRAY_LENGTH, this.isPacked || (this.physicalLength = t2), this.array = new ArrayBuffer(8 * this.physicalLength), this.initArrayViews(this.array), this.init(t2);
+        }
+        initArrayViews(t2) {
+          this.byteArray = new Uint8Array(t2), this.shortArray = new Uint16Array(t2), this.longArray = new Float64Array(t2);
+        }
+        init(t2) {
+          if (this.isPacked) {
+            this.populatedShortLength = SET_0_START_INDEX + 8;
+            for (let t3 = 0; t3 < NUMBER_OF_SETS$1; t3++) this.setAtShortIndex(SET_0_START_INDEX + t3, 0);
+            this.setVirtualLength(t2);
+          } else this.virtualLength = t2;
+        }
+        clear() {
+          this.byteArray.fill(0), this.init(this.virtualLength);
+        }
+        copyAndIncreaseSize(t2, e) {
+          const r = new PackedArrayContext(e, t2);
+          return this.isPacked && r.populateEquivalentEntriesWithEntriesFromOther(this), r;
+        }
+        getPopulatedShortLength() {
+          return this.populatedShortLength;
+        }
+        getPopulatedLongLength() {
+          return this.getPopulatedShortLength() + 3 >> 2;
+        }
+        setAtByteIndex(t2, e) {
+          this.byteArray[t2] = e;
+        }
+        getAtByteIndex(t2) {
+          return this.byteArray[t2];
+        }
+        addAtByteIndex(t2, e) {
+          const r = this.byteArray[t2] + e;
+          return this.byteArray[t2] = r, r;
+        }
+        setPopulatedLongLength(t2) {
+          this.populatedShortLength = t2 << 2;
+        }
+        getVirtualLength() {
+          return this.virtualLength;
+        }
+        length() {
+          return this.physicalLength;
+        }
+        setAtShortIndex(t2, e) {
+          this.shortArray[t2] = e;
+        }
+        setAtLongIndex(t2, e) {
+          this.longArray[t2] = e;
+        }
+        getAtShortIndex(t2) {
+          return this.shortArray[t2];
+        }
+        getIndexAtShortIndex(t2) {
+          return this.shortArray[t2];
+        }
+        setPackedSlotIndicators(t2, e) {
+          this.setAtShortIndex(t2 + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET, e);
+        }
+        getPackedSlotIndicators(t2) {
+          return 65535 & this.shortArray[t2 + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET];
+        }
+        getIndexAtEntrySlot(t2, e) {
+          return this.getAtShortIndex(t2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + e);
+        }
+        setIndexAtEntrySlot(t2, e, r) {
+          this.setAtShortIndex(t2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + e, r);
+        }
+        expandArrayIfNeeded(t2) {
+          const e = this.length();
+          if (e < this.getPopulatedLongLength() + t2) {
+            const r = max$1(t2, PACKED_ARRAY_GROWTH_INCREMENT, this.getPopulatedLongLength() >> PACKED_ARRAY_GROWTH_FRACTION_POW2);
+            this.resizeArray(e + r);
+          }
+        }
+        newEntry(t2) {
+          const e = this.populatedShortLength;
+          this.expandArrayIfNeeded(1 + (t2 >> 2)), this.populatedShortLength = e + t2;
+          for (let r = 0; r < t2; r++) this.setAtShortIndex(e + r, -1);
+          return e;
+        }
+        newLeafEntry() {
+          let t2;
+          return t2 = this.getPopulatedLongLength(), this.expandArrayIfNeeded(1), this.setPopulatedLongLength(t2 + 1), this.setAtLongIndex(t2, 0), t2;
+        }
+        consolidateEntry(t2, e) {
+          const r = this.getPackedSlotIndicators(e), n = this.getPackedSlotIndicators(t2), i2 = bitCount(n & (n ^ r) - 1), s = bitCount(n);
+          let o = 0;
+          for (let r2 = 0; r2 < s; r2++) if (r2 !== i2) {
+            const n2 = this.getIndexAtEntrySlot(e, o);
+            0 !== n2 && this.setIndexAtEntrySlot(t2, r2, n2), o++;
+          }
+        }
+        expandEntry(t2, e, r, n, i2) {
+          let s = 65535 & this.getAtShortIndex(t2);
+          s |= n;
+          const o = bitCount(s);
+          if (r >= o) throw new Error("inserted slot index is out of range given provided masks");
+          const a = o + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS;
+          let u = 0;
+          i2 ? u = this.newLeafEntry() : (u = this.newEntry(NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS), this.setPackedSlotIndicators(u, 0));
+          const l = u, h = this.newEntry(a);
+          return this.setPackedSlotIndicators(h, s), this.setIndexAtEntrySlot(h, r, l), this.setAtShortIndex(e, h), this.consolidateEntry(h, t2), h;
+        }
+        getRootEntry(t2, e = false) {
+          const r = SET_0_START_INDEX + t2;
+          let n = this.getIndexAtShortIndex(r);
+          if (0 == n) {
+            if (!e) return 0;
+            n = this.newEntry(NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS), this.setPackedSlotIndicators(n, 0), this.setAtShortIndex(r, n);
+          }
+          return n;
+        }
+        getPackedIndex(t2, e, r) {
+          if (e >= this.virtualLength) throw new Error(`Attempting access at index ${e}, beyond virtualLength ${this.virtualLength}`);
+          let n = SET_0_START_INDEX + t2, i2 = this.getRootEntry(t2, r);
+          if (0 == i2) return -1;
+          for (let t3 = this.topLevelShift; t3 >= LEAF_LEVEL_SHIFT; t3 -= 4) {
+            const s = t3 === LEAF_LEVEL_SHIFT, o = this.getPackedSlotIndicators(i2), a = 1 << (e / pow$2(2, t3) & 15), u = bitCount(o & a - 1);
+            if (0 == (o & a)) {
+              if (!r) return -1;
+              i2 = this.expandEntry(i2, n, u, a, s);
+            }
+            n = i2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + u, i2 = this.getIndexAtShortIndex(n);
+          }
+          return (i2 << 3) + (7 & e);
+        }
+        determineTopLevelShiftForVirtualLength(t2) {
+          const e = ceil(log2(t2));
+          let r = 4 * ceil((e - 3) / 4);
+          r = max$1(r, 8);
+          return r - 4 + 3;
+        }
+        setVirtualLength(t2) {
+          if (!this.isPacked) throw new Error("Should never be adjusting the virtual size of a non-packed context");
+          this.topLevelShift = this.determineTopLevelShiftForVirtualLength(t2), this.virtualLength = t2;
+        }
+        getTopLevelShift() {
+          return this.topLevelShift;
+        }
+        resizeArray(t2) {
+          const e = new Uint8Array(8 * t2);
+          e.set(this.byteArray), this.array = e.buffer, this.initArrayViews(this.array), this.physicalLength = t2;
+        }
+        populateEquivalentEntriesWithEntriesFromOther(t2) {
+          if (this.virtualLength < t2.getVirtualLength()) throw new Error("Cannot populate array of smaller virtual length");
+          for (let e = 0; e < NUMBER_OF_SETS$1; e++) {
+            const r = t2.getAtShortIndex(SET_0_START_INDEX + e);
+            if (0 == r) continue;
+            let n = SET_0_START_INDEX + e;
+            for (let e2 = this.topLevelShift; e2 > t2.topLevelShift; e2 -= 4) {
+              const t3 = NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + 1, e3 = this.newEntry(t3);
+              this.setAtShortIndex(n, e3), this.setPackedSlotIndicators(e3, 1), n = e3 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS;
+            }
+            this.copyEntriesAtLevelFromOther(t2, r, n, t2.topLevelShift);
+          }
+        }
+        copyEntriesAtLevelFromOther(t2, e, r, n) {
+          const i2 = n == LEAF_LEVEL_SHIFT, s = t2.getPackedSlotIndicators(e), o = bitCount(s), a = NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + o, u = this.newEntry(a);
+          this.setAtShortIndex(r, u), this.setAtShortIndex(u + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET, s);
+          for (let r2 = 0; r2 < o; r2++) if (i2) {
+            const n2 = this.newLeafEntry();
+            this.setIndexAtEntrySlot(u, r2, n2);
+            const i3 = t2.getIndexAtEntrySlot(e, r2);
+            this.longArray[n2] = t2.longArray[i3];
+          } else {
+            const i3 = t2.getIndexAtEntrySlot(e, r2);
+            this.copyEntriesAtLevelFromOther(t2, i3, u + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + r2, n - 4);
+          }
+        }
+        getAtUnpackedIndex(t2) {
+          return this.longArray[t2];
+        }
+        setAtUnpackedIndex(t2, e) {
+          this.longArray[t2] = e;
+        }
+        lazysetAtUnpackedIndex(t2, e) {
+          this.longArray[t2] = e;
+        }
+        incrementAndGetAtUnpackedIndex(t2) {
+          return this.longArray[t2]++, this.longArray[t2];
+        }
+        addAndGetAtUnpackedIndex(t2, e) {
+          return this.longArray[t2] += e, this.longArray[t2];
+        }
+        nonLeafEntryToString(t2, e, r) {
+          let n = "";
+          for (let t3 = 0; t3 < r; t3++) n += "  ";
+          try {
+            const i2 = this.getPackedSlotIndicators(t2);
+            n += `slotIndiators: 0x${toHex(i2)}, prevVersionIndex: 0: [ `;
+            const s = bitCount(i2);
+            for (let e2 = 0; e2 < s; e2++) n += this.getIndexAtEntrySlot(t2, e2), e2 < s - 1 && (n += ", ");
+            n += ` ] (indexShift = ${e})
+`;
+            const o = e == LEAF_LEVEL_SHIFT;
+            for (let i3 = 0; i3 < s; i3++) {
+              const s2 = this.getIndexAtEntrySlot(t2, i3);
+              n += o ? this.leafEntryToString(s2, r + 4) : this.nonLeafEntryToString(s2, e - 4, r + 4);
+            }
+          } catch (r2) {
+            n += `Exception thrown at nonLeafEnty at index ${t2} with indexShift ${e}
+`;
+          }
+          return n;
+        }
+        leafEntryToString(t2, e) {
+          let r = "";
+          for (let t3 = 0; t3 < e; t3++) r += "  ";
+          try {
+            r += "Leaf bytes : ";
+            for (let e2 = 0; e2 < 8; e2++) r += `0x${toHex(this.byteArray[8 * t2 + e2])} `;
+            r += "\n";
+          } catch (e2) {
+            r += `Exception thrown at leafEnty at index ${t2}
+`;
+          }
+          return r;
+        }
+        toString() {
+          let t2 = "PackedArrayContext:\n";
+          if (!this.isPacked) return t2 + "Context is unpacked:\n";
+          for (let e = 0; e < NUMBER_OF_SETS$1; e++) try {
+            const r = SET_0_START_INDEX + e, n = this.getIndexAtShortIndex(r);
+            if (t2 += `Set ${e}: root = ${n} 
+`, 0 == n) continue;
+            t2 += this.nonLeafEntryToString(n, this.topLevelShift, 4);
+          } catch (r) {
+            t2 += `Exception thrown in set ${e}%d
+`;
+          }
+          return t2;
+        }
+      }
+      const toHex = (t2) => Number(t2).toString(16).padStart(2, "0"), NUMBER_OF_SETS = 8, { pow: pow$1, floor: floor$1 } = Math;
+      class PackedArray {
+        constructor(t2, e = MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY) {
+          this.arrayContext = new PackedArrayContext(t2, e);
+        }
+        setVirtualLength(t2) {
+          if (t2 < this.length()) throw new Error("Cannot set virtual length, as requested length " + t2 + " is smaller than the current virtual length " + this.length());
+          const e = this.arrayContext;
+          e.isPacked && e.determineTopLevelShiftForVirtualLength(t2) == e.getTopLevelShift() ? e.setVirtualLength(t2) : this.arrayContext = e.copyAndIncreaseSize(this.getPhysicalLength(), t2);
+        }
+        get(t2) {
+          let e = 0;
+          for (let r = 0; r < NUMBER_OF_SETS; r++) {
+            let n = 0;
+            if (!this.arrayContext.isPacked) return this.arrayContext.getAtUnpackedIndex(t2);
+            const i2 = this.arrayContext.getPackedIndex(r, t2, false);
+            if (i2 < 0) return e;
+            n = this.arrayContext.getAtByteIndex(i2) * pow$1(2, r << 3), e += n;
+          }
+          return e;
+        }
+        increment(t2) {
+          this.add(t2, 1);
+        }
+        safeGetPackedIndexgetPackedIndex(t2, e) {
+          return this.arrayContext.getPackedIndex(t2, e, true);
+        }
+        add(t2, e) {
+          let r = e;
+          for (let n = 0, i2 = 0; n < NUMBER_OF_SETS; n++, i2 += 8) {
+            if (!this.arrayContext.isPacked) return void this.arrayContext.addAndGetAtUnpackedIndex(t2, e);
+            const i3 = this.safeGetPackedIndexgetPackedIndex(n, t2), s = 255 & r, o = this.arrayContext.addAtByteIndex(i3, s);
+            if (r -= s, r /= pow$1(2, 8), r += floor$1(o / pow$1(2, 8)), 0 == r) return;
+          }
+        }
+        set(t2, e) {
+          let r = 0, n = e;
+          for (let i2 = 0; i2 < NUMBER_OF_SETS; i2++) {
+            if (!this.arrayContext.isPacked) return void this.arrayContext.setAtUnpackedIndex(t2, e);
+            if (0 == n) {
+              if (this.arrayContext.getPackedIndex(i2, t2, false) < 0) return;
+            }
+            const s = this.arrayContext.getPackedIndex(i2, t2, true), o = 255 & n;
+            n = floor$1(n / pow$1(2, 8)), i2 < r || (this.arrayContext.setAtByteIndex(s, o), r++);
+          }
+        }
+        getPhysicalLength() {
+          return this.arrayContext.physicalLength;
+        }
+        length() {
+          return this.arrayContext.getVirtualLength();
+        }
+        clear() {
+          this.arrayContext.clear();
+        }
+        toString() {
+          let t2 = "PackedArray:\n";
+          return t2 += this.arrayContext.toString(), t2;
+        }
+      }
+      class PackedHistogram extends JsHistogram {
+        constructor(t2, e, r) {
+          super(t2, e, r), this._totalCount = 0, this.packedCounts = new PackedArray(this.countsArrayLength);
+        }
+        clearCounts() {
+          this.packedCounts.clear();
+        }
+        incrementCountAtIndex(t2) {
+          this.packedCounts.increment(t2);
+        }
+        addToCountAtIndex(t2, e) {
+          this.packedCounts.add(t2, e);
+        }
+        setCountAtIndex(t2, e) {
+          this.packedCounts.set(t2, e);
+        }
+        resize(t2) {
+          this.establishSize(t2), this.packedCounts.setVirtualLength(this.countsArrayLength);
+        }
+        getCountAtIndex(t2) {
+          return this.packedCounts.get(t2);
+        }
+        _getEstimatedFootprintInBytes() {
+          return 192 + 8 * this.packedCounts.getPhysicalLength();
+        }
+        copyCorrectedForCoordinatedOmission(t2) {
+          const e = new PackedHistogram(this.lowestDiscernibleValue, this.highestTrackableValue, this.numberOfSignificantValueDigits);
+          return e.addWhileCorrectingForCoordinatedOmission(this, t2), e;
+        }
+        toString() {
+          return "PackedHistogram " + JSON.stringify(this, null, 2);
+        }
+      }
+      class TypedArrayHistogram extends JsHistogram {
+        constructor(t2, e, r, n) {
+          super(e, r, n), this.arrayCtr = t2, this._totalCount = 0, this._counts = new t2(this.countsArrayLength);
+        }
+        clearCounts() {
+          this._counts.fill(0);
+        }
+        incrementCountAtIndex(t2) {
+          const e = this._counts[t2] + 1;
+          if (e < 0) throw e + " would overflow short integer count";
+          this._counts[t2] = e;
+        }
+        addToCountAtIndex(t2, e) {
+          const r = this._counts[t2] + e;
+          if (r < Number.MIN_SAFE_INTEGER || r > Number.MAX_SAFE_INTEGER) throw r + " would overflow integer count";
+          this._counts[t2] = r;
+        }
+        setCountAtIndex(t2, e) {
+          if (e < Number.MIN_SAFE_INTEGER || e > Number.MAX_SAFE_INTEGER) throw e + " would overflow integer count";
+          this._counts[t2] = e;
+        }
+        resize(t2) {
+          this.establishSize(t2);
+          const e = new this.arrayCtr(this.countsArrayLength);
+          e.set(this._counts), this._counts = e;
+        }
+        getCountAtIndex(t2) {
+          return this._counts[t2];
+        }
+        _getEstimatedFootprintInBytes() {
+          return 1024 + this._counts.BYTES_PER_ELEMENT * this._counts.length;
+        }
+        copyCorrectedForCoordinatedOmission(t2) {
+          const e = new TypedArrayHistogram(this.arrayCtr, this.lowestDiscernibleValue, this.highestTrackableValue, this.numberOfSignificantValueDigits);
+          return e.addWhileCorrectingForCoordinatedOmission(this, t2), e;
+        }
+        toString() {
+          return `Histogram ${8 * this._counts.BYTES_PER_ELEMENT}b ${JSON.stringify(this, null, 2)}`;
+        }
+      }
+      class Int8Histogram extends TypedArrayHistogram {
+        constructor(t2, e, r) {
+          super(Uint8Array, t2, e, r);
+        }
+      }
+      class Int16Histogram extends TypedArrayHistogram {
+        constructor(t2, e, r) {
+          super(Uint16Array, t2, e, r);
+        }
+      }
+      class Int32Histogram extends TypedArrayHistogram {
+        constructor(t2, e, r) {
+          super(Uint32Array, t2, e, r);
+        }
+      }
+      class Float64Histogram extends TypedArrayHistogram {
+        constructor(t2, e, r) {
+          super(Float64Array, t2, e, r);
+        }
+      }
+      function constructorFromBucketSize(t2) {
+        switch (t2) {
+          case "packed":
+            return PackedHistogram;
+          case 8:
+            return Int8Histogram;
+          case 16:
+            return Int16Histogram;
+          case 32:
+            return Int32Histogram;
+          case 64:
+            return Float64Histogram;
+          default:
+            throw new Error("Incorrect parameter bitBucketSize");
+        }
+      }
+      const { pow, floor } = Math, TWO_POW_7 = pow(2, 7), TWO_POW_14 = pow(2, 14), TWO_POW_21 = pow(2, 21), TWO_POW_28 = pow(2, 28), TWO_POW_35 = pow(2, 35), TWO_POW_42 = pow(2, 42), TWO_POW_49 = pow(2, 49), TWO_POW_56 = pow(2, 56);
+      class ZigZagEncoding {
+        static encode(t2, e) {
+          e >= 0 ? e *= 2 : e = 2 * -e - 1, e < TWO_POW_7 ? t2.put(e) : (t2.put(128 | e), e < TWO_POW_14 ? t2.put(floor(e / TWO_POW_7)) : (t2.put(128 | floor(e / TWO_POW_7)), e < TWO_POW_21 ? t2.put(floor(e / TWO_POW_14)) : (t2.put(128 | floor(e / TWO_POW_14)), e < TWO_POW_28 ? t2.put(floor(e / TWO_POW_21)) : (t2.put(128 | floor(e / TWO_POW_21)), e < TWO_POW_35 ? t2.put(floor(e / TWO_POW_28)) : (t2.put(128 | floor(e / TWO_POW_28)), e < TWO_POW_42 ? t2.put(floor(e / TWO_POW_35)) : (t2.put(128 | floor(e / TWO_POW_35)), e < TWO_POW_49 ? t2.put(floor(e / TWO_POW_42)) : (t2.put(128 | floor(e / TWO_POW_42)), e < TWO_POW_56 ? t2.put(floor(e / TWO_POW_49)) : (t2.put(floor(e / TWO_POW_49) + 128), t2.put(floor(e / TWO_POW_56))))))))));
+        }
+        static decode(t2) {
+          let e = t2.get(), r = 127 & e;
+          return 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_7, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_14, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_21, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_28, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_35, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_42, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_49, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_56)))))))), r % 2 == 0 ? r /= 2 : r = -(r + 1) / 2, r;
+        }
+      }
+      const { max } = Math, V2EncodingCookieBase = 478450435, V2CompressedEncodingCookieBase$1 = 478450436, V2maxWordSizeInBytes = 9, encodingCookie = 16 | V2EncodingCookieBase, compressedEncodingCookie$1 = 16 | V2CompressedEncodingCookieBase$1;
+      function fillBufferFromCountsArray(t2, e) {
+        const r = t2.countsArrayIndex(t2.maxValue) + 1;
+        let n = 0;
+        for (; n < r; ) {
+          const i2 = t2.getCountAtIndex(n++);
+          if (i2 < 0) throw new Error("Cannot encode histogram containing negative counts (" + i2 + ") at index " + n + ", corresponding the value range [" + t2.lowestEquivalentValue(t2.valueFromIndex(n)) + "," + t2.nextNonEquivalentValue(t2.valueFromIndex(n)) + ")");
+          let s = 0;
+          if (0 == i2) for (s = 1; n < r && 0 == t2.getCountAtIndex(n); ) s++, n++;
+          s > 1 ? ZigZagEncoding.encode(e, -s) : ZigZagEncoding.encode(e, i2);
+        }
+      }
+      function encodeIntoByteBuffer(t2, e) {
+        const r = e.position;
+        e.putInt32(encodingCookie), e.putInt32(0), e.putInt32(1), e.putInt32(t2.numberOfSignificantValueDigits), e.putInt64(t2.lowestDiscernibleValue), e.putInt64(t2.highestTrackableValue), e.putInt64(1);
+        const n = e.position;
+        fillBufferFromCountsArray(t2, e);
+        const i2 = e.position;
+        return e.position = r + 4, e.putInt32(i2 - n), e.position = i2, i2 - r;
+      }
+      function fillCountsArrayFromSourceBuffer(t2, e, r, n) {
+        if (2 != n && 4 != n && 8 != n && n != V2maxWordSizeInBytes) throw new Error("word size must be 2, 4, 8, or V2maxWordSizeInBytes (" + V2maxWordSizeInBytes + ") bytes");
+        let i2 = 0;
+        const s = e.position + r;
+        for (; e.position < s; ) {
+          let r2 = 0, n2 = ZigZagEncoding.decode(e);
+          n2 < 0 ? (r2 = -n2, i2 += r2) : t2.setCountAtIndex(i2++, n2);
+        }
+        return i2;
+      }
+      function getCookieBase(t2) {
+        return -241 & t2;
+      }
+      function getWordSizeInBytesFromCookie(t2) {
+        if (getCookieBase(t2) == V2EncodingCookieBase || getCookieBase(t2) == V2CompressedEncodingCookieBase$1) return V2maxWordSizeInBytes;
+        return 14 & (240 & t2) >> 4;
+      }
+      function findDeflateFunction() {
+        try {
+          return eval('require("zlib").deflateSync');
+        } catch (t2) {
+          return pako__namespace ? pako__namespace.deflate : () => {
+            throw new Error("pako library is mandatory for encoding/deconding on the browser side");
+          };
+        }
+      }
+      function findInflateFunction() {
+        try {
+          return eval('require("zlib").inflateSync');
+        } catch (t2) {
+          return pako__namespace ? pako__namespace.inflate : () => {
+            throw new Error("pako library is mandatory for encoding/deconding on the browser side");
+          };
+        }
+      }
+      const deflate = findDeflateFunction(), inflate = findInflateFunction();
+      function doDecode(t2, e = 32, r = 0) {
+        const n = new ByteBuffer(t2), i2 = n.getInt32();
+        let s, o, a, u;
+        if (getCookieBase(i2) !== V2EncodingCookieBase) throw new Error("The buffer does not contain a Histogram (no valid V2 encoding cookie found)");
+        if (getWordSizeInBytesFromCookie(i2) != V2maxWordSizeInBytes) throw new Error("The buffer does not contain a Histogram (no valid cookie found)");
+        s = n.getInt32(), n.getInt32(), o = n.getInt32(), a = n.getInt64(), u = n.getInt64(), n.getInt64(), u = max(u, r);
+        const l = new (constructorFromBucketSize(e))(a, u, o), h = fillCountsArrayFromSourceBuffer(l, n, s, V2maxWordSizeInBytes);
+        return l.establishInternalTackingValues(h), l;
+      }
+      function doEncodeIntoCompressedBase64(t2) {
+        const e = t2 ? { level: t2 } : {}, r = ByteBuffer.allocate();
+        r.putInt32(compressedEncodingCookie$1);
+        const n = ByteBuffer.allocate(), i2 = encodeIntoByteBuffer(this, n), s = n.data.slice(0, i2), o = deflate(s, e);
+        return r.putInt32(o.byteLength), r.putArray(o), fromByteArray_1(r.data);
+      }
+      JsHistogram.decode = doDecode, JsHistogram.prototype.encodeIntoCompressedBase64 = doEncodeIntoCompressedBase64;
+      const V2CompressedEncodingCookieBase = 478450436, compressedEncodingCookie = 16 | V2CompressedEncodingCookieBase;
+      function decompress(t2) {
+        const e = new ByteBuffer(t2), r = e.position;
+        if ((-241 & e.getInt32()) !== V2CompressedEncodingCookieBase) throw new Error("Encoding not supported, only V2 is supported");
+        const n = e.getInt32();
+        return inflate(e.data.slice(r + 8, r + 8 + n));
+      }
+      const decodeFromCompressedBase64 = (t2, e = 32, r = false, n = 0) => {
+        const i2 = decompress(toByteArray_1(t2.trim()));
+        return r ? WasmHistogram.decode(i2, e, n) : JsHistogram.decode(i2, e, n);
+      };
+      function encodeWasmIntoCompressedBase64(t2) {
+        const e = t2 ? { level: t2 } : {}, r = ByteBuffer.allocate();
+        r.putInt32(compressedEncodingCookie);
+        const n = this.encode(), i2 = deflate(n, e);
+        return r.putInt32(i2.byteLength), r.putArray(i2), fromByteArray_1(r.data);
+      }
+      WasmHistogram.prototype.encodeIntoCompressedBase64 = encodeWasmIntoCompressedBase64;
+      const encodeIntoCompressedBase64 = (t2, e) => {
+        if (t2 instanceof WasmHistogram) return t2.encodeIntoCompressedBase64(e);
+        if (t2 instanceof JsHistogram) return t2.encodeIntoCompressedBase64(e);
+        throw new Error("Unsupported Histogram implementation");
+      }, TAG_PREFIX = "Tag=", TAG_PREFIX_LENGTH = "Tag=".length;
+      class HistogramLogReader {
+        constructor(t2, e = 32, r = false) {
+          this.lines = splitLines(t2), this.currentLineIndex = 0, this.bitBucketSize = e, this.useWebAssembly = r;
+        }
+        nextIntervalHistogram(t2 = 0, e = Number.MAX_VALUE) {
+          for (; this.currentLineIndex < this.lines.length; ) {
+            const r = this.lines[this.currentLineIndex];
+            if (this.currentLineIndex++, r.startsWith("#[StartTime:")) this.parseStartTimeFromLine(r);
+            else if (r.startsWith("#[BaseTime:")) this.parseBaseTimeFromLine(r);
+            else if (r.startsWith("#") || r.startsWith('"StartTimestamp"')) ;
+            else if (r.includes(",")) {
+              const n = r.split(","), [i2] = n;
+              let s;
+              i2.startsWith(TAG_PREFIX) ? (s = i2.substring(TAG_PREFIX_LENGTH), n.shift()) : s = NO_TAG;
+              const [o, a, , u] = n, l = Number.parseFloat(o);
+              if (this.baseTimeSec || (l < this.startTimeSec - 31536e3 ? this.baseTimeSec = this.startTimeSec : this.baseTimeSec = 0), e < l) return null;
+              if (l < t2) continue;
+              const h = decodeFromCompressedBase64(u, this.bitBucketSize, this.useWebAssembly);
+              h.startTimeStampMsec = 1e3 * (this.baseTimeSec + l);
+              const c = Number.parseFloat(a);
+              return h.endTimeStampMsec = 1e3 * (this.baseTimeSec + l + c), h.tag = s, h;
+            }
+          }
+          return null;
+        }
+        parseStartTimeFromLine(t2) {
+          this.startTimeSec = Number.parseFloat(t2.split(" ")[1]);
+        }
+        parseBaseTimeFromLine(t2) {
+          this.baseTimeSec = Number.parseFloat(t2.split(" ")[1]);
+        }
+      }
+      const splitLines = (t2) => t2.split(/\r\n|\r|\n/g), shouldIncludeNoTag = (t2) => t2.find((t3) => !t3.startsWith("#") && !t3.startsWith('"') && !t3.startsWith(TAG_PREFIX) && t3.includes(",")), listTags = (t2) => {
+        const e = splitLines(t2), r = e.filter((t3) => t3.includes(",") && t3.startsWith(TAG_PREFIX)).map((t3) => t3.substring(TAG_PREFIX_LENGTH, t3.indexOf(","))), n = new Set(r), i2 = Array.from(n);
+        return shouldIncludeNoTag(e) && i2.unshift("NO TAG"), i2;
+      }, HISTOGRAM_LOG_FORMAT_VERSION = "1.3", timeFormatter = floatFormatter(5, 3);
+      class HistogramLogWriter {
+        constructor(t2) {
+          this.log = t2, this.baseTime = 0;
+        }
+        outputIntervalHistogram(t2, e = (t2.startTimeStampMsec - this.baseTime) / 1e3, r = (t2.endTimeStampMsec - this.baseTime) / 1e3, n = 1e3) {
+          const i2 = encodeIntoCompressedBase64(t2), s = `${timeFormatter(e)},${timeFormatter(r - e)},${timeFormatter(t2.maxValue / n)},${i2}
+`;
+          t2.tag && t2.tag !== NO_TAG ? this.log(`Tag=${t2.tag},${s}`) : this.log(s);
+        }
+        outputComment(t2) {
+          this.log(`#${t2}
+`);
+        }
+        outputStartTime(t2) {
+          this.outputComment(`[StartTime: ${floatFormatter(5, 3)(t2 / 1e3)} (seconds since epoch), ${new Date(t2)}]
+`);
+        }
+        outputLegend() {
+          this.log('"StartTimestamp","Interval_Length","Interval_Max","Interval_Compressed_Histogram"\n');
+        }
+        outputLogFormatVersion() {
+          this.outputComment("[Histogram log format version " + HISTOGRAM_LOG_FORMAT_VERSION + "]");
+        }
+      }
+      const defaultRequest = { bitBucketSize: 32, autoResize: true, lowestDiscernibleValue: 1, highestTrackableValue: 2, numberOfSignificantValueDigits: 3, useWebAssembly: false }, build = (t2 = defaultRequest) => {
+        const e = Object.assign({}, defaultRequest, t2);
+        if (t2.useWebAssembly && webAssemblyAvailable) return WasmHistogram.build(e);
+        const r = new (constructorFromBucketSize(e.bitBucketSize))(e.lowestDiscernibleValue, e.highestTrackableValue, e.numberOfSignificantValueDigits);
+        return r.autoResize = e.autoResize, r;
+      };
+      class Recorder {
+        constructor(t2 = defaultRequest, e = (() => (/* @__PURE__ */ new Date()).getTime())) {
+          this.histogramBuildRequest = t2, this.clock = e, this.activeHistogram = build(this.histogramBuildRequest), Recorder.idGenerator++, this.activeHistogram.containingInstanceId = Recorder.idGenerator, this.activeHistogram.startTimeStampMsec = e();
+        }
+        recordValue(t2) {
+          this.activeHistogram.recordValue(t2);
+        }
+        recordValueWithCount(t2, e) {
+          this.activeHistogram.recordValueWithCount(t2, e);
+        }
+        recordValueWithExpectedInterval(t2, e) {
+          this.activeHistogram.recordValueWithExpectedInterval(t2, e);
+        }
+        getIntervalHistogram(t2) {
+          if (t2) {
+            if (t2.containingInstanceId !== this.activeHistogram.containingInstanceId) throw "replacement histogram must have been obtained via a previous getIntervalHistogram() call from this Recorder";
+          }
+          this.inactiveHistogram = t2, this.performIntervalSample();
+          const e = this.inactiveHistogram;
+          return this.inactiveHistogram = null, e;
+        }
+        getIntervalHistogramInto(t2) {
+          this.performIntervalSample(), this.inactiveHistogram && (t2.add(this.inactiveHistogram), t2.startTimeStampMsec = this.inactiveHistogram.startTimeStampMsec, t2.endTimeStampMsec = this.inactiveHistogram.endTimeStampMsec);
+        }
+        reset() {
+          this.activeHistogram.reset(), this.activeHistogram.startTimeStampMsec = this.clock();
+        }
+        performIntervalSample() {
+          this.inactiveHistogram || (this.inactiveHistogram = build(this.histogramBuildRequest), this.inactiveHistogram.containingInstanceId = this.activeHistogram.containingInstanceId), this.inactiveHistogram.reset();
+          const t2 = this.activeHistogram;
+          this.activeHistogram = this.inactiveHistogram, this.inactiveHistogram = t2;
+          const e = this.clock();
+          this.inactiveHistogram.endTimeStampMsec = e, this.activeHistogram.startTimeStampMsec = e;
+        }
+        destroy() {
+          var t2;
+          this.activeHistogram.destroy(), null === (t2 = this.inactiveHistogram) || void 0 === t2 || t2.destroy();
+        }
+      }
+      Recorder.idGenerator = 0, exports.ByteBuffer = ByteBuffer, exports.Float64Histogram = Float64Histogram, exports.HistogramLogReader = HistogramLogReader, exports.HistogramLogWriter = HistogramLogWriter, exports.Int16Histogram = Int16Histogram, exports.Int32Histogram = Int32Histogram, exports.Int8Histogram = Int8Histogram, exports.JsHistogram = JsHistogram, exports.PackedHistogram = PackedHistogram, exports.Recorder = Recorder, exports.WasmHistogram = WasmHistogram, exports.build = build, exports.decodeFromCompressedBase64 = decodeFromCompressedBase64, exports.encodeIntoCompressedBase64 = encodeIntoCompressedBase64, exports.initWebAssembly = initWebAssembly, exports.initWebAssemblySync = initWebAssemblySync, exports.listTags = listTags, Object.defineProperty(exports, "__esModule", { value: true });
+    }));
+  }
+});
+
 // node_modules/.pnpm/tslib@2.8.1/node_modules/tslib/tslib.es6.mjs
 var tslib_es6_exports = {};
 __export(tslib_es6_exports, {
@@ -5691,7 +11397,7 @@ var require_types2 = __commonJS({
 });
 
 // node_modules/.pnpm/@jsonjoy.com+fs-node-utils@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-node-utils/lib/constants.js
-var require_constants = __commonJS({
+var require_constants2 = __commonJS({
   "node_modules/.pnpm/@jsonjoy.com+fs-node-utils@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-node-utils/lib/constants.js"(exports2) {
     "use strict";
     init_globals();
@@ -7284,7 +12990,7 @@ var require_lib2 = __commonJS({
     exports2.fsCommonObjectsList = exports2.fsSynchronousApiList = exports2.fsCallbackApiList = void 0;
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     tslib_1.__exportStar(require_types2(), exports2);
-    tslib_1.__exportStar(require_constants(), exports2);
+    tslib_1.__exportStar(require_constants2(), exports2);
     tslib_1.__exportStar(require_AMODE(), exports2);
     tslib_1.__exportStar(require_FLAG(), exports2);
     tslib_1.__exportStar(require_path2(), exports2);
@@ -7337,7 +13043,7 @@ var require_json = __commonJS({
 });
 
 // node_modules/.pnpm/@jsonjoy.com+fs-core@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-core/lib/constants.js
-var require_constants2 = __commonJS({
+var require_constants3 = __commonJS({
   "node_modules/.pnpm/@jsonjoy.com+fs-core@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-core/lib/constants.js"(exports2) {
     "use strict";
     init_globals();
@@ -9121,7 +14827,7 @@ var require_lib3 = __commonJS({
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     tslib_1.__exportStar(require_types(), exports2);
     tslib_1.__exportStar(require_json(), exports2);
-    tslib_1.__exportStar(require_constants2(), exports2);
+    tslib_1.__exportStar(require_constants3(), exports2);
     tslib_1.__exportStar(require_result(), exports2);
     var Node_1 = require_Node();
     Object.defineProperty(exports2, "Node", { enumerable: true, get: function() {
@@ -17232,7 +22938,7 @@ var require_lib5 = __commonJS({
 });
 
 // node_modules/.pnpm/@jsonjoy.com+fs-snapshot@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-snapshot/lib/constants.js
-var require_constants3 = __commonJS({
+var require_constants4 = __commonJS({
   "node_modules/.pnpm/@jsonjoy.com+fs-snapshot@4.80.0_tslib@2.8.1/node_modules/@jsonjoy.com/fs-snapshot/lib/constants.js"(exports2) {
     "use strict";
     init_globals();
@@ -19461,7 +25167,7 @@ var require_binary = __commonJS({
 });
 
 // node_modules/.pnpm/@jsonjoy.com+base64@17.67.0_tslib@2.8.1/node_modules/@jsonjoy.com/base64/lib/constants.js
-var require_constants4 = __commonJS({
+var require_constants5 = __commonJS({
   "node_modules/.pnpm/@jsonjoy.com+base64@17.67.0_tslib@2.8.1/node_modules/@jsonjoy.com/base64/lib/constants.js"(exports2) {
     "use strict";
     init_globals();
@@ -19479,7 +25185,7 @@ var require_createToBase64Bin = __commonJS({
     init_globals();
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.createToBase64Bin = void 0;
-    var constants_1 = require_constants4();
+    var constants_1 = require_constants5();
     var createToBase64Bin = (chars = constants_1.alphabet, pad = "=") => {
       if (chars.length !== 64)
         throw new Error("chars must be 64 characters long");
@@ -19832,7 +25538,7 @@ var require_createFromBase64Bin = __commonJS({
     init_globals();
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.createFromBase64Bin = void 0;
-    var constants_1 = require_constants4();
+    var constants_1 = require_constants5();
     var createFromBase64Bin = (chars = constants_1.alphabet, pad = "=") => {
       if (chars.length !== 64)
         throw new Error("chars must be 64 characters long");
@@ -20571,7 +26277,7 @@ var require_lib6 = __commonJS({
     init_globals();
     Object.defineProperty(exports2, "__esModule", { value: true });
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    tslib_1.__exportStar(require_constants3(), exports2);
+    tslib_1.__exportStar(require_constants4(), exports2);
     tslib_1.__exportStar(require_sync(), exports2);
     tslib_1.__exportStar(require_binary(), exports2);
     tslib_1.__exportStar(require_json2(), exports2);
@@ -22543,5712 +28249,6 @@ var require_lib8 = __commonJS({
   }
 });
 
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/common.js
-var require_common = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/common.js"(exports2) {
-    "use strict";
-    init_globals();
-    var TYPED_OK = typeof Uint8Array !== "undefined" && typeof Uint16Array !== "undefined" && typeof Int32Array !== "undefined";
-    function _has(obj, key) {
-      return Object.prototype.hasOwnProperty.call(obj, key);
-    }
-    exports2.assign = function(obj) {
-      var sources = Array.prototype.slice.call(arguments, 1);
-      while (sources.length) {
-        var source = sources.shift();
-        if (!source) {
-          continue;
-        }
-        if (typeof source !== "object") {
-          throw new TypeError(source + "must be non-object");
-        }
-        for (var p2 in source) {
-          if (_has(source, p2)) {
-            obj[p2] = source[p2];
-          }
-        }
-      }
-      return obj;
-    };
-    exports2.shrinkBuf = function(buf, size) {
-      if (buf.length === size) {
-        return buf;
-      }
-      if (buf.subarray) {
-        return buf.subarray(0, size);
-      }
-      buf.length = size;
-      return buf;
-    };
-    var fnTyped = {
-      arraySet: function(dest, src, src_offs, len3, dest_offs) {
-        if (src.subarray && dest.subarray) {
-          dest.set(src.subarray(src_offs, src_offs + len3), dest_offs);
-          return;
-        }
-        for (var i2 = 0; i2 < len3; i2++) {
-          dest[dest_offs + i2] = src[src_offs + i2];
-        }
-      },
-      // Join array of chunks to single array.
-      flattenChunks: function(chunks) {
-        var i2, l, len3, pos, chunk3, result;
-        len3 = 0;
-        for (i2 = 0, l = chunks.length; i2 < l; i2++) {
-          len3 += chunks[i2].length;
-        }
-        result = new Uint8Array(len3);
-        pos = 0;
-        for (i2 = 0, l = chunks.length; i2 < l; i2++) {
-          chunk3 = chunks[i2];
-          result.set(chunk3, pos);
-          pos += chunk3.length;
-        }
-        return result;
-      }
-    };
-    var fnUntyped = {
-      arraySet: function(dest, src, src_offs, len3, dest_offs) {
-        for (var i2 = 0; i2 < len3; i2++) {
-          dest[dest_offs + i2] = src[src_offs + i2];
-        }
-      },
-      // Join array of chunks to single array.
-      flattenChunks: function(chunks) {
-        return [].concat.apply([], chunks);
-      }
-    };
-    exports2.setTyped = function(on2) {
-      if (on2) {
-        exports2.Buf8 = Uint8Array;
-        exports2.Buf16 = Uint16Array;
-        exports2.Buf32 = Int32Array;
-        exports2.assign(exports2, fnTyped);
-      } else {
-        exports2.Buf8 = Array;
-        exports2.Buf16 = Array;
-        exports2.Buf32 = Array;
-        exports2.assign(exports2, fnUntyped);
-      }
-    };
-    exports2.setTyped(TYPED_OK);
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/trees.js
-var require_trees = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/trees.js"(exports2) {
-    "use strict";
-    init_globals();
-    var utils = require_common();
-    var Z_FIXED = 4;
-    var Z_BINARY = 0;
-    var Z_TEXT = 1;
-    var Z_UNKNOWN = 2;
-    function zero(buf) {
-      var len3 = buf.length;
-      while (--len3 >= 0) {
-        buf[len3] = 0;
-      }
-    }
-    var STORED_BLOCK = 0;
-    var STATIC_TREES = 1;
-    var DYN_TREES = 2;
-    var MIN_MATCH = 3;
-    var MAX_MATCH = 258;
-    var LENGTH_CODES = 29;
-    var LITERALS = 256;
-    var L_CODES = LITERALS + 1 + LENGTH_CODES;
-    var D_CODES = 30;
-    var BL_CODES = 19;
-    var HEAP_SIZE = 2 * L_CODES + 1;
-    var MAX_BITS = 15;
-    var Buf_size = 16;
-    var MAX_BL_BITS = 7;
-    var END_BLOCK = 256;
-    var REP_3_6 = 16;
-    var REPZ_3_10 = 17;
-    var REPZ_11_138 = 18;
-    var extra_lbits = (
-      /* extra bits for each length code */
-      [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0]
-    );
-    var extra_dbits = (
-      /* extra bits for each distance code */
-      [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13]
-    );
-    var extra_blbits = (
-      /* extra bits for each bit length code */
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7]
-    );
-    var bl_order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-    var DIST_CODE_LEN = 512;
-    var static_ltree = new Array((L_CODES + 2) * 2);
-    zero(static_ltree);
-    var static_dtree = new Array(D_CODES * 2);
-    zero(static_dtree);
-    var _dist_code = new Array(DIST_CODE_LEN);
-    zero(_dist_code);
-    var _length_code = new Array(MAX_MATCH - MIN_MATCH + 1);
-    zero(_length_code);
-    var base_length = new Array(LENGTH_CODES);
-    zero(base_length);
-    var base_dist = new Array(D_CODES);
-    zero(base_dist);
-    function StaticTreeDesc(static_tree, extra_bits, extra_base, elems, max_length) {
-      this.static_tree = static_tree;
-      this.extra_bits = extra_bits;
-      this.extra_base = extra_base;
-      this.elems = elems;
-      this.max_length = max_length;
-      this.has_stree = static_tree && static_tree.length;
-    }
-    var static_l_desc;
-    var static_d_desc;
-    var static_bl_desc;
-    function TreeDesc(dyn_tree, stat_desc) {
-      this.dyn_tree = dyn_tree;
-      this.max_code = 0;
-      this.stat_desc = stat_desc;
-    }
-    function d_code(dist) {
-      return dist < 256 ? _dist_code[dist] : _dist_code[256 + (dist >>> 7)];
-    }
-    function put_short(s, w) {
-      s.pending_buf[s.pending++] = w & 255;
-      s.pending_buf[s.pending++] = w >>> 8 & 255;
-    }
-    function send_bits(s, value, length) {
-      if (s.bi_valid > Buf_size - length) {
-        s.bi_buf |= value << s.bi_valid & 65535;
-        put_short(s, s.bi_buf);
-        s.bi_buf = value >> Buf_size - s.bi_valid;
-        s.bi_valid += length - Buf_size;
-      } else {
-        s.bi_buf |= value << s.bi_valid & 65535;
-        s.bi_valid += length;
-      }
-    }
-    function send_code(s, c, tree) {
-      send_bits(
-        s,
-        tree[c * 2],
-        tree[c * 2 + 1]
-        /*.Len*/
-      );
-    }
-    function bi_reverse(code2, len3) {
-      var res = 0;
-      do {
-        res |= code2 & 1;
-        code2 >>>= 1;
-        res <<= 1;
-      } while (--len3 > 0);
-      return res >>> 1;
-    }
-    function bi_flush(s) {
-      if (s.bi_valid === 16) {
-        put_short(s, s.bi_buf);
-        s.bi_buf = 0;
-        s.bi_valid = 0;
-      } else if (s.bi_valid >= 8) {
-        s.pending_buf[s.pending++] = s.bi_buf & 255;
-        s.bi_buf >>= 8;
-        s.bi_valid -= 8;
-      }
-    }
-    function gen_bitlen(s, desc) {
-      var tree = desc.dyn_tree;
-      var max_code = desc.max_code;
-      var stree = desc.stat_desc.static_tree;
-      var has_stree = desc.stat_desc.has_stree;
-      var extra = desc.stat_desc.extra_bits;
-      var base = desc.stat_desc.extra_base;
-      var max_length = desc.stat_desc.max_length;
-      var h;
-      var n, m;
-      var bits;
-      var xbits;
-      var f;
-      var overflow = 0;
-      for (bits = 0; bits <= MAX_BITS; bits++) {
-        s.bl_count[bits] = 0;
-      }
-      tree[s.heap[s.heap_max] * 2 + 1] = 0;
-      for (h = s.heap_max + 1; h < HEAP_SIZE; h++) {
-        n = s.heap[h];
-        bits = tree[tree[n * 2 + 1] * 2 + 1] + 1;
-        if (bits > max_length) {
-          bits = max_length;
-          overflow++;
-        }
-        tree[n * 2 + 1] = bits;
-        if (n > max_code) {
-          continue;
-        }
-        s.bl_count[bits]++;
-        xbits = 0;
-        if (n >= base) {
-          xbits = extra[n - base];
-        }
-        f = tree[n * 2];
-        s.opt_len += f * (bits + xbits);
-        if (has_stree) {
-          s.static_len += f * (stree[n * 2 + 1] + xbits);
-        }
-      }
-      if (overflow === 0) {
-        return;
-      }
-      do {
-        bits = max_length - 1;
-        while (s.bl_count[bits] === 0) {
-          bits--;
-        }
-        s.bl_count[bits]--;
-        s.bl_count[bits + 1] += 2;
-        s.bl_count[max_length]--;
-        overflow -= 2;
-      } while (overflow > 0);
-      for (bits = max_length; bits !== 0; bits--) {
-        n = s.bl_count[bits];
-        while (n !== 0) {
-          m = s.heap[--h];
-          if (m > max_code) {
-            continue;
-          }
-          if (tree[m * 2 + 1] !== bits) {
-            s.opt_len += (bits - tree[m * 2 + 1]) * tree[m * 2];
-            tree[m * 2 + 1] = bits;
-          }
-          n--;
-        }
-      }
-    }
-    function gen_codes(tree, max_code, bl_count) {
-      var next_code = new Array(MAX_BITS + 1);
-      var code2 = 0;
-      var bits;
-      var n;
-      for (bits = 1; bits <= MAX_BITS; bits++) {
-        next_code[bits] = code2 = code2 + bl_count[bits - 1] << 1;
-      }
-      for (n = 0; n <= max_code; n++) {
-        var len3 = tree[n * 2 + 1];
-        if (len3 === 0) {
-          continue;
-        }
-        tree[n * 2] = bi_reverse(next_code[len3]++, len3);
-      }
-    }
-    function tr_static_init() {
-      var n;
-      var bits;
-      var length;
-      var code2;
-      var dist;
-      var bl_count = new Array(MAX_BITS + 1);
-      length = 0;
-      for (code2 = 0; code2 < LENGTH_CODES - 1; code2++) {
-        base_length[code2] = length;
-        for (n = 0; n < 1 << extra_lbits[code2]; n++) {
-          _length_code[length++] = code2;
-        }
-      }
-      _length_code[length - 1] = code2;
-      dist = 0;
-      for (code2 = 0; code2 < 16; code2++) {
-        base_dist[code2] = dist;
-        for (n = 0; n < 1 << extra_dbits[code2]; n++) {
-          _dist_code[dist++] = code2;
-        }
-      }
-      dist >>= 7;
-      for (; code2 < D_CODES; code2++) {
-        base_dist[code2] = dist << 7;
-        for (n = 0; n < 1 << extra_dbits[code2] - 7; n++) {
-          _dist_code[256 + dist++] = code2;
-        }
-      }
-      for (bits = 0; bits <= MAX_BITS; bits++) {
-        bl_count[bits] = 0;
-      }
-      n = 0;
-      while (n <= 143) {
-        static_ltree[n * 2 + 1] = 8;
-        n++;
-        bl_count[8]++;
-      }
-      while (n <= 255) {
-        static_ltree[n * 2 + 1] = 9;
-        n++;
-        bl_count[9]++;
-      }
-      while (n <= 279) {
-        static_ltree[n * 2 + 1] = 7;
-        n++;
-        bl_count[7]++;
-      }
-      while (n <= 287) {
-        static_ltree[n * 2 + 1] = 8;
-        n++;
-        bl_count[8]++;
-      }
-      gen_codes(static_ltree, L_CODES + 1, bl_count);
-      for (n = 0; n < D_CODES; n++) {
-        static_dtree[n * 2 + 1] = 5;
-        static_dtree[n * 2] = bi_reverse(n, 5);
-      }
-      static_l_desc = new StaticTreeDesc(static_ltree, extra_lbits, LITERALS + 1, L_CODES, MAX_BITS);
-      static_d_desc = new StaticTreeDesc(static_dtree, extra_dbits, 0, D_CODES, MAX_BITS);
-      static_bl_desc = new StaticTreeDesc(new Array(0), extra_blbits, 0, BL_CODES, MAX_BL_BITS);
-    }
-    function init_block(s) {
-      var n;
-      for (n = 0; n < L_CODES; n++) {
-        s.dyn_ltree[n * 2] = 0;
-      }
-      for (n = 0; n < D_CODES; n++) {
-        s.dyn_dtree[n * 2] = 0;
-      }
-      for (n = 0; n < BL_CODES; n++) {
-        s.bl_tree[n * 2] = 0;
-      }
-      s.dyn_ltree[END_BLOCK * 2] = 1;
-      s.opt_len = s.static_len = 0;
-      s.last_lit = s.matches = 0;
-    }
-    function bi_windup(s) {
-      if (s.bi_valid > 8) {
-        put_short(s, s.bi_buf);
-      } else if (s.bi_valid > 0) {
-        s.pending_buf[s.pending++] = s.bi_buf;
-      }
-      s.bi_buf = 0;
-      s.bi_valid = 0;
-    }
-    function copy_block(s, buf, len3, header) {
-      bi_windup(s);
-      if (header) {
-        put_short(s, len3);
-        put_short(s, ~len3);
-      }
-      utils.arraySet(s.pending_buf, s.window, buf, len3, s.pending);
-      s.pending += len3;
-    }
-    function smaller(tree, n, m, depth) {
-      var _n2 = n * 2;
-      var _m2 = m * 2;
-      return tree[_n2] < tree[_m2] || tree[_n2] === tree[_m2] && depth[n] <= depth[m];
-    }
-    function pqdownheap(s, tree, k) {
-      var v = s.heap[k];
-      var j = k << 1;
-      while (j <= s.heap_len) {
-        if (j < s.heap_len && smaller(tree, s.heap[j + 1], s.heap[j], s.depth)) {
-          j++;
-        }
-        if (smaller(tree, v, s.heap[j], s.depth)) {
-          break;
-        }
-        s.heap[k] = s.heap[j];
-        k = j;
-        j <<= 1;
-      }
-      s.heap[k] = v;
-    }
-    function compress_block(s, ltree, dtree) {
-      var dist;
-      var lc;
-      var lx = 0;
-      var code2;
-      var extra;
-      if (s.last_lit !== 0) {
-        do {
-          dist = s.pending_buf[s.d_buf + lx * 2] << 8 | s.pending_buf[s.d_buf + lx * 2 + 1];
-          lc = s.pending_buf[s.l_buf + lx];
-          lx++;
-          if (dist === 0) {
-            send_code(s, lc, ltree);
-          } else {
-            code2 = _length_code[lc];
-            send_code(s, code2 + LITERALS + 1, ltree);
-            extra = extra_lbits[code2];
-            if (extra !== 0) {
-              lc -= base_length[code2];
-              send_bits(s, lc, extra);
-            }
-            dist--;
-            code2 = d_code(dist);
-            send_code(s, code2, dtree);
-            extra = extra_dbits[code2];
-            if (extra !== 0) {
-              dist -= base_dist[code2];
-              send_bits(s, dist, extra);
-            }
-          }
-        } while (lx < s.last_lit);
-      }
-      send_code(s, END_BLOCK, ltree);
-    }
-    function build_tree(s, desc) {
-      var tree = desc.dyn_tree;
-      var stree = desc.stat_desc.static_tree;
-      var has_stree = desc.stat_desc.has_stree;
-      var elems = desc.stat_desc.elems;
-      var n, m;
-      var max_code = -1;
-      var node;
-      s.heap_len = 0;
-      s.heap_max = HEAP_SIZE;
-      for (n = 0; n < elems; n++) {
-        if (tree[n * 2] !== 0) {
-          s.heap[++s.heap_len] = max_code = n;
-          s.depth[n] = 0;
-        } else {
-          tree[n * 2 + 1] = 0;
-        }
-      }
-      while (s.heap_len < 2) {
-        node = s.heap[++s.heap_len] = max_code < 2 ? ++max_code : 0;
-        tree[node * 2] = 1;
-        s.depth[node] = 0;
-        s.opt_len--;
-        if (has_stree) {
-          s.static_len -= stree[node * 2 + 1];
-        }
-      }
-      desc.max_code = max_code;
-      for (n = s.heap_len >> 1; n >= 1; n--) {
-        pqdownheap(s, tree, n);
-      }
-      node = elems;
-      do {
-        n = s.heap[
-          1
-          /*SMALLEST*/
-        ];
-        s.heap[
-          1
-          /*SMALLEST*/
-        ] = s.heap[s.heap_len--];
-        pqdownheap(
-          s,
-          tree,
-          1
-          /*SMALLEST*/
-        );
-        m = s.heap[
-          1
-          /*SMALLEST*/
-        ];
-        s.heap[--s.heap_max] = n;
-        s.heap[--s.heap_max] = m;
-        tree[node * 2] = tree[n * 2] + tree[m * 2];
-        s.depth[node] = (s.depth[n] >= s.depth[m] ? s.depth[n] : s.depth[m]) + 1;
-        tree[n * 2 + 1] = tree[m * 2 + 1] = node;
-        s.heap[
-          1
-          /*SMALLEST*/
-        ] = node++;
-        pqdownheap(
-          s,
-          tree,
-          1
-          /*SMALLEST*/
-        );
-      } while (s.heap_len >= 2);
-      s.heap[--s.heap_max] = s.heap[
-        1
-        /*SMALLEST*/
-      ];
-      gen_bitlen(s, desc);
-      gen_codes(tree, max_code, s.bl_count);
-    }
-    function scan_tree(s, tree, max_code) {
-      var n;
-      var prevlen = -1;
-      var curlen;
-      var nextlen = tree[0 * 2 + 1];
-      var count = 0;
-      var max_count = 7;
-      var min_count = 4;
-      if (nextlen === 0) {
-        max_count = 138;
-        min_count = 3;
-      }
-      tree[(max_code + 1) * 2 + 1] = 65535;
-      for (n = 0; n <= max_code; n++) {
-        curlen = nextlen;
-        nextlen = tree[(n + 1) * 2 + 1];
-        if (++count < max_count && curlen === nextlen) {
-          continue;
-        } else if (count < min_count) {
-          s.bl_tree[curlen * 2] += count;
-        } else if (curlen !== 0) {
-          if (curlen !== prevlen) {
-            s.bl_tree[curlen * 2]++;
-          }
-          s.bl_tree[REP_3_6 * 2]++;
-        } else if (count <= 10) {
-          s.bl_tree[REPZ_3_10 * 2]++;
-        } else {
-          s.bl_tree[REPZ_11_138 * 2]++;
-        }
-        count = 0;
-        prevlen = curlen;
-        if (nextlen === 0) {
-          max_count = 138;
-          min_count = 3;
-        } else if (curlen === nextlen) {
-          max_count = 6;
-          min_count = 3;
-        } else {
-          max_count = 7;
-          min_count = 4;
-        }
-      }
-    }
-    function send_tree(s, tree, max_code) {
-      var n;
-      var prevlen = -1;
-      var curlen;
-      var nextlen = tree[0 * 2 + 1];
-      var count = 0;
-      var max_count = 7;
-      var min_count = 4;
-      if (nextlen === 0) {
-        max_count = 138;
-        min_count = 3;
-      }
-      for (n = 0; n <= max_code; n++) {
-        curlen = nextlen;
-        nextlen = tree[(n + 1) * 2 + 1];
-        if (++count < max_count && curlen === nextlen) {
-          continue;
-        } else if (count < min_count) {
-          do {
-            send_code(s, curlen, s.bl_tree);
-          } while (--count !== 0);
-        } else if (curlen !== 0) {
-          if (curlen !== prevlen) {
-            send_code(s, curlen, s.bl_tree);
-            count--;
-          }
-          send_code(s, REP_3_6, s.bl_tree);
-          send_bits(s, count - 3, 2);
-        } else if (count <= 10) {
-          send_code(s, REPZ_3_10, s.bl_tree);
-          send_bits(s, count - 3, 3);
-        } else {
-          send_code(s, REPZ_11_138, s.bl_tree);
-          send_bits(s, count - 11, 7);
-        }
-        count = 0;
-        prevlen = curlen;
-        if (nextlen === 0) {
-          max_count = 138;
-          min_count = 3;
-        } else if (curlen === nextlen) {
-          max_count = 6;
-          min_count = 3;
-        } else {
-          max_count = 7;
-          min_count = 4;
-        }
-      }
-    }
-    function build_bl_tree(s) {
-      var max_blindex;
-      scan_tree(s, s.dyn_ltree, s.l_desc.max_code);
-      scan_tree(s, s.dyn_dtree, s.d_desc.max_code);
-      build_tree(s, s.bl_desc);
-      for (max_blindex = BL_CODES - 1; max_blindex >= 3; max_blindex--) {
-        if (s.bl_tree[bl_order[max_blindex] * 2 + 1] !== 0) {
-          break;
-        }
-      }
-      s.opt_len += 3 * (max_blindex + 1) + 5 + 5 + 4;
-      return max_blindex;
-    }
-    function send_all_trees(s, lcodes, dcodes, blcodes) {
-      var rank2;
-      send_bits(s, lcodes - 257, 5);
-      send_bits(s, dcodes - 1, 5);
-      send_bits(s, blcodes - 4, 4);
-      for (rank2 = 0; rank2 < blcodes; rank2++) {
-        send_bits(s, s.bl_tree[bl_order[rank2] * 2 + 1], 3);
-      }
-      send_tree(s, s.dyn_ltree, lcodes - 1);
-      send_tree(s, s.dyn_dtree, dcodes - 1);
-    }
-    function detect_data_type(s) {
-      var black_mask = 4093624447;
-      var n;
-      for (n = 0; n <= 31; n++, black_mask >>>= 1) {
-        if (black_mask & 1 && s.dyn_ltree[n * 2] !== 0) {
-          return Z_BINARY;
-        }
-      }
-      if (s.dyn_ltree[9 * 2] !== 0 || s.dyn_ltree[10 * 2] !== 0 || s.dyn_ltree[13 * 2] !== 0) {
-        return Z_TEXT;
-      }
-      for (n = 32; n < LITERALS; n++) {
-        if (s.dyn_ltree[n * 2] !== 0) {
-          return Z_TEXT;
-        }
-      }
-      return Z_BINARY;
-    }
-    var static_init_done = false;
-    function _tr_init(s) {
-      if (!static_init_done) {
-        tr_static_init();
-        static_init_done = true;
-      }
-      s.l_desc = new TreeDesc(s.dyn_ltree, static_l_desc);
-      s.d_desc = new TreeDesc(s.dyn_dtree, static_d_desc);
-      s.bl_desc = new TreeDesc(s.bl_tree, static_bl_desc);
-      s.bi_buf = 0;
-      s.bi_valid = 0;
-      init_block(s);
-    }
-    function _tr_stored_block(s, buf, stored_len, last2) {
-      send_bits(s, (STORED_BLOCK << 1) + (last2 ? 1 : 0), 3);
-      copy_block(s, buf, stored_len, true);
-    }
-    function _tr_align(s) {
-      send_bits(s, STATIC_TREES << 1, 3);
-      send_code(s, END_BLOCK, static_ltree);
-      bi_flush(s);
-    }
-    function _tr_flush_block(s, buf, stored_len, last2) {
-      var opt_lenb, static_lenb;
-      var max_blindex = 0;
-      if (s.level > 0) {
-        if (s.strm.data_type === Z_UNKNOWN) {
-          s.strm.data_type = detect_data_type(s);
-        }
-        build_tree(s, s.l_desc);
-        build_tree(s, s.d_desc);
-        max_blindex = build_bl_tree(s);
-        opt_lenb = s.opt_len + 3 + 7 >>> 3;
-        static_lenb = s.static_len + 3 + 7 >>> 3;
-        if (static_lenb <= opt_lenb) {
-          opt_lenb = static_lenb;
-        }
-      } else {
-        opt_lenb = static_lenb = stored_len + 5;
-      }
-      if (stored_len + 4 <= opt_lenb && buf !== -1) {
-        _tr_stored_block(s, buf, stored_len, last2);
-      } else if (s.strategy === Z_FIXED || static_lenb === opt_lenb) {
-        send_bits(s, (STATIC_TREES << 1) + (last2 ? 1 : 0), 3);
-        compress_block(s, static_ltree, static_dtree);
-      } else {
-        send_bits(s, (DYN_TREES << 1) + (last2 ? 1 : 0), 3);
-        send_all_trees(s, s.l_desc.max_code + 1, s.d_desc.max_code + 1, max_blindex + 1);
-        compress_block(s, s.dyn_ltree, s.dyn_dtree);
-      }
-      init_block(s);
-      if (last2) {
-        bi_windup(s);
-      }
-    }
-    function _tr_tally(s, dist, lc) {
-      s.pending_buf[s.d_buf + s.last_lit * 2] = dist >>> 8 & 255;
-      s.pending_buf[s.d_buf + s.last_lit * 2 + 1] = dist & 255;
-      s.pending_buf[s.l_buf + s.last_lit] = lc & 255;
-      s.last_lit++;
-      if (dist === 0) {
-        s.dyn_ltree[lc * 2]++;
-      } else {
-        s.matches++;
-        dist--;
-        s.dyn_ltree[(_length_code[lc] + LITERALS + 1) * 2]++;
-        s.dyn_dtree[d_code(dist) * 2]++;
-      }
-      return s.last_lit === s.lit_bufsize - 1;
-    }
-    exports2._tr_init = _tr_init;
-    exports2._tr_stored_block = _tr_stored_block;
-    exports2._tr_flush_block = _tr_flush_block;
-    exports2._tr_tally = _tr_tally;
-    exports2._tr_align = _tr_align;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/adler32.js
-var require_adler32 = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/adler32.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function adler32(adler, buf, len3, pos) {
-      var s1 = adler & 65535 | 0, s2 = adler >>> 16 & 65535 | 0, n = 0;
-      while (len3 !== 0) {
-        n = len3 > 2e3 ? 2e3 : len3;
-        len3 -= n;
-        do {
-          s1 = s1 + buf[pos++] | 0;
-          s2 = s2 + s1 | 0;
-        } while (--n);
-        s1 %= 65521;
-        s2 %= 65521;
-      }
-      return s1 | s2 << 16 | 0;
-    }
-    module2.exports = adler32;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/crc32.js
-var require_crc32 = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/crc32.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function makeTable() {
-      var c, table = [];
-      for (var n = 0; n < 256; n++) {
-        c = n;
-        for (var k = 0; k < 8; k++) {
-          c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
-        }
-        table[n] = c;
-      }
-      return table;
-    }
-    var crcTable = makeTable();
-    function crc32(crc, buf, len3, pos) {
-      var t2 = crcTable, end = pos + len3;
-      crc ^= -1;
-      for (var i2 = pos; i2 < end; i2++) {
-        crc = crc >>> 8 ^ t2[(crc ^ buf[i2]) & 255];
-      }
-      return crc ^ -1;
-    }
-    module2.exports = crc32;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/messages.js
-var require_messages = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/messages.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    module2.exports = {
-      2: "need dictionary",
-      /* Z_NEED_DICT       2  */
-      1: "stream end",
-      /* Z_STREAM_END      1  */
-      0: "",
-      /* Z_OK              0  */
-      "-1": "file error",
-      /* Z_ERRNO         (-1) */
-      "-2": "stream error",
-      /* Z_STREAM_ERROR  (-2) */
-      "-3": "data error",
-      /* Z_DATA_ERROR    (-3) */
-      "-4": "insufficient memory",
-      /* Z_MEM_ERROR     (-4) */
-      "-5": "buffer error",
-      /* Z_BUF_ERROR     (-5) */
-      "-6": "incompatible version"
-      /* Z_VERSION_ERROR (-6) */
-    };
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/deflate.js
-var require_deflate = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/deflate.js"(exports2) {
-    "use strict";
-    init_globals();
-    var utils = require_common();
-    var trees = require_trees();
-    var adler32 = require_adler32();
-    var crc32 = require_crc32();
-    var msg = require_messages();
-    var Z_NO_FLUSH = 0;
-    var Z_PARTIAL_FLUSH = 1;
-    var Z_FULL_FLUSH = 3;
-    var Z_FINISH = 4;
-    var Z_BLOCK = 5;
-    var Z_OK = 0;
-    var Z_STREAM_END = 1;
-    var Z_STREAM_ERROR = -2;
-    var Z_DATA_ERROR = -3;
-    var Z_BUF_ERROR = -5;
-    var Z_DEFAULT_COMPRESSION = -1;
-    var Z_FILTERED = 1;
-    var Z_HUFFMAN_ONLY = 2;
-    var Z_RLE = 3;
-    var Z_FIXED = 4;
-    var Z_DEFAULT_STRATEGY = 0;
-    var Z_UNKNOWN = 2;
-    var Z_DEFLATED = 8;
-    var MAX_MEM_LEVEL = 9;
-    var MAX_WBITS = 15;
-    var DEF_MEM_LEVEL = 8;
-    var LENGTH_CODES = 29;
-    var LITERALS = 256;
-    var L_CODES = LITERALS + 1 + LENGTH_CODES;
-    var D_CODES = 30;
-    var BL_CODES = 19;
-    var HEAP_SIZE = 2 * L_CODES + 1;
-    var MAX_BITS = 15;
-    var MIN_MATCH = 3;
-    var MAX_MATCH = 258;
-    var MIN_LOOKAHEAD = MAX_MATCH + MIN_MATCH + 1;
-    var PRESET_DICT = 32;
-    var INIT_STATE = 42;
-    var EXTRA_STATE = 69;
-    var NAME_STATE = 73;
-    var COMMENT_STATE = 91;
-    var HCRC_STATE = 103;
-    var BUSY_STATE = 113;
-    var FINISH_STATE = 666;
-    var BS_NEED_MORE = 1;
-    var BS_BLOCK_DONE = 2;
-    var BS_FINISH_STARTED = 3;
-    var BS_FINISH_DONE = 4;
-    var OS_CODE = 3;
-    function err(strm, errorCode) {
-      strm.msg = msg[errorCode];
-      return errorCode;
-    }
-    function rank2(f) {
-      return (f << 1) - (f > 4 ? 9 : 0);
-    }
-    function zero(buf) {
-      var len3 = buf.length;
-      while (--len3 >= 0) {
-        buf[len3] = 0;
-      }
-    }
-    function flush_pending(strm) {
-      var s = strm.state;
-      var len3 = s.pending;
-      if (len3 > strm.avail_out) {
-        len3 = strm.avail_out;
-      }
-      if (len3 === 0) {
-        return;
-      }
-      utils.arraySet(strm.output, s.pending_buf, s.pending_out, len3, strm.next_out);
-      strm.next_out += len3;
-      s.pending_out += len3;
-      strm.total_out += len3;
-      strm.avail_out -= len3;
-      s.pending -= len3;
-      if (s.pending === 0) {
-        s.pending_out = 0;
-      }
-    }
-    function flush_block_only(s, last2) {
-      trees._tr_flush_block(s, s.block_start >= 0 ? s.block_start : -1, s.strstart - s.block_start, last2);
-      s.block_start = s.strstart;
-      flush_pending(s.strm);
-    }
-    function put_byte(s, b) {
-      s.pending_buf[s.pending++] = b;
-    }
-    function putShortMSB(s, b) {
-      s.pending_buf[s.pending++] = b >>> 8 & 255;
-      s.pending_buf[s.pending++] = b & 255;
-    }
-    function read_buf(strm, buf, start, size) {
-      var len3 = strm.avail_in;
-      if (len3 > size) {
-        len3 = size;
-      }
-      if (len3 === 0) {
-        return 0;
-      }
-      strm.avail_in -= len3;
-      utils.arraySet(buf, strm.input, strm.next_in, len3, start);
-      if (strm.state.wrap === 1) {
-        strm.adler = adler32(strm.adler, buf, len3, start);
-      } else if (strm.state.wrap === 2) {
-        strm.adler = crc32(strm.adler, buf, len3, start);
-      }
-      strm.next_in += len3;
-      strm.total_in += len3;
-      return len3;
-    }
-    function longest_match(s, cur_match) {
-      var chain_length = s.max_chain_length;
-      var scan = s.strstart;
-      var match;
-      var len3;
-      var best_len = s.prev_length;
-      var nice_match = s.nice_match;
-      var limit = s.strstart > s.w_size - MIN_LOOKAHEAD ? s.strstart - (s.w_size - MIN_LOOKAHEAD) : 0;
-      var _win = s.window;
-      var wmask = s.w_mask;
-      var prev = s.prev;
-      var strend = s.strstart + MAX_MATCH;
-      var scan_end1 = _win[scan + best_len - 1];
-      var scan_end = _win[scan + best_len];
-      if (s.prev_length >= s.good_match) {
-        chain_length >>= 2;
-      }
-      if (nice_match > s.lookahead) {
-        nice_match = s.lookahead;
-      }
-      do {
-        match = cur_match;
-        if (_win[match + best_len] !== scan_end || _win[match + best_len - 1] !== scan_end1 || _win[match] !== _win[scan] || _win[++match] !== _win[scan + 1]) {
-          continue;
-        }
-        scan += 2;
-        match++;
-        do {
-        } while (_win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && _win[++scan] === _win[++match] && scan < strend);
-        len3 = MAX_MATCH - (strend - scan);
-        scan = strend - MAX_MATCH;
-        if (len3 > best_len) {
-          s.match_start = cur_match;
-          best_len = len3;
-          if (len3 >= nice_match) {
-            break;
-          }
-          scan_end1 = _win[scan + best_len - 1];
-          scan_end = _win[scan + best_len];
-        }
-      } while ((cur_match = prev[cur_match & wmask]) > limit && --chain_length !== 0);
-      if (best_len <= s.lookahead) {
-        return best_len;
-      }
-      return s.lookahead;
-    }
-    function fill_window(s) {
-      var _w_size = s.w_size;
-      var p2, n, m, more, str;
-      do {
-        more = s.window_size - s.lookahead - s.strstart;
-        if (s.strstart >= _w_size + (_w_size - MIN_LOOKAHEAD)) {
-          utils.arraySet(s.window, s.window, _w_size, _w_size, 0);
-          s.match_start -= _w_size;
-          s.strstart -= _w_size;
-          s.block_start -= _w_size;
-          n = s.hash_size;
-          p2 = n;
-          do {
-            m = s.head[--p2];
-            s.head[p2] = m >= _w_size ? m - _w_size : 0;
-          } while (--n);
-          n = _w_size;
-          p2 = n;
-          do {
-            m = s.prev[--p2];
-            s.prev[p2] = m >= _w_size ? m - _w_size : 0;
-          } while (--n);
-          more += _w_size;
-        }
-        if (s.strm.avail_in === 0) {
-          break;
-        }
-        n = read_buf(s.strm, s.window, s.strstart + s.lookahead, more);
-        s.lookahead += n;
-        if (s.lookahead + s.insert >= MIN_MATCH) {
-          str = s.strstart - s.insert;
-          s.ins_h = s.window[str];
-          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + 1]) & s.hash_mask;
-          while (s.insert) {
-            s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + MIN_MATCH - 1]) & s.hash_mask;
-            s.prev[str & s.w_mask] = s.head[s.ins_h];
-            s.head[s.ins_h] = str;
-            str++;
-            s.insert--;
-            if (s.lookahead + s.insert < MIN_MATCH) {
-              break;
-            }
-          }
-        }
-      } while (s.lookahead < MIN_LOOKAHEAD && s.strm.avail_in !== 0);
-    }
-    function deflate_stored(s, flush) {
-      var max_block_size = 65535;
-      if (max_block_size > s.pending_buf_size - 5) {
-        max_block_size = s.pending_buf_size - 5;
-      }
-      for (; ; ) {
-        if (s.lookahead <= 1) {
-          fill_window(s);
-          if (s.lookahead === 0 && flush === Z_NO_FLUSH) {
-            return BS_NEED_MORE;
-          }
-          if (s.lookahead === 0) {
-            break;
-          }
-        }
-        s.strstart += s.lookahead;
-        s.lookahead = 0;
-        var max_start = s.block_start + max_block_size;
-        if (s.strstart === 0 || s.strstart >= max_start) {
-          s.lookahead = s.strstart - max_start;
-          s.strstart = max_start;
-          flush_block_only(s, false);
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        }
-        if (s.strstart - s.block_start >= s.w_size - MIN_LOOKAHEAD) {
-          flush_block_only(s, false);
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        }
-      }
-      s.insert = 0;
-      if (flush === Z_FINISH) {
-        flush_block_only(s, true);
-        if (s.strm.avail_out === 0) {
-          return BS_FINISH_STARTED;
-        }
-        return BS_FINISH_DONE;
-      }
-      if (s.strstart > s.block_start) {
-        flush_block_only(s, false);
-        if (s.strm.avail_out === 0) {
-          return BS_NEED_MORE;
-        }
-      }
-      return BS_NEED_MORE;
-    }
-    function deflate_fast(s, flush) {
-      var hash_head;
-      var bflush;
-      for (; ; ) {
-        if (s.lookahead < MIN_LOOKAHEAD) {
-          fill_window(s);
-          if (s.lookahead < MIN_LOOKAHEAD && flush === Z_NO_FLUSH) {
-            return BS_NEED_MORE;
-          }
-          if (s.lookahead === 0) {
-            break;
-          }
-        }
-        hash_head = 0;
-        if (s.lookahead >= MIN_MATCH) {
-          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
-          hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-          s.head[s.ins_h] = s.strstart;
-        }
-        if (hash_head !== 0 && s.strstart - hash_head <= s.w_size - MIN_LOOKAHEAD) {
-          s.match_length = longest_match(s, hash_head);
-        }
-        if (s.match_length >= MIN_MATCH) {
-          bflush = trees._tr_tally(s, s.strstart - s.match_start, s.match_length - MIN_MATCH);
-          s.lookahead -= s.match_length;
-          if (s.match_length <= s.max_lazy_match && s.lookahead >= MIN_MATCH) {
-            s.match_length--;
-            do {
-              s.strstart++;
-              s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
-              hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-              s.head[s.ins_h] = s.strstart;
-            } while (--s.match_length !== 0);
-            s.strstart++;
-          } else {
-            s.strstart += s.match_length;
-            s.match_length = 0;
-            s.ins_h = s.window[s.strstart];
-            s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + 1]) & s.hash_mask;
-          }
-        } else {
-          bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
-          s.lookahead--;
-          s.strstart++;
-        }
-        if (bflush) {
-          flush_block_only(s, false);
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        }
-      }
-      s.insert = s.strstart < MIN_MATCH - 1 ? s.strstart : MIN_MATCH - 1;
-      if (flush === Z_FINISH) {
-        flush_block_only(s, true);
-        if (s.strm.avail_out === 0) {
-          return BS_FINISH_STARTED;
-        }
-        return BS_FINISH_DONE;
-      }
-      if (s.last_lit) {
-        flush_block_only(s, false);
-        if (s.strm.avail_out === 0) {
-          return BS_NEED_MORE;
-        }
-      }
-      return BS_BLOCK_DONE;
-    }
-    function deflate_slow(s, flush) {
-      var hash_head;
-      var bflush;
-      var max_insert;
-      for (; ; ) {
-        if (s.lookahead < MIN_LOOKAHEAD) {
-          fill_window(s);
-          if (s.lookahead < MIN_LOOKAHEAD && flush === Z_NO_FLUSH) {
-            return BS_NEED_MORE;
-          }
-          if (s.lookahead === 0) {
-            break;
-          }
-        }
-        hash_head = 0;
-        if (s.lookahead >= MIN_MATCH) {
-          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
-          hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-          s.head[s.ins_h] = s.strstart;
-        }
-        s.prev_length = s.match_length;
-        s.prev_match = s.match_start;
-        s.match_length = MIN_MATCH - 1;
-        if (hash_head !== 0 && s.prev_length < s.max_lazy_match && s.strstart - hash_head <= s.w_size - MIN_LOOKAHEAD) {
-          s.match_length = longest_match(s, hash_head);
-          if (s.match_length <= 5 && (s.strategy === Z_FILTERED || s.match_length === MIN_MATCH && s.strstart - s.match_start > 4096)) {
-            s.match_length = MIN_MATCH - 1;
-          }
-        }
-        if (s.prev_length >= MIN_MATCH && s.match_length <= s.prev_length) {
-          max_insert = s.strstart + s.lookahead - MIN_MATCH;
-          bflush = trees._tr_tally(s, s.strstart - 1 - s.prev_match, s.prev_length - MIN_MATCH);
-          s.lookahead -= s.prev_length - 1;
-          s.prev_length -= 2;
-          do {
-            if (++s.strstart <= max_insert) {
-              s.ins_h = (s.ins_h << s.hash_shift ^ s.window[s.strstart + MIN_MATCH - 1]) & s.hash_mask;
-              hash_head = s.prev[s.strstart & s.w_mask] = s.head[s.ins_h];
-              s.head[s.ins_h] = s.strstart;
-            }
-          } while (--s.prev_length !== 0);
-          s.match_available = 0;
-          s.match_length = MIN_MATCH - 1;
-          s.strstart++;
-          if (bflush) {
-            flush_block_only(s, false);
-            if (s.strm.avail_out === 0) {
-              return BS_NEED_MORE;
-            }
-          }
-        } else if (s.match_available) {
-          bflush = trees._tr_tally(s, 0, s.window[s.strstart - 1]);
-          if (bflush) {
-            flush_block_only(s, false);
-          }
-          s.strstart++;
-          s.lookahead--;
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        } else {
-          s.match_available = 1;
-          s.strstart++;
-          s.lookahead--;
-        }
-      }
-      if (s.match_available) {
-        bflush = trees._tr_tally(s, 0, s.window[s.strstart - 1]);
-        s.match_available = 0;
-      }
-      s.insert = s.strstart < MIN_MATCH - 1 ? s.strstart : MIN_MATCH - 1;
-      if (flush === Z_FINISH) {
-        flush_block_only(s, true);
-        if (s.strm.avail_out === 0) {
-          return BS_FINISH_STARTED;
-        }
-        return BS_FINISH_DONE;
-      }
-      if (s.last_lit) {
-        flush_block_only(s, false);
-        if (s.strm.avail_out === 0) {
-          return BS_NEED_MORE;
-        }
-      }
-      return BS_BLOCK_DONE;
-    }
-    function deflate_rle(s, flush) {
-      var bflush;
-      var prev;
-      var scan, strend;
-      var _win = s.window;
-      for (; ; ) {
-        if (s.lookahead <= MAX_MATCH) {
-          fill_window(s);
-          if (s.lookahead <= MAX_MATCH && flush === Z_NO_FLUSH) {
-            return BS_NEED_MORE;
-          }
-          if (s.lookahead === 0) {
-            break;
-          }
-        }
-        s.match_length = 0;
-        if (s.lookahead >= MIN_MATCH && s.strstart > 0) {
-          scan = s.strstart - 1;
-          prev = _win[scan];
-          if (prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan]) {
-            strend = s.strstart + MAX_MATCH;
-            do {
-            } while (prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && prev === _win[++scan] && scan < strend);
-            s.match_length = MAX_MATCH - (strend - scan);
-            if (s.match_length > s.lookahead) {
-              s.match_length = s.lookahead;
-            }
-          }
-        }
-        if (s.match_length >= MIN_MATCH) {
-          bflush = trees._tr_tally(s, 1, s.match_length - MIN_MATCH);
-          s.lookahead -= s.match_length;
-          s.strstart += s.match_length;
-          s.match_length = 0;
-        } else {
-          bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
-          s.lookahead--;
-          s.strstart++;
-        }
-        if (bflush) {
-          flush_block_only(s, false);
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        }
-      }
-      s.insert = 0;
-      if (flush === Z_FINISH) {
-        flush_block_only(s, true);
-        if (s.strm.avail_out === 0) {
-          return BS_FINISH_STARTED;
-        }
-        return BS_FINISH_DONE;
-      }
-      if (s.last_lit) {
-        flush_block_only(s, false);
-        if (s.strm.avail_out === 0) {
-          return BS_NEED_MORE;
-        }
-      }
-      return BS_BLOCK_DONE;
-    }
-    function deflate_huff(s, flush) {
-      var bflush;
-      for (; ; ) {
-        if (s.lookahead === 0) {
-          fill_window(s);
-          if (s.lookahead === 0) {
-            if (flush === Z_NO_FLUSH) {
-              return BS_NEED_MORE;
-            }
-            break;
-          }
-        }
-        s.match_length = 0;
-        bflush = trees._tr_tally(s, 0, s.window[s.strstart]);
-        s.lookahead--;
-        s.strstart++;
-        if (bflush) {
-          flush_block_only(s, false);
-          if (s.strm.avail_out === 0) {
-            return BS_NEED_MORE;
-          }
-        }
-      }
-      s.insert = 0;
-      if (flush === Z_FINISH) {
-        flush_block_only(s, true);
-        if (s.strm.avail_out === 0) {
-          return BS_FINISH_STARTED;
-        }
-        return BS_FINISH_DONE;
-      }
-      if (s.last_lit) {
-        flush_block_only(s, false);
-        if (s.strm.avail_out === 0) {
-          return BS_NEED_MORE;
-        }
-      }
-      return BS_BLOCK_DONE;
-    }
-    function Config(good_length, max_lazy, nice_length, max_chain, func) {
-      this.good_length = good_length;
-      this.max_lazy = max_lazy;
-      this.nice_length = nice_length;
-      this.max_chain = max_chain;
-      this.func = func;
-    }
-    var configuration_table;
-    configuration_table = [
-      /*      good lazy nice chain */
-      new Config(0, 0, 0, 0, deflate_stored),
-      /* 0 store only */
-      new Config(4, 4, 8, 4, deflate_fast),
-      /* 1 max speed, no lazy matches */
-      new Config(4, 5, 16, 8, deflate_fast),
-      /* 2 */
-      new Config(4, 6, 32, 32, deflate_fast),
-      /* 3 */
-      new Config(4, 4, 16, 16, deflate_slow),
-      /* 4 lazy matches */
-      new Config(8, 16, 32, 32, deflate_slow),
-      /* 5 */
-      new Config(8, 16, 128, 128, deflate_slow),
-      /* 6 */
-      new Config(8, 32, 128, 256, deflate_slow),
-      /* 7 */
-      new Config(32, 128, 258, 1024, deflate_slow),
-      /* 8 */
-      new Config(32, 258, 258, 4096, deflate_slow)
-      /* 9 max compression */
-    ];
-    function lm_init(s) {
-      s.window_size = 2 * s.w_size;
-      zero(s.head);
-      s.max_lazy_match = configuration_table[s.level].max_lazy;
-      s.good_match = configuration_table[s.level].good_length;
-      s.nice_match = configuration_table[s.level].nice_length;
-      s.max_chain_length = configuration_table[s.level].max_chain;
-      s.strstart = 0;
-      s.block_start = 0;
-      s.lookahead = 0;
-      s.insert = 0;
-      s.match_length = s.prev_length = MIN_MATCH - 1;
-      s.match_available = 0;
-      s.ins_h = 0;
-    }
-    function DeflateState() {
-      this.strm = null;
-      this.status = 0;
-      this.pending_buf = null;
-      this.pending_buf_size = 0;
-      this.pending_out = 0;
-      this.pending = 0;
-      this.wrap = 0;
-      this.gzhead = null;
-      this.gzindex = 0;
-      this.method = Z_DEFLATED;
-      this.last_flush = -1;
-      this.w_size = 0;
-      this.w_bits = 0;
-      this.w_mask = 0;
-      this.window = null;
-      this.window_size = 0;
-      this.prev = null;
-      this.head = null;
-      this.ins_h = 0;
-      this.hash_size = 0;
-      this.hash_bits = 0;
-      this.hash_mask = 0;
-      this.hash_shift = 0;
-      this.block_start = 0;
-      this.match_length = 0;
-      this.prev_match = 0;
-      this.match_available = 0;
-      this.strstart = 0;
-      this.match_start = 0;
-      this.lookahead = 0;
-      this.prev_length = 0;
-      this.max_chain_length = 0;
-      this.max_lazy_match = 0;
-      this.level = 0;
-      this.strategy = 0;
-      this.good_match = 0;
-      this.nice_match = 0;
-      this.dyn_ltree = new utils.Buf16(HEAP_SIZE * 2);
-      this.dyn_dtree = new utils.Buf16((2 * D_CODES + 1) * 2);
-      this.bl_tree = new utils.Buf16((2 * BL_CODES + 1) * 2);
-      zero(this.dyn_ltree);
-      zero(this.dyn_dtree);
-      zero(this.bl_tree);
-      this.l_desc = null;
-      this.d_desc = null;
-      this.bl_desc = null;
-      this.bl_count = new utils.Buf16(MAX_BITS + 1);
-      this.heap = new utils.Buf16(2 * L_CODES + 1);
-      zero(this.heap);
-      this.heap_len = 0;
-      this.heap_max = 0;
-      this.depth = new utils.Buf16(2 * L_CODES + 1);
-      zero(this.depth);
-      this.l_buf = 0;
-      this.lit_bufsize = 0;
-      this.last_lit = 0;
-      this.d_buf = 0;
-      this.opt_len = 0;
-      this.static_len = 0;
-      this.matches = 0;
-      this.insert = 0;
-      this.bi_buf = 0;
-      this.bi_valid = 0;
-    }
-    function deflateResetKeep(strm) {
-      var s;
-      if (!strm || !strm.state) {
-        return err(strm, Z_STREAM_ERROR);
-      }
-      strm.total_in = strm.total_out = 0;
-      strm.data_type = Z_UNKNOWN;
-      s = strm.state;
-      s.pending = 0;
-      s.pending_out = 0;
-      if (s.wrap < 0) {
-        s.wrap = -s.wrap;
-      }
-      s.status = s.wrap ? INIT_STATE : BUSY_STATE;
-      strm.adler = s.wrap === 2 ? 0 : 1;
-      s.last_flush = Z_NO_FLUSH;
-      trees._tr_init(s);
-      return Z_OK;
-    }
-    function deflateReset(strm) {
-      var ret = deflateResetKeep(strm);
-      if (ret === Z_OK) {
-        lm_init(strm.state);
-      }
-      return ret;
-    }
-    function deflateSetHeader(strm, head) {
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      if (strm.state.wrap !== 2) {
-        return Z_STREAM_ERROR;
-      }
-      strm.state.gzhead = head;
-      return Z_OK;
-    }
-    function deflateInit2(strm, level, method, windowBits, memLevel, strategy) {
-      if (!strm) {
-        return Z_STREAM_ERROR;
-      }
-      var wrap2 = 1;
-      if (level === Z_DEFAULT_COMPRESSION) {
-        level = 6;
-      }
-      if (windowBits < 0) {
-        wrap2 = 0;
-        windowBits = -windowBits;
-      } else if (windowBits > 15) {
-        wrap2 = 2;
-        windowBits -= 16;
-      }
-      if (memLevel < 1 || memLevel > MAX_MEM_LEVEL || method !== Z_DEFLATED || windowBits < 8 || windowBits > 15 || level < 0 || level > 9 || strategy < 0 || strategy > Z_FIXED) {
-        return err(strm, Z_STREAM_ERROR);
-      }
-      if (windowBits === 8) {
-        windowBits = 9;
-      }
-      var s = new DeflateState();
-      strm.state = s;
-      s.strm = strm;
-      s.wrap = wrap2;
-      s.gzhead = null;
-      s.w_bits = windowBits;
-      s.w_size = 1 << s.w_bits;
-      s.w_mask = s.w_size - 1;
-      s.hash_bits = memLevel + 7;
-      s.hash_size = 1 << s.hash_bits;
-      s.hash_mask = s.hash_size - 1;
-      s.hash_shift = ~~((s.hash_bits + MIN_MATCH - 1) / MIN_MATCH);
-      s.window = new utils.Buf8(s.w_size * 2);
-      s.head = new utils.Buf16(s.hash_size);
-      s.prev = new utils.Buf16(s.w_size);
-      s.lit_bufsize = 1 << memLevel + 6;
-      s.pending_buf_size = s.lit_bufsize * 4;
-      s.pending_buf = new utils.Buf8(s.pending_buf_size);
-      s.d_buf = 1 * s.lit_bufsize;
-      s.l_buf = (1 + 2) * s.lit_bufsize;
-      s.level = level;
-      s.strategy = strategy;
-      s.method = method;
-      return deflateReset(strm);
-    }
-    function deflateInit(strm, level) {
-      return deflateInit2(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY);
-    }
-    function deflate2(strm, flush) {
-      var old_flush, s;
-      var beg, val;
-      if (!strm || !strm.state || flush > Z_BLOCK || flush < 0) {
-        return strm ? err(strm, Z_STREAM_ERROR) : Z_STREAM_ERROR;
-      }
-      s = strm.state;
-      if (!strm.output || !strm.input && strm.avail_in !== 0 || s.status === FINISH_STATE && flush !== Z_FINISH) {
-        return err(strm, strm.avail_out === 0 ? Z_BUF_ERROR : Z_STREAM_ERROR);
-      }
-      s.strm = strm;
-      old_flush = s.last_flush;
-      s.last_flush = flush;
-      if (s.status === INIT_STATE) {
-        if (s.wrap === 2) {
-          strm.adler = 0;
-          put_byte(s, 31);
-          put_byte(s, 139);
-          put_byte(s, 8);
-          if (!s.gzhead) {
-            put_byte(s, 0);
-            put_byte(s, 0);
-            put_byte(s, 0);
-            put_byte(s, 0);
-            put_byte(s, 0);
-            put_byte(s, s.level === 9 ? 2 : s.strategy >= Z_HUFFMAN_ONLY || s.level < 2 ? 4 : 0);
-            put_byte(s, OS_CODE);
-            s.status = BUSY_STATE;
-          } else {
-            put_byte(
-              s,
-              (s.gzhead.text ? 1 : 0) + (s.gzhead.hcrc ? 2 : 0) + (!s.gzhead.extra ? 0 : 4) + (!s.gzhead.name ? 0 : 8) + (!s.gzhead.comment ? 0 : 16)
-            );
-            put_byte(s, s.gzhead.time & 255);
-            put_byte(s, s.gzhead.time >> 8 & 255);
-            put_byte(s, s.gzhead.time >> 16 & 255);
-            put_byte(s, s.gzhead.time >> 24 & 255);
-            put_byte(s, s.level === 9 ? 2 : s.strategy >= Z_HUFFMAN_ONLY || s.level < 2 ? 4 : 0);
-            put_byte(s, s.gzhead.os & 255);
-            if (s.gzhead.extra && s.gzhead.extra.length) {
-              put_byte(s, s.gzhead.extra.length & 255);
-              put_byte(s, s.gzhead.extra.length >> 8 & 255);
-            }
-            if (s.gzhead.hcrc) {
-              strm.adler = crc32(strm.adler, s.pending_buf, s.pending, 0);
-            }
-            s.gzindex = 0;
-            s.status = EXTRA_STATE;
-          }
-        } else {
-          var header = Z_DEFLATED + (s.w_bits - 8 << 4) << 8;
-          var level_flags = -1;
-          if (s.strategy >= Z_HUFFMAN_ONLY || s.level < 2) {
-            level_flags = 0;
-          } else if (s.level < 6) {
-            level_flags = 1;
-          } else if (s.level === 6) {
-            level_flags = 2;
-          } else {
-            level_flags = 3;
-          }
-          header |= level_flags << 6;
-          if (s.strstart !== 0) {
-            header |= PRESET_DICT;
-          }
-          header += 31 - header % 31;
-          s.status = BUSY_STATE;
-          putShortMSB(s, header);
-          if (s.strstart !== 0) {
-            putShortMSB(s, strm.adler >>> 16);
-            putShortMSB(s, strm.adler & 65535);
-          }
-          strm.adler = 1;
-        }
-      }
-      if (s.status === EXTRA_STATE) {
-        if (s.gzhead.extra) {
-          beg = s.pending;
-          while (s.gzindex < (s.gzhead.extra.length & 65535)) {
-            if (s.pending === s.pending_buf_size) {
-              if (s.gzhead.hcrc && s.pending > beg) {
-                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-              }
-              flush_pending(strm);
-              beg = s.pending;
-              if (s.pending === s.pending_buf_size) {
-                break;
-              }
-            }
-            put_byte(s, s.gzhead.extra[s.gzindex] & 255);
-            s.gzindex++;
-          }
-          if (s.gzhead.hcrc && s.pending > beg) {
-            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-          }
-          if (s.gzindex === s.gzhead.extra.length) {
-            s.gzindex = 0;
-            s.status = NAME_STATE;
-          }
-        } else {
-          s.status = NAME_STATE;
-        }
-      }
-      if (s.status === NAME_STATE) {
-        if (s.gzhead.name) {
-          beg = s.pending;
-          do {
-            if (s.pending === s.pending_buf_size) {
-              if (s.gzhead.hcrc && s.pending > beg) {
-                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-              }
-              flush_pending(strm);
-              beg = s.pending;
-              if (s.pending === s.pending_buf_size) {
-                val = 1;
-                break;
-              }
-            }
-            if (s.gzindex < s.gzhead.name.length) {
-              val = s.gzhead.name.charCodeAt(s.gzindex++) & 255;
-            } else {
-              val = 0;
-            }
-            put_byte(s, val);
-          } while (val !== 0);
-          if (s.gzhead.hcrc && s.pending > beg) {
-            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-          }
-          if (val === 0) {
-            s.gzindex = 0;
-            s.status = COMMENT_STATE;
-          }
-        } else {
-          s.status = COMMENT_STATE;
-        }
-      }
-      if (s.status === COMMENT_STATE) {
-        if (s.gzhead.comment) {
-          beg = s.pending;
-          do {
-            if (s.pending === s.pending_buf_size) {
-              if (s.gzhead.hcrc && s.pending > beg) {
-                strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-              }
-              flush_pending(strm);
-              beg = s.pending;
-              if (s.pending === s.pending_buf_size) {
-                val = 1;
-                break;
-              }
-            }
-            if (s.gzindex < s.gzhead.comment.length) {
-              val = s.gzhead.comment.charCodeAt(s.gzindex++) & 255;
-            } else {
-              val = 0;
-            }
-            put_byte(s, val);
-          } while (val !== 0);
-          if (s.gzhead.hcrc && s.pending > beg) {
-            strm.adler = crc32(strm.adler, s.pending_buf, s.pending - beg, beg);
-          }
-          if (val === 0) {
-            s.status = HCRC_STATE;
-          }
-        } else {
-          s.status = HCRC_STATE;
-        }
-      }
-      if (s.status === HCRC_STATE) {
-        if (s.gzhead.hcrc) {
-          if (s.pending + 2 > s.pending_buf_size) {
-            flush_pending(strm);
-          }
-          if (s.pending + 2 <= s.pending_buf_size) {
-            put_byte(s, strm.adler & 255);
-            put_byte(s, strm.adler >> 8 & 255);
-            strm.adler = 0;
-            s.status = BUSY_STATE;
-          }
-        } else {
-          s.status = BUSY_STATE;
-        }
-      }
-      if (s.pending !== 0) {
-        flush_pending(strm);
-        if (strm.avail_out === 0) {
-          s.last_flush = -1;
-          return Z_OK;
-        }
-      } else if (strm.avail_in === 0 && rank2(flush) <= rank2(old_flush) && flush !== Z_FINISH) {
-        return err(strm, Z_BUF_ERROR);
-      }
-      if (s.status === FINISH_STATE && strm.avail_in !== 0) {
-        return err(strm, Z_BUF_ERROR);
-      }
-      if (strm.avail_in !== 0 || s.lookahead !== 0 || flush !== Z_NO_FLUSH && s.status !== FINISH_STATE) {
-        var bstate = s.strategy === Z_HUFFMAN_ONLY ? deflate_huff(s, flush) : s.strategy === Z_RLE ? deflate_rle(s, flush) : configuration_table[s.level].func(s, flush);
-        if (bstate === BS_FINISH_STARTED || bstate === BS_FINISH_DONE) {
-          s.status = FINISH_STATE;
-        }
-        if (bstate === BS_NEED_MORE || bstate === BS_FINISH_STARTED) {
-          if (strm.avail_out === 0) {
-            s.last_flush = -1;
-          }
-          return Z_OK;
-        }
-        if (bstate === BS_BLOCK_DONE) {
-          if (flush === Z_PARTIAL_FLUSH) {
-            trees._tr_align(s);
-          } else if (flush !== Z_BLOCK) {
-            trees._tr_stored_block(s, 0, 0, false);
-            if (flush === Z_FULL_FLUSH) {
-              zero(s.head);
-              if (s.lookahead === 0) {
-                s.strstart = 0;
-                s.block_start = 0;
-                s.insert = 0;
-              }
-            }
-          }
-          flush_pending(strm);
-          if (strm.avail_out === 0) {
-            s.last_flush = -1;
-            return Z_OK;
-          }
-        }
-      }
-      if (flush !== Z_FINISH) {
-        return Z_OK;
-      }
-      if (s.wrap <= 0) {
-        return Z_STREAM_END;
-      }
-      if (s.wrap === 2) {
-        put_byte(s, strm.adler & 255);
-        put_byte(s, strm.adler >> 8 & 255);
-        put_byte(s, strm.adler >> 16 & 255);
-        put_byte(s, strm.adler >> 24 & 255);
-        put_byte(s, strm.total_in & 255);
-        put_byte(s, strm.total_in >> 8 & 255);
-        put_byte(s, strm.total_in >> 16 & 255);
-        put_byte(s, strm.total_in >> 24 & 255);
-      } else {
-        putShortMSB(s, strm.adler >>> 16);
-        putShortMSB(s, strm.adler & 65535);
-      }
-      flush_pending(strm);
-      if (s.wrap > 0) {
-        s.wrap = -s.wrap;
-      }
-      return s.pending !== 0 ? Z_OK : Z_STREAM_END;
-    }
-    function deflateEnd(strm) {
-      var status;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      status = strm.state.status;
-      if (status !== INIT_STATE && status !== EXTRA_STATE && status !== NAME_STATE && status !== COMMENT_STATE && status !== HCRC_STATE && status !== BUSY_STATE && status !== FINISH_STATE) {
-        return err(strm, Z_STREAM_ERROR);
-      }
-      strm.state = null;
-      return status === BUSY_STATE ? err(strm, Z_DATA_ERROR) : Z_OK;
-    }
-    function deflateSetDictionary(strm, dictionary) {
-      var dictLength = dictionary.length;
-      var s;
-      var str, n;
-      var wrap2;
-      var avail;
-      var next2;
-      var input;
-      var tmpDict;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      s = strm.state;
-      wrap2 = s.wrap;
-      if (wrap2 === 2 || wrap2 === 1 && s.status !== INIT_STATE || s.lookahead) {
-        return Z_STREAM_ERROR;
-      }
-      if (wrap2 === 1) {
-        strm.adler = adler32(strm.adler, dictionary, dictLength, 0);
-      }
-      s.wrap = 0;
-      if (dictLength >= s.w_size) {
-        if (wrap2 === 0) {
-          zero(s.head);
-          s.strstart = 0;
-          s.block_start = 0;
-          s.insert = 0;
-        }
-        tmpDict = new utils.Buf8(s.w_size);
-        utils.arraySet(tmpDict, dictionary, dictLength - s.w_size, s.w_size, 0);
-        dictionary = tmpDict;
-        dictLength = s.w_size;
-      }
-      avail = strm.avail_in;
-      next2 = strm.next_in;
-      input = strm.input;
-      strm.avail_in = dictLength;
-      strm.next_in = 0;
-      strm.input = dictionary;
-      fill_window(s);
-      while (s.lookahead >= MIN_MATCH) {
-        str = s.strstart;
-        n = s.lookahead - (MIN_MATCH - 1);
-        do {
-          s.ins_h = (s.ins_h << s.hash_shift ^ s.window[str + MIN_MATCH - 1]) & s.hash_mask;
-          s.prev[str & s.w_mask] = s.head[s.ins_h];
-          s.head[s.ins_h] = str;
-          str++;
-        } while (--n);
-        s.strstart = str;
-        s.lookahead = MIN_MATCH - 1;
-        fill_window(s);
-      }
-      s.strstart += s.lookahead;
-      s.block_start = s.strstart;
-      s.insert = s.lookahead;
-      s.lookahead = 0;
-      s.match_length = s.prev_length = MIN_MATCH - 1;
-      s.match_available = 0;
-      strm.next_in = next2;
-      strm.input = input;
-      strm.avail_in = avail;
-      s.wrap = wrap2;
-      return Z_OK;
-    }
-    exports2.deflateInit = deflateInit;
-    exports2.deflateInit2 = deflateInit2;
-    exports2.deflateReset = deflateReset;
-    exports2.deflateResetKeep = deflateResetKeep;
-    exports2.deflateSetHeader = deflateSetHeader;
-    exports2.deflate = deflate2;
-    exports2.deflateEnd = deflateEnd;
-    exports2.deflateSetDictionary = deflateSetDictionary;
-    exports2.deflateInfo = "pako deflate (from Nodeca project)";
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/strings.js
-var require_strings = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/utils/strings.js"(exports2) {
-    "use strict";
-    init_globals();
-    var utils = require_common();
-    var STR_APPLY_OK = true;
-    var STR_APPLY_UIA_OK = true;
-    try {
-      String.fromCharCode.apply(null, [0]);
-    } catch (__) {
-      STR_APPLY_OK = false;
-    }
-    try {
-      String.fromCharCode.apply(null, new Uint8Array(1));
-    } catch (__) {
-      STR_APPLY_UIA_OK = false;
-    }
-    var _utf8len = new utils.Buf8(256);
-    for (q = 0; q < 256; q++) {
-      _utf8len[q] = q >= 252 ? 6 : q >= 248 ? 5 : q >= 240 ? 4 : q >= 224 ? 3 : q >= 192 ? 2 : 1;
-    }
-    var q;
-    _utf8len[254] = _utf8len[254] = 1;
-    exports2.string2buf = function(str) {
-      var buf, c, c2, m_pos, i2, str_len = str.length, buf_len = 0;
-      for (m_pos = 0; m_pos < str_len; m_pos++) {
-        c = str.charCodeAt(m_pos);
-        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
-          c2 = str.charCodeAt(m_pos + 1);
-          if ((c2 & 64512) === 56320) {
-            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
-            m_pos++;
-          }
-        }
-        buf_len += c < 128 ? 1 : c < 2048 ? 2 : c < 65536 ? 3 : 4;
-      }
-      buf = new utils.Buf8(buf_len);
-      for (i2 = 0, m_pos = 0; i2 < buf_len; m_pos++) {
-        c = str.charCodeAt(m_pos);
-        if ((c & 64512) === 55296 && m_pos + 1 < str_len) {
-          c2 = str.charCodeAt(m_pos + 1);
-          if ((c2 & 64512) === 56320) {
-            c = 65536 + (c - 55296 << 10) + (c2 - 56320);
-            m_pos++;
-          }
-        }
-        if (c < 128) {
-          buf[i2++] = c;
-        } else if (c < 2048) {
-          buf[i2++] = 192 | c >>> 6;
-          buf[i2++] = 128 | c & 63;
-        } else if (c < 65536) {
-          buf[i2++] = 224 | c >>> 12;
-          buf[i2++] = 128 | c >>> 6 & 63;
-          buf[i2++] = 128 | c & 63;
-        } else {
-          buf[i2++] = 240 | c >>> 18;
-          buf[i2++] = 128 | c >>> 12 & 63;
-          buf[i2++] = 128 | c >>> 6 & 63;
-          buf[i2++] = 128 | c & 63;
-        }
-      }
-      return buf;
-    };
-    function buf2binstring(buf, len3) {
-      if (len3 < 65534) {
-        if (buf.subarray && STR_APPLY_UIA_OK || !buf.subarray && STR_APPLY_OK) {
-          return String.fromCharCode.apply(null, utils.shrinkBuf(buf, len3));
-        }
-      }
-      var result = "";
-      for (var i2 = 0; i2 < len3; i2++) {
-        result += String.fromCharCode(buf[i2]);
-      }
-      return result;
-    }
-    exports2.buf2binstring = function(buf) {
-      return buf2binstring(buf, buf.length);
-    };
-    exports2.binstring2buf = function(str) {
-      var buf = new utils.Buf8(str.length);
-      for (var i2 = 0, len3 = buf.length; i2 < len3; i2++) {
-        buf[i2] = str.charCodeAt(i2);
-      }
-      return buf;
-    };
-    exports2.buf2string = function(buf, max3) {
-      var i2, out, c, c_len;
-      var len3 = max3 || buf.length;
-      var utf16buf = new Array(len3 * 2);
-      for (out = 0, i2 = 0; i2 < len3; ) {
-        c = buf[i2++];
-        if (c < 128) {
-          utf16buf[out++] = c;
-          continue;
-        }
-        c_len = _utf8len[c];
-        if (c_len > 4) {
-          utf16buf[out++] = 65533;
-          i2 += c_len - 1;
-          continue;
-        }
-        c &= c_len === 2 ? 31 : c_len === 3 ? 15 : 7;
-        while (c_len > 1 && i2 < len3) {
-          c = c << 6 | buf[i2++] & 63;
-          c_len--;
-        }
-        if (c_len > 1) {
-          utf16buf[out++] = 65533;
-          continue;
-        }
-        if (c < 65536) {
-          utf16buf[out++] = c;
-        } else {
-          c -= 65536;
-          utf16buf[out++] = 55296 | c >> 10 & 1023;
-          utf16buf[out++] = 56320 | c & 1023;
-        }
-      }
-      return buf2binstring(utf16buf, out);
-    };
-    exports2.utf8border = function(buf, max3) {
-      var pos;
-      max3 = max3 || buf.length;
-      if (max3 > buf.length) {
-        max3 = buf.length;
-      }
-      pos = max3 - 1;
-      while (pos >= 0 && (buf[pos] & 192) === 128) {
-        pos--;
-      }
-      if (pos < 0) {
-        return max3;
-      }
-      if (pos === 0) {
-        return max3;
-      }
-      return pos + _utf8len[buf[pos]] > max3 ? pos : max3;
-    };
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/zstream.js
-var require_zstream = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/zstream.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function ZStream() {
-      this.input = null;
-      this.next_in = 0;
-      this.avail_in = 0;
-      this.total_in = 0;
-      this.output = null;
-      this.next_out = 0;
-      this.avail_out = 0;
-      this.total_out = 0;
-      this.msg = "";
-      this.state = null;
-      this.data_type = 2;
-      this.adler = 0;
-    }
-    module2.exports = ZStream;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/deflate.js
-var require_deflate2 = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/deflate.js"(exports2) {
-    "use strict";
-    init_globals();
-    var zlib_deflate = require_deflate();
-    var utils = require_common();
-    var strings = require_strings();
-    var msg = require_messages();
-    var ZStream = require_zstream();
-    var toString3 = Object.prototype.toString;
-    var Z_NO_FLUSH = 0;
-    var Z_FINISH = 4;
-    var Z_OK = 0;
-    var Z_STREAM_END = 1;
-    var Z_SYNC_FLUSH = 2;
-    var Z_DEFAULT_COMPRESSION = -1;
-    var Z_DEFAULT_STRATEGY = 0;
-    var Z_DEFLATED = 8;
-    function Deflate(options) {
-      if (!(this instanceof Deflate)) return new Deflate(options);
-      this.options = utils.assign({
-        level: Z_DEFAULT_COMPRESSION,
-        method: Z_DEFLATED,
-        chunkSize: 16384,
-        windowBits: 15,
-        memLevel: 8,
-        strategy: Z_DEFAULT_STRATEGY,
-        to: ""
-      }, options || {});
-      var opt = this.options;
-      if (opt.raw && opt.windowBits > 0) {
-        opt.windowBits = -opt.windowBits;
-      } else if (opt.gzip && opt.windowBits > 0 && opt.windowBits < 16) {
-        opt.windowBits += 16;
-      }
-      this.err = 0;
-      this.msg = "";
-      this.ended = false;
-      this.chunks = [];
-      this.strm = new ZStream();
-      this.strm.avail_out = 0;
-      var status = zlib_deflate.deflateInit2(
-        this.strm,
-        opt.level,
-        opt.method,
-        opt.windowBits,
-        opt.memLevel,
-        opt.strategy
-      );
-      if (status !== Z_OK) {
-        throw new Error(msg[status]);
-      }
-      if (opt.header) {
-        zlib_deflate.deflateSetHeader(this.strm, opt.header);
-      }
-      if (opt.dictionary) {
-        var dict2;
-        if (typeof opt.dictionary === "string") {
-          dict2 = strings.string2buf(opt.dictionary);
-        } else if (toString3.call(opt.dictionary) === "[object ArrayBuffer]") {
-          dict2 = new Uint8Array(opt.dictionary);
-        } else {
-          dict2 = opt.dictionary;
-        }
-        status = zlib_deflate.deflateSetDictionary(this.strm, dict2);
-        if (status !== Z_OK) {
-          throw new Error(msg[status]);
-        }
-        this._dict_set = true;
-      }
-    }
-    Deflate.prototype.push = function(data, mode) {
-      var strm = this.strm;
-      var chunkSize = this.options.chunkSize;
-      var status, _mode;
-      if (this.ended) {
-        return false;
-      }
-      _mode = mode === ~~mode ? mode : mode === true ? Z_FINISH : Z_NO_FLUSH;
-      if (typeof data === "string") {
-        strm.input = strings.string2buf(data);
-      } else if (toString3.call(data) === "[object ArrayBuffer]") {
-        strm.input = new Uint8Array(data);
-      } else {
-        strm.input = data;
-      }
-      strm.next_in = 0;
-      strm.avail_in = strm.input.length;
-      do {
-        if (strm.avail_out === 0) {
-          strm.output = new utils.Buf8(chunkSize);
-          strm.next_out = 0;
-          strm.avail_out = chunkSize;
-        }
-        status = zlib_deflate.deflate(strm, _mode);
-        if (status !== Z_STREAM_END && status !== Z_OK) {
-          this.onEnd(status);
-          this.ended = true;
-          return false;
-        }
-        if (strm.avail_out === 0 || strm.avail_in === 0 && (_mode === Z_FINISH || _mode === Z_SYNC_FLUSH)) {
-          if (this.options.to === "string") {
-            this.onData(strings.buf2binstring(utils.shrinkBuf(strm.output, strm.next_out)));
-          } else {
-            this.onData(utils.shrinkBuf(strm.output, strm.next_out));
-          }
-        }
-      } while ((strm.avail_in > 0 || strm.avail_out === 0) && status !== Z_STREAM_END);
-      if (_mode === Z_FINISH) {
-        status = zlib_deflate.deflateEnd(this.strm);
-        this.onEnd(status);
-        this.ended = true;
-        return status === Z_OK;
-      }
-      if (_mode === Z_SYNC_FLUSH) {
-        this.onEnd(Z_OK);
-        strm.avail_out = 0;
-        return true;
-      }
-      return true;
-    };
-    Deflate.prototype.onData = function(chunk3) {
-      this.chunks.push(chunk3);
-    };
-    Deflate.prototype.onEnd = function(status) {
-      if (status === Z_OK) {
-        if (this.options.to === "string") {
-          this.result = this.chunks.join("");
-        } else {
-          this.result = utils.flattenChunks(this.chunks);
-        }
-      }
-      this.chunks = [];
-      this.err = status;
-      this.msg = this.strm.msg;
-    };
-    function deflate2(input, options) {
-      var deflator = new Deflate(options);
-      deflator.push(input, true);
-      if (deflator.err) {
-        throw deflator.msg || msg[deflator.err];
-      }
-      return deflator.result;
-    }
-    function deflateRaw(input, options) {
-      options = options || {};
-      options.raw = true;
-      return deflate2(input, options);
-    }
-    function gzip(input, options) {
-      options = options || {};
-      options.gzip = true;
-      return deflate2(input, options);
-    }
-    exports2.Deflate = Deflate;
-    exports2.deflate = deflate2;
-    exports2.deflateRaw = deflateRaw;
-    exports2.gzip = gzip;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inffast.js
-var require_inffast = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inffast.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var BAD = 30;
-    var TYPE = 12;
-    module2.exports = function inflate_fast(strm, start) {
-      var state;
-      var _in;
-      var last2;
-      var _out;
-      var beg;
-      var end;
-      var dmax;
-      var wsize;
-      var whave;
-      var wnext;
-      var s_window;
-      var hold2;
-      var bits;
-      var lcode;
-      var dcode;
-      var lmask;
-      var dmask;
-      var here;
-      var op;
-      var len3;
-      var dist;
-      var from;
-      var from_source;
-      var input, output;
-      state = strm.state;
-      _in = strm.next_in;
-      input = strm.input;
-      last2 = _in + (strm.avail_in - 5);
-      _out = strm.next_out;
-      output = strm.output;
-      beg = _out - (start - strm.avail_out);
-      end = _out + (strm.avail_out - 257);
-      dmax = state.dmax;
-      wsize = state.wsize;
-      whave = state.whave;
-      wnext = state.wnext;
-      s_window = state.window;
-      hold2 = state.hold;
-      bits = state.bits;
-      lcode = state.lencode;
-      dcode = state.distcode;
-      lmask = (1 << state.lenbits) - 1;
-      dmask = (1 << state.distbits) - 1;
-      top:
-        do {
-          if (bits < 15) {
-            hold2 += input[_in++] << bits;
-            bits += 8;
-            hold2 += input[_in++] << bits;
-            bits += 8;
-          }
-          here = lcode[hold2 & lmask];
-          dolen:
-            for (; ; ) {
-              op = here >>> 24;
-              hold2 >>>= op;
-              bits -= op;
-              op = here >>> 16 & 255;
-              if (op === 0) {
-                output[_out++] = here & 65535;
-              } else if (op & 16) {
-                len3 = here & 65535;
-                op &= 15;
-                if (op) {
-                  if (bits < op) {
-                    hold2 += input[_in++] << bits;
-                    bits += 8;
-                  }
-                  len3 += hold2 & (1 << op) - 1;
-                  hold2 >>>= op;
-                  bits -= op;
-                }
-                if (bits < 15) {
-                  hold2 += input[_in++] << bits;
-                  bits += 8;
-                  hold2 += input[_in++] << bits;
-                  bits += 8;
-                }
-                here = dcode[hold2 & dmask];
-                dodist:
-                  for (; ; ) {
-                    op = here >>> 24;
-                    hold2 >>>= op;
-                    bits -= op;
-                    op = here >>> 16 & 255;
-                    if (op & 16) {
-                      dist = here & 65535;
-                      op &= 15;
-                      if (bits < op) {
-                        hold2 += input[_in++] << bits;
-                        bits += 8;
-                        if (bits < op) {
-                          hold2 += input[_in++] << bits;
-                          bits += 8;
-                        }
-                      }
-                      dist += hold2 & (1 << op) - 1;
-                      if (dist > dmax) {
-                        strm.msg = "invalid distance too far back";
-                        state.mode = BAD;
-                        break top;
-                      }
-                      hold2 >>>= op;
-                      bits -= op;
-                      op = _out - beg;
-                      if (dist > op) {
-                        op = dist - op;
-                        if (op > whave) {
-                          if (state.sane) {
-                            strm.msg = "invalid distance too far back";
-                            state.mode = BAD;
-                            break top;
-                          }
-                        }
-                        from = 0;
-                        from_source = s_window;
-                        if (wnext === 0) {
-                          from += wsize - op;
-                          if (op < len3) {
-                            len3 -= op;
-                            do {
-                              output[_out++] = s_window[from++];
-                            } while (--op);
-                            from = _out - dist;
-                            from_source = output;
-                          }
-                        } else if (wnext < op) {
-                          from += wsize + wnext - op;
-                          op -= wnext;
-                          if (op < len3) {
-                            len3 -= op;
-                            do {
-                              output[_out++] = s_window[from++];
-                            } while (--op);
-                            from = 0;
-                            if (wnext < len3) {
-                              op = wnext;
-                              len3 -= op;
-                              do {
-                                output[_out++] = s_window[from++];
-                              } while (--op);
-                              from = _out - dist;
-                              from_source = output;
-                            }
-                          }
-                        } else {
-                          from += wnext - op;
-                          if (op < len3) {
-                            len3 -= op;
-                            do {
-                              output[_out++] = s_window[from++];
-                            } while (--op);
-                            from = _out - dist;
-                            from_source = output;
-                          }
-                        }
-                        while (len3 > 2) {
-                          output[_out++] = from_source[from++];
-                          output[_out++] = from_source[from++];
-                          output[_out++] = from_source[from++];
-                          len3 -= 3;
-                        }
-                        if (len3) {
-                          output[_out++] = from_source[from++];
-                          if (len3 > 1) {
-                            output[_out++] = from_source[from++];
-                          }
-                        }
-                      } else {
-                        from = _out - dist;
-                        do {
-                          output[_out++] = output[from++];
-                          output[_out++] = output[from++];
-                          output[_out++] = output[from++];
-                          len3 -= 3;
-                        } while (len3 > 2);
-                        if (len3) {
-                          output[_out++] = output[from++];
-                          if (len3 > 1) {
-                            output[_out++] = output[from++];
-                          }
-                        }
-                      }
-                    } else if ((op & 64) === 0) {
-                      here = dcode[(here & 65535) + (hold2 & (1 << op) - 1)];
-                      continue dodist;
-                    } else {
-                      strm.msg = "invalid distance code";
-                      state.mode = BAD;
-                      break top;
-                    }
-                    break;
-                  }
-              } else if ((op & 64) === 0) {
-                here = lcode[(here & 65535) + (hold2 & (1 << op) - 1)];
-                continue dolen;
-              } else if (op & 32) {
-                state.mode = TYPE;
-                break top;
-              } else {
-                strm.msg = "invalid literal/length code";
-                state.mode = BAD;
-                break top;
-              }
-              break;
-            }
-        } while (_in < last2 && _out < end);
-      len3 = bits >> 3;
-      _in -= len3;
-      bits -= len3 << 3;
-      hold2 &= (1 << bits) - 1;
-      strm.next_in = _in;
-      strm.next_out = _out;
-      strm.avail_in = _in < last2 ? 5 + (last2 - _in) : 5 - (_in - last2);
-      strm.avail_out = _out < end ? 257 + (end - _out) : 257 - (_out - end);
-      state.hold = hold2;
-      state.bits = bits;
-      return;
-    };
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inftrees.js
-var require_inftrees = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inftrees.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var utils = require_common();
-    var MAXBITS = 15;
-    var ENOUGH_LENS = 852;
-    var ENOUGH_DISTS = 592;
-    var CODES = 0;
-    var LENS = 1;
-    var DISTS = 2;
-    var lbase = [
-      /* Length codes 257..285 base */
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      13,
-      15,
-      17,
-      19,
-      23,
-      27,
-      31,
-      35,
-      43,
-      51,
-      59,
-      67,
-      83,
-      99,
-      115,
-      131,
-      163,
-      195,
-      227,
-      258,
-      0,
-      0
-    ];
-    var lext = [
-      /* Length codes 257..285 extra */
-      16,
-      16,
-      16,
-      16,
-      16,
-      16,
-      16,
-      16,
-      17,
-      17,
-      17,
-      17,
-      18,
-      18,
-      18,
-      18,
-      19,
-      19,
-      19,
-      19,
-      20,
-      20,
-      20,
-      20,
-      21,
-      21,
-      21,
-      21,
-      16,
-      72,
-      78
-    ];
-    var dbase = [
-      /* Distance codes 0..29 base */
-      1,
-      2,
-      3,
-      4,
-      5,
-      7,
-      9,
-      13,
-      17,
-      25,
-      33,
-      49,
-      65,
-      97,
-      129,
-      193,
-      257,
-      385,
-      513,
-      769,
-      1025,
-      1537,
-      2049,
-      3073,
-      4097,
-      6145,
-      8193,
-      12289,
-      16385,
-      24577,
-      0,
-      0
-    ];
-    var dext = [
-      /* Distance codes 0..29 extra */
-      16,
-      16,
-      16,
-      16,
-      17,
-      17,
-      18,
-      18,
-      19,
-      19,
-      20,
-      20,
-      21,
-      21,
-      22,
-      22,
-      23,
-      23,
-      24,
-      24,
-      25,
-      25,
-      26,
-      26,
-      27,
-      27,
-      28,
-      28,
-      29,
-      29,
-      64,
-      64
-    ];
-    module2.exports = function inflate_table(type3, lens, lens_index, codes, table, table_index, work, opts) {
-      var bits = opts.bits;
-      var len3 = 0;
-      var sym = 0;
-      var min3 = 0, max3 = 0;
-      var root = 0;
-      var curr = 0;
-      var drop = 0;
-      var left = 0;
-      var used = 0;
-      var huff = 0;
-      var incr;
-      var fill;
-      var low;
-      var mask;
-      var next2;
-      var base = null;
-      var base_index = 0;
-      var end;
-      var count = new utils.Buf16(MAXBITS + 1);
-      var offs = new utils.Buf16(MAXBITS + 1);
-      var extra = null;
-      var extra_index = 0;
-      var here_bits, here_op, here_val;
-      for (len3 = 0; len3 <= MAXBITS; len3++) {
-        count[len3] = 0;
-      }
-      for (sym = 0; sym < codes; sym++) {
-        count[lens[lens_index + sym]]++;
-      }
-      root = bits;
-      for (max3 = MAXBITS; max3 >= 1; max3--) {
-        if (count[max3] !== 0) {
-          break;
-        }
-      }
-      if (root > max3) {
-        root = max3;
-      }
-      if (max3 === 0) {
-        table[table_index++] = 1 << 24 | 64 << 16 | 0;
-        table[table_index++] = 1 << 24 | 64 << 16 | 0;
-        opts.bits = 1;
-        return 0;
-      }
-      for (min3 = 1; min3 < max3; min3++) {
-        if (count[min3] !== 0) {
-          break;
-        }
-      }
-      if (root < min3) {
-        root = min3;
-      }
-      left = 1;
-      for (len3 = 1; len3 <= MAXBITS; len3++) {
-        left <<= 1;
-        left -= count[len3];
-        if (left < 0) {
-          return -1;
-        }
-      }
-      if (left > 0 && (type3 === CODES || max3 !== 1)) {
-        return -1;
-      }
-      offs[1] = 0;
-      for (len3 = 1; len3 < MAXBITS; len3++) {
-        offs[len3 + 1] = offs[len3] + count[len3];
-      }
-      for (sym = 0; sym < codes; sym++) {
-        if (lens[lens_index + sym] !== 0) {
-          work[offs[lens[lens_index + sym]]++] = sym;
-        }
-      }
-      if (type3 === CODES) {
-        base = extra = work;
-        end = 19;
-      } else if (type3 === LENS) {
-        base = lbase;
-        base_index -= 257;
-        extra = lext;
-        extra_index -= 257;
-        end = 256;
-      } else {
-        base = dbase;
-        extra = dext;
-        end = -1;
-      }
-      huff = 0;
-      sym = 0;
-      len3 = min3;
-      next2 = table_index;
-      curr = root;
-      drop = 0;
-      low = -1;
-      used = 1 << root;
-      mask = used - 1;
-      if (type3 === LENS && used > ENOUGH_LENS || type3 === DISTS && used > ENOUGH_DISTS) {
-        return 1;
-      }
-      for (; ; ) {
-        here_bits = len3 - drop;
-        if (work[sym] < end) {
-          here_op = 0;
-          here_val = work[sym];
-        } else if (work[sym] > end) {
-          here_op = extra[extra_index + work[sym]];
-          here_val = base[base_index + work[sym]];
-        } else {
-          here_op = 32 + 64;
-          here_val = 0;
-        }
-        incr = 1 << len3 - drop;
-        fill = 1 << curr;
-        min3 = fill;
-        do {
-          fill -= incr;
-          table[next2 + (huff >> drop) + fill] = here_bits << 24 | here_op << 16 | here_val | 0;
-        } while (fill !== 0);
-        incr = 1 << len3 - 1;
-        while (huff & incr) {
-          incr >>= 1;
-        }
-        if (incr !== 0) {
-          huff &= incr - 1;
-          huff += incr;
-        } else {
-          huff = 0;
-        }
-        sym++;
-        if (--count[len3] === 0) {
-          if (len3 === max3) {
-            break;
-          }
-          len3 = lens[lens_index + work[sym]];
-        }
-        if (len3 > root && (huff & mask) !== low) {
-          if (drop === 0) {
-            drop = root;
-          }
-          next2 += min3;
-          curr = len3 - drop;
-          left = 1 << curr;
-          while (curr + drop < max3) {
-            left -= count[curr + drop];
-            if (left <= 0) {
-              break;
-            }
-            curr++;
-            left <<= 1;
-          }
-          used += 1 << curr;
-          if (type3 === LENS && used > ENOUGH_LENS || type3 === DISTS && used > ENOUGH_DISTS) {
-            return 1;
-          }
-          low = huff & mask;
-          table[low] = root << 24 | curr << 16 | next2 - table_index | 0;
-        }
-      }
-      if (huff !== 0) {
-        table[next2 + huff] = len3 - drop << 24 | 64 << 16 | 0;
-      }
-      opts.bits = root;
-      return 0;
-    };
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inflate.js
-var require_inflate = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/inflate.js"(exports2) {
-    "use strict";
-    init_globals();
-    var utils = require_common();
-    var adler32 = require_adler32();
-    var crc32 = require_crc32();
-    var inflate_fast = require_inffast();
-    var inflate_table = require_inftrees();
-    var CODES = 0;
-    var LENS = 1;
-    var DISTS = 2;
-    var Z_FINISH = 4;
-    var Z_BLOCK = 5;
-    var Z_TREES = 6;
-    var Z_OK = 0;
-    var Z_STREAM_END = 1;
-    var Z_NEED_DICT = 2;
-    var Z_STREAM_ERROR = -2;
-    var Z_DATA_ERROR = -3;
-    var Z_MEM_ERROR = -4;
-    var Z_BUF_ERROR = -5;
-    var Z_DEFLATED = 8;
-    var HEAD = 1;
-    var FLAGS = 2;
-    var TIME = 3;
-    var OS = 4;
-    var EXLEN = 5;
-    var EXTRA = 6;
-    var NAME = 7;
-    var COMMENT = 8;
-    var HCRC = 9;
-    var DICTID = 10;
-    var DICT = 11;
-    var TYPE = 12;
-    var TYPEDO = 13;
-    var STORED = 14;
-    var COPY_ = 15;
-    var COPY = 16;
-    var TABLE = 17;
-    var LENLENS = 18;
-    var CODELENS = 19;
-    var LEN_ = 20;
-    var LEN = 21;
-    var LENEXT = 22;
-    var DIST = 23;
-    var DISTEXT = 24;
-    var MATCH = 25;
-    var LIT = 26;
-    var CHECK = 27;
-    var LENGTH = 28;
-    var DONE = 29;
-    var BAD = 30;
-    var MEM = 31;
-    var SYNC = 32;
-    var ENOUGH_LENS = 852;
-    var ENOUGH_DISTS = 592;
-    var MAX_WBITS = 15;
-    var DEF_WBITS = MAX_WBITS;
-    function zswap32(q) {
-      return (q >>> 24 & 255) + (q >>> 8 & 65280) + ((q & 65280) << 8) + ((q & 255) << 24);
-    }
-    function InflateState() {
-      this.mode = 0;
-      this.last = false;
-      this.wrap = 0;
-      this.havedict = false;
-      this.flags = 0;
-      this.dmax = 0;
-      this.check = 0;
-      this.total = 0;
-      this.head = null;
-      this.wbits = 0;
-      this.wsize = 0;
-      this.whave = 0;
-      this.wnext = 0;
-      this.window = null;
-      this.hold = 0;
-      this.bits = 0;
-      this.length = 0;
-      this.offset = 0;
-      this.extra = 0;
-      this.lencode = null;
-      this.distcode = null;
-      this.lenbits = 0;
-      this.distbits = 0;
-      this.ncode = 0;
-      this.nlen = 0;
-      this.ndist = 0;
-      this.have = 0;
-      this.next = null;
-      this.lens = new utils.Buf16(320);
-      this.work = new utils.Buf16(288);
-      this.lendyn = null;
-      this.distdyn = null;
-      this.sane = 0;
-      this.back = 0;
-      this.was = 0;
-    }
-    function inflateResetKeep(strm) {
-      var state;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      strm.total_in = strm.total_out = state.total = 0;
-      strm.msg = "";
-      if (state.wrap) {
-        strm.adler = state.wrap & 1;
-      }
-      state.mode = HEAD;
-      state.last = 0;
-      state.havedict = 0;
-      state.dmax = 32768;
-      state.head = null;
-      state.hold = 0;
-      state.bits = 0;
-      state.lencode = state.lendyn = new utils.Buf32(ENOUGH_LENS);
-      state.distcode = state.distdyn = new utils.Buf32(ENOUGH_DISTS);
-      state.sane = 1;
-      state.back = -1;
-      return Z_OK;
-    }
-    function inflateReset(strm) {
-      var state;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      state.wsize = 0;
-      state.whave = 0;
-      state.wnext = 0;
-      return inflateResetKeep(strm);
-    }
-    function inflateReset2(strm, windowBits) {
-      var wrap2;
-      var state;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      if (windowBits < 0) {
-        wrap2 = 0;
-        windowBits = -windowBits;
-      } else {
-        wrap2 = (windowBits >> 4) + 1;
-        if (windowBits < 48) {
-          windowBits &= 15;
-        }
-      }
-      if (windowBits && (windowBits < 8 || windowBits > 15)) {
-        return Z_STREAM_ERROR;
-      }
-      if (state.window !== null && state.wbits !== windowBits) {
-        state.window = null;
-      }
-      state.wrap = wrap2;
-      state.wbits = windowBits;
-      return inflateReset(strm);
-    }
-    function inflateInit2(strm, windowBits) {
-      var ret;
-      var state;
-      if (!strm) {
-        return Z_STREAM_ERROR;
-      }
-      state = new InflateState();
-      strm.state = state;
-      state.window = null;
-      ret = inflateReset2(strm, windowBits);
-      if (ret !== Z_OK) {
-        strm.state = null;
-      }
-      return ret;
-    }
-    function inflateInit(strm) {
-      return inflateInit2(strm, DEF_WBITS);
-    }
-    var virgin = true;
-    var lenfix;
-    var distfix;
-    function fixedtables(state) {
-      if (virgin) {
-        var sym;
-        lenfix = new utils.Buf32(512);
-        distfix = new utils.Buf32(32);
-        sym = 0;
-        while (sym < 144) {
-          state.lens[sym++] = 8;
-        }
-        while (sym < 256) {
-          state.lens[sym++] = 9;
-        }
-        while (sym < 280) {
-          state.lens[sym++] = 7;
-        }
-        while (sym < 288) {
-          state.lens[sym++] = 8;
-        }
-        inflate_table(LENS, state.lens, 0, 288, lenfix, 0, state.work, { bits: 9 });
-        sym = 0;
-        while (sym < 32) {
-          state.lens[sym++] = 5;
-        }
-        inflate_table(DISTS, state.lens, 0, 32, distfix, 0, state.work, { bits: 5 });
-        virgin = false;
-      }
-      state.lencode = lenfix;
-      state.lenbits = 9;
-      state.distcode = distfix;
-      state.distbits = 5;
-    }
-    function updatewindow(strm, src, end, copy2) {
-      var dist;
-      var state = strm.state;
-      if (state.window === null) {
-        state.wsize = 1 << state.wbits;
-        state.wnext = 0;
-        state.whave = 0;
-        state.window = new utils.Buf8(state.wsize);
-      }
-      if (copy2 >= state.wsize) {
-        utils.arraySet(state.window, src, end - state.wsize, state.wsize, 0);
-        state.wnext = 0;
-        state.whave = state.wsize;
-      } else {
-        dist = state.wsize - state.wnext;
-        if (dist > copy2) {
-          dist = copy2;
-        }
-        utils.arraySet(state.window, src, end - copy2, dist, state.wnext);
-        copy2 -= dist;
-        if (copy2) {
-          utils.arraySet(state.window, src, end - copy2, copy2, 0);
-          state.wnext = copy2;
-          state.whave = state.wsize;
-        } else {
-          state.wnext += dist;
-          if (state.wnext === state.wsize) {
-            state.wnext = 0;
-          }
-          if (state.whave < state.wsize) {
-            state.whave += dist;
-          }
-        }
-      }
-      return 0;
-    }
-    function inflate2(strm, flush) {
-      var state;
-      var input, output;
-      var next2;
-      var put;
-      var have, left;
-      var hold2;
-      var bits;
-      var _in, _out;
-      var copy2;
-      var from;
-      var from_source;
-      var here = 0;
-      var here_bits, here_op, here_val;
-      var last_bits, last_op, last_val;
-      var len3;
-      var ret;
-      var hbuf = new utils.Buf8(4);
-      var opts;
-      var n;
-      var order2 = (
-        /* permutation of code lengths */
-        [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
-      );
-      if (!strm || !strm.state || !strm.output || !strm.input && strm.avail_in !== 0) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      if (state.mode === TYPE) {
-        state.mode = TYPEDO;
-      }
-      put = strm.next_out;
-      output = strm.output;
-      left = strm.avail_out;
-      next2 = strm.next_in;
-      input = strm.input;
-      have = strm.avail_in;
-      hold2 = state.hold;
-      bits = state.bits;
-      _in = have;
-      _out = left;
-      ret = Z_OK;
-      inf_leave:
-        for (; ; ) {
-          switch (state.mode) {
-            case HEAD:
-              if (state.wrap === 0) {
-                state.mode = TYPEDO;
-                break;
-              }
-              while (bits < 16) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if (state.wrap & 2 && hold2 === 35615) {
-                state.check = 0;
-                hbuf[0] = hold2 & 255;
-                hbuf[1] = hold2 >>> 8 & 255;
-                state.check = crc32(state.check, hbuf, 2, 0);
-                hold2 = 0;
-                bits = 0;
-                state.mode = FLAGS;
-                break;
-              }
-              state.flags = 0;
-              if (state.head) {
-                state.head.done = false;
-              }
-              if (!(state.wrap & 1) || /* check if zlib header allowed */
-              (((hold2 & 255) << 8) + (hold2 >> 8)) % 31) {
-                strm.msg = "incorrect header check";
-                state.mode = BAD;
-                break;
-              }
-              if ((hold2 & 15) !== Z_DEFLATED) {
-                strm.msg = "unknown compression method";
-                state.mode = BAD;
-                break;
-              }
-              hold2 >>>= 4;
-              bits -= 4;
-              len3 = (hold2 & 15) + 8;
-              if (state.wbits === 0) {
-                state.wbits = len3;
-              } else if (len3 > state.wbits) {
-                strm.msg = "invalid window size";
-                state.mode = BAD;
-                break;
-              }
-              state.dmax = 1 << len3;
-              strm.adler = state.check = 1;
-              state.mode = hold2 & 512 ? DICTID : TYPE;
-              hold2 = 0;
-              bits = 0;
-              break;
-            case FLAGS:
-              while (bits < 16) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              state.flags = hold2;
-              if ((state.flags & 255) !== Z_DEFLATED) {
-                strm.msg = "unknown compression method";
-                state.mode = BAD;
-                break;
-              }
-              if (state.flags & 57344) {
-                strm.msg = "unknown header flags set";
-                state.mode = BAD;
-                break;
-              }
-              if (state.head) {
-                state.head.text = hold2 >> 8 & 1;
-              }
-              if (state.flags & 512) {
-                hbuf[0] = hold2 & 255;
-                hbuf[1] = hold2 >>> 8 & 255;
-                state.check = crc32(state.check, hbuf, 2, 0);
-              }
-              hold2 = 0;
-              bits = 0;
-              state.mode = TIME;
-            /* falls through */
-            case TIME:
-              while (bits < 32) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if (state.head) {
-                state.head.time = hold2;
-              }
-              if (state.flags & 512) {
-                hbuf[0] = hold2 & 255;
-                hbuf[1] = hold2 >>> 8 & 255;
-                hbuf[2] = hold2 >>> 16 & 255;
-                hbuf[3] = hold2 >>> 24 & 255;
-                state.check = crc32(state.check, hbuf, 4, 0);
-              }
-              hold2 = 0;
-              bits = 0;
-              state.mode = OS;
-            /* falls through */
-            case OS:
-              while (bits < 16) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if (state.head) {
-                state.head.xflags = hold2 & 255;
-                state.head.os = hold2 >> 8;
-              }
-              if (state.flags & 512) {
-                hbuf[0] = hold2 & 255;
-                hbuf[1] = hold2 >>> 8 & 255;
-                state.check = crc32(state.check, hbuf, 2, 0);
-              }
-              hold2 = 0;
-              bits = 0;
-              state.mode = EXLEN;
-            /* falls through */
-            case EXLEN:
-              if (state.flags & 1024) {
-                while (bits < 16) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                state.length = hold2;
-                if (state.head) {
-                  state.head.extra_len = hold2;
-                }
-                if (state.flags & 512) {
-                  hbuf[0] = hold2 & 255;
-                  hbuf[1] = hold2 >>> 8 & 255;
-                  state.check = crc32(state.check, hbuf, 2, 0);
-                }
-                hold2 = 0;
-                bits = 0;
-              } else if (state.head) {
-                state.head.extra = null;
-              }
-              state.mode = EXTRA;
-            /* falls through */
-            case EXTRA:
-              if (state.flags & 1024) {
-                copy2 = state.length;
-                if (copy2 > have) {
-                  copy2 = have;
-                }
-                if (copy2) {
-                  if (state.head) {
-                    len3 = state.head.extra_len - state.length;
-                    if (!state.head.extra) {
-                      state.head.extra = new Array(state.head.extra_len);
-                    }
-                    utils.arraySet(
-                      state.head.extra,
-                      input,
-                      next2,
-                      // extra field is limited to 65536 bytes
-                      // - no need for additional size check
-                      copy2,
-                      /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
-                      len3
-                    );
-                  }
-                  if (state.flags & 512) {
-                    state.check = crc32(state.check, input, copy2, next2);
-                  }
-                  have -= copy2;
-                  next2 += copy2;
-                  state.length -= copy2;
-                }
-                if (state.length) {
-                  break inf_leave;
-                }
-              }
-              state.length = 0;
-              state.mode = NAME;
-            /* falls through */
-            case NAME:
-              if (state.flags & 2048) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                copy2 = 0;
-                do {
-                  len3 = input[next2 + copy2++];
-                  if (state.head && len3 && state.length < 65536) {
-                    state.head.name += String.fromCharCode(len3);
-                  }
-                } while (len3 && copy2 < have);
-                if (state.flags & 512) {
-                  state.check = crc32(state.check, input, copy2, next2);
-                }
-                have -= copy2;
-                next2 += copy2;
-                if (len3) {
-                  break inf_leave;
-                }
-              } else if (state.head) {
-                state.head.name = null;
-              }
-              state.length = 0;
-              state.mode = COMMENT;
-            /* falls through */
-            case COMMENT:
-              if (state.flags & 4096) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                copy2 = 0;
-                do {
-                  len3 = input[next2 + copy2++];
-                  if (state.head && len3 && state.length < 65536) {
-                    state.head.comment += String.fromCharCode(len3);
-                  }
-                } while (len3 && copy2 < have);
-                if (state.flags & 512) {
-                  state.check = crc32(state.check, input, copy2, next2);
-                }
-                have -= copy2;
-                next2 += copy2;
-                if (len3) {
-                  break inf_leave;
-                }
-              } else if (state.head) {
-                state.head.comment = null;
-              }
-              state.mode = HCRC;
-            /* falls through */
-            case HCRC:
-              if (state.flags & 512) {
-                while (bits < 16) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                if (hold2 !== (state.check & 65535)) {
-                  strm.msg = "header crc mismatch";
-                  state.mode = BAD;
-                  break;
-                }
-                hold2 = 0;
-                bits = 0;
-              }
-              if (state.head) {
-                state.head.hcrc = state.flags >> 9 & 1;
-                state.head.done = true;
-              }
-              strm.adler = state.check = 0;
-              state.mode = TYPE;
-              break;
-            case DICTID:
-              while (bits < 32) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              strm.adler = state.check = zswap32(hold2);
-              hold2 = 0;
-              bits = 0;
-              state.mode = DICT;
-            /* falls through */
-            case DICT:
-              if (state.havedict === 0) {
-                strm.next_out = put;
-                strm.avail_out = left;
-                strm.next_in = next2;
-                strm.avail_in = have;
-                state.hold = hold2;
-                state.bits = bits;
-                return Z_NEED_DICT;
-              }
-              strm.adler = state.check = 1;
-              state.mode = TYPE;
-            /* falls through */
-            case TYPE:
-              if (flush === Z_BLOCK || flush === Z_TREES) {
-                break inf_leave;
-              }
-            /* falls through */
-            case TYPEDO:
-              if (state.last) {
-                hold2 >>>= bits & 7;
-                bits -= bits & 7;
-                state.mode = CHECK;
-                break;
-              }
-              while (bits < 3) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              state.last = hold2 & 1;
-              hold2 >>>= 1;
-              bits -= 1;
-              switch (hold2 & 3) {
-                case 0:
-                  state.mode = STORED;
-                  break;
-                case 1:
-                  fixedtables(state);
-                  state.mode = LEN_;
-                  if (flush === Z_TREES) {
-                    hold2 >>>= 2;
-                    bits -= 2;
-                    break inf_leave;
-                  }
-                  break;
-                case 2:
-                  state.mode = TABLE;
-                  break;
-                case 3:
-                  strm.msg = "invalid block type";
-                  state.mode = BAD;
-              }
-              hold2 >>>= 2;
-              bits -= 2;
-              break;
-            case STORED:
-              hold2 >>>= bits & 7;
-              bits -= bits & 7;
-              while (bits < 32) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if ((hold2 & 65535) !== (hold2 >>> 16 ^ 65535)) {
-                strm.msg = "invalid stored block lengths";
-                state.mode = BAD;
-                break;
-              }
-              state.length = hold2 & 65535;
-              hold2 = 0;
-              bits = 0;
-              state.mode = COPY_;
-              if (flush === Z_TREES) {
-                break inf_leave;
-              }
-            /* falls through */
-            case COPY_:
-              state.mode = COPY;
-            /* falls through */
-            case COPY:
-              copy2 = state.length;
-              if (copy2) {
-                if (copy2 > have) {
-                  copy2 = have;
-                }
-                if (copy2 > left) {
-                  copy2 = left;
-                }
-                if (copy2 === 0) {
-                  break inf_leave;
-                }
-                utils.arraySet(output, input, next2, copy2, put);
-                have -= copy2;
-                next2 += copy2;
-                left -= copy2;
-                put += copy2;
-                state.length -= copy2;
-                break;
-              }
-              state.mode = TYPE;
-              break;
-            case TABLE:
-              while (bits < 14) {
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              state.nlen = (hold2 & 31) + 257;
-              hold2 >>>= 5;
-              bits -= 5;
-              state.ndist = (hold2 & 31) + 1;
-              hold2 >>>= 5;
-              bits -= 5;
-              state.ncode = (hold2 & 15) + 4;
-              hold2 >>>= 4;
-              bits -= 4;
-              if (state.nlen > 286 || state.ndist > 30) {
-                strm.msg = "too many length or distance symbols";
-                state.mode = BAD;
-                break;
-              }
-              state.have = 0;
-              state.mode = LENLENS;
-            /* falls through */
-            case LENLENS:
-              while (state.have < state.ncode) {
-                while (bits < 3) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                state.lens[order2[state.have++]] = hold2 & 7;
-                hold2 >>>= 3;
-                bits -= 3;
-              }
-              while (state.have < 19) {
-                state.lens[order2[state.have++]] = 0;
-              }
-              state.lencode = state.lendyn;
-              state.lenbits = 7;
-              opts = { bits: state.lenbits };
-              ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
-              state.lenbits = opts.bits;
-              if (ret) {
-                strm.msg = "invalid code lengths set";
-                state.mode = BAD;
-                break;
-              }
-              state.have = 0;
-              state.mode = CODELENS;
-            /* falls through */
-            case CODELENS:
-              while (state.have < state.nlen + state.ndist) {
-                for (; ; ) {
-                  here = state.lencode[hold2 & (1 << state.lenbits) - 1];
-                  here_bits = here >>> 24;
-                  here_op = here >>> 16 & 255;
-                  here_val = here & 65535;
-                  if (here_bits <= bits) {
-                    break;
-                  }
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                if (here_val < 16) {
-                  hold2 >>>= here_bits;
-                  bits -= here_bits;
-                  state.lens[state.have++] = here_val;
-                } else {
-                  if (here_val === 16) {
-                    n = here_bits + 2;
-                    while (bits < n) {
-                      if (have === 0) {
-                        break inf_leave;
-                      }
-                      have--;
-                      hold2 += input[next2++] << bits;
-                      bits += 8;
-                    }
-                    hold2 >>>= here_bits;
-                    bits -= here_bits;
-                    if (state.have === 0) {
-                      strm.msg = "invalid bit length repeat";
-                      state.mode = BAD;
-                      break;
-                    }
-                    len3 = state.lens[state.have - 1];
-                    copy2 = 3 + (hold2 & 3);
-                    hold2 >>>= 2;
-                    bits -= 2;
-                  } else if (here_val === 17) {
-                    n = here_bits + 3;
-                    while (bits < n) {
-                      if (have === 0) {
-                        break inf_leave;
-                      }
-                      have--;
-                      hold2 += input[next2++] << bits;
-                      bits += 8;
-                    }
-                    hold2 >>>= here_bits;
-                    bits -= here_bits;
-                    len3 = 0;
-                    copy2 = 3 + (hold2 & 7);
-                    hold2 >>>= 3;
-                    bits -= 3;
-                  } else {
-                    n = here_bits + 7;
-                    while (bits < n) {
-                      if (have === 0) {
-                        break inf_leave;
-                      }
-                      have--;
-                      hold2 += input[next2++] << bits;
-                      bits += 8;
-                    }
-                    hold2 >>>= here_bits;
-                    bits -= here_bits;
-                    len3 = 0;
-                    copy2 = 11 + (hold2 & 127);
-                    hold2 >>>= 7;
-                    bits -= 7;
-                  }
-                  if (state.have + copy2 > state.nlen + state.ndist) {
-                    strm.msg = "invalid bit length repeat";
-                    state.mode = BAD;
-                    break;
-                  }
-                  while (copy2--) {
-                    state.lens[state.have++] = len3;
-                  }
-                }
-              }
-              if (state.mode === BAD) {
-                break;
-              }
-              if (state.lens[256] === 0) {
-                strm.msg = "invalid code -- missing end-of-block";
-                state.mode = BAD;
-                break;
-              }
-              state.lenbits = 9;
-              opts = { bits: state.lenbits };
-              ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
-              state.lenbits = opts.bits;
-              if (ret) {
-                strm.msg = "invalid literal/lengths set";
-                state.mode = BAD;
-                break;
-              }
-              state.distbits = 6;
-              state.distcode = state.distdyn;
-              opts = { bits: state.distbits };
-              ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
-              state.distbits = opts.bits;
-              if (ret) {
-                strm.msg = "invalid distances set";
-                state.mode = BAD;
-                break;
-              }
-              state.mode = LEN_;
-              if (flush === Z_TREES) {
-                break inf_leave;
-              }
-            /* falls through */
-            case LEN_:
-              state.mode = LEN;
-            /* falls through */
-            case LEN:
-              if (have >= 6 && left >= 258) {
-                strm.next_out = put;
-                strm.avail_out = left;
-                strm.next_in = next2;
-                strm.avail_in = have;
-                state.hold = hold2;
-                state.bits = bits;
-                inflate_fast(strm, _out);
-                put = strm.next_out;
-                output = strm.output;
-                left = strm.avail_out;
-                next2 = strm.next_in;
-                input = strm.input;
-                have = strm.avail_in;
-                hold2 = state.hold;
-                bits = state.bits;
-                if (state.mode === TYPE) {
-                  state.back = -1;
-                }
-                break;
-              }
-              state.back = 0;
-              for (; ; ) {
-                here = state.lencode[hold2 & (1 << state.lenbits) - 1];
-                here_bits = here >>> 24;
-                here_op = here >>> 16 & 255;
-                here_val = here & 65535;
-                if (here_bits <= bits) {
-                  break;
-                }
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if (here_op && (here_op & 240) === 0) {
-                last_bits = here_bits;
-                last_op = here_op;
-                last_val = here_val;
-                for (; ; ) {
-                  here = state.lencode[last_val + ((hold2 & (1 << last_bits + last_op) - 1) >> last_bits)];
-                  here_bits = here >>> 24;
-                  here_op = here >>> 16 & 255;
-                  here_val = here & 65535;
-                  if (last_bits + here_bits <= bits) {
-                    break;
-                  }
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                hold2 >>>= last_bits;
-                bits -= last_bits;
-                state.back += last_bits;
-              }
-              hold2 >>>= here_bits;
-              bits -= here_bits;
-              state.back += here_bits;
-              state.length = here_val;
-              if (here_op === 0) {
-                state.mode = LIT;
-                break;
-              }
-              if (here_op & 32) {
-                state.back = -1;
-                state.mode = TYPE;
-                break;
-              }
-              if (here_op & 64) {
-                strm.msg = "invalid literal/length code";
-                state.mode = BAD;
-                break;
-              }
-              state.extra = here_op & 15;
-              state.mode = LENEXT;
-            /* falls through */
-            case LENEXT:
-              if (state.extra) {
-                n = state.extra;
-                while (bits < n) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                state.length += hold2 & (1 << state.extra) - 1;
-                hold2 >>>= state.extra;
-                bits -= state.extra;
-                state.back += state.extra;
-              }
-              state.was = state.length;
-              state.mode = DIST;
-            /* falls through */
-            case DIST:
-              for (; ; ) {
-                here = state.distcode[hold2 & (1 << state.distbits) - 1];
-                here_bits = here >>> 24;
-                here_op = here >>> 16 & 255;
-                here_val = here & 65535;
-                if (here_bits <= bits) {
-                  break;
-                }
-                if (have === 0) {
-                  break inf_leave;
-                }
-                have--;
-                hold2 += input[next2++] << bits;
-                bits += 8;
-              }
-              if ((here_op & 240) === 0) {
-                last_bits = here_bits;
-                last_op = here_op;
-                last_val = here_val;
-                for (; ; ) {
-                  here = state.distcode[last_val + ((hold2 & (1 << last_bits + last_op) - 1) >> last_bits)];
-                  here_bits = here >>> 24;
-                  here_op = here >>> 16 & 255;
-                  here_val = here & 65535;
-                  if (last_bits + here_bits <= bits) {
-                    break;
-                  }
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                hold2 >>>= last_bits;
-                bits -= last_bits;
-                state.back += last_bits;
-              }
-              hold2 >>>= here_bits;
-              bits -= here_bits;
-              state.back += here_bits;
-              if (here_op & 64) {
-                strm.msg = "invalid distance code";
-                state.mode = BAD;
-                break;
-              }
-              state.offset = here_val;
-              state.extra = here_op & 15;
-              state.mode = DISTEXT;
-            /* falls through */
-            case DISTEXT:
-              if (state.extra) {
-                n = state.extra;
-                while (bits < n) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                state.offset += hold2 & (1 << state.extra) - 1;
-                hold2 >>>= state.extra;
-                bits -= state.extra;
-                state.back += state.extra;
-              }
-              if (state.offset > state.dmax) {
-                strm.msg = "invalid distance too far back";
-                state.mode = BAD;
-                break;
-              }
-              state.mode = MATCH;
-            /* falls through */
-            case MATCH:
-              if (left === 0) {
-                break inf_leave;
-              }
-              copy2 = _out - left;
-              if (state.offset > copy2) {
-                copy2 = state.offset - copy2;
-                if (copy2 > state.whave) {
-                  if (state.sane) {
-                    strm.msg = "invalid distance too far back";
-                    state.mode = BAD;
-                    break;
-                  }
-                }
-                if (copy2 > state.wnext) {
-                  copy2 -= state.wnext;
-                  from = state.wsize - copy2;
-                } else {
-                  from = state.wnext - copy2;
-                }
-                if (copy2 > state.length) {
-                  copy2 = state.length;
-                }
-                from_source = state.window;
-              } else {
-                from_source = output;
-                from = put - state.offset;
-                copy2 = state.length;
-              }
-              if (copy2 > left) {
-                copy2 = left;
-              }
-              left -= copy2;
-              state.length -= copy2;
-              do {
-                output[put++] = from_source[from++];
-              } while (--copy2);
-              if (state.length === 0) {
-                state.mode = LEN;
-              }
-              break;
-            case LIT:
-              if (left === 0) {
-                break inf_leave;
-              }
-              output[put++] = state.length;
-              left--;
-              state.mode = LEN;
-              break;
-            case CHECK:
-              if (state.wrap) {
-                while (bits < 32) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 |= input[next2++] << bits;
-                  bits += 8;
-                }
-                _out -= left;
-                strm.total_out += _out;
-                state.total += _out;
-                if (_out) {
-                  strm.adler = state.check = /*UPDATE(state.check, put - _out, _out);*/
-                  state.flags ? crc32(state.check, output, _out, put - _out) : adler32(state.check, output, _out, put - _out);
-                }
-                _out = left;
-                if ((state.flags ? hold2 : zswap32(hold2)) !== state.check) {
-                  strm.msg = "incorrect data check";
-                  state.mode = BAD;
-                  break;
-                }
-                hold2 = 0;
-                bits = 0;
-              }
-              state.mode = LENGTH;
-            /* falls through */
-            case LENGTH:
-              if (state.wrap && state.flags) {
-                while (bits < 32) {
-                  if (have === 0) {
-                    break inf_leave;
-                  }
-                  have--;
-                  hold2 += input[next2++] << bits;
-                  bits += 8;
-                }
-                if (hold2 !== (state.total & 4294967295)) {
-                  strm.msg = "incorrect length check";
-                  state.mode = BAD;
-                  break;
-                }
-                hold2 = 0;
-                bits = 0;
-              }
-              state.mode = DONE;
-            /* falls through */
-            case DONE:
-              ret = Z_STREAM_END;
-              break inf_leave;
-            case BAD:
-              ret = Z_DATA_ERROR;
-              break inf_leave;
-            case MEM:
-              return Z_MEM_ERROR;
-            case SYNC:
-            /* falls through */
-            default:
-              return Z_STREAM_ERROR;
-          }
-        }
-      strm.next_out = put;
-      strm.avail_out = left;
-      strm.next_in = next2;
-      strm.avail_in = have;
-      state.hold = hold2;
-      state.bits = bits;
-      if (state.wsize || _out !== strm.avail_out && state.mode < BAD && (state.mode < CHECK || flush !== Z_FINISH)) {
-        if (updatewindow(strm, strm.output, strm.next_out, _out - strm.avail_out)) {
-          state.mode = MEM;
-          return Z_MEM_ERROR;
-        }
-      }
-      _in -= strm.avail_in;
-      _out -= strm.avail_out;
-      strm.total_in += _in;
-      strm.total_out += _out;
-      state.total += _out;
-      if (state.wrap && _out) {
-        strm.adler = state.check = /*UPDATE(state.check, strm.next_out - _out, _out);*/
-        state.flags ? crc32(state.check, output, _out, strm.next_out - _out) : adler32(state.check, output, _out, strm.next_out - _out);
-      }
-      strm.data_type = state.bits + (state.last ? 64 : 0) + (state.mode === TYPE ? 128 : 0) + (state.mode === LEN_ || state.mode === COPY_ ? 256 : 0);
-      if ((_in === 0 && _out === 0 || flush === Z_FINISH) && ret === Z_OK) {
-        ret = Z_BUF_ERROR;
-      }
-      return ret;
-    }
-    function inflateEnd(strm) {
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      var state = strm.state;
-      if (state.window) {
-        state.window = null;
-      }
-      strm.state = null;
-      return Z_OK;
-    }
-    function inflateGetHeader(strm, head) {
-      var state;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      if ((state.wrap & 2) === 0) {
-        return Z_STREAM_ERROR;
-      }
-      state.head = head;
-      head.done = false;
-      return Z_OK;
-    }
-    function inflateSetDictionary(strm, dictionary) {
-      var dictLength = dictionary.length;
-      var state;
-      var dictid;
-      var ret;
-      if (!strm || !strm.state) {
-        return Z_STREAM_ERROR;
-      }
-      state = strm.state;
-      if (state.wrap !== 0 && state.mode !== DICT) {
-        return Z_STREAM_ERROR;
-      }
-      if (state.mode === DICT) {
-        dictid = 1;
-        dictid = adler32(dictid, dictionary, dictLength, 0);
-        if (dictid !== state.check) {
-          return Z_DATA_ERROR;
-        }
-      }
-      ret = updatewindow(strm, dictionary, dictLength, dictLength);
-      if (ret) {
-        state.mode = MEM;
-        return Z_MEM_ERROR;
-      }
-      state.havedict = 1;
-      return Z_OK;
-    }
-    exports2.inflateReset = inflateReset;
-    exports2.inflateReset2 = inflateReset2;
-    exports2.inflateResetKeep = inflateResetKeep;
-    exports2.inflateInit = inflateInit;
-    exports2.inflateInit2 = inflateInit2;
-    exports2.inflate = inflate2;
-    exports2.inflateEnd = inflateEnd;
-    exports2.inflateGetHeader = inflateGetHeader;
-    exports2.inflateSetDictionary = inflateSetDictionary;
-    exports2.inflateInfo = "pako inflate (from Nodeca project)";
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/constants.js
-var require_constants5 = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/constants.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    module2.exports = {
-      /* Allowed flush values; see deflate() and inflate() below for details */
-      Z_NO_FLUSH: 0,
-      Z_PARTIAL_FLUSH: 1,
-      Z_SYNC_FLUSH: 2,
-      Z_FULL_FLUSH: 3,
-      Z_FINISH: 4,
-      Z_BLOCK: 5,
-      Z_TREES: 6,
-      /* Return codes for the compression/decompression functions. Negative values
-      * are errors, positive values are used for special but normal events.
-      */
-      Z_OK: 0,
-      Z_STREAM_END: 1,
-      Z_NEED_DICT: 2,
-      Z_ERRNO: -1,
-      Z_STREAM_ERROR: -2,
-      Z_DATA_ERROR: -3,
-      //Z_MEM_ERROR:     -4,
-      Z_BUF_ERROR: -5,
-      //Z_VERSION_ERROR: -6,
-      /* compression levels */
-      Z_NO_COMPRESSION: 0,
-      Z_BEST_SPEED: 1,
-      Z_BEST_COMPRESSION: 9,
-      Z_DEFAULT_COMPRESSION: -1,
-      Z_FILTERED: 1,
-      Z_HUFFMAN_ONLY: 2,
-      Z_RLE: 3,
-      Z_FIXED: 4,
-      Z_DEFAULT_STRATEGY: 0,
-      /* Possible values of the data_type field (though see inflate()) */
-      Z_BINARY: 0,
-      Z_TEXT: 1,
-      //Z_ASCII:                1, // = Z_TEXT (deprecated)
-      Z_UNKNOWN: 2,
-      /* The deflate compression method */
-      Z_DEFLATED: 8
-      //Z_NULL:                 null // Use -1 or null inline, depending on var type
-    };
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/gzheader.js
-var require_gzheader = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/zlib/gzheader.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function GZheader() {
-      this.text = 0;
-      this.time = 0;
-      this.xflags = 0;
-      this.os = 0;
-      this.extra = null;
-      this.extra_len = 0;
-      this.name = "";
-      this.comment = "";
-      this.hcrc = 0;
-      this.done = false;
-    }
-    module2.exports = GZheader;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/inflate.js
-var require_inflate2 = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/lib/inflate.js"(exports2) {
-    "use strict";
-    init_globals();
-    var zlib_inflate = require_inflate();
-    var utils = require_common();
-    var strings = require_strings();
-    var c = require_constants5();
-    var msg = require_messages();
-    var ZStream = require_zstream();
-    var GZheader = require_gzheader();
-    var toString3 = Object.prototype.toString;
-    function Inflate(options) {
-      if (!(this instanceof Inflate)) return new Inflate(options);
-      this.options = utils.assign({
-        chunkSize: 16384,
-        windowBits: 0,
-        to: ""
-      }, options || {});
-      var opt = this.options;
-      if (opt.raw && opt.windowBits >= 0 && opt.windowBits < 16) {
-        opt.windowBits = -opt.windowBits;
-        if (opt.windowBits === 0) {
-          opt.windowBits = -15;
-        }
-      }
-      if (opt.windowBits >= 0 && opt.windowBits < 16 && !(options && options.windowBits)) {
-        opt.windowBits += 32;
-      }
-      if (opt.windowBits > 15 && opt.windowBits < 48) {
-        if ((opt.windowBits & 15) === 0) {
-          opt.windowBits |= 15;
-        }
-      }
-      this.err = 0;
-      this.msg = "";
-      this.ended = false;
-      this.chunks = [];
-      this.strm = new ZStream();
-      this.strm.avail_out = 0;
-      var status = zlib_inflate.inflateInit2(
-        this.strm,
-        opt.windowBits
-      );
-      if (status !== c.Z_OK) {
-        throw new Error(msg[status]);
-      }
-      this.header = new GZheader();
-      zlib_inflate.inflateGetHeader(this.strm, this.header);
-      if (opt.dictionary) {
-        if (typeof opt.dictionary === "string") {
-          opt.dictionary = strings.string2buf(opt.dictionary);
-        } else if (toString3.call(opt.dictionary) === "[object ArrayBuffer]") {
-          opt.dictionary = new Uint8Array(opt.dictionary);
-        }
-        if (opt.raw) {
-          status = zlib_inflate.inflateSetDictionary(this.strm, opt.dictionary);
-          if (status !== c.Z_OK) {
-            throw new Error(msg[status]);
-          }
-        }
-      }
-    }
-    Inflate.prototype.push = function(data, mode) {
-      var strm = this.strm;
-      var chunkSize = this.options.chunkSize;
-      var dictionary = this.options.dictionary;
-      var status, _mode;
-      var next_out_utf8, tail, utf8str;
-      var allowBufError = false;
-      if (this.ended) {
-        return false;
-      }
-      _mode = mode === ~~mode ? mode : mode === true ? c.Z_FINISH : c.Z_NO_FLUSH;
-      if (typeof data === "string") {
-        strm.input = strings.binstring2buf(data);
-      } else if (toString3.call(data) === "[object ArrayBuffer]") {
-        strm.input = new Uint8Array(data);
-      } else {
-        strm.input = data;
-      }
-      strm.next_in = 0;
-      strm.avail_in = strm.input.length;
-      do {
-        if (strm.avail_out === 0) {
-          strm.output = new utils.Buf8(chunkSize);
-          strm.next_out = 0;
-          strm.avail_out = chunkSize;
-        }
-        status = zlib_inflate.inflate(strm, c.Z_NO_FLUSH);
-        if (status === c.Z_NEED_DICT && dictionary) {
-          status = zlib_inflate.inflateSetDictionary(this.strm, dictionary);
-        }
-        if (status === c.Z_BUF_ERROR && allowBufError === true) {
-          status = c.Z_OK;
-          allowBufError = false;
-        }
-        if (status !== c.Z_STREAM_END && status !== c.Z_OK) {
-          this.onEnd(status);
-          this.ended = true;
-          return false;
-        }
-        if (strm.next_out) {
-          if (strm.avail_out === 0 || status === c.Z_STREAM_END || strm.avail_in === 0 && (_mode === c.Z_FINISH || _mode === c.Z_SYNC_FLUSH)) {
-            if (this.options.to === "string") {
-              next_out_utf8 = strings.utf8border(strm.output, strm.next_out);
-              tail = strm.next_out - next_out_utf8;
-              utf8str = strings.buf2string(strm.output, next_out_utf8);
-              strm.next_out = tail;
-              strm.avail_out = chunkSize - tail;
-              if (tail) {
-                utils.arraySet(strm.output, strm.output, next_out_utf8, tail, 0);
-              }
-              this.onData(utf8str);
-            } else {
-              this.onData(utils.shrinkBuf(strm.output, strm.next_out));
-            }
-          }
-        }
-        if (strm.avail_in === 0 && strm.avail_out === 0) {
-          allowBufError = true;
-        }
-      } while ((strm.avail_in > 0 || strm.avail_out === 0) && status !== c.Z_STREAM_END);
-      if (status === c.Z_STREAM_END) {
-        _mode = c.Z_FINISH;
-      }
-      if (_mode === c.Z_FINISH) {
-        status = zlib_inflate.inflateEnd(this.strm);
-        this.onEnd(status);
-        this.ended = true;
-        return status === c.Z_OK;
-      }
-      if (_mode === c.Z_SYNC_FLUSH) {
-        this.onEnd(c.Z_OK);
-        strm.avail_out = 0;
-        return true;
-      }
-      return true;
-    };
-    Inflate.prototype.onData = function(chunk3) {
-      this.chunks.push(chunk3);
-    };
-    Inflate.prototype.onEnd = function(status) {
-      if (status === c.Z_OK) {
-        if (this.options.to === "string") {
-          this.result = this.chunks.join("");
-        } else {
-          this.result = utils.flattenChunks(this.chunks);
-        }
-      }
-      this.chunks = [];
-      this.err = status;
-      this.msg = this.strm.msg;
-    };
-    function inflate2(input, options) {
-      var inflator = new Inflate(options);
-      inflator.push(input, true);
-      if (inflator.err) {
-        throw inflator.msg || msg[inflator.err];
-      }
-      return inflator.result;
-    }
-    function inflateRaw(input, options) {
-      options = options || {};
-      options.raw = true;
-      return inflate2(input, options);
-    }
-    exports2.Inflate = Inflate;
-    exports2.inflate = inflate2;
-    exports2.inflateRaw = inflateRaw;
-    exports2.ungzip = inflate2;
-  }
-});
-
-// node_modules/.pnpm/pako@1.0.11/node_modules/pako/index.js
-var require_pako = __commonJS({
-  "node_modules/.pnpm/pako@1.0.11/node_modules/pako/index.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    var assign2 = require_common().assign;
-    var deflate2 = require_deflate2();
-    var inflate2 = require_inflate2();
-    var constants2 = require_constants5();
-    var pako2 = {};
-    assign2(pako2, deflate2, inflate2, constants2);
-    module2.exports = pako2;
-  }
-});
-
-// node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js
-var require_hdrhistogram_umd = __commonJS({
-  "node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js"(exports, module) {
-    init_globals();
-    !(function(t2, e) {
-      "object" == typeof exports && "undefined" != typeof module ? e(exports, require_pako()) : "function" == typeof define && define.amd ? define(["exports", "pako"], e) : e((t2 = "undefined" != typeof globalThis ? globalThis : t2 || self).hdr = {}, t2.pako);
-    })(exports, (function(exports, pako) {
-      "use strict";
-      function _interopNamespace(t2) {
-        if (t2 && t2.__esModule) return t2;
-        var e = /* @__PURE__ */ Object.create(null);
-        return t2 && Object.keys(t2).forEach((function(r) {
-          if ("default" !== r) {
-            var n = Object.getOwnPropertyDescriptor(t2, r);
-            Object.defineProperty(e, r, n.get ? n : { enumerable: true, get: function() {
-              return t2[r];
-            } });
-          }
-        })), e.default = t2, Object.freeze(e);
-      }
-      var pako__namespace = _interopNamespace(pako);
-      const { pow: pow$6, floor: floor$5 } = Math, TWO_POW_32 = pow$6(2, 32);
-      class ByteBuffer {
-        static allocate(t2 = 16) {
-          return new ByteBuffer(new Uint8Array(t2));
-        }
-        constructor(t2) {
-          this.position = 0, this.data = t2, this.int32ArrayForConvert = new Uint32Array(1), this.int8ArrayForConvert = new Uint8Array(this.int32ArrayForConvert.buffer);
-        }
-        put(t2) {
-          if (this.position === this.data.length) {
-            const t3 = this.data;
-            this.data = new Uint8Array(2 * this.data.length), this.data.set(t3);
-          }
-          this.data[this.position] = t2, this.position++;
-        }
-        putInt32(t2) {
-          if (this.data.length - this.position < 4) {
-            const t3 = this.data;
-            this.data = new Uint8Array(2 * this.data.length + 4), this.data.set(t3);
-          }
-          this.int32ArrayForConvert[0] = t2, this.data.set(this.int8ArrayForConvert.reverse(), this.position), this.position += 4;
-        }
-        putInt64(t2) {
-          this.putInt32(floor$5(t2 / TWO_POW_32)), this.putInt32(t2);
-        }
-        putArray(t2) {
-          if (this.data.length - this.position < t2.byteLength) {
-            const e = this.data;
-            this.data = new Uint8Array(this.position + t2.byteLength), this.data.set(e);
-          }
-          this.data.set(t2, this.position), this.position += t2.byteLength;
-        }
-        get() {
-          const t2 = this.data[this.position];
-          return this.position++, t2;
-        }
-        getInt32() {
-          this.int8ArrayForConvert.set(this.data.slice(this.position, this.position + 4).reverse());
-          const t2 = this.int32ArrayForConvert[0];
-          return this.position += 4, t2;
-        }
-        getInt64() {
-          const t2 = this.getInt32(), e = this.getInt32();
-          return t2 * TWO_POW_32 + e;
-        }
-        resetPosition() {
-          this.position = 0;
-        }
-      }
-      class HistogramIterationValue {
-        constructor() {
-          this.reset();
-        }
-        reset() {
-          this.valueIteratedTo = 0, this.valueIteratedFrom = 0, this.countAtValueIteratedTo = 0, this.countAddedInThisIterationStep = 0, this.totalCountToThisValue = 0, this.totalValueToThisValue = 0, this.percentile = 0, this.percentileLevelIteratedTo = 0;
-        }
-      }
-      class JsHistogramIterator {
-        constructor() {
-          this.currentIterationValue = new HistogramIterationValue();
-        }
-        resetIterator(t2) {
-          this.histogram = t2, this.savedHistogramTotalRawCount = t2.totalCount, this.arrayTotalCount = t2.totalCount, this.currentIndex = 0, this.currentValueAtIndex = 0, this.nextValueAtIndex = Math.pow(2, t2.unitMagnitude), this.prevValueIteratedTo = 0, this.totalCountToPrevIndex = 0, this.totalCountToCurrentIndex = 0, this.totalValueToCurrentIndex = 0, this.countAtThisValue = 0, this.freshSubBucket = true, this.currentIterationValue.reset();
-        }
-        hasNext() {
-          if (this.histogram.totalCount !== this.savedHistogramTotalRawCount) throw "Concurrent Modification Exception";
-          return this.totalCountToCurrentIndex < this.arrayTotalCount;
-        }
-        next() {
-          for (; !this.exhaustedSubBuckets(); ) {
-            if (this.countAtThisValue = this.histogram.getCountAtIndex(this.currentIndex), this.freshSubBucket && (this.totalCountToCurrentIndex += this.countAtThisValue, this.totalValueToCurrentIndex += this.countAtThisValue * this.histogram.highestEquivalentValue(this.currentValueAtIndex), this.freshSubBucket = false), this.reachedIterationLevel()) {
-              const t2 = this.getValueIteratedTo();
-              if (Object.assign(this.currentIterationValue, { valueIteratedTo: t2, valueIteratedFrom: this.prevValueIteratedTo, countAtValueIteratedTo: this.countAtThisValue, countAddedInThisIterationStep: this.totalCountToCurrentIndex - this.totalCountToPrevIndex, totalCountToThisValue: this.totalCountToCurrentIndex, totalValueToThisValue: this.totalValueToCurrentIndex, percentile: 100 * this.totalCountToCurrentIndex / this.arrayTotalCount, percentileLevelIteratedTo: this.getPercentileIteratedTo() }), this.prevValueIteratedTo = t2, this.totalCountToPrevIndex = this.totalCountToCurrentIndex, this.incrementIterationLevel(), this.histogram.totalCount !== this.savedHistogramTotalRawCount) throw new Error("Concurrent Modification Exception");
-              return this.currentIterationValue;
-            }
-            this.incrementSubBucket();
-          }
-          throw new Error("Index Out Of Bounds Exception");
-        }
-        getPercentileIteratedTo() {
-          return 100 * this.totalCountToCurrentIndex / this.arrayTotalCount;
-        }
-        getPercentileIteratedFrom() {
-          return 100 * this.totalCountToPrevIndex / this.arrayTotalCount;
-        }
-        getValueIteratedTo() {
-          return this.histogram.highestEquivalentValue(this.currentValueAtIndex);
-        }
-        exhaustedSubBuckets() {
-          return this.currentIndex >= this.histogram.countsArrayLength;
-        }
-        incrementSubBucket() {
-          this.freshSubBucket = true, this.currentIndex++, this.currentValueAtIndex = this.histogram.valueFromIndex(this.currentIndex), this.nextValueAtIndex = this.histogram.valueFromIndex(this.currentIndex + 1);
-        }
-      }
-      class RecordedValuesIterator extends JsHistogramIterator {
-        constructor(t2) {
-          super(), this.doReset(t2);
-        }
-        reset() {
-          this.doReset(this.histogram);
-        }
-        doReset(t2) {
-          super.resetIterator(t2), this.visitedIndex = -1;
-        }
-        incrementIterationLevel() {
-          this.visitedIndex = this.currentIndex;
-        }
-        reachedIterationLevel() {
-          return 0 != this.histogram.getCountAtIndex(this.currentIndex) && this.visitedIndex !== this.currentIndex;
-        }
-      }
-      const { pow: pow$5, floor: floor$4, log2: log2$2 } = Math;
-      class PercentileIterator extends JsHistogramIterator {
-        constructor(t2, e) {
-          super(), this.percentileTicksPerHalfDistance = 0, this.percentileLevelToIterateTo = 0, this.percentileLevelToIterateFrom = 0, this.reachedLastRecordedValue = false, this.doReset(t2, e);
-        }
-        reset(t2) {
-          this.doReset(this.histogram, t2);
-        }
-        doReset(t2, e) {
-          super.resetIterator(t2), this.percentileTicksPerHalfDistance = e, this.percentileLevelToIterateTo = 0, this.percentileLevelToIterateFrom = 0, this.reachedLastRecordedValue = false;
-        }
-        hasNext() {
-          return !!super.hasNext() || !this.reachedLastRecordedValue && this.arrayTotalCount > 0 && (this.percentileLevelToIterateTo = 100, this.reachedLastRecordedValue = true, true);
-        }
-        incrementIterationLevel() {
-          this.percentileLevelToIterateFrom = this.percentileLevelToIterateTo;
-          const t2 = this.percentileTicksPerHalfDistance * pow$5(2, floor$4(log2$2(100 / (100 - this.percentileLevelToIterateTo))) + 1);
-          this.percentileLevelToIterateTo += 100 / t2;
-        }
-        reachedIterationLevel() {
-          if (0 === this.countAtThisValue) return false;
-          return 100 * this.totalCountToCurrentIndex / this.arrayTotalCount >= this.percentileLevelToIterateTo;
-        }
-        getPercentileIteratedTo() {
-          return this.percentileLevelToIterateTo;
-        }
-        getPercentileIteratedFrom() {
-          return this.percentileLevelToIterateFrom;
-        }
-      }
-      const leftPadding = (t2) => (e) => e.length < t2 ? " ".repeat(t2 - e.length) + e : e, integerFormatter = (t2) => {
-        const e = leftPadding(t2);
-        return (t3) => e("" + t3);
-      }, { floor: floor$3, log10, pow: pow$4 } = Math, numberOfDigits = (t2) => floor$3(log10(t2) + 1), keepSignificantDigits = (t2) => (e) => {
-        const r = numberOfDigits(e);
-        if (r > t2) {
-          return e - e % pow$4(10, r - t2);
-        }
-        return e;
-      }, floatFormatter = (t2, e) => {
-        const r = new Intl.NumberFormat("en-US", { maximumFractionDigits: e, minimumFractionDigits: e, useGrouping: false }), n = leftPadding(t2);
-        return (t3) => n(r.format(t3));
-      }, ulp = (t2) => Math.pow(2, Math.floor(Math.log2(t2)) - 52), NO_TAG = "NO TAG", toSummary = (t2) => {
-        const { totalCount: e, maxValue: r, numberOfSignificantValueDigits: n } = t2, i2 = keepSignificantDigits(n);
-        return { p50: i2(t2.getValueAtPercentile(50)), p75: i2(t2.getValueAtPercentile(75)), p90: i2(t2.getValueAtPercentile(90)), p97_5: i2(t2.getValueAtPercentile(97.5)), p99: i2(t2.getValueAtPercentile(99)), p99_9: i2(t2.getValueAtPercentile(99.9)), p99_99: i2(t2.getValueAtPercentile(99.99)), p99_999: i2(t2.getValueAtPercentile(99.999)), max: r, totalCount: e };
-      }, { pow: pow$3, floor: floor$2, ceil: ceil$1, log2: log2$1, max: max$2, min } = Math;
-      class JsHistogram {
-        incrementTotalCount() {
-          this._totalCount++;
-        }
-        addToTotalCount(t2) {
-          this._totalCount += t2;
-        }
-        setTotalCount(t2) {
-          this._totalCount = t2;
-        }
-        get totalCount() {
-          return this._totalCount;
-        }
-        updatedMaxValue(t2) {
-          const e = t2 + this.unitMagnitudeMask;
-          this.maxValue = e;
-        }
-        updateMinNonZeroValue(t2) {
-          if (t2 <= this.unitMagnitudeMask) return;
-          const e = floor$2(t2 / this.lowestDiscernibleValueRounded) * this.lowestDiscernibleValueRounded;
-          this.minNonZeroValue = e;
-        }
-        constructor(t2, e, r) {
-          if (this.autoResize = false, this.startTimeStampMsec = Number.MAX_SAFE_INTEGER, this.endTimeStampMsec = 0, this.tag = NO_TAG, this.maxValue = 0, this.minNonZeroValue = Number.MAX_SAFE_INTEGER, this.identity = 0, this.highestTrackableValue = 0, this.lowestDiscernibleValue = 0, this.numberOfSignificantValueDigits = 0, this.bucketCount = 0, this.subBucketCount = 0, this.countsArrayLength = 0, this.wordSizeInBytes = 0, t2 < 1) throw new Error("lowestDiscernibleValue must be >= 1");
-          if (e < 2 * t2) throw new Error(`highestTrackableValue must be >= 2 * lowestDiscernibleValue ( 2 * ${t2} )`);
-          if (r < 0 || r > 5) throw new Error("numberOfSignificantValueDigits must be between 0 and 5");
-          this.identity = JsHistogram.identityBuilder++, this.init(t2, e, r);
-        }
-        init(t2, e, r) {
-          this.lowestDiscernibleValue = t2, this.highestTrackableValue = e, this.numberOfSignificantValueDigits = r;
-          const n = 2 * floor$2(pow$3(10, r));
-          this.unitMagnitude = floor$2(log2$1(t2)), this.lowestDiscernibleValueRounded = pow$3(2, this.unitMagnitude), this.unitMagnitudeMask = this.lowestDiscernibleValueRounded - 1;
-          const i2 = ceil$1(log2$1(n));
-          this.subBucketHalfCountMagnitude = (i2 > 1 ? i2 : 1) - 1, this.subBucketCount = pow$3(2, this.subBucketHalfCountMagnitude + 1), this.subBucketHalfCount = this.subBucketCount / 2, this.subBucketMask = (floor$2(this.subBucketCount) - 1) * pow$3(2, this.unitMagnitude), this.establishSize(e), this.leadingZeroCountBase = 53 - this.unitMagnitude - this.subBucketHalfCountMagnitude - 1, this.percentileIterator = new PercentileIterator(this, 1), this.recordedValuesIterator = new RecordedValuesIterator(this);
-        }
-        establishSize(t2) {
-          this.countsArrayLength = this.determineArrayLengthNeeded(t2), this.bucketCount = this.getBucketsNeededToCoverValue(t2), this.highestTrackableValue = t2;
-        }
-        determineArrayLengthNeeded(t2) {
-          if (t2 < 2 * this.lowestDiscernibleValue) throw new Error("highestTrackableValue (" + t2 + ") cannot be < (2 * lowestDiscernibleValue)");
-          return this.getLengthForNumberOfBuckets(this.getBucketsNeededToCoverValue(t2));
-        }
-        getLengthForNumberOfBuckets(t2) {
-          return (t2 + 1) * (this.subBucketCount / 2);
-        }
-        getBucketsNeededToCoverValue(t2) {
-          let e = this.subBucketCount * pow$3(2, this.unitMagnitude), r = 1;
-          for (; e <= t2; ) {
-            if (e > Number.MAX_SAFE_INTEGER / 2) return r + 1;
-            e *= 2, r++;
-          }
-          return r;
-        }
-        recordValue(t2) {
-          this.recordSingleValue(t2);
-        }
-        recordSingleValue(t2) {
-          const e = this.countsArrayIndex(t2);
-          e >= this.countsArrayLength ? this.handleRecordException(1, t2) : this.incrementCountAtIndex(e), this.updateMinAndMax(t2), this.incrementTotalCount();
-        }
-        handleRecordException(t2, e) {
-          if (!this.autoResize) throw new Error("Value " + e + " is outside of histogram covered range");
-          this.resize(e);
-          var r = this.countsArrayIndex(e);
-          this.addToCountAtIndex(r, t2), this.highestTrackableValue = this.highestEquivalentValue(this.valueFromIndex(this.countsArrayLength - 1));
-        }
-        countsArrayIndex(t2) {
-          if (t2 < 0) throw new Error("Histogram recorded value cannot be negative.");
-          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
-          return this.computeCountsArrayIndex(e, r);
-        }
-        computeCountsArrayIndex(t2, e) {
-          return (t2 + 1) * pow$3(2, this.subBucketHalfCountMagnitude) + (e - this.subBucketHalfCount);
-        }
-        getBucketIndex(t2) {
-          return max$2(floor$2(log2$1(t2)) - this.subBucketHalfCountMagnitude - this.unitMagnitude, 0);
-        }
-        getSubBucketIndex(t2, e) {
-          return floor$2(t2 / pow$3(2, e + this.unitMagnitude));
-        }
-        updateMinAndMax(t2) {
-          t2 > this.maxValue && this.updatedMaxValue(t2), t2 < this.minNonZeroValue && 0 !== t2 && this.updateMinNonZeroValue(t2);
-        }
-        getValueAtPercentile(t2) {
-          const e = min(t2, 100) / 100 * this.totalCount, r = max$2(ceil$1(e - ulp(e)), 1);
-          let n = 0;
-          for (let e2 = 0; e2 < this.countsArrayLength; e2++) if (n += this.getCountAtIndex(e2), n >= r) {
-            var i2 = this.valueFromIndex(e2);
-            return 0 === t2 ? this.lowestEquivalentValue(i2) : this.highestEquivalentValue(i2);
-          }
-          return 0;
-        }
-        valueFromIndexes(t2, e) {
-          return e * pow$3(2, t2 + this.unitMagnitude);
-        }
-        valueFromIndex(t2) {
-          let e = floor$2(t2 / this.subBucketHalfCount) - 1, r = t2 % this.subBucketHalfCount + this.subBucketHalfCount;
-          return e < 0 && (r -= this.subBucketHalfCount, e = 0), this.valueFromIndexes(e, r);
-        }
-        lowestEquivalentValue(t2) {
-          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
-          return this.valueFromIndexes(e, r);
-        }
-        highestEquivalentValue(t2) {
-          return this.nextNonEquivalentValue(t2) - 1;
-        }
-        nextNonEquivalentValue(t2) {
-          return this.lowestEquivalentValue(t2) + this.sizeOfEquivalentValueRange(t2);
-        }
-        sizeOfEquivalentValueRange(t2) {
-          const e = this.getBucketIndex(t2), r = this.getSubBucketIndex(t2, e);
-          return pow$3(2, this.unitMagnitude + (r >= this.subBucketCount ? e + 1 : e));
-        }
-        medianEquivalentValue(t2) {
-          return this.lowestEquivalentValue(t2) + floor$2(this.sizeOfEquivalentValueRange(t2) / 2);
-        }
-        get mean() {
-          if (0 === this.totalCount) return 0;
-          this.recordedValuesIterator.reset();
-          let t2 = 0;
-          for (; this.recordedValuesIterator.hasNext(); ) {
-            const e = this.recordedValuesIterator.next();
-            t2 += this.medianEquivalentValue(e.valueIteratedTo) * e.countAtValueIteratedTo;
-          }
-          return t2 / this.totalCount;
-        }
-        getStdDeviation(t2 = this.mean) {
-          if (0 === this.totalCount) return 0;
-          let e = 0;
-          for (this.recordedValuesIterator.reset(); this.recordedValuesIterator.hasNext(); ) {
-            const r = this.recordedValuesIterator.next(), n = this.medianEquivalentValue(r.valueIteratedTo) - t2;
-            e += n * n * r.countAddedInThisIterationStep;
-          }
-          return Math.sqrt(e / this.totalCount);
-        }
-        get stdDeviation() {
-          if (0 === this.totalCount) return 0;
-          const t2 = this.mean;
-          let e = 0;
-          for (this.recordedValuesIterator.reset(); this.recordedValuesIterator.hasNext(); ) {
-            const r = this.recordedValuesIterator.next(), n = this.medianEquivalentValue(r.valueIteratedTo) - t2;
-            e += n * n * r.countAddedInThisIterationStep;
-          }
-          return Math.sqrt(e / this.totalCount);
-        }
-        outputPercentileDistribution(t2 = 5, e = 1, r = false) {
-          let n = "";
-          n += r ? '"Value","Percentile","TotalCount","1/(1-Percentile)"\n' : "       Value     Percentile TotalCount 1/(1-Percentile)\n\n";
-          const i2 = this.percentileIterator;
-          let s, o;
-          if (i2.reset(t2), r) {
-            const t3 = floatFormatter(0, this.numberOfSignificantValueDigits), r2 = floatFormatter(0, 12), n2 = floatFormatter(0, 2);
-            s = (i3) => t3(i3.valueIteratedTo / e) + "," + r2(i3.percentileLevelIteratedTo / 100) + "," + i3.totalCountToThisValue + "," + n2(1 / (1 - i3.percentileLevelIteratedTo / 100)) + "\n", o = (n3) => t3(n3.valueIteratedTo / e) + "," + r2(n3.percentileLevelIteratedTo / 100) + "," + n3.totalCountToThisValue + ",Infinity\n";
-          } else {
-            const t3 = floatFormatter(12, this.numberOfSignificantValueDigits), r2 = floatFormatter(2, 12), n2 = integerFormatter(10), i3 = floatFormatter(14, 2);
-            s = (s2) => t3(s2.valueIteratedTo / e) + " " + r2(s2.percentileLevelIteratedTo / 100) + " " + n2(s2.totalCountToThisValue) + " " + i3(1 / (1 - s2.percentileLevelIteratedTo / 100)) + "\n", o = (i4) => t3(i4.valueIteratedTo / e) + " " + r2(i4.percentileLevelIteratedTo / 100) + " " + n2(i4.totalCountToThisValue) + "\n";
-          }
-          for (; i2.hasNext(); ) {
-            const t3 = i2.next();
-            t3.percentileLevelIteratedTo < 100 ? n += s(t3) : n += o(t3);
-          }
-          if (!r) {
-            const t3 = floatFormatter(12, this.numberOfSignificantValueDigits), r2 = this.mean, i3 = t3(r2 / e), s2 = t3(this.getStdDeviation(r2) / e), o2 = t3(this.maxValue / e), a = integerFormatter(12);
-            n += `#[Mean    = ${i3}, StdDeviation   = ${s2}]
-#[Max     = ${o2}, Total count    = ${a(this.totalCount)}]
-#[Buckets = ${a(this.bucketCount)}, SubBuckets     = ${a(this.subBucketCount)}]
-`;
-          }
-          return n;
-        }
-        get summary() {
-          return toSummary(this);
-        }
-        toJSON() {
-          return this.summary;
-        }
-        inspect() {
-          return this.toString();
-        }
-        [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
-          return this.toString();
-        }
-        get estimatedFootprintInBytes() {
-          return this._getEstimatedFootprintInBytes();
-        }
-        recordSingleValueWithExpectedInterval(t2, e) {
-          if (this.recordSingleValue(t2), !(e <= 0)) for (let r = t2 - e; r >= e; r -= e) this.recordSingleValue(r);
-        }
-        recordCountAtValue(t2, e) {
-          const r = this.countsArrayIndex(e);
-          r >= this.countsArrayLength ? this.handleRecordException(t2, e) : this.addToCountAtIndex(r, t2), this.updateMinAndMax(e), this.addToTotalCount(t2);
-        }
-        recordValueWithCount(t2, e) {
-          this.recordCountAtValue(e, t2);
-        }
-        recordValueWithExpectedInterval(t2, e) {
-          this.recordSingleValueWithExpectedInterval(t2, e);
-        }
-        recordValueWithCountAndExpectedInterval(t2, e, r) {
-          if (this.recordCountAtValue(e, t2), !(r <= 0)) for (let n = t2 - r; n >= r; n -= r) this.recordCountAtValue(e, n);
-        }
-        addWhileCorrectingForCoordinatedOmission(t2, e) {
-          const r = this, n = new RecordedValuesIterator(t2);
-          for (; n.hasNext(); ) {
-            const t3 = n.next();
-            r.recordValueWithCountAndExpectedInterval(t3.valueIteratedTo, t3.countAtValueIteratedTo, e);
-          }
-        }
-        add(t2) {
-          if (!(t2 instanceof JsHistogram)) throw new Error("Cannot add a WASM histogram to a regular JS histogram");
-          if (this.highestEquivalentValue(this.valueFromIndex(this.countsArrayLength - 1)) < t2.maxValue) {
-            if (!this.autoResize) throw new Error("The other histogram includes values that do not fit in this histogram's range.");
-            this.resize(t2.maxValue);
-          }
-          if (this.bucketCount === t2.bucketCount && this.subBucketCount === t2.subBucketCount && this.unitMagnitude === t2.unitMagnitude) {
-            let e = 0;
-            for (let r = 0; r < t2.countsArrayLength; r++) {
-              const n = t2.getCountAtIndex(r);
-              n > 0 && (this.addToCountAtIndex(r, n), e += n);
-            }
-            this.setTotalCount(this.totalCount + e), this.updatedMaxValue(max$2(this.maxValue, t2.maxValue)), this.updateMinNonZeroValue(min(this.minNonZeroValue, t2.minNonZeroValue));
-          } else {
-            const e = t2.countsArrayIndex(t2.maxValue);
-            let r = t2.getCountAtIndex(e);
-            this.recordCountAtValue(r, t2.valueFromIndex(e));
-            for (let n = 0; n < e; n++) r = t2.getCountAtIndex(n), r > 0 && this.recordCountAtValue(r, t2.valueFromIndex(n));
-          }
-          this.startTimeStampMsec = min(this.startTimeStampMsec, t2.startTimeStampMsec), this.endTimeStampMsec = max$2(this.endTimeStampMsec, t2.endTimeStampMsec);
-        }
-        getCountAtValue(t2) {
-          const e = min(max$2(0, this.countsArrayIndex(t2)), this.countsArrayLength - 1);
-          return this.getCountAtIndex(e);
-        }
-        subtract(t2) {
-          const e = this.valueFromIndex(this.countsArrayLength - 1);
-          if (!(t2 instanceof JsHistogram)) throw new Error("Cannot subtract a WASM histogram to a regular JS histogram");
-          if (e < t2.maxValue) {
-            if (!this.autoResize) throw new Error("The other histogram includes values that do not fit in this histogram's range.");
-            this.resize(t2.maxValue);
-          }
-          if (this.bucketCount === t2.bucketCount && this.subBucketCount === t2.subBucketCount && this.unitMagnitude === t2.unitMagnitude) {
-            let e2 = 0;
-            for (let r = 0; r < t2.countsArrayLength; r++) {
-              const n = t2.getCountAtIndex(r);
-              n > 0 && (this.addToCountAtIndex(r, -n), e2 += n);
-            }
-            this.setTotalCount(this.totalCount - e2);
-          } else for (let e2 = 0; e2 < t2.countsArrayLength; e2++) {
-            const r = t2.getCountAtIndex(e2);
-            if (r > 0) {
-              const n = t2.valueFromIndex(e2);
-              if (this.getCountAtValue(n) < r) throw new Error("otherHistogram count (" + r + ") at value " + n + " is larger than this one's (" + this.getCountAtValue(n) + ")");
-              this.recordCountAtValue(-r, n);
-            }
-          }
-          (this.getCountAtValue(this.maxValue) <= 0 || this.getCountAtValue(this.minNonZeroValue) <= 0) && this.establishInternalTackingValues();
-        }
-        establishInternalTackingValues(t2 = this.countsArrayLength) {
-          this.maxValue = 0, this.minNonZeroValue = Number.MAX_VALUE;
-          let e = -1, r = -1, n = 0;
-          for (let i2 = 0; i2 < t2; i2++) {
-            const t3 = this.getCountAtIndex(i2);
-            t3 > 0 && (n += t3, e = i2, -1 == r && 0 != i2 && (r = i2));
-          }
-          e >= 0 && this.updatedMaxValue(this.highestEquivalentValue(this.valueFromIndex(e))), r >= 0 && this.updateMinNonZeroValue(this.valueFromIndex(r)), this.setTotalCount(n);
-        }
-        reset() {
-          this.clearCounts(), this.setTotalCount(0), this.startTimeStampMsec = 0, this.endTimeStampMsec = 0, this.tag = NO_TAG, this.maxValue = 0, this.minNonZeroValue = Number.MAX_SAFE_INTEGER;
-        }
-        destroy() {
-        }
-      }
-      function __awaiter(t2, e, r, n) {
-        return new (r || (r = Promise))((function(i2, s) {
-          function o(t3) {
-            try {
-              u(n.next(t3));
-            } catch (t4) {
-              s(t4);
-            }
-          }
-          function a(t3) {
-            try {
-              u(n.throw(t3));
-            } catch (t4) {
-              s(t4);
-            }
-          }
-          function u(t3) {
-            var e2;
-            t3.done ? i2(t3.value) : (e2 = t3.value, e2 instanceof r ? e2 : new r((function(t4) {
-              t4(e2);
-            }))).then(o, a);
-          }
-          u((n = n.apply(t2, e || [])).next());
-        }));
-      }
-      const BINARY = "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";
-      for (var toByteArray_1 = toByteArray, fromByteArray_1 = fromByteArray, lookup = [], revLookup = [], Arr = "undefined" != typeof Uint8Array ? Uint8Array : Array, code = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", i = 0, len = code.length; i < len; ++i) lookup[i] = code[i], revLookup[code.charCodeAt(i)] = i;
-      function getLens(t2) {
-        var e = t2.length;
-        if (e % 4 > 0) throw new Error("Invalid string. Length must be a multiple of 4");
-        var r = t2.indexOf("=");
-        return -1 === r && (r = e), [r, r === e ? 0 : 4 - r % 4];
-      }
-      function _byteLength(t2, e, r) {
-        return 3 * (e + r) / 4 - r;
-      }
-      function toByteArray(t2) {
-        var e, r, n = getLens(t2), i2 = n[0], s = n[1], o = new Arr(_byteLength(t2, i2, s)), a = 0, u = s > 0 ? i2 - 4 : i2;
-        for (r = 0; r < u; r += 4) e = revLookup[t2.charCodeAt(r)] << 18 | revLookup[t2.charCodeAt(r + 1)] << 12 | revLookup[t2.charCodeAt(r + 2)] << 6 | revLookup[t2.charCodeAt(r + 3)], o[a++] = e >> 16 & 255, o[a++] = e >> 8 & 255, o[a++] = 255 & e;
-        return 2 === s && (e = revLookup[t2.charCodeAt(r)] << 2 | revLookup[t2.charCodeAt(r + 1)] >> 4, o[a++] = 255 & e), 1 === s && (e = revLookup[t2.charCodeAt(r)] << 10 | revLookup[t2.charCodeAt(r + 1)] << 4 | revLookup[t2.charCodeAt(r + 2)] >> 2, o[a++] = e >> 8 & 255, o[a++] = 255 & e), o;
-      }
-      function tripletToBase64(t2) {
-        return lookup[t2 >> 18 & 63] + lookup[t2 >> 12 & 63] + lookup[t2 >> 6 & 63] + lookup[63 & t2];
-      }
-      function encodeChunk(t2, e, r) {
-        for (var n, i2 = [], s = e; s < r; s += 3) n = (t2[s] << 16 & 16711680) + (t2[s + 1] << 8 & 65280) + (255 & t2[s + 2]), i2.push(tripletToBase64(n));
-        return i2.join("");
-      }
-      function fromByteArray(t2) {
-        for (var e, r = t2.length, n = r % 3, i2 = [], s = 0, o = r - n; s < o; s += 16383) i2.push(encodeChunk(t2, s, s + 16383 > o ? o : s + 16383));
-        return 1 === n ? (e = t2[r - 1], i2.push(lookup[e >> 2] + lookup[e << 4 & 63] + "==")) : 2 === n && (e = (t2[r - 2] << 8) + t2[r - 1], i2.push(lookup[e >> 10] + lookup[e >> 4 & 63] + lookup[e << 2 & 63] + "=")), i2.join("");
-      }
-      revLookup["-".charCodeAt(0)] = 62, revLookup["_".charCodeAt(0)] = 63;
-      const ID_OFFSET = -8, SIZE_OFFSET = -4, ARRAYBUFFER_ID = 0, STRING_ID = 1, ARRAYBUFFERVIEW = 1, ARRAY = 2, STATICARRAY = 4, VAL_ALIGN_OFFSET = 6, VAL_SIGNED = 2048, VAL_FLOAT = 4096, VAL_MANAGED = 16384, ARRAYBUFFERVIEW_BUFFER_OFFSET = 0, ARRAYBUFFERVIEW_DATASTART_OFFSET = 4, ARRAYBUFFERVIEW_BYTELENGTH_OFFSET = 8, ARRAYBUFFERVIEW_SIZE = 12, ARRAY_LENGTH_OFFSET = 12, ARRAY_SIZE = 16, E_NO_EXPORT_TABLE = "Operation requires compiling with --exportTable", E_NO_EXPORT_RUNTIME = "Operation requires compiling with --exportRuntime", F_NO_EXPORT_RUNTIME = () => {
-        throw Error(E_NO_EXPORT_RUNTIME);
-      }, BIGINT = "undefined" != typeof BigUint64Array, THIS = /* @__PURE__ */ Symbol(), STRING_SMALLSIZE = 192, STRING_CHUNKSIZE = 1024, utf16 = new TextDecoder("utf-16le", { fatal: true });
-      function getStringImpl(t2, e) {
-        let r = new Uint32Array(t2)[e + SIZE_OFFSET >>> 2] >>> 1;
-        const n = new Uint16Array(t2, e, r);
-        if (r <= STRING_SMALLSIZE) return String.fromCharCode(...n);
-        try {
-          return utf16.decode(n);
-        } catch {
-          let t3 = "", e2 = 0;
-          for (; r - e2 > STRING_CHUNKSIZE; ) t3 += String.fromCharCode(...n.subarray(e2, e2 += STRING_CHUNKSIZE));
-          return t3 + String.fromCharCode(...n.subarray(e2));
-        }
-      }
-      function preInstantiate(t2) {
-        const e = {};
-        function r(t3, e2) {
-          return t3 ? getStringImpl(t3.buffer, e2) : "<yet unknown>";
-        }
-        const n = t2.env = t2.env || {};
-        return n.abort = n.abort || function(t3, i2, s, o) {
-          const a = e.memory || n.memory;
-          throw Error(`abort: ${r(a, t3)} at ${r(a, i2)}:${s}:${o}`);
-        }, n.trace = n.trace || function(t3, i2, ...s) {
-          const o = e.memory || n.memory;
-          console.log(`trace: ${r(o, t3)}${i2 ? " " : ""}${s.slice(0, i2).join(", ")}`);
-        }, n.seed = n.seed || Date.now, t2.Math = t2.Math || Math, t2.Date = t2.Date || Date, e;
-      }
-      function postInstantiate(t2, e) {
-        const r = e.exports, n = r.memory, i2 = r.table, s = r.__new || F_NO_EXPORT_RUNTIME, o = r.__pin || F_NO_EXPORT_RUNTIME, a = r.__unpin || F_NO_EXPORT_RUNTIME, u = r.__collect || F_NO_EXPORT_RUNTIME, l = r.__rtti_base, h = l ? (t3) => t3[l >>> 2] : F_NO_EXPORT_RUNTIME;
-        function c(t3) {
-          const e2 = new Uint32Array(n.buffer);
-          if ((t3 >>>= 0) >= h(e2)) throw Error("invalid id: " + t3);
-          return e2[(l + 4 >>> 2) + (t3 << 1) + 1];
-        }
-        function d(t3) {
-          const e2 = (function(t4) {
-            const e3 = new Uint32Array(n.buffer);
-            if ((t4 >>>= 0) >= h(e3)) throw Error("invalid id: " + t4);
-            return e3[(l + 4 >>> 2) + (t4 << 1)];
-          })(t3);
-          if (!(e2 & (ARRAYBUFFERVIEW | ARRAY | STATICARRAY))) throw Error(`not an array: ${t3}, flags=${e2}`);
-          return e2;
-        }
-        function g(t3) {
-          return 31 - Math.clz32(t3 >>> VAL_ALIGN_OFFSET & 31);
-        }
-        function m(t3, e2, r2) {
-          const i3 = n.buffer;
-          if (r2) switch (t3) {
-            case 2:
-              return new Float32Array(i3);
-            case 3:
-              return new Float64Array(i3);
-          }
-          else switch (t3) {
-            case 0:
-              return new (e2 ? Int8Array : Uint8Array)(i3);
-            case 1:
-              return new (e2 ? Int16Array : Uint16Array)(i3);
-            case 2:
-              return new (e2 ? Int32Array : Uint32Array)(i3);
-            case 3:
-              return new (e2 ? BigInt64Array : BigUint64Array)(i3);
-          }
-          throw Error("unsupported align: " + t3);
-        }
-        function p2(t3) {
-          const e2 = new Uint32Array(n.buffer), r2 = d(e2[t3 + ID_OFFSET >>> 2]), i3 = g(r2);
-          let s2 = r2 & STATICARRAY ? t3 : e2[t3 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2];
-          const o2 = r2 & ARRAY ? e2[t3 + ARRAY_LENGTH_OFFSET >>> 2] : e2[s2 + SIZE_OFFSET >>> 2] >>> i3;
-          return m(i3, r2 & VAL_SIGNED, r2 & VAL_FLOAT).subarray(s2 >>>= i3, s2 + o2);
-        }
-        function f(t3, e2, r2) {
-          return new t3(A(t3, e2, r2));
-        }
-        function A(t3, e2, r2) {
-          const i3 = n.buffer, s2 = new Uint32Array(i3);
-          return new t3(i3, s2[r2 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2], s2[r2 + ARRAYBUFFERVIEW_BYTELENGTH_OFFSET >>> 2] >>> e2);
-        }
-        function I(e2, r2, n2) {
-          t2["__get" + r2] = f.bind(null, e2, n2), t2[`__get${r2}View`] = A.bind(null, e2, n2);
-        }
-        return t2.__new = s, t2.__pin = o, t2.__unpin = a, t2.__collect = u, t2.__newString = function(t3) {
-          if (null == t3) return 0;
-          const e2 = t3.length, r2 = s(e2 << 1, STRING_ID), i3 = new Uint16Array(n.buffer);
-          for (var o2 = 0, a2 = r2 >>> 1; o2 < e2; ++o2) i3[a2 + o2] = t3.charCodeAt(o2);
-          return r2;
-        }, t2.__newArrayBuffer = function(t3) {
-          if (null == t3) return 0;
-          const e2 = new Uint8Array(t3), r2 = s(e2.length, ARRAYBUFFER_ID);
-          return new Uint8Array(n.buffer).set(e2, r2), r2;
-        }, t2.__getString = function(t3) {
-          if (!t3) return null;
-          const e2 = n.buffer;
-          if (new Uint32Array(e2)[t3 + ID_OFFSET >>> 2] !== STRING_ID) throw Error("not a string: " + t3);
-          return getStringImpl(e2, t3);
-        }, t2.__newArray = function(t3, e2 = 0) {
-          const r2 = e2, i3 = d(t3), u2 = g(i3), l2 = "number" != typeof r2, h2 = l2 ? r2.length : r2, c2 = s(h2 << u2, i3 & STATICARRAY ? t3 : ARRAYBUFFER_ID);
-          let p3;
-          if (i3 & STATICARRAY) p3 = c2;
-          else {
-            o(c2);
-            const e3 = s(i3 & ARRAY ? ARRAY_SIZE : ARRAYBUFFERVIEW_SIZE, t3);
-            a(c2);
-            const r3 = new Uint32Array(n.buffer);
-            r3[e3 + ARRAYBUFFERVIEW_BUFFER_OFFSET >>> 2] = c2, r3[e3 + ARRAYBUFFERVIEW_DATASTART_OFFSET >>> 2] = c2, r3[e3 + ARRAYBUFFERVIEW_BYTELENGTH_OFFSET >>> 2] = h2 << u2, i3 & ARRAY && (r3[e3 + ARRAY_LENGTH_OFFSET >>> 2] = h2), p3 = e3;
-          }
-          if (l2) {
-            const t4 = m(u2, i3 & VAL_SIGNED, i3 & VAL_FLOAT), e3 = c2 >>> u2;
-            if (i3 & VAL_MANAGED) for (let n2 = 0; n2 < h2; ++n2) t4[e3 + n2] = r2[n2];
-            else t4.set(r2, e3);
-          }
-          return p3;
-        }, t2.__getArrayView = p2, t2.__getArray = function(t3) {
-          const e2 = p2(t3), r2 = e2.length, n2 = new Array(r2);
-          for (let t4 = 0; t4 < r2; t4++) n2[t4] = e2[t4];
-          return n2;
-        }, t2.__getArrayBuffer = function(t3) {
-          const e2 = n.buffer, r2 = new Uint32Array(e2)[t3 + SIZE_OFFSET >>> 2];
-          return e2.slice(t3, t3 + r2);
-        }, t2.__getFunction = function(t3) {
-          if (!i2) throw Error(E_NO_EXPORT_TABLE);
-          const e2 = new Uint32Array(n.buffer)[t3 >>> 2];
-          return i2.get(e2);
-        }, [Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float32Array, Float64Array].forEach((t3) => {
-          I(t3, t3.name, 31 - Math.clz32(t3.BYTES_PER_ELEMENT));
-        }), BIGINT && [BigUint64Array, BigInt64Array].forEach((t3) => {
-          I(t3, t3.name.slice(3), 3);
-        }), t2.__instanceof = function(t3, e2) {
-          const r2 = new Uint32Array(n.buffer);
-          let i3 = r2[t3 + ID_OFFSET >>> 2];
-          if (i3 <= h(r2)) do {
-            if (i3 == e2) return true;
-            i3 = c(i3);
-          } while (i3);
-          return false;
-        }, t2.memory = t2.memory || n, t2.table = t2.table || i2, demangle(r, t2);
-      }
-      function isResponse(t2) {
-        return "undefined" != typeof Response && t2 instanceof Response;
-      }
-      function isModule(t2) {
-        return t2 instanceof WebAssembly.Module;
-      }
-      async function instantiate(t2, e = {}) {
-        if (isResponse(t2 = await t2)) return instantiateStreaming(t2, e);
-        const r = isModule(t2) ? t2 : await WebAssembly.compile(t2), n = preInstantiate(e), i2 = await WebAssembly.instantiate(r, e);
-        return { module: r, instance: i2, exports: postInstantiate(n, i2) };
-      }
-      function instantiateSync(t2, e = {}) {
-        const r = isModule(t2) ? t2 : new WebAssembly.Module(t2), n = preInstantiate(e), i2 = new WebAssembly.Instance(r, e);
-        return { module: r, instance: i2, exports: postInstantiate(n, i2) };
-      }
-      async function instantiateStreaming(t2, e = {}) {
-        if (!WebAssembly.instantiateStreaming) return instantiate(isResponse(t2 = await t2) ? t2.arrayBuffer() : t2, e);
-        const r = preInstantiate(e), n = await WebAssembly.instantiateStreaming(t2, e), i2 = postInstantiate(r, n.instance);
-        return { ...n, exports: i2 };
-      }
-      function demangle(t2, e = {}) {
-        const r = t2.__argumentsLength ? (e2) => {
-          t2.__argumentsLength.value = e2;
-        } : t2.__setArgumentsLength || t2.__setargc || (() => {
-        });
-        for (let n of Object.keys(t2)) {
-          const i2 = t2[n];
-          let s = n.split("."), o = e;
-          for (; s.length > 1; ) {
-            let t3 = s.shift();
-            Object.hasOwn(o, t3) || (o[t3] = {}), o = o[t3];
-          }
-          let a = s[0], u = a.indexOf("#");
-          if (u >= 0) {
-            const e2 = a.substring(0, u), s2 = o[e2];
-            if (void 0 === s2 || !s2.prototype) {
-              const t3 = function(...e3) {
-                return t3.wrap(t3.prototype.constructor(0, ...e3));
-              };
-              t3.prototype = { valueOf() {
-                return this[THIS];
-              } }, t3.wrap = function(e3) {
-                return Object.create(t3.prototype, { [THIS]: { value: e3, writable: false } });
-              }, s2 && Object.getOwnPropertyNames(s2).forEach((e3) => Object.defineProperty(t3, e3, Object.getOwnPropertyDescriptor(s2, e3))), o[e2] = t3;
-            }
-            if (a = a.substring(u + 1), o = o[e2].prototype, /^(get|set):/.test(a)) {
-              if (!Object.hasOwn(o, a = a.substring(4))) {
-                let e3 = t2[n.replace("set:", "get:")], r2 = t2[n.replace("get:", "set:")];
-                Object.defineProperty(o, a, { get() {
-                  return e3(this[THIS]);
-                }, set(t3) {
-                  r2(this[THIS], t3);
-                }, enumerable: true });
-              }
-            } else "constructor" === a ? (o[a] = function(...t3) {
-              return r(t3.length), i2(...t3);
-            }).original = i2 : (o[a] = function(...t3) {
-              return r(t3.length), i2(this[THIS], ...t3);
-            }).original = i2;
-          } else /^(get|set):/.test(a) ? Object.hasOwn(o, a = a.substring(4)) || Object.defineProperty(o, a, { get: t2[n.replace("set:", "get:")], set: t2[n.replace("get:", "set:")], enumerable: true }) : "function" == typeof i2 && i2 !== r ? (o[a] = (...t3) => (r(t3.length), i2(...t3))).original = i2 : o[a] = i2;
-        }
-        return e;
-      }
-      Object.hasOwn = Object.hasOwn || function(t2, e) {
-        return Object.prototype.hasOwnProperty.call(t2, e);
-      };
-      const isNode = "undefined" != typeof process && process.version, isWorker = "function" == typeof importScripts, webAssemblyAvailable = (() => {
-        let t2 = false;
-        return t2 = isNode ? "WebAssembly" in globalThis : isWorker || "WebAssembly" in window, t2;
-      })();
-      let wasm = void 0;
-      const initWebAssembly = () => __awaiter(void 0, void 0, void 0, (function* () {
-        if (!webAssemblyAvailable) throw new Error("WebAssembly not available here!");
-        if (!wasm) return instantiate(pako__namespace.inflate(toByteArray_1(BINARY))).then((t2) => wasm = t2.exports || t2);
-      })), initWebAssemblySync = () => {
-        if (wasm) return;
-        const t2 = instantiateSync(pako__namespace.inflate(toByteArray_1(BINARY)));
-        wasm = t2.exports || t2;
-      }, webAssemblyReady = () => !!wasm, defaultRequest$1 = { bitBucketSize: 32, autoResize: true, lowestDiscernibleValue: 1, highestTrackableValue: 2, numberOfSignificantValueDigits: 3 }, remoteHistogramClassFor = (t2) => "packed" === t2 ? "PackedHistogram" : "Histogram" + t2, destroyedWasmHistogram = new Proxy({}, { get: function(t2, e) {
-        throw new Error("Cannot use a destroyed histogram");
-      } });
-      class WasmHistogram {
-        constructor(t2, e) {
-          this._wasmHistogram = t2, this._remoteHistogramClass = e, this.tag = NO_TAG, wasm.__pin(this._wasmHistogram);
-        }
-        static build(t2 = defaultRequest$1) {
-          if (!webAssemblyReady()) throw new Error("WebAssembly is not ready yet!");
-          const e = Object.assign({}, defaultRequest$1, t2), r = remoteHistogramClassFor(e.bitBucketSize);
-          return new WasmHistogram(new wasm[r](e.lowestDiscernibleValue, e.highestTrackableValue, e.numberOfSignificantValueDigits, e.autoResize), r);
-        }
-        static decode(t2, e = 32, r = 0) {
-          if (!webAssemblyReady()) throw new Error("WebAssembly is not ready yet!");
-          const n = remoteHistogramClassFor(e), i2 = "decode" + n, s = wasm.__newArray(wasm.UINT8ARRAY_ID, t2);
-          return new WasmHistogram(wasm[n].wrap(wasm[i2](s, r)), n);
-        }
-        get numberOfSignificantValueDigits() {
-          return this._wasmHistogram.numberOfSignificantValueDigits;
-        }
-        get autoResize() {
-          return !!this._wasmHistogram.autoResize;
-        }
-        set autoResize(t2) {
-          this._wasmHistogram.autoResize = t2;
-        }
-        get highestTrackableValue() {
-          return this._wasmHistogram.highestTrackableValue;
-        }
-        set highestTrackableValue(t2) {
-          this._wasmHistogram.highestTrackableValue = t2;
-        }
-        get startTimeStampMsec() {
-          return this._wasmHistogram.startTimeStampMsec;
-        }
-        set startTimeStampMsec(t2) {
-          this._wasmHistogram.startTimeStampMsec = t2;
-        }
-        get endTimeStampMsec() {
-          return this._wasmHistogram.endTimeStampMsec;
-        }
-        set endTimeStampMsec(t2) {
-          this._wasmHistogram.endTimeStampMsec = t2;
-        }
-        get totalCount() {
-          return this._wasmHistogram.totalCount;
-        }
-        get stdDeviation() {
-          return this._wasmHistogram.stdDeviation;
-        }
-        get mean() {
-          return this._wasmHistogram.mean;
-        }
-        get estimatedFootprintInBytes() {
-          return 192 + this._wasmHistogram.estimatedFootprintInBytes;
-        }
-        get minNonZeroValue() {
-          return this._wasmHistogram.minNonZeroValue;
-        }
-        get maxValue() {
-          return this._wasmHistogram.maxValue;
-        }
-        recordValue(t2) {
-          this._wasmHistogram.recordValue(t2);
-        }
-        recordValueWithCount(t2, e) {
-          this._wasmHistogram.recordValueWithCount(t2, e);
-        }
-        recordValueWithExpectedInterval(t2, e) {
-          this._wasmHistogram.recordValueWithExpectedInterval(t2, e);
-        }
-        getValueAtPercentile(t2) {
-          return this._wasmHistogram.getValueAtPercentile(t2);
-        }
-        outputPercentileDistribution(t2 = 5, e = 1, r = false) {
-          if (r) throw new Error("CSV output not supported by wasm histograms");
-          return wasm.__getString(this._wasmHistogram.outputPercentileDistribution(t2, e));
-        }
-        isDestroyed() {
-          return this._wasmHistogram === destroyedWasmHistogram;
-        }
-        get summary() {
-          return toSummary(this);
-        }
-        toJSON() {
-          return this.summary;
-        }
-        toString() {
-          return this.isDestroyed() ? "Destroyed WASM histogram" : `WASM ${this._remoteHistogramClass} ${JSON.stringify(this, null, 2)}`;
-        }
-        inspect() {
-          return this.toString();
-        }
-        [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
-          return this.toString();
-        }
-        addWhileCorrectingForCoordinatedOmission(t2, e) {
-          this._wasmHistogram.addWhileCorrectingForCoordinatedOmission(t2, e);
-        }
-        copyCorrectedForCoordinatedOmission(t2) {
-          return new WasmHistogram(wasm[this._remoteHistogramClass].wrap(this._wasmHistogram.copyCorrectedForCoordinatedOmission(t2)), this._remoteHistogramClass);
-        }
-        add(t2) {
-          if (!(t2 instanceof WasmHistogram)) throw new Error("Cannot add a regular JS histogram to a WASM histogram");
-          this._wasmHistogram["add" + t2._remoteHistogramClass](t2._wasmHistogram);
-        }
-        subtract(t2) {
-          if (!(t2 instanceof WasmHistogram)) throw new Error("Cannot subtract a regular JS histogram to a WASM histogram");
-          this._wasmHistogram["subtract" + t2._remoteHistogramClass](t2._wasmHistogram);
-        }
-        encode() {
-          const t2 = wasm.__pin(this._wasmHistogram.encode()), e = wasm.__getUint8Array(t2);
-          return wasm.__unpin(t2), e;
-        }
-        reset() {
-          this.tag = NO_TAG, this._wasmHistogram.reset();
-        }
-        destroy() {
-          wasm.__unpin(this._wasmHistogram), this._wasmHistogram = destroyedWasmHistogram;
-        }
-      }
-      const MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY = 16, MAX_SUPPORTED_PACKED_COUNTS_ARRAY_LENGTH = Math.pow(2, 13) - 1, SET_0_START_INDEX = 0, NUMBER_OF_SETS$1 = 8, LEAF_LEVEL_SHIFT = 3, NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET = 0, NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS = 1, PACKED_ARRAY_GROWTH_INCREMENT = 16, PACKED_ARRAY_GROWTH_FRACTION_POW2 = 4, { pow: pow$2, ceil, log2, max: max$1 } = Math, bitCount = (t2) => {
-        for (var e = 0; 0 !== t2; ) e += bitCount32(0 | t2), t2 /= 4294967296;
-        return e;
-      }, bitCount32 = (t2) => 16843009 * ((t2 = (858993459 & (t2 -= t2 >> 1 & 1431655765)) + (t2 >> 2 & 858993459)) + (t2 >> 4) & 252645135) >> 24;
-      class PackedArrayContext {
-        constructor(t2, e) {
-          this.populatedShortLength = 0, this.topLevelShift = Number.MAX_VALUE, this.physicalLength = Math.max(e, MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY), this.isPacked = this.physicalLength <= MAX_SUPPORTED_PACKED_COUNTS_ARRAY_LENGTH, this.isPacked || (this.physicalLength = t2), this.array = new ArrayBuffer(8 * this.physicalLength), this.initArrayViews(this.array), this.init(t2);
-        }
-        initArrayViews(t2) {
-          this.byteArray = new Uint8Array(t2), this.shortArray = new Uint16Array(t2), this.longArray = new Float64Array(t2);
-        }
-        init(t2) {
-          if (this.isPacked) {
-            this.populatedShortLength = SET_0_START_INDEX + 8;
-            for (let t3 = 0; t3 < NUMBER_OF_SETS$1; t3++) this.setAtShortIndex(SET_0_START_INDEX + t3, 0);
-            this.setVirtualLength(t2);
-          } else this.virtualLength = t2;
-        }
-        clear() {
-          this.byteArray.fill(0), this.init(this.virtualLength);
-        }
-        copyAndIncreaseSize(t2, e) {
-          const r = new PackedArrayContext(e, t2);
-          return this.isPacked && r.populateEquivalentEntriesWithEntriesFromOther(this), r;
-        }
-        getPopulatedShortLength() {
-          return this.populatedShortLength;
-        }
-        getPopulatedLongLength() {
-          return this.getPopulatedShortLength() + 3 >> 2;
-        }
-        setAtByteIndex(t2, e) {
-          this.byteArray[t2] = e;
-        }
-        getAtByteIndex(t2) {
-          return this.byteArray[t2];
-        }
-        addAtByteIndex(t2, e) {
-          const r = this.byteArray[t2] + e;
-          return this.byteArray[t2] = r, r;
-        }
-        setPopulatedLongLength(t2) {
-          this.populatedShortLength = t2 << 2;
-        }
-        getVirtualLength() {
-          return this.virtualLength;
-        }
-        length() {
-          return this.physicalLength;
-        }
-        setAtShortIndex(t2, e) {
-          this.shortArray[t2] = e;
-        }
-        setAtLongIndex(t2, e) {
-          this.longArray[t2] = e;
-        }
-        getAtShortIndex(t2) {
-          return this.shortArray[t2];
-        }
-        getIndexAtShortIndex(t2) {
-          return this.shortArray[t2];
-        }
-        setPackedSlotIndicators(t2, e) {
-          this.setAtShortIndex(t2 + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET, e);
-        }
-        getPackedSlotIndicators(t2) {
-          return 65535 & this.shortArray[t2 + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET];
-        }
-        getIndexAtEntrySlot(t2, e) {
-          return this.getAtShortIndex(t2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + e);
-        }
-        setIndexAtEntrySlot(t2, e, r) {
-          this.setAtShortIndex(t2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + e, r);
-        }
-        expandArrayIfNeeded(t2) {
-          const e = this.length();
-          if (e < this.getPopulatedLongLength() + t2) {
-            const r = max$1(t2, PACKED_ARRAY_GROWTH_INCREMENT, this.getPopulatedLongLength() >> PACKED_ARRAY_GROWTH_FRACTION_POW2);
-            this.resizeArray(e + r);
-          }
-        }
-        newEntry(t2) {
-          const e = this.populatedShortLength;
-          this.expandArrayIfNeeded(1 + (t2 >> 2)), this.populatedShortLength = e + t2;
-          for (let r = 0; r < t2; r++) this.setAtShortIndex(e + r, -1);
-          return e;
-        }
-        newLeafEntry() {
-          let t2;
-          return t2 = this.getPopulatedLongLength(), this.expandArrayIfNeeded(1), this.setPopulatedLongLength(t2 + 1), this.setAtLongIndex(t2, 0), t2;
-        }
-        consolidateEntry(t2, e) {
-          const r = this.getPackedSlotIndicators(e), n = this.getPackedSlotIndicators(t2), i2 = bitCount(n & (n ^ r) - 1), s = bitCount(n);
-          let o = 0;
-          for (let r2 = 0; r2 < s; r2++) if (r2 !== i2) {
-            const n2 = this.getIndexAtEntrySlot(e, o);
-            0 !== n2 && this.setIndexAtEntrySlot(t2, r2, n2), o++;
-          }
-        }
-        expandEntry(t2, e, r, n, i2) {
-          let s = 65535 & this.getAtShortIndex(t2);
-          s |= n;
-          const o = bitCount(s);
-          if (r >= o) throw new Error("inserted slot index is out of range given provided masks");
-          const a = o + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS;
-          let u = 0;
-          i2 ? u = this.newLeafEntry() : (u = this.newEntry(NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS), this.setPackedSlotIndicators(u, 0));
-          const l = u, h = this.newEntry(a);
-          return this.setPackedSlotIndicators(h, s), this.setIndexAtEntrySlot(h, r, l), this.setAtShortIndex(e, h), this.consolidateEntry(h, t2), h;
-        }
-        getRootEntry(t2, e = false) {
-          const r = SET_0_START_INDEX + t2;
-          let n = this.getIndexAtShortIndex(r);
-          if (0 == n) {
-            if (!e) return 0;
-            n = this.newEntry(NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS), this.setPackedSlotIndicators(n, 0), this.setAtShortIndex(r, n);
-          }
-          return n;
-        }
-        getPackedIndex(t2, e, r) {
-          if (e >= this.virtualLength) throw new Error(`Attempting access at index ${e}, beyond virtualLength ${this.virtualLength}`);
-          let n = SET_0_START_INDEX + t2, i2 = this.getRootEntry(t2, r);
-          if (0 == i2) return -1;
-          for (let t3 = this.topLevelShift; t3 >= LEAF_LEVEL_SHIFT; t3 -= 4) {
-            const s = t3 === LEAF_LEVEL_SHIFT, o = this.getPackedSlotIndicators(i2), a = 1 << (e / pow$2(2, t3) & 15), u = bitCount(o & a - 1);
-            if (0 == (o & a)) {
-              if (!r) return -1;
-              i2 = this.expandEntry(i2, n, u, a, s);
-            }
-            n = i2 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + u, i2 = this.getIndexAtShortIndex(n);
-          }
-          return (i2 << 3) + (7 & e);
-        }
-        determineTopLevelShiftForVirtualLength(t2) {
-          const e = ceil(log2(t2));
-          let r = 4 * ceil((e - 3) / 4);
-          r = max$1(r, 8);
-          return r - 4 + 3;
-        }
-        setVirtualLength(t2) {
-          if (!this.isPacked) throw new Error("Should never be adjusting the virtual size of a non-packed context");
-          this.topLevelShift = this.determineTopLevelShiftForVirtualLength(t2), this.virtualLength = t2;
-        }
-        getTopLevelShift() {
-          return this.topLevelShift;
-        }
-        resizeArray(t2) {
-          const e = new Uint8Array(8 * t2);
-          e.set(this.byteArray), this.array = e.buffer, this.initArrayViews(this.array), this.physicalLength = t2;
-        }
-        populateEquivalentEntriesWithEntriesFromOther(t2) {
-          if (this.virtualLength < t2.getVirtualLength()) throw new Error("Cannot populate array of smaller virtual length");
-          for (let e = 0; e < NUMBER_OF_SETS$1; e++) {
-            const r = t2.getAtShortIndex(SET_0_START_INDEX + e);
-            if (0 == r) continue;
-            let n = SET_0_START_INDEX + e;
-            for (let e2 = this.topLevelShift; e2 > t2.topLevelShift; e2 -= 4) {
-              const t3 = NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + 1, e3 = this.newEntry(t3);
-              this.setAtShortIndex(n, e3), this.setPackedSlotIndicators(e3, 1), n = e3 + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS;
-            }
-            this.copyEntriesAtLevelFromOther(t2, r, n, t2.topLevelShift);
-          }
-        }
-        copyEntriesAtLevelFromOther(t2, e, r, n) {
-          const i2 = n == LEAF_LEVEL_SHIFT, s = t2.getPackedSlotIndicators(e), o = bitCount(s), a = NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + o, u = this.newEntry(a);
-          this.setAtShortIndex(r, u), this.setAtShortIndex(u + NON_LEAF_ENTRY_SLOT_INDICATORS_OFFSET, s);
-          for (let r2 = 0; r2 < o; r2++) if (i2) {
-            const n2 = this.newLeafEntry();
-            this.setIndexAtEntrySlot(u, r2, n2);
-            const i3 = t2.getIndexAtEntrySlot(e, r2);
-            this.longArray[n2] = t2.longArray[i3];
-          } else {
-            const i3 = t2.getIndexAtEntrySlot(e, r2);
-            this.copyEntriesAtLevelFromOther(t2, i3, u + NON_LEAF_ENTRY_HEADER_SIZE_IN_SHORTS + r2, n - 4);
-          }
-        }
-        getAtUnpackedIndex(t2) {
-          return this.longArray[t2];
-        }
-        setAtUnpackedIndex(t2, e) {
-          this.longArray[t2] = e;
-        }
-        lazysetAtUnpackedIndex(t2, e) {
-          this.longArray[t2] = e;
-        }
-        incrementAndGetAtUnpackedIndex(t2) {
-          return this.longArray[t2]++, this.longArray[t2];
-        }
-        addAndGetAtUnpackedIndex(t2, e) {
-          return this.longArray[t2] += e, this.longArray[t2];
-        }
-        nonLeafEntryToString(t2, e, r) {
-          let n = "";
-          for (let t3 = 0; t3 < r; t3++) n += "  ";
-          try {
-            const i2 = this.getPackedSlotIndicators(t2);
-            n += `slotIndiators: 0x${toHex(i2)}, prevVersionIndex: 0: [ `;
-            const s = bitCount(i2);
-            for (let e2 = 0; e2 < s; e2++) n += this.getIndexAtEntrySlot(t2, e2), e2 < s - 1 && (n += ", ");
-            n += ` ] (indexShift = ${e})
-`;
-            const o = e == LEAF_LEVEL_SHIFT;
-            for (let i3 = 0; i3 < s; i3++) {
-              const s2 = this.getIndexAtEntrySlot(t2, i3);
-              n += o ? this.leafEntryToString(s2, r + 4) : this.nonLeafEntryToString(s2, e - 4, r + 4);
-            }
-          } catch (r2) {
-            n += `Exception thrown at nonLeafEnty at index ${t2} with indexShift ${e}
-`;
-          }
-          return n;
-        }
-        leafEntryToString(t2, e) {
-          let r = "";
-          for (let t3 = 0; t3 < e; t3++) r += "  ";
-          try {
-            r += "Leaf bytes : ";
-            for (let e2 = 0; e2 < 8; e2++) r += `0x${toHex(this.byteArray[8 * t2 + e2])} `;
-            r += "\n";
-          } catch (e2) {
-            r += `Exception thrown at leafEnty at index ${t2}
-`;
-          }
-          return r;
-        }
-        toString() {
-          let t2 = "PackedArrayContext:\n";
-          if (!this.isPacked) return t2 + "Context is unpacked:\n";
-          for (let e = 0; e < NUMBER_OF_SETS$1; e++) try {
-            const r = SET_0_START_INDEX + e, n = this.getIndexAtShortIndex(r);
-            if (t2 += `Set ${e}: root = ${n} 
-`, 0 == n) continue;
-            t2 += this.nonLeafEntryToString(n, this.topLevelShift, 4);
-          } catch (r) {
-            t2 += `Exception thrown in set ${e}%d
-`;
-          }
-          return t2;
-        }
-      }
-      const toHex = (t2) => Number(t2).toString(16).padStart(2, "0"), NUMBER_OF_SETS = 8, { pow: pow$1, floor: floor$1 } = Math;
-      class PackedArray {
-        constructor(t2, e = MINIMUM_INITIAL_PACKED_ARRAY_CAPACITY) {
-          this.arrayContext = new PackedArrayContext(t2, e);
-        }
-        setVirtualLength(t2) {
-          if (t2 < this.length()) throw new Error("Cannot set virtual length, as requested length " + t2 + " is smaller than the current virtual length " + this.length());
-          const e = this.arrayContext;
-          e.isPacked && e.determineTopLevelShiftForVirtualLength(t2) == e.getTopLevelShift() ? e.setVirtualLength(t2) : this.arrayContext = e.copyAndIncreaseSize(this.getPhysicalLength(), t2);
-        }
-        get(t2) {
-          let e = 0;
-          for (let r = 0; r < NUMBER_OF_SETS; r++) {
-            let n = 0;
-            if (!this.arrayContext.isPacked) return this.arrayContext.getAtUnpackedIndex(t2);
-            const i2 = this.arrayContext.getPackedIndex(r, t2, false);
-            if (i2 < 0) return e;
-            n = this.arrayContext.getAtByteIndex(i2) * pow$1(2, r << 3), e += n;
-          }
-          return e;
-        }
-        increment(t2) {
-          this.add(t2, 1);
-        }
-        safeGetPackedIndexgetPackedIndex(t2, e) {
-          return this.arrayContext.getPackedIndex(t2, e, true);
-        }
-        add(t2, e) {
-          let r = e;
-          for (let n = 0, i2 = 0; n < NUMBER_OF_SETS; n++, i2 += 8) {
-            if (!this.arrayContext.isPacked) return void this.arrayContext.addAndGetAtUnpackedIndex(t2, e);
-            const i3 = this.safeGetPackedIndexgetPackedIndex(n, t2), s = 255 & r, o = this.arrayContext.addAtByteIndex(i3, s);
-            if (r -= s, r /= pow$1(2, 8), r += floor$1(o / pow$1(2, 8)), 0 == r) return;
-          }
-        }
-        set(t2, e) {
-          let r = 0, n = e;
-          for (let i2 = 0; i2 < NUMBER_OF_SETS; i2++) {
-            if (!this.arrayContext.isPacked) return void this.arrayContext.setAtUnpackedIndex(t2, e);
-            if (0 == n) {
-              if (this.arrayContext.getPackedIndex(i2, t2, false) < 0) return;
-            }
-            const s = this.arrayContext.getPackedIndex(i2, t2, true), o = 255 & n;
-            n = floor$1(n / pow$1(2, 8)), i2 < r || (this.arrayContext.setAtByteIndex(s, o), r++);
-          }
-        }
-        getPhysicalLength() {
-          return this.arrayContext.physicalLength;
-        }
-        length() {
-          return this.arrayContext.getVirtualLength();
-        }
-        clear() {
-          this.arrayContext.clear();
-        }
-        toString() {
-          let t2 = "PackedArray:\n";
-          return t2 += this.arrayContext.toString(), t2;
-        }
-      }
-      class PackedHistogram extends JsHistogram {
-        constructor(t2, e, r) {
-          super(t2, e, r), this._totalCount = 0, this.packedCounts = new PackedArray(this.countsArrayLength);
-        }
-        clearCounts() {
-          this.packedCounts.clear();
-        }
-        incrementCountAtIndex(t2) {
-          this.packedCounts.increment(t2);
-        }
-        addToCountAtIndex(t2, e) {
-          this.packedCounts.add(t2, e);
-        }
-        setCountAtIndex(t2, e) {
-          this.packedCounts.set(t2, e);
-        }
-        resize(t2) {
-          this.establishSize(t2), this.packedCounts.setVirtualLength(this.countsArrayLength);
-        }
-        getCountAtIndex(t2) {
-          return this.packedCounts.get(t2);
-        }
-        _getEstimatedFootprintInBytes() {
-          return 192 + 8 * this.packedCounts.getPhysicalLength();
-        }
-        copyCorrectedForCoordinatedOmission(t2) {
-          const e = new PackedHistogram(this.lowestDiscernibleValue, this.highestTrackableValue, this.numberOfSignificantValueDigits);
-          return e.addWhileCorrectingForCoordinatedOmission(this, t2), e;
-        }
-        toString() {
-          return "PackedHistogram " + JSON.stringify(this, null, 2);
-        }
-      }
-      class TypedArrayHistogram extends JsHistogram {
-        constructor(t2, e, r, n) {
-          super(e, r, n), this.arrayCtr = t2, this._totalCount = 0, this._counts = new t2(this.countsArrayLength);
-        }
-        clearCounts() {
-          this._counts.fill(0);
-        }
-        incrementCountAtIndex(t2) {
-          const e = this._counts[t2] + 1;
-          if (e < 0) throw e + " would overflow short integer count";
-          this._counts[t2] = e;
-        }
-        addToCountAtIndex(t2, e) {
-          const r = this._counts[t2] + e;
-          if (r < Number.MIN_SAFE_INTEGER || r > Number.MAX_SAFE_INTEGER) throw r + " would overflow integer count";
-          this._counts[t2] = r;
-        }
-        setCountAtIndex(t2, e) {
-          if (e < Number.MIN_SAFE_INTEGER || e > Number.MAX_SAFE_INTEGER) throw e + " would overflow integer count";
-          this._counts[t2] = e;
-        }
-        resize(t2) {
-          this.establishSize(t2);
-          const e = new this.arrayCtr(this.countsArrayLength);
-          e.set(this._counts), this._counts = e;
-        }
-        getCountAtIndex(t2) {
-          return this._counts[t2];
-        }
-        _getEstimatedFootprintInBytes() {
-          return 1024 + this._counts.BYTES_PER_ELEMENT * this._counts.length;
-        }
-        copyCorrectedForCoordinatedOmission(t2) {
-          const e = new TypedArrayHistogram(this.arrayCtr, this.lowestDiscernibleValue, this.highestTrackableValue, this.numberOfSignificantValueDigits);
-          return e.addWhileCorrectingForCoordinatedOmission(this, t2), e;
-        }
-        toString() {
-          return `Histogram ${8 * this._counts.BYTES_PER_ELEMENT}b ${JSON.stringify(this, null, 2)}`;
-        }
-      }
-      class Int8Histogram extends TypedArrayHistogram {
-        constructor(t2, e, r) {
-          super(Uint8Array, t2, e, r);
-        }
-      }
-      class Int16Histogram extends TypedArrayHistogram {
-        constructor(t2, e, r) {
-          super(Uint16Array, t2, e, r);
-        }
-      }
-      class Int32Histogram extends TypedArrayHistogram {
-        constructor(t2, e, r) {
-          super(Uint32Array, t2, e, r);
-        }
-      }
-      class Float64Histogram extends TypedArrayHistogram {
-        constructor(t2, e, r) {
-          super(Float64Array, t2, e, r);
-        }
-      }
-      function constructorFromBucketSize(t2) {
-        switch (t2) {
-          case "packed":
-            return PackedHistogram;
-          case 8:
-            return Int8Histogram;
-          case 16:
-            return Int16Histogram;
-          case 32:
-            return Int32Histogram;
-          case 64:
-            return Float64Histogram;
-          default:
-            throw new Error("Incorrect parameter bitBucketSize");
-        }
-      }
-      const { pow, floor } = Math, TWO_POW_7 = pow(2, 7), TWO_POW_14 = pow(2, 14), TWO_POW_21 = pow(2, 21), TWO_POW_28 = pow(2, 28), TWO_POW_35 = pow(2, 35), TWO_POW_42 = pow(2, 42), TWO_POW_49 = pow(2, 49), TWO_POW_56 = pow(2, 56);
-      class ZigZagEncoding {
-        static encode(t2, e) {
-          e >= 0 ? e *= 2 : e = 2 * -e - 1, e < TWO_POW_7 ? t2.put(e) : (t2.put(128 | e), e < TWO_POW_14 ? t2.put(floor(e / TWO_POW_7)) : (t2.put(128 | floor(e / TWO_POW_7)), e < TWO_POW_21 ? t2.put(floor(e / TWO_POW_14)) : (t2.put(128 | floor(e / TWO_POW_14)), e < TWO_POW_28 ? t2.put(floor(e / TWO_POW_21)) : (t2.put(128 | floor(e / TWO_POW_21)), e < TWO_POW_35 ? t2.put(floor(e / TWO_POW_28)) : (t2.put(128 | floor(e / TWO_POW_28)), e < TWO_POW_42 ? t2.put(floor(e / TWO_POW_35)) : (t2.put(128 | floor(e / TWO_POW_35)), e < TWO_POW_49 ? t2.put(floor(e / TWO_POW_42)) : (t2.put(128 | floor(e / TWO_POW_42)), e < TWO_POW_56 ? t2.put(floor(e / TWO_POW_49)) : (t2.put(floor(e / TWO_POW_49) + 128), t2.put(floor(e / TWO_POW_56))))))))));
-        }
-        static decode(t2) {
-          let e = t2.get(), r = 127 & e;
-          return 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_7, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_14, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_21, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_28, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_35, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_42, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_49, 0 != (128 & e) && (e = t2.get(), r += (127 & e) * TWO_POW_56)))))))), r % 2 == 0 ? r /= 2 : r = -(r + 1) / 2, r;
-        }
-      }
-      const { max } = Math, V2EncodingCookieBase = 478450435, V2CompressedEncodingCookieBase$1 = 478450436, V2maxWordSizeInBytes = 9, encodingCookie = 16 | V2EncodingCookieBase, compressedEncodingCookie$1 = 16 | V2CompressedEncodingCookieBase$1;
-      function fillBufferFromCountsArray(t2, e) {
-        const r = t2.countsArrayIndex(t2.maxValue) + 1;
-        let n = 0;
-        for (; n < r; ) {
-          const i2 = t2.getCountAtIndex(n++);
-          if (i2 < 0) throw new Error("Cannot encode histogram containing negative counts (" + i2 + ") at index " + n + ", corresponding the value range [" + t2.lowestEquivalentValue(t2.valueFromIndex(n)) + "," + t2.nextNonEquivalentValue(t2.valueFromIndex(n)) + ")");
-          let s = 0;
-          if (0 == i2) for (s = 1; n < r && 0 == t2.getCountAtIndex(n); ) s++, n++;
-          s > 1 ? ZigZagEncoding.encode(e, -s) : ZigZagEncoding.encode(e, i2);
-        }
-      }
-      function encodeIntoByteBuffer(t2, e) {
-        const r = e.position;
-        e.putInt32(encodingCookie), e.putInt32(0), e.putInt32(1), e.putInt32(t2.numberOfSignificantValueDigits), e.putInt64(t2.lowestDiscernibleValue), e.putInt64(t2.highestTrackableValue), e.putInt64(1);
-        const n = e.position;
-        fillBufferFromCountsArray(t2, e);
-        const i2 = e.position;
-        return e.position = r + 4, e.putInt32(i2 - n), e.position = i2, i2 - r;
-      }
-      function fillCountsArrayFromSourceBuffer(t2, e, r, n) {
-        if (2 != n && 4 != n && 8 != n && n != V2maxWordSizeInBytes) throw new Error("word size must be 2, 4, 8, or V2maxWordSizeInBytes (" + V2maxWordSizeInBytes + ") bytes");
-        let i2 = 0;
-        const s = e.position + r;
-        for (; e.position < s; ) {
-          let r2 = 0, n2 = ZigZagEncoding.decode(e);
-          n2 < 0 ? (r2 = -n2, i2 += r2) : t2.setCountAtIndex(i2++, n2);
-        }
-        return i2;
-      }
-      function getCookieBase(t2) {
-        return -241 & t2;
-      }
-      function getWordSizeInBytesFromCookie(t2) {
-        if (getCookieBase(t2) == V2EncodingCookieBase || getCookieBase(t2) == V2CompressedEncodingCookieBase$1) return V2maxWordSizeInBytes;
-        return 14 & (240 & t2) >> 4;
-      }
-      function findDeflateFunction() {
-        try {
-          return eval('require("zlib").deflateSync');
-        } catch (t2) {
-          return pako__namespace ? pako__namespace.deflate : () => {
-            throw new Error("pako library is mandatory for encoding/deconding on the browser side");
-          };
-        }
-      }
-      function findInflateFunction() {
-        try {
-          return eval('require("zlib").inflateSync');
-        } catch (t2) {
-          return pako__namespace ? pako__namespace.inflate : () => {
-            throw new Error("pako library is mandatory for encoding/deconding on the browser side");
-          };
-        }
-      }
-      const deflate = findDeflateFunction(), inflate = findInflateFunction();
-      function doDecode(t2, e = 32, r = 0) {
-        const n = new ByteBuffer(t2), i2 = n.getInt32();
-        let s, o, a, u;
-        if (getCookieBase(i2) !== V2EncodingCookieBase) throw new Error("The buffer does not contain a Histogram (no valid V2 encoding cookie found)");
-        if (getWordSizeInBytesFromCookie(i2) != V2maxWordSizeInBytes) throw new Error("The buffer does not contain a Histogram (no valid cookie found)");
-        s = n.getInt32(), n.getInt32(), o = n.getInt32(), a = n.getInt64(), u = n.getInt64(), n.getInt64(), u = max(u, r);
-        const l = new (constructorFromBucketSize(e))(a, u, o), h = fillCountsArrayFromSourceBuffer(l, n, s, V2maxWordSizeInBytes);
-        return l.establishInternalTackingValues(h), l;
-      }
-      function doEncodeIntoCompressedBase64(t2) {
-        const e = t2 ? { level: t2 } : {}, r = ByteBuffer.allocate();
-        r.putInt32(compressedEncodingCookie$1);
-        const n = ByteBuffer.allocate(), i2 = encodeIntoByteBuffer(this, n), s = n.data.slice(0, i2), o = deflate(s, e);
-        return r.putInt32(o.byteLength), r.putArray(o), fromByteArray_1(r.data);
-      }
-      JsHistogram.decode = doDecode, JsHistogram.prototype.encodeIntoCompressedBase64 = doEncodeIntoCompressedBase64;
-      const V2CompressedEncodingCookieBase = 478450436, compressedEncodingCookie = 16 | V2CompressedEncodingCookieBase;
-      function decompress(t2) {
-        const e = new ByteBuffer(t2), r = e.position;
-        if ((-241 & e.getInt32()) !== V2CompressedEncodingCookieBase) throw new Error("Encoding not supported, only V2 is supported");
-        const n = e.getInt32();
-        return inflate(e.data.slice(r + 8, r + 8 + n));
-      }
-      const decodeFromCompressedBase64 = (t2, e = 32, r = false, n = 0) => {
-        const i2 = decompress(toByteArray_1(t2.trim()));
-        return r ? WasmHistogram.decode(i2, e, n) : JsHistogram.decode(i2, e, n);
-      };
-      function encodeWasmIntoCompressedBase64(t2) {
-        const e = t2 ? { level: t2 } : {}, r = ByteBuffer.allocate();
-        r.putInt32(compressedEncodingCookie);
-        const n = this.encode(), i2 = deflate(n, e);
-        return r.putInt32(i2.byteLength), r.putArray(i2), fromByteArray_1(r.data);
-      }
-      WasmHistogram.prototype.encodeIntoCompressedBase64 = encodeWasmIntoCompressedBase64;
-      const encodeIntoCompressedBase64 = (t2, e) => {
-        if (t2 instanceof WasmHistogram) return t2.encodeIntoCompressedBase64(e);
-        if (t2 instanceof JsHistogram) return t2.encodeIntoCompressedBase64(e);
-        throw new Error("Unsupported Histogram implementation");
-      }, TAG_PREFIX = "Tag=", TAG_PREFIX_LENGTH = "Tag=".length;
-      class HistogramLogReader {
-        constructor(t2, e = 32, r = false) {
-          this.lines = splitLines(t2), this.currentLineIndex = 0, this.bitBucketSize = e, this.useWebAssembly = r;
-        }
-        nextIntervalHistogram(t2 = 0, e = Number.MAX_VALUE) {
-          for (; this.currentLineIndex < this.lines.length; ) {
-            const r = this.lines[this.currentLineIndex];
-            if (this.currentLineIndex++, r.startsWith("#[StartTime:")) this.parseStartTimeFromLine(r);
-            else if (r.startsWith("#[BaseTime:")) this.parseBaseTimeFromLine(r);
-            else if (r.startsWith("#") || r.startsWith('"StartTimestamp"')) ;
-            else if (r.includes(",")) {
-              const n = r.split(","), [i2] = n;
-              let s;
-              i2.startsWith(TAG_PREFIX) ? (s = i2.substring(TAG_PREFIX_LENGTH), n.shift()) : s = NO_TAG;
-              const [o, a, , u] = n, l = Number.parseFloat(o);
-              if (this.baseTimeSec || (l < this.startTimeSec - 31536e3 ? this.baseTimeSec = this.startTimeSec : this.baseTimeSec = 0), e < l) return null;
-              if (l < t2) continue;
-              const h = decodeFromCompressedBase64(u, this.bitBucketSize, this.useWebAssembly);
-              h.startTimeStampMsec = 1e3 * (this.baseTimeSec + l);
-              const c = Number.parseFloat(a);
-              return h.endTimeStampMsec = 1e3 * (this.baseTimeSec + l + c), h.tag = s, h;
-            }
-          }
-          return null;
-        }
-        parseStartTimeFromLine(t2) {
-          this.startTimeSec = Number.parseFloat(t2.split(" ")[1]);
-        }
-        parseBaseTimeFromLine(t2) {
-          this.baseTimeSec = Number.parseFloat(t2.split(" ")[1]);
-        }
-      }
-      const splitLines = (t2) => t2.split(/\r\n|\r|\n/g), shouldIncludeNoTag = (t2) => t2.find((t3) => !t3.startsWith("#") && !t3.startsWith('"') && !t3.startsWith(TAG_PREFIX) && t3.includes(",")), listTags = (t2) => {
-        const e = splitLines(t2), r = e.filter((t3) => t3.includes(",") && t3.startsWith(TAG_PREFIX)).map((t3) => t3.substring(TAG_PREFIX_LENGTH, t3.indexOf(","))), n = new Set(r), i2 = Array.from(n);
-        return shouldIncludeNoTag(e) && i2.unshift("NO TAG"), i2;
-      }, HISTOGRAM_LOG_FORMAT_VERSION = "1.3", timeFormatter = floatFormatter(5, 3);
-      class HistogramLogWriter {
-        constructor(t2) {
-          this.log = t2, this.baseTime = 0;
-        }
-        outputIntervalHistogram(t2, e = (t2.startTimeStampMsec - this.baseTime) / 1e3, r = (t2.endTimeStampMsec - this.baseTime) / 1e3, n = 1e3) {
-          const i2 = encodeIntoCompressedBase64(t2), s = `${timeFormatter(e)},${timeFormatter(r - e)},${timeFormatter(t2.maxValue / n)},${i2}
-`;
-          t2.tag && t2.tag !== NO_TAG ? this.log(`Tag=${t2.tag},${s}`) : this.log(s);
-        }
-        outputComment(t2) {
-          this.log(`#${t2}
-`);
-        }
-        outputStartTime(t2) {
-          this.outputComment(`[StartTime: ${floatFormatter(5, 3)(t2 / 1e3)} (seconds since epoch), ${new Date(t2)}]
-`);
-        }
-        outputLegend() {
-          this.log('"StartTimestamp","Interval_Length","Interval_Max","Interval_Compressed_Histogram"\n');
-        }
-        outputLogFormatVersion() {
-          this.outputComment("[Histogram log format version " + HISTOGRAM_LOG_FORMAT_VERSION + "]");
-        }
-      }
-      const defaultRequest = { bitBucketSize: 32, autoResize: true, lowestDiscernibleValue: 1, highestTrackableValue: 2, numberOfSignificantValueDigits: 3, useWebAssembly: false }, build = (t2 = defaultRequest) => {
-        const e = Object.assign({}, defaultRequest, t2);
-        if (t2.useWebAssembly && webAssemblyAvailable) return WasmHistogram.build(e);
-        const r = new (constructorFromBucketSize(e.bitBucketSize))(e.lowestDiscernibleValue, e.highestTrackableValue, e.numberOfSignificantValueDigits);
-        return r.autoResize = e.autoResize, r;
-      };
-      class Recorder {
-        constructor(t2 = defaultRequest, e = (() => (/* @__PURE__ */ new Date()).getTime())) {
-          this.histogramBuildRequest = t2, this.clock = e, this.activeHistogram = build(this.histogramBuildRequest), Recorder.idGenerator++, this.activeHistogram.containingInstanceId = Recorder.idGenerator, this.activeHistogram.startTimeStampMsec = e();
-        }
-        recordValue(t2) {
-          this.activeHistogram.recordValue(t2);
-        }
-        recordValueWithCount(t2, e) {
-          this.activeHistogram.recordValueWithCount(t2, e);
-        }
-        recordValueWithExpectedInterval(t2, e) {
-          this.activeHistogram.recordValueWithExpectedInterval(t2, e);
-        }
-        getIntervalHistogram(t2) {
-          if (t2) {
-            if (t2.containingInstanceId !== this.activeHistogram.containingInstanceId) throw "replacement histogram must have been obtained via a previous getIntervalHistogram() call from this Recorder";
-          }
-          this.inactiveHistogram = t2, this.performIntervalSample();
-          const e = this.inactiveHistogram;
-          return this.inactiveHistogram = null, e;
-        }
-        getIntervalHistogramInto(t2) {
-          this.performIntervalSample(), this.inactiveHistogram && (t2.add(this.inactiveHistogram), t2.startTimeStampMsec = this.inactiveHistogram.startTimeStampMsec, t2.endTimeStampMsec = this.inactiveHistogram.endTimeStampMsec);
-        }
-        reset() {
-          this.activeHistogram.reset(), this.activeHistogram.startTimeStampMsec = this.clock();
-        }
-        performIntervalSample() {
-          this.inactiveHistogram || (this.inactiveHistogram = build(this.histogramBuildRequest), this.inactiveHistogram.containingInstanceId = this.activeHistogram.containingInstanceId), this.inactiveHistogram.reset();
-          const t2 = this.activeHistogram;
-          this.activeHistogram = this.inactiveHistogram, this.inactiveHistogram = t2;
-          const e = this.clock();
-          this.inactiveHistogram.endTimeStampMsec = e, this.activeHistogram.startTimeStampMsec = e;
-        }
-        destroy() {
-          var t2;
-          this.activeHistogram.destroy(), null === (t2 = this.inactiveHistogram) || void 0 === t2 || t2.destroy();
-        }
-      }
-      Recorder.idGenerator = 0, exports.ByteBuffer = ByteBuffer, exports.Float64Histogram = Float64Histogram, exports.HistogramLogReader = HistogramLogReader, exports.HistogramLogWriter = HistogramLogWriter, exports.Int16Histogram = Int16Histogram, exports.Int32Histogram = Int32Histogram, exports.Int8Histogram = Int8Histogram, exports.JsHistogram = JsHistogram, exports.PackedHistogram = PackedHistogram, exports.Recorder = Recorder, exports.WasmHistogram = WasmHistogram, exports.build = build, exports.decodeFromCompressedBase64 = decodeFromCompressedBase64, exports.encodeIntoCompressedBase64 = encodeIntoCompressedBase64, exports.initWebAssembly = initWebAssembly, exports.initWebAssemblySync = initWebAssemblySync, exports.listTags = listTags, Object.defineProperty(exports, "__esModule", { value: true });
-    }));
-  }
-});
-
 // site/transport.ts
 init_globals();
 
@@ -28375,7 +28375,10 @@ function joinedEvent(last2, text4, at) {
   };
 }
 function answeredBy(last2, shown) {
-  return !last2.answered && last2.at === shown.at && last2.text === shown.text && last2.revision === shown.revision;
+  return !last2.answered && sameOccurrence(last2, shown);
+}
+function sameOccurrence(a, b) {
+  return a.at === b.at && a.text === b.text && a.revision === b.revision;
 }
 
 // src/proc/launcher.ts
@@ -71321,7 +71324,7 @@ var roleOf = (client) => client?.kind === "frames" ? "frames" : "statusline";
 
 // src/renderer/render-payload.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -71640,932 +71643,7 @@ function projectToday(facts, at) {
 
 // src/segments/context.ts
 init_globals();
-
-// src/utils/transcript-fold.ts
-init_globals();
-
-// src/utils/claude.ts
-init_globals();
-
-// site/shims/fs.ts
-init_globals();
-var import_memfs = __toESM(require_lib8(), 1);
-init_process();
-var vol = import_memfs.Volume.fromNestedJSON({}, "/", {
-  process: { cwd: () => "/", platform: process.platform, env: process.env, getuid: process.getuid, getgid: process.getgid, emitWarning: process.emitWarning }
-});
-var fs = (0, import_memfs.createFsFromVolume)(vol);
-var fs_default = fs;
-var {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  statSync,
-  lstatSync,
-  readdirSync,
-  mkdirSync,
-  rmSync,
-  unlinkSync,
-  renameSync,
-  openSync,
-  readSync,
-  closeSync,
-  fstatSync,
-  writeSync,
-  appendFileSync,
-  realpathSync,
-  readlinkSync,
-  mkdtempSync,
-  copyFileSync,
-  watch,
-  watchFile,
-  unwatchFile,
-  constants,
-  promises,
-  accessSync,
-  createReadStream,
-  createWriteStream,
-  chmodSync,
-  utimesSync,
-  symlinkSync,
-  linkSync,
-  rmdirSync,
-  ftruncateSync,
-  fsyncSync,
-  Stats
-} = fs;
-
-// src/utils/transcript-fs.ts
-init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var p = fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/utils/limiter.ts
-init_globals();
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max3) {
-    this.slots = max3;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    const stat3 = statSync(filePath2, { bigint: true });
-    return stat3.isFile() ? transcriptVersion(stat3) : "";
-  } catch {
-    return "";
-  }
-}
-function transcriptVersion(stat3) {
-  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path30, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path30, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-var Observations = class {
-  pending = new SingleFlight();
-  recent = /* @__PURE__ */ new Map();
-  async read(path30, range, read2) {
-    const stamp2 = statStamp(path30);
-    if (stamp2 === "") return observedValue(await read2());
-    const key = `${stamp2}|${range}`;
-    const recent = this.recent.get(key);
-    if (recent !== void 0) {
-      this.recent.delete(key);
-      this.recent.set(key, recent);
-      return ok(recent);
-    }
-    const { observed: observed2, originalPath } = await this.pending.run(key, async () => {
-      const observed3 = await read2();
-      if (observed3.kind === "ok" && observed3.value.stamp === stamp2 && observed3.value.bytes <= FOLD_WINDOW_BYTES) {
-        this.recent.set(key, observed3.value.value);
-        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
-          const oldest = this.recent.keys().next();
-          if (!oldest.done) this.recent.delete(oldest.value);
-        }
-      }
-      return { observed: observed3, originalPath: path30 };
-    });
-    return observedValue(
-      originalPath === path30 || observed2.kind === "ok" && observed2.value.stamp === stamp2 ? observed2 : await read2()
-    );
-  }
-};
-function observedValue(found2) {
-  return found2.kind === "ok" ? ok(found2.value.value) : found2;
-}
-var forward = new Observations();
-var tails = new Observations();
-function readAppendedText(path30, prior, until2) {
-  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
-  return forward.read(path30, range, async () => {
-    var _stack = [];
-    try {
-      const read2 = await readAppended(path30, prior, until2);
-      if (read2.kind !== "ok") return read2;
-      const lent = __using(_stack, read2.value);
-      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
-      const bytes = lines2.length;
-      return ok({
-        stamp: info.stamp,
-        bytes,
-        value: { ...info, bytes, text: lines2.toString("utf8") }
-      });
-    } catch (_) {
-      var _error = _, _hasError = true;
-    } finally {
-      __callDispose(_stack, _error, _hasError);
-    }
-  });
-}
-function readTailText(path30, maxBytes) {
-  return tails.read(path30, String(maxBytes), async () => {
-    const read2 = await readTail(path30, maxBytes);
-    if (read2.kind !== "ok") return read2;
-    const { stamp: stamp2, fromStart, buf } = read2.value;
-    return ok({
-      stamp: stamp2,
-      bytes: buf.length,
-      value: { text: buf.toString("utf8"), fromStart }
-    });
-  });
-}
-async function readWholeLines(path30, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path30, constants.O_RDONLY | constants.O_NONBLOCK);
-    const st = await fh.stat({ bigint: true });
-    if (!st.isFile())
-      return failed(`readAppended ${path30}: not a regular file`, "read");
-    const size = Number(st.size);
-    const ino = Number(st.ino);
-    const stamp2 = transcriptVersion(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next2 = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next2.length;
-      const nl = next2.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next2.length < Math.min(window2.length, end - reached);
-      reached += next2.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT2;
-    return failed(
-      `readAppended ${path30}: ${e instanceof Error ? e.message : String(e)}`,
-      "read"
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path30, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path30, constants.O_RDONLY | constants.O_NONBLOCK);
-      const stat3 = await fh.stat({ bigint: true });
-      if (!stat3.isFile())
-        return failed(`readTail ${path30}: not a regular file`, "read");
-      const size = Number(stat3.size);
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0,
-        stamp: transcriptVersion(stat3)
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT2;
-      return failed(
-        `readTail ${path30}: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-
-// src/utils/claude.ts
-var import_node_path8 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-activity.ts
-init_globals();
-var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text4) {
-  if (typeof text4 !== "string") return void 0;
-  return COMMAND_NAME.exec(text4)?.[1];
-}
-function todoItems(input) {
-  const todos2 = input?.todos;
-  if (!Array.isArray(todos2)) return void 0;
-  const items = [];
-  for (const raw of todos2) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const { content, activeForm, status } = raw;
-    const active2 = status === "in_progress";
-    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text4 !== "string") continue;
-    items.push({ text: text4, active: active2, done: status === "completed" });
-  }
-  return items;
-}
-function turnText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const block = content.find(
-    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
-  );
-  return block?.text ?? "";
-}
-function entryActivity(parsed2, userEntry) {
-  const msg = parsed2.message;
-  const content = msg?.content;
-  const started2 = [];
-  const finished = [];
-  let todos2;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block;
-      switch (b.type) {
-        case "tool_use": {
-          const { id: id2, name } = b;
-          if (typeof id2 !== "string" || typeof name !== "string") break;
-          started2.push({ id: id2, name });
-          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
-          break;
-        }
-        case "tool_result": {
-          const id2 = b.tool_use_id;
-          if (typeof id2 === "string") finished.push(id2);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
-  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
-    return void 0;
-  }
-  return {
-    ...started2.length > 0 && { started: started2 },
-    ...finished.length > 0 && { finished },
-    ...todos2 !== void 0 && { todos: todos2 },
-    ...command !== void 0 && { command }
-  };
-}
-
-// src/utils/claude.ts
-function getClaudePaths(detected, homeDir) {
-  if (detected !== void 0) return [detected];
-  return [(0, import_node_path8.join)(homeDir, ".config", "claude"), (0, import_node_path8.join)(homeDir, ".claude")].filter(
-    (dir) => existsSync(dir)
-  );
-}
-async function findProjectPaths(claudePaths) {
-  const projectPaths = [];
-  for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path8.join)(claudePath, "projects");
-    const entries = await unlessGone(
-      readdir2(projectsDir, { withFileTypes: true })
-    );
-    for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path8.join)(projectsDir, entry.name));
-    }
-  }
-  return projectPaths;
-}
-async function unlessGone(read2) {
-  try {
-    return await read2;
-  } catch (e) {
-    if (e.code === "ENOENT") return void 0;
-    throw e;
-  }
-}
-async function findAgentTranscripts(sessionId2, projectPath, verified) {
-  const paths2 = [];
-  let longLines = [];
-  const subagentsDir = (0, import_node_path8.join)(projectPath, sessionId2, "subagents");
-  try {
-    const files = await readdir2(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
-    );
-    for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path8.join)(subagentsDir, fileName2);
-      if (verified?.has(filePath2)) {
-        paths2.push(filePath2);
-        continue;
-      }
-      const read2 = await readAppendedText(filePath2, void 0, void 0);
-      if (read2.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath2}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath2, read2.value);
-      const { text: text4 } = read2.value;
-      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
-      if (line.kind === "object" && line.value.sessionId === sessionId2) {
-        paths2.push(filePath2);
-      }
-    }
-  } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
-  }
-  return { paths: paths2, longLines };
-}
-function userEntryOf(parsed2) {
-  const msg = parsed2.message;
-  const messageType = parsed2.type || msg?.role || msg?.type;
-  if (messageType !== "user") return void 0;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
-  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
-  if (origin !== void 0 && origin !== "human") return "turn";
-  const text4 = turnText(msg?.content).trimStart();
-  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
-}
-var TURN_GOES_ON = /* @__PURE__ */ new Set([
-  void 0,
-  "tool_use",
-  "pause_turn"
-]);
-function turnOpenAfter(open2, entry) {
-  if (entry.isSidechain) return open2;
-  switch (entry.userEntry) {
-    case "prompt":
-    case "turn":
-      return true;
-    case "interrupt":
-      return false;
-    case "tool-result":
-    case "claude-code":
-      return open2;
-    case void 0:
-      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
-  }
-}
-var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
-function firstBlockType(msg) {
-  const content = msg?.content;
-  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
-}
-function makeEntry(parsed2) {
-  if (!parsed2.timestamp) return null;
-  const msg = parsed2.message;
-  const usage = msg?.usage;
-  const userEntry = userEntryOf(parsed2);
-  return {
-    timestamp: new Date(parsed2.timestamp),
-    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
-    message: msg ? {
-      id: typeof msg.id === "string" ? msg.id : void 0,
-      model: typeof msg.model === "string" ? msg.model : void 0,
-      usage,
-      role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0,
-      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
-    } : void 0,
-    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
-    isSidechain: parsed2.isSidechain === true,
-    userEntry,
-    activity: entryActivity(parsed2, userEntry),
-    raw: {
-      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
-      message: msg ? {
-        id: typeof msg.id === "string" ? msg.id : void 0,
-        model: typeof msg.model === "string" ? msg.model : void 0,
-        usage
-      } : void 0,
-      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
-    }
-  };
-}
-function jsonLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return { kind: "blank" };
-  try {
-    const value = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
-  } catch (parseError) {
-    return { kind: "unparsed", reason: String(parseError) };
-  }
-}
-function entryOf3(line) {
-  const read2 = jsonLine(line);
-  if (read2.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read2.reason}`);
-    return null;
-  }
-  if (read2.kind === "blank") return null;
-  try {
-    return makeEntry(read2.value);
-  } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
-  }
-}
-function parseJsonlLines(text4) {
-  const entries = [];
-  for (const line of text4.split("\n")) {
-    const entry = entryOf3(line);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
-function longLinesWith(longLines, path30, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path30, offset: read2.start, bytes: read2.longLine }];
-}
-function longLineLog(longLines) {
-  return longLines.map(
-    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
-  );
-}
-async function foldAppended(filePath2, prior, empty2, step4) {
-  let longLines = [];
-  let cursor = prior?.cursor;
-  let value = prior?.value ?? empty2;
-  let end;
-  for (; ; ) {
-    const read2 = await readAppendedText(
-      filePath2,
-      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
-      end?.size
-    );
-    if (read2.kind !== "ok") return read2;
-    const window2 = read2.value;
-    if (window2.reset) value = empty2;
-    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
-    if (end === void 0 || window2.reset) {
-      end = { size: window2.size, stamp: window2.stamp };
-    }
-    const next2 = window2.start + window2.bytes;
-    value = await step4(value, parseJsonlLines(window2.text));
-    cursor = {
-      offset: next2,
-      stamp: end.stamp,
-      ino: window2.ino
-    };
-    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
-  }
-}
-
-// src/utils/observable-lru.ts
-init_globals();
-var ObservableLru = class {
-  constructor(max3) {
-    this.max = max3;
-  }
-  max;
-  values = observable.map(void 0, { deep: false });
-  // Least recently used first.
-  order = /* @__PURE__ */ new Set();
-  get(key) {
-    return this.values.get(key);
-  }
-  get size() {
-    return this.order.size;
-  }
-  // The key was used and its value stands.
-  touch(key) {
-    if (this.order.delete(key)) this.order.add(key);
-  }
-  // The key's value now, used now. A value identical to the one held wakes
-  // nobody.
-  set(key, value) {
-    this.order.delete(key);
-    this.order.add(key);
-    runInAction(() => {
-      this.values.set(key, value);
-      for (const oldest of this.order) {
-        if (this.order.size <= this.max) break;
-        this.order.delete(oldest);
-        this.values.delete(oldest);
-      }
-    });
-  }
-};
-
-// src/time.ts
-init_globals();
-init_timers();
-function spanMs(from, to) {
-  return Math.round(to - from);
-}
-function elapsedMs(clock, since) {
-  return spanMs(since, clock.monotonic());
-}
-var systemTimekeeper = {
-  now: () => Date.now(),
-  monotonic: () => performance.now(),
-  after: (ms, fire, options) => {
-    const timer = setTimeout(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearTimeout(timer);
-  },
-  every: (ms, fire, options) => {
-    const timer = setInterval(fire, ms);
-    if (options?.unref) {
-      timer.unref();
-    }
-    return () => clearInterval(timer);
-  },
-  defer: (fire) => {
-    const turn = setImmediate(fire);
-    return () => clearImmediate(turn);
-  }
-};
-function sleep(clock, ms, signal) {
-  return new Promise((resolve2, reject2) => {
-    const aborted = () => Object.assign(new Error("The operation was aborted"), {
-      name: "AbortError",
-      code: "ABORT_ERR",
-      cause: signal?.reason
-    });
-    if (signal?.aborted) {
-      reject2(aborted());
-      return;
-    }
-    const onAbort = () => {
-      cancel();
-      reject2(aborted());
-    };
-    const cancel = clock.after(ms, () => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve2();
-    });
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-// src/utils/transcript-fold.ts
-var MAX_SESSIONS2 = 256;
-var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS2) {
-    this.empty = empty2;
-    this.step = step4;
-    this.refreshes = refreshes;
-    this.clock = clock;
-    this.log = log;
-    this.sessions = new ObservableLru(maxSessions);
-  }
-  empty;
-  step;
-  refreshes;
-  clock;
-  log;
-  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
-  // instance per projection per daemon. Observable, so a view's payload over
-  // an answer is recomputed in the turn the answer is stored.
-  sessions;
-  // [LAW:effects-at-boundaries] The session's refresh: folds what was
-  // appended since its last read, and stores what it answered.
-  async read(sessionId2, transcriptPath, by) {
-    const held = this.sessions.get(sessionId2);
-    const prior = held?.folded;
-    const stamp2 = statStamp(transcriptPath);
-    if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
-      const { folded: folded3, answer: answer2 } = held;
-      if (answer2.kind === "ok" && answer2.value === folded3.value) {
-        this.sessions.touch(sessionId2);
-        return answer2;
-      }
-      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
-    }
-    const startedAt = this.clock.monotonic();
-    const read2 = await foldAppended(
-      transcriptPath,
-      prior,
-      this.empty,
-      (state, entries) => entries.reduce(this.step, state)
-    );
-    this.refreshes.recorded(
-      `sid=${valueOf(sessionId2)}`,
-      by,
-      read2,
-      elapsedMs(this.clock, startedAt)
-    );
-    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
-    if (read2.kind === "absent") {
-      return this.store(sessionId2, prior, {
-        kind: "ok",
-        value: prior?.value ?? this.empty
-      });
-    }
-    const { folded: folded2, longLines } = read2.value;
-    for (const line of longLineLog(longLines)) this.log("info", line);
-    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
-  }
-  // What the session's last read answered, as it stands: never read is
-  // pending, its first read the next request's.
-  answer(sessionId2) {
-    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
-  }
-  store(sessionId2, folded2, answer2) {
-    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
-    return answer2;
-  }
-};
-
-// src/utils/refresh-ledger.ts
-init_globals();
-var REFRESH_TRIGGERS = [
-  "first",
-  "period",
-  "change",
-  "supersede"
-];
-var RefreshLedger = class {
-  constructor(logger = quietLogger) {
-    this.logger = logger;
-  }
-  logger;
-  tallies = /* @__PURE__ */ new Map();
-  declare(declaration) {
-    const key = `${declaration.scope}/${declaration.name}`;
-    const tally = this.tallies.get(key) ?? {
-      name: declaration.name,
-      scope: declaration.scope,
-      refreshes: {},
-      failures: 0,
-      abandoned: 0,
-      lastMs: null
-    };
-    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
-    this.tallies.set(key, tally);
-    return new Refreshes(tally, new Set(declaration.lines), this.logger);
-  }
-  // Every source declared, by scope then name.
-  snapshot() {
-    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
-  }
-  // Every source's refreshes summed by trigger: what the feed summary
-  // compares across its window.
-  totals() {
-    const sum2 = Object.fromEntries(
-      REFRESH_TRIGGERS.map((t2) => [t2, 0])
-    );
-    for (const tally of this.tallies.values()) {
-      for (const trigger of REFRESH_TRIGGERS) {
-        sum2[trigger] += tally.refreshes[trigger] ?? 0;
-      }
-    }
-    return sum2;
-  }
-};
-var Refreshes = class {
-  constructor(tally, lines2, logger) {
-    this.tally = tally;
-    this.lines = lines2;
-    this.logger = logger;
-  }
-  tally;
-  lines;
-  logger;
-  // This source's record as the ledger holds it: what its owner's own stats
-  // report, a view of the one tally rather than a count of its own.
-  record() {
-    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
-  }
-  // `fields` is the refreshed entry's logfmt identity.
-  recorded(fields2, by, outcome, ms) {
-    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
-    this.tally.lastMs = ms;
-    if (outcome.kind === "failed") this.tally.failures++;
-    const failure2 = outcome.kind === "failed";
-    if (!failure2 && !this.lines.has(by)) return;
-    const why = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
-    this.logger(
-      failure2 ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`
-    );
-  }
-  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
-  // own count: a key that moves on every tick aborts a read on every tick,
-  // which no refresh or failure tally would show.
-  abandoned(fields2, by, ms) {
-    this.tally.abandoned++;
-    this.logger(
-      "info",
-      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
-    );
-  }
-};
-
-// src/segments/context.ts
 var DEFAULT_CONTEXT_WINDOW = 2e5;
-function step(state, entry) {
-  const usage = entry.message?.usage;
-  if (!usage?.input_tokens || entry.isSidechain === true) return state;
-  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
-}
-var ContextProvider = class {
-  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
-  // activity: one number per session, kept incrementally, rather than every
-  // entry of the transcript re-parsed to find the last one.
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      void 0,
-      step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "context",
-        scope: "session",
-        refresh: ["first", "period", "change"],
-        lines: []
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // The session's context tokens, folded from the transcript's newest
-  // main-chain usage entry.
-  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
-  // boundary logs it); a transcript with no usable usage entry is `absent`.
-  async refresh(sessionId2, transcriptPath, by) {
-    return tokensFrom(await this.fold.read(sessionId2, transcriptPath, by));
-  }
-  // The session's context tokens as its last refresh left them, for a draw.
-  tokensOf(sessionId2) {
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : tokensFrom(answer2);
-  }
-};
-function tokensFrom(read2) {
-  if (read2.kind === "failed") {
-    return failed(`context transcript: ${read2.reason}`, read2.failedAt);
-  }
-  if (read2.value === void 0) {
-    debug("No main chain entries with usage data found");
-    return ABSENT2;
-  }
-  return ok(read2.value);
-}
 function ratioPercentages(totalTokens, contextLimit) {
   const percentage = Math.min(
     100,
@@ -72604,83 +71682,6 @@ function contextLimitOf(hookData2) {
 
 // src/segments/metrics.ts
 init_globals();
-var RECENT_WINDOW = 20;
-var EMPTY = {
-  messageCount: 0,
-  nonPrompts: 0,
-  recent: []
-};
-var NON_PROMPTS = /* @__PURE__ */ new Set([
-  "turn",
-  "interrupt",
-  "claude-code"
-]);
-function step2(state, entry) {
-  if (entry.isSidechain) return state;
-  const grown = [...state.recent, entry];
-  return {
-    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
-    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
-    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
-  };
-}
-function lastResponseTime(entries) {
-  let lastUserTime = null;
-  let best = null;
-  for (const entry of entries) {
-    const messageType = entry.type || entry.message?.role || entry.message?.type;
-    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
-      lastUserTime = entry.timestamp;
-    } else if (messageType === "assistant" && lastUserTime) {
-      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
-      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
-    }
-  }
-  return best;
-}
-var MetricsProvider = class {
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      EMPTY,
-      step2,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "metrics",
-        scope: "session",
-        refresh: ["first", "period", "change"],
-        lines: []
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // The session's metrics fold, read from its transcript.
-  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
-  // the payload boundary.
-  async refresh(sessionId2, transcriptPath, by) {
-    debug(`Getting metrics from the transcript for session: ${sessionId2}`);
-    return foldFrom(
-      sessionId2,
-      await this.fold.read(sessionId2, transcriptPath, by)
-    );
-  }
-  // The session's metrics fold as its last refresh left it, for a draw.
-  foldOf(sessionId2) {
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : foldFrom(sessionId2, answer2);
-  }
-};
-function foldFrom(sessionId2, folded2) {
-  if (folded2.kind === "failed") {
-    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
-  }
-  return ok({
-    lastResponseTime: lastResponseTime(folded2.value.recent),
-    messageCount: folded2.value.messageCount,
-    nonPrompts: folded2.value.nonPrompts
-  });
-}
 function metricsOver(fold, hookData2) {
   const cost = hookData2.cost;
   if (!cost) return ABSENT2;
@@ -72709,17 +71710,17 @@ init_globals();
 
 // src/claude-settings.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 function detectClaudeConfigDir(env2, cwd2) {
   const first2 = (env2[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0].trim();
-  return first2 === "" ? void 0 : import_node_path9.default.resolve(cwd2, first2);
+  return first2 === "" ? void 0 : import_node_path8.default.resolve(cwd2, first2);
 }
 function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path9.default.join(home, ".claude");
+  return detected ?? import_node_path8.default.join(home, ".claude");
 }
 function claudeSettingsPath(configDir) {
-  return import_node_path9.default.join(configDir, "settings.json");
+  return import_node_path8.default.join(configDir, "settings.json");
 }
 var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -73136,7 +72137,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path10.default.sep !== "\\") return s;
+  if (import_node_path9.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -73331,12 +72332,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate } = drawRender(
-        parts,
-        setup,
-        { by: "feed", fps },
-        feeds
-      );
+      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate, eventsShown } = drawRender(parts, setup, { by: "feed", fps }, feeds);
       const bar = drawn.body;
       const statusline = statuslineOf(
         setup,
@@ -73347,11 +72343,16 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
       const handoff = statusline === bar ? null : statusline;
       const receipt = prepare({
         candidate,
-        clickShown: null,
-        eventsShown: []
+        clickShown: null
       });
       return {
-        frame: { kind: "drawn", receipt, bar, handoff },
+        frame: {
+          kind: "drawn",
+          receipt,
+          bar,
+          handoff,
+          displayedEvents: eventsShown
+        },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -73526,9 +72527,10 @@ function drawRender(parts, setup, drawing2, feeds) {
     daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
     daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
   ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [...launchEvents, ...held].map(
-    (warning) => warning.event
-  );
+  const eventsShown = [...launchEvents, ...held].map(({ kind, event }) => ({
+    kind,
+    event
+  }));
   const standing2 = [
     ...daemon2.fileEvents,
     ...launched,
@@ -73709,7 +72711,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     evaluated: evaluated2,
     cellBreaks,
     clickShown,
-    eventsShown,
+    eventsShown: eventsShown.length > 0 ? eventsShown : void 0,
     lanes,
     candidate: {
       session: sessionId2,
@@ -73760,10 +72762,10 @@ function answerRequest(parts, req, presentation, facts) {
     });
     return {
       frame: frame2,
+      displayedEvents: eventsShown,
       delivery: {
         candidate,
-        clickShown,
-        eventsShown
+        clickShown
       }
     };
   } catch (_) {
@@ -73773,12 +72775,11 @@ function answerRequest(parts, req, presentation, facts) {
   }
 }
 function deliver(parts, id2, delivery) {
-  const { candidate, clickShown, eventsShown } = delivery;
+  const { candidate, clickShown } = delivery;
   const accepted = parts.renderCache.acceptFrame(id2, candidate);
   if (accepted === null) return null;
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);
-  for (const event of eventsShown) parts.eventAnswered(event);
   return accepted;
 }
 function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, elsewhere) {
@@ -75595,9 +74596,9 @@ var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLAC
 
 // src/renderer/settings-history.ts
 var MAX_STEPS = 50;
-var MAX_SESSIONS3 = 32;
+var MAX_SESSIONS2 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
-var EMPTY2 = { past: [], future: [] };
+var EMPTY = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
 var SettingsHistory = class {
   // `loaded` is what the profile holds, oldest first, as the host handed it
@@ -75651,7 +74652,7 @@ var SettingsHistory = class {
     };
   }
   history(sessionId2) {
-    return this.state.get(sessionId2) ?? EMPTY2;
+    return this.state.get(sessionId2) ?? EMPTY;
   }
   begin(files) {
     const held = heldWrites(this.sessionState);
@@ -75820,7 +74821,7 @@ var SettingsHistory = class {
     this.state = next2;
   }
   bound(next2) {
-    while (next2.size > MAX_SESSIONS3 || weight(next2) > MAX_BYTES) {
+    while (next2.size > MAX_SESSIONS2 || weight(next2) > MAX_BYTES) {
       const [oldest, h] = next2.entries().next().value;
       if (next2.size > 1) {
         next2.delete(oldest);
@@ -77036,9 +76037,9 @@ var EditTransactions = class {
 
 // src/renderer/navigation-history.ts
 init_globals();
-var EMPTY3 = { visits: [], cursor: 0 };
+var EMPTY2 = { visits: [], cursor: 0 };
 var MAX_VISITS = 20;
-var MAX_SESSIONS4 = 32;
+var MAX_SESSIONS3 = 32;
 var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
 var menuKeys = /* @__PURE__ */ new WeakMap();
 function capture2(store, sid, { gate: gate2, edit }) {
@@ -77107,7 +76108,7 @@ var NavigationHistory = class {
   begin(store, choose) {
     const before = /* @__PURE__ */ new Map();
     const next2 = /* @__PURE__ */ new Map();
-    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY3;
+    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY2;
     const endVisit = (sid) => {
       const start = before.get(sid);
       if (start === void 0) return;
@@ -77173,7 +76174,7 @@ var NavigationHistory = class {
         this.timelines.delete(sid);
         if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
       }
-      while (this.timelines.size > MAX_SESSIONS4)
+      while (this.timelines.size > MAX_SESSIONS3)
         this.timelines.delete(this.timelines.keys().next().value);
     });
   }
@@ -77691,7 +76692,7 @@ function mainRenderer(parts, pushed, drains) {
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
-        const { frame: frame2, delivery } = answerRequest(
+        const { frame: frame2, delivery, displayedEvents } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -77703,7 +76704,8 @@ function mainRenderer(parts, pushed, drains) {
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
-          frame: frame2
+          frame: frame2,
+          displayedEvents
         });
         return;
       }
@@ -77961,17 +76963,17 @@ function closeIdleMenus2(parts, effects, busy) {
     }
   }
 }
-function mainRendererOf(inputs, host) {
+function mainRendererOf(inputs) {
   const turnLog = new TurnLog();
   return turnLog.during(() => {
     try {
-      return { kind: "built", renderer: build2(inputs, host, turnLog) };
+      return { kind: "built", renderer: build2(inputs, turnLog) };
     } catch (thrown2) {
       return { kind: "refused", failure: failureOf(thrown2) };
     }
   });
 }
-function build2(inputs, host, turnLog) {
+function build2(inputs, turnLog) {
   const gates = createGates();
   const time = new TurnTime();
   const now2 = () => time.at;
@@ -78065,7 +77067,6 @@ function build2(inputs, host, turnLog) {
     periods: FEED_PERIODS
   });
   const parts = {
-    ...host,
     time,
     sessionState: edits.view,
     renderCache,
@@ -78169,10 +77170,10 @@ function debugOf(cache2, what) {
 // src/in-process-renderer.ts
 function inProcessRenderer(decorate = (renderer) => renderer) {
   return ({ name, boot }) => ({
-    start: ({ reaches, clock, log }) => localLink(
+    start: ({ clock, log }) => localLink(
       name,
       () => {
-        const result = mainRendererOf(boot(), reaches);
+        const result = mainRendererOf(boot());
         if (result.diagnostics !== void 0)
           writeLogLines(log, result.diagnostics);
         if (result.kind === "refused")
@@ -78265,11 +77266,115 @@ init_globals();
 
 // src/proc/launch.ts
 init_globals();
+
+// site/shims/fs.ts
+init_globals();
+var import_memfs = __toESM(require_lib8(), 1);
+init_process();
+var vol = import_memfs.Volume.fromNestedJSON({}, "/", {
+  process: { cwd: () => "/", platform: process.platform, env: process.env, getuid: process.getuid, getgid: process.getgid, emitWarning: process.emitWarning }
+});
+var fs = (0, import_memfs.createFsFromVolume)(vol);
+var fs_default = fs;
+var {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+  lstatSync,
+  readdirSync,
+  mkdirSync,
+  rmSync,
+  unlinkSync,
+  renameSync,
+  openSync,
+  readSync,
+  closeSync,
+  fstatSync,
+  writeSync,
+  appendFileSync,
+  realpathSync,
+  readlinkSync,
+  mkdtempSync,
+  copyFileSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  constants,
+  promises,
+  accessSync,
+  createReadStream,
+  createWriteStream,
+  chmodSync,
+  utimesSync,
+  symlinkSync,
+  linkSync,
+  rmdirSync,
+  ftruncateSync,
+  fsyncSync,
+  Stats
+} = fs;
+
+// src/proc/launch.ts
 var import_node_string_decoder = __toESM(require_string_decoder(), 1);
+
+// src/time.ts
+init_globals();
+init_timers();
+function spanMs(from, to) {
+  return Math.round(to - from);
+}
+function elapsedMs(clock, since) {
+  return spanMs(since, clock.monotonic());
+}
+var systemTimekeeper = {
+  now: () => Date.now(),
+  monotonic: () => performance.now(),
+  after: (ms, fire, options) => {
+    const timer = setTimeout(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearTimeout(timer);
+  },
+  every: (ms, fire, options) => {
+    const timer = setInterval(fire, ms);
+    if (options?.unref) {
+      timer.unref();
+    }
+    return () => clearInterval(timer);
+  },
+  defer: (fire) => {
+    const turn = setImmediate(fire);
+    return () => clearImmediate(turn);
+  }
+};
+function sleep(clock, ms, signal) {
+  return new Promise((resolve2, reject2) => {
+    const aborted = () => Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+      code: "ABORT_ERR",
+      cause: signal?.reason
+    });
+    if (signal?.aborted) {
+      reject2(aborted());
+      return;
+    }
+    const onAbort = () => {
+      cancel();
+      reject2(aborted());
+    };
+    const cancel = clock.after(ms, () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve2();
+    });
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 function publishByRename(file, bytes, mode) {
   const staged = stagedName(file);
   try {
@@ -78346,7 +77451,7 @@ function noted(e, staged, removal) {
 }
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path11.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path10.default.dirname(file), { recursive: true });
   const kept = fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   publishByRename(
     file,
@@ -78381,8 +77486,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path11.default.resolve(
-      fs_default.realpathSync(import_node_path11.default.dirname(file)),
+    return import_node_path10.default.resolve(
+      fs_default.realpathSync(import_node_path10.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -78537,6 +77642,9 @@ function pipeEvent(state, kind, category) {
   state.pipeEvent = {
     text: `${PIPE_EVENT_LEAD}${said2.join("; ")}`,
     at: state.scope.now(),
+    // [LAW:types-are-the-program] An old write must not answer a later event
+    // with the same count, category and instant.
+    revision: (last2?.revision ?? 0) + 1,
     answered: false,
     counts
   };
@@ -78557,7 +77665,12 @@ function standing(state) {
     ...event === null ? [] : [
       {
         kind: "launch-pipes",
-        event: { text: event.text, at: event.at, answered: event.answered }
+        event: {
+          text: event.text,
+          at: event.at,
+          revision: event.revision,
+          answered: event.answered
+        }
       }
     ]
   ];
@@ -79533,7 +78646,7 @@ init_globals();
 
 // src/daemon/session-book.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/render-origin.ts
 init_globals();
@@ -79558,7 +78671,7 @@ function originOfRecord(value) {
 }
 
 // src/daemon/session-book.ts
-var MAX_SESSIONS5 = 256;
+var MAX_SESSIONS4 = 256;
 var SESSION_BOOK_FILE = {
   name: "session-book",
   // Flat: the origin's record, and the Claude Code directory beside it.
@@ -79573,7 +78686,7 @@ var SESSION_BOOK_FILE = {
     if (origin === null)
       return { kind: "failed", reason: "is not the origin of a render" };
     const { claudeConfigDir: claudeConfigDir2 } = value;
-    if (!(0, import_node_path12.isAbsolute)(origin.projectDir) || !(0, import_node_path12.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path12.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path12.isAbsolute)(claudeConfigDir2)))
+    if (!(0, import_node_path11.isAbsolute)(origin.projectDir) || !(0, import_node_path11.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path11.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path11.isAbsolute)(claudeConfigDir2)))
       return { kind: "failed", reason: "holds a path that is not absolute" };
     return {
       kind: "ok",
@@ -79657,7 +78770,7 @@ var SessionBook = class {
   }
   bound() {
     for (const oldest of this.book.keys()) {
-      if (this.book.size <= MAX_SESSIONS5) break;
+      if (this.book.size <= MAX_SESSIONS4) break;
       this.book.delete(oldest);
       this.environments.delete(oldest);
     }
@@ -79666,7 +78779,7 @@ var SessionBook = class {
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -79732,7 +78845,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path13.default.resolve(run2.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path12.default.resolve(run2.cwd, program) : program,
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
@@ -79785,47 +78898,47 @@ var Runs = class {
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path14.default.join(host.home, ".local", "state");
-  return import_node_path14.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path13.default.join(host.home, ".local", "state");
+  return import_node_path13.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path14.default.join(host.home, ".cache");
-  return import_node_path14.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path13.default.join(host.home, ".cache");
+  return import_node_path13.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path14.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path13.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function sessionStatePath(host) {
-  return import_node_path14.default.join(stateDir(host), "session-state.json");
+  return import_node_path13.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path14.default.join(stateDir(host), "settings-history.json");
+  return import_node_path13.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path14.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path13.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path14.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path13.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path14.default.join(stateDir(host), "watch-probe");
+  return import_node_path13.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path14.default.join(stateDir(host), "daemon.log");
+  return import_node_path13.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -79835,7 +78948,7 @@ function daemonPaths(host) {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
-    sessionBook: import_node_path14.default.join(stateDir(host), "session-book.json"),
+    sessionBook: import_node_path13.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host)
   };
@@ -79846,20 +78959,20 @@ function profilePaths(paths2, name) {
       sessionState: paths2.sessionState,
       settingsHistory: paths2.settingsHistory
     };
-  const state = import_node_path14.default.join(paths2.state, "renderers", name, "state");
+  const state = import_node_path13.default.join(paths2.state, "renderers", name, "state");
   return {
-    sessionState: import_node_path14.default.join(state, import_node_path14.default.basename(paths2.sessionState)),
-    settingsHistory: import_node_path14.default.join(state, import_node_path14.default.basename(paths2.settingsHistory))
+    sessionState: import_node_path13.default.join(state, import_node_path13.default.basename(paths2.sessionState)),
+    settingsHistory: import_node_path13.default.join(state, import_node_path13.default.basename(paths2.settingsHistory))
   };
 }
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path14.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path13.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path14.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path14.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path13.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path13.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -79935,6 +79048,13 @@ init_globals();
 
 // src/daemon/source-files.ts
 init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var p = fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/daemon/source-files.ts
 var SourceFiles = class {
   constructor(readUtf8 = (file, signal) => readFile(file, { encoding: "utf8", signal })) {
     this.readUtf8 = readUtf8;
@@ -79986,7 +79106,7 @@ var SourceFiles = class {
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -80105,7 +79225,7 @@ function folded(window2, next2) {
   return window2;
 }
 var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path15.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path14.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -80114,7 +79234,7 @@ var heldBy = (state, handle) => state.kind === "listening" && state.handle === h
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var isBelow = (at, root) => at.startsWith(root + import_node_path15.default.sep);
+var isBelow = (at, root) => at.startsWith(root + import_node_path14.default.sep);
 function dirsBelow(at, held, trusted, unlisted) {
   const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
   let entries;
@@ -80127,7 +79247,7 @@ function dirsBelow(at, held, trusted, unlisted) {
     return [...held].filter((p2) => isBelow(p2, at));
   }
   return entries.filter((e) => e.isDirectory()).flatMap((e) => {
-    const below = import_node_path15.default.join(at, e.name);
+    const below = import_node_path14.default.join(at, e.name);
     return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
   });
 }
@@ -80448,7 +79568,7 @@ var WatcherRegistry = class {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
     this.tell(dir, namedOf(dir.path, changed));
-    if (changed === import_node_path15.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
+    if (changed === import_node_path14.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
     for (const slot of [...dir.listeners].map((l) => l.slot))
       this.reconciled(slot, "heard", dir.path);
@@ -80625,7 +79745,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/file-events-warnings.ts
 init_globals();
@@ -80826,7 +79946,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path16.default.join(inst.folder, PROBE_FILE),
+        import_node_path15.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -81241,6 +80361,91 @@ function attempt2(read2) {
     return Promise.resolve(threw2(e));
   }
 }
+
+// src/utils/refresh-ledger.ts
+init_globals();
+var REFRESH_TRIGGERS = [
+  "first",
+  "period",
+  "change",
+  "supersede"
+];
+var RefreshLedger = class {
+  constructor(logger = quietLogger) {
+    this.logger = logger;
+  }
+  logger;
+  tallies = /* @__PURE__ */ new Map();
+  declare(declaration) {
+    const key = `${declaration.scope}/${declaration.name}`;
+    const tally = this.tallies.get(key) ?? {
+      name: declaration.name,
+      scope: declaration.scope,
+      refreshes: {},
+      failures: 0,
+      abandoned: 0,
+      lastMs: null
+    };
+    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
+    this.tallies.set(key, tally);
+    return new Refreshes(tally, new Set(declaration.lines), this.logger);
+  }
+  // Every source declared, by scope then name.
+  snapshot() {
+    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
+  }
+  // Every source's refreshes summed by trigger: what the feed summary
+  // compares across its window.
+  totals() {
+    const sum2 = Object.fromEntries(
+      REFRESH_TRIGGERS.map((t2) => [t2, 0])
+    );
+    for (const tally of this.tallies.values()) {
+      for (const trigger of REFRESH_TRIGGERS) {
+        sum2[trigger] += tally.refreshes[trigger] ?? 0;
+      }
+    }
+    return sum2;
+  }
+};
+var Refreshes = class {
+  constructor(tally, lines2, logger) {
+    this.tally = tally;
+    this.lines = lines2;
+    this.logger = logger;
+  }
+  tally;
+  lines;
+  logger;
+  // This source's record as the ledger holds it: what its owner's own stats
+  // report, a view of the one tally rather than a count of its own.
+  record() {
+    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
+  }
+  // `fields` is the refreshed entry's logfmt identity.
+  recorded(fields2, by, outcome, ms) {
+    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
+    this.tally.lastMs = ms;
+    if (outcome.kind === "failed") this.tally.failures++;
+    const failure2 = outcome.kind === "failed";
+    if (!failure2 && !this.lines.has(by)) return;
+    const why = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    this.logger(
+      failure2 ? "warn" : "info",
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`
+    );
+  }
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields2, by, ms) {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
+    );
+  }
+};
 
 // src/daemon/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
@@ -81907,7 +81112,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/client-hints.ts
 init_globals();
@@ -82193,19 +81398,19 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path17.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path16.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path17.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path16.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
   }
   const currentDir = req.hookData?.workspace?.current_dir;
-  if (typeof currentDir === "string" && !(0, import_node_path17.isAbsolute)(currentDir)) {
+  if (typeof currentDir === "string" && !(0, import_node_path16.isAbsolute)(currentDir)) {
     wireProblems.push(
       `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`
     );
@@ -82240,7 +81445,7 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
     env2 = presented;
   }
   const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
-  const clientHome = keyed ? keyed.HOME ? (0, import_node_path17.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path16.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
   const rawHints = keyed ? {
     ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
     ...req.termCols !== void 0 && { termCols: req.termCols },
@@ -82394,6 +81599,310 @@ function parseClick(url, delivery, links) {
       signed: { link: href, verb: link.verb }
     };
   }
+}
+
+// src/utils/transcript-fs.ts
+init_globals();
+
+// src/utils/limiter.ts
+init_globals();
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max3) {
+    this.slots = max3;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
+
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    const stat3 = statSync(filePath2, { bigint: true });
+    return stat3.isFile() ? transcriptVersion(stat3) : "";
+  } catch {
+    return "";
+  }
+}
+function transcriptVersion(stat3) {
+  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path30, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path30, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+var Observations = class {
+  pending = new SingleFlight();
+  recent = /* @__PURE__ */ new Map();
+  async read(path30, range, read2) {
+    const stamp2 = statStamp(path30);
+    if (stamp2 === "") return observedValue(await read2());
+    const key = `${stamp2}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== void 0) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed: observed2, originalPath } = await this.pending.run(key, async () => {
+      const observed3 = await read2();
+      if (observed3.kind === "ok" && observed3.value.stamp === stamp2 && observed3.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed3.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed: observed3, originalPath: path30 };
+    });
+    return observedValue(
+      originalPath === path30 || observed2.kind === "ok" && observed2.value.stamp === stamp2 ? observed2 : await read2()
+    );
+  }
+};
+function observedValue(found2) {
+  return found2.kind === "ok" ? ok(found2.value.value) : found2;
+}
+var forward = new Observations();
+var tails = new Observations();
+function readAppendedText(path30, prior, until2) {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
+  return forward.read(path30, range, async () => {
+    var _stack = [];
+    try {
+      const read2 = await readAppended(path30, prior, until2);
+      if (read2.kind !== "ok") return read2;
+      const lent = __using(_stack, read2.value);
+      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
+      const bytes = lines2.length;
+      return ok({
+        stamp: info.stamp,
+        bytes,
+        value: { ...info, bytes, text: lines2.toString("utf8") }
+      });
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  });
+}
+function readTailText(path30, maxBytes) {
+  return tails.read(path30, String(maxBytes), async () => {
+    const read2 = await readTail(path30, maxBytes);
+    if (read2.kind !== "ok") return read2;
+    const { stamp: stamp2, fromStart, buf } = read2.value;
+    return ok({
+      stamp: stamp2,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart }
+    });
+  });
+}
+async function readWholeLines(path30, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path30, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path30}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp2 = transcriptVersion(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next2 = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next2.length;
+      const nl = next2.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next2.length < Math.min(window2.length, end - reached);
+      reached += next2.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT2;
+    return failed(
+      `readAppended ${path30}: ${e instanceof Error ? e.message : String(e)}`,
+      "read"
+    );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path30, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path30, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat3 = await fh.stat({ bigint: true });
+      if (!stat3.isFile())
+        return failed(`readTail ${path30}: not a regular file`, "read");
+      const size = Number(stat3.size);
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0,
+        stamp: transcriptVersion(stat3)
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT2;
+      return failed(
+        `readTail ${path30}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
 }
 
 // src/daemon/foundations/debug-types.ts
@@ -83016,7 +82525,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -83096,8 +82605,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path18.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path18.default.join(gitDir, "HEAD"), import_node_path18.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path17.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path17.default.join(gitDir, "HEAD"), import_node_path17.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -83565,18 +83074,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path19.default.join(root, "usage");
+    return import_node_path18.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path19.default.join(root, "locks");
+    return import_node_path18.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -83609,7 +83118,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -83631,7 +83140,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -83660,7 +83169,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path18.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -83715,7 +83224,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path18.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -84111,6 +83620,275 @@ var PricingService = class {
     return "claude-sonnet-4-5-20250929";
   }
 };
+
+// src/utils/claude.ts
+init_globals();
+var import_node_path19 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-activity.ts
+init_globals();
+var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
+}
+function todoItems(input) {
+  const todos2 = input?.todos;
+  if (!Array.isArray(todos2)) return void 0;
+  const items = [];
+  for (const raw of todos2) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { content, activeForm, status } = raw;
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
+  }
+  return items;
+}
+function turnText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
+  );
+  return block?.text ?? "";
+}
+function entryActivity(parsed2, userEntry) {
+  const msg = parsed2.message;
+  const content = msg?.content;
+  const started2 = [];
+  const finished = [];
+  let todos2;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const b = block;
+      switch (b.type) {
+        case "tool_use": {
+          const { id: id2, name } = b;
+          if (typeof id2 !== "string" || typeof name !== "string") break;
+          started2.push({ id: id2, name });
+          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
+          break;
+        }
+        case "tool_result": {
+          const id2 = b.tool_use_id;
+          if (typeof id2 === "string") finished.push(id2);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
+  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
+    return void 0;
+  }
+  return {
+    ...started2.length > 0 && { started: started2 },
+    ...finished.length > 0 && { finished },
+    ...todos2 !== void 0 && { todos: todos2 },
+    ...command !== void 0 && { command }
+  };
+}
+
+// src/utils/claude.ts
+function getClaudePaths(detected, homeDir) {
+  if (detected !== void 0) return [detected];
+  return [(0, import_node_path19.join)(homeDir, ".config", "claude"), (0, import_node_path19.join)(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir)
+  );
+}
+async function findProjectPaths(claudePaths) {
+  const projectPaths = [];
+  for (const claudePath of claudePaths) {
+    const projectsDir = (0, import_node_path19.join)(claudePath, "projects");
+    const entries = await unlessGone(
+      readdir2(projectsDir, { withFileTypes: true })
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path19.join)(projectsDir, entry.name));
+    }
+  }
+  return projectPaths;
+}
+async function unlessGone(read2) {
+  try {
+    return await read2;
+  } catch (e) {
+    if (e.code === "ENOENT") return void 0;
+    throw e;
+  }
+}
+async function findAgentTranscripts(sessionId2, projectPath, verified) {
+  const paths2 = [];
+  let longLines = [];
+  const subagentsDir = (0, import_node_path19.join)(projectPath, sessionId2, "subagents");
+  try {
+    const files = await readdir2(subagentsDir);
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
+    );
+    for (const fileName2 of agentFileNames) {
+      const filePath2 = (0, import_node_path19.join)(subagentsDir, fileName2);
+      if (verified?.has(filePath2)) {
+        paths2.push(filePath2);
+        continue;
+      }
+      const read2 = await readAppendedText(filePath2, void 0, void 0);
+      if (read2.kind !== "ok") {
+        debug(`Failed to check agent file ${filePath2}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath2, read2.value);
+      const { text: text4 } = read2.value;
+      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
+        paths2.push(filePath2);
+      }
+    }
+  } catch (error) {
+    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+  }
+  return { paths: paths2, longLines };
+}
+function userEntryOf(parsed2) {
+  const msg = parsed2.message;
+  const messageType = parsed2.type || msg?.role || msg?.type;
+  if (messageType !== "user") return void 0;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
+  if (origin !== void 0 && origin !== "human") return "turn";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
+}
+var TURN_GOES_ON = /* @__PURE__ */ new Set([
+  void 0,
+  "tool_use",
+  "pause_turn"
+]);
+function turnOpenAfter(open2, entry) {
+  if (entry.isSidechain) return open2;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open2;
+    case void 0:
+      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
+  }
+}
+var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+function firstBlockType(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
+}
+function makeEntry(parsed2) {
+  if (!parsed2.timestamp) return null;
+  const msg = parsed2.message;
+  const usage = msg?.usage;
+  const userEntry = userEntryOf(parsed2);
+  return {
+    timestamp: new Date(parsed2.timestamp),
+    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
+    message: msg ? {
+      id: typeof msg.id === "string" ? msg.id : void 0,
+      model: typeof msg.model === "string" ? msg.model : void 0,
+      usage,
+      role: typeof msg.role === "string" ? msg.role : void 0,
+      type: typeof msg.type === "string" ? msg.type : void 0,
+      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
+    } : void 0,
+    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
+    isSidechain: parsed2.isSidechain === true,
+    userEntry,
+    activity: entryActivity(parsed2, userEntry),
+    raw: {
+      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
+      message: msg ? {
+        id: typeof msg.id === "string" ? msg.id : void 0,
+        model: typeof msg.model === "string" ? msg.model : void 0,
+        usage
+      } : void 0,
+      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
+    }
+  };
+}
+function jsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
+  try {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+function entryOf3(line) {
+  const read2 = jsonLine(line);
+  if (read2.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read2.reason}`);
+    return null;
+  }
+  if (read2.kind === "blank") return null;
+  try {
+    return makeEntry(read2.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
+}
+function parseJsonlLines(text4) {
+  const entries = [];
+  for (const line of text4.split("\n")) {
+    const entry = entryOf3(line);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+function longLinesWith(longLines, path30, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path30, offset: read2.start, bytes: read2.longLine }];
+}
+function longLineLog(longLines) {
+  return longLines.map(
+    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
+  );
+}
+async function foldAppended(filePath2, prior, empty2, step4) {
+  let longLines = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty2;
+  let end;
+  for (; ; ) {
+    const read2 = await readAppendedText(
+      filePath2,
+      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
+      end?.size
+    );
+    if (read2.kind !== "ok") return read2;
+    const window2 = read2.value;
+    if (window2.reset) value = empty2;
+    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
+    if (end === void 0 || window2.reset) {
+      end = { size: window2.size, stamp: window2.stamp };
+    }
+    const next2 = window2.start + window2.bytes;
+    value = await step4(value, parseJsonlLines(window2.text));
+    cursor = {
+      offset: next2,
+      stamp: end.stamp,
+      ino: window2.ino
+    };
+    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
+  }
+}
 
 // src/daemon/cache/session-usage-store.ts
 var SPEED_RING_CAPACITY = 64;
@@ -85438,6 +85216,247 @@ var GitService = class {
     return ok(parseStatusV2(r.value));
   }
 };
+
+// src/daemon/cache/context-provider.ts
+init_globals();
+
+// src/utils/transcript-fold.ts
+init_globals();
+
+// src/utils/observable-lru.ts
+init_globals();
+var ObservableLru = class {
+  constructor(max3) {
+    this.max = max3;
+  }
+  max;
+  values = observable.map(void 0, { deep: false });
+  // Least recently used first.
+  order = /* @__PURE__ */ new Set();
+  get(key) {
+    return this.values.get(key);
+  }
+  get size() {
+    return this.order.size;
+  }
+  // The key was used and its value stands.
+  touch(key) {
+    if (this.order.delete(key)) this.order.add(key);
+  }
+  // The key's value now, used now. A value identical to the one held wakes
+  // nobody.
+  set(key, value) {
+    this.order.delete(key);
+    this.order.add(key);
+    runInAction(() => {
+      this.values.set(key, value);
+      for (const oldest of this.order) {
+        if (this.order.size <= this.max) break;
+        this.order.delete(oldest);
+        this.values.delete(oldest);
+      }
+    });
+  }
+};
+
+// src/utils/transcript-fold.ts
+var MAX_SESSIONS5 = 256;
+var TranscriptFold = class {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS5) {
+    this.empty = empty2;
+    this.step = step4;
+    this.refreshes = refreshes;
+    this.clock = clock;
+    this.log = log;
+    this.sessions = new ObservableLru(maxSessions);
+  }
+  empty;
+  step;
+  refreshes;
+  clock;
+  log;
+  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
+  // instance per projection per daemon. Observable, so a view's payload over
+  // an answer is recomputed in the turn the answer is stored.
+  sessions;
+  // [LAW:effects-at-boundaries] The session's refresh: folds what was
+  // appended since its last read, and stores what it answered.
+  async read(sessionId2, transcriptPath, by) {
+    const held = this.sessions.get(sessionId2);
+    const prior = held?.folded;
+    const stamp2 = statStamp(transcriptPath);
+    if (held?.folded && stamp2 !== "" && held.folded.cursor.stamp === stamp2) {
+      const { folded: folded3, answer: answer2 } = held;
+      if (answer2.kind === "ok" && answer2.value === folded3.value) {
+        this.sessions.touch(sessionId2);
+        return answer2;
+      }
+      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
+    }
+    const startedAt = this.clock.monotonic();
+    const read2 = await foldAppended(
+      transcriptPath,
+      prior,
+      this.empty,
+      (state, entries) => entries.reduce(this.step, state)
+    );
+    this.refreshes.recorded(
+      `sid=${valueOf(sessionId2)}`,
+      by,
+      read2,
+      elapsedMs(this.clock, startedAt)
+    );
+    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
+    if (read2.kind === "absent") {
+      return this.store(sessionId2, prior, {
+        kind: "ok",
+        value: prior?.value ?? this.empty
+      });
+    }
+    const { folded: folded2, longLines } = read2.value;
+    for (const line of longLineLog(longLines)) this.log("info", line);
+    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
+  }
+  // What the session's last read answered, as it stands: never read is
+  // pending, its first read the next request's.
+  answer(sessionId2) {
+    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
+  }
+  store(sessionId2, folded2, answer2) {
+    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
+    return answer2;
+  }
+};
+
+// src/daemon/cache/context-provider.ts
+function step(state, entry) {
+  const usage = entry.message?.usage;
+  if (!usage?.input_tokens || entry.isSidechain === true) return state;
+  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+}
+var ContextProvider = class {
+  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
+  // activity: one number per session, kept incrementally, rather than every
+  // entry of the transcript re-parsed to find the last one.
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      void 0,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "context",
+        scope: "session",
+        refresh: ["first", "period", "change"],
+        lines: []
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's context tokens, folded from the transcript's newest
+  // main-chain usage entry.
+  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
+  // boundary logs it); a transcript with no usable usage entry is `absent`.
+  async refresh(sessionId2, transcriptPath, by) {
+    return tokensFrom(await this.fold.read(sessionId2, transcriptPath, by));
+  }
+  // The session's context tokens as its last refresh left them, for a draw.
+  tokensOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : tokensFrom(answer2);
+  }
+};
+function tokensFrom(read2) {
+  if (read2.kind === "failed") {
+    return failed(`context transcript: ${read2.reason}`, read2.failedAt);
+  }
+  if (read2.value === void 0) {
+    debug("No main chain entries with usage data found");
+    return ABSENT2;
+  }
+  return ok(read2.value);
+}
+
+// src/daemon/cache/metrics-provider.ts
+init_globals();
+var RECENT_WINDOW = 20;
+var EMPTY3 = {
+  messageCount: 0,
+  nonPrompts: 0,
+  recent: []
+};
+var NON_PROMPTS = /* @__PURE__ */ new Set([
+  "turn",
+  "interrupt",
+  "claude-code"
+]);
+function step2(state, entry) {
+  if (entry.isSidechain) return state;
+  const grown = [...state.recent, entry];
+  return {
+    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
+    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
+    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
+  };
+}
+function lastResponseTime(entries) {
+  let lastUserTime = null;
+  let best = null;
+  for (const entry of entries) {
+    const messageType = entry.type || entry.message?.role || entry.message?.type;
+    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
+      lastUserTime = entry.timestamp;
+    } else if (messageType === "assistant" && lastUserTime) {
+      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
+      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
+    }
+  }
+  return best;
+}
+var MetricsProvider = class {
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      EMPTY3,
+      step2,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "metrics",
+        scope: "session",
+        refresh: ["first", "period", "change"],
+        lines: []
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's metrics fold, read from its transcript.
+  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
+  // the payload boundary.
+  async refresh(sessionId2, transcriptPath, by) {
+    debug(`Getting metrics from the transcript for session: ${sessionId2}`);
+    return foldFrom(
+      sessionId2,
+      await this.fold.read(sessionId2, transcriptPath, by)
+    );
+  }
+  // The session's metrics fold as its last refresh left it, for a draw.
+  foldOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : foldFrom(sessionId2, answer2);
+  }
+};
+function foldFrom(sessionId2, folded2) {
+  if (folded2.kind === "failed") {
+    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
+  }
+  return ok({
+    lastResponseTime: lastResponseTime(folded2.value.recent),
+    messageCount: folded2.value.messageCount,
+    nonPrompts: folded2.value.nonPrompts
+  });
+}
 
 // src/segments/activity.ts
 init_globals();
@@ -87913,9 +87932,18 @@ var Collector = class {
 init_globals();
 var MAX_REQUESTS = 256;
 var failedFeed = (refusal) => {
-  const encoded = JSON.stringify(refusal);
+  const encoded = { json: JSON.stringify(refusal) };
   return { resp: encoded, statusline: encoded };
 };
+function sameAnswer(a, b) {
+  if (a.json !== b.json) return false;
+  const seen = a.displayedEvents ?? [];
+  const offered = b.displayedEvents ?? [];
+  return seen.length === offered.length && seen.every(({ kind, event }, index) => {
+    const other = offered[index];
+    return other?.kind === kind && sameOccurrence(event, other.event);
+  });
+}
 function settleWrite(write, delivered) {
   const done = write.done;
   write.done = void 0;
@@ -87923,8 +87951,12 @@ function settleWrite(write, delivered) {
 }
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar, source)));
-  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff, source)));
+  const encode = (body) => ({
+    json: JSON.stringify(RENDER_ANSWERS.ansi(publish(body, source))),
+    displayedEvents: frame2.displayedEvents
+  });
+  const resp = encode(frame2.bar);
+  const statusline = frame2.handoff === null ? resp : encode(frame2.handoff);
   return { resp, statusline };
 }
 var FrameFeeds = class {
@@ -88130,7 +88162,7 @@ var FrameFeeds = class {
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
-        if (watched.last?.resp !== encoded.resp)
+        if (watched.last?.resp.json !== encoded.resp.json)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
@@ -88236,30 +88268,34 @@ var FrameFeeds = class {
       done?.(false);
       return;
     }
-    const json2 = answerOf2(encoded, sub2.lane);
+    const answer2 = answerOf2(encoded, sub2.lane);
     let latest;
     for (const write2 of follower.writes) latest = write2;
-    if (latest?.json === json2) {
+    if (latest !== void 0 && sameAnswer(latest.answer, answer2)) {
       const superseded = latest.done;
       latest.done = done;
       superseded?.(false);
       return;
     }
-    if (latest === void 0 && follower.confirmed === json2) {
+    if (latest === void 0 && follower.confirmed !== null && sameAnswer(follower.confirmed, answer2)) {
       done?.(true);
       return;
     }
-    const write = { json: json2, done };
+    const write = { answer: answer2, done };
     follower.writes.add(write);
     this.pushed++;
     watched.pushed++;
     const finished = (delivered) => {
       if (!follower.writes.delete(write)) return;
-      if (delivered) follower.confirmed = json2;
+      if (delivered) {
+        follower.confirmed = answer2;
+        if (answer2.displayedEvents !== void 0)
+          this.deps.acknowledgeDisplayed(answer2.displayedEvents);
+      }
       settleWrite(write, delivered);
     };
     try {
-      sub2.frame(json2, finished);
+      sub2.frame(answer2.json, finished);
     } catch (error) {
       this.deps.log(
         "error",
@@ -89946,6 +89982,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
   });
   const receiptFor = (issuer) => (effect, reason) => {
+    if (reason === null && effect.displayedEvents !== void 0)
+      world.acknowledgeDisplayed(effect.displayedEvents);
     if (issuer !== generation) return;
     const retired2 = "the renderer that drew the frame has ended";
     unawaited(
@@ -91200,6 +91238,24 @@ function createDaemon(inputs) {
       if (phase.kind !== "building") restateFaults();
     }
   });
+  const acknowledgeDisplayed = (shown) => {
+    for (const { kind, event } of shown) {
+      switch (kind) {
+        case "launch-pipes":
+          launcher.answeredPipeEvent(event);
+          break;
+        case "renderer-ended":
+          if (rendererEnded !== null && answeredBy(rendererEnded, event))
+            rendererEnded = { ...rendererEnded, answered: true };
+          break;
+        case "act-failed":
+          if (actFailed !== null && answeredBy(actFailed, event))
+            actFailed = { ...actFailed, answered: true };
+          break;
+      }
+    }
+    restateFaults();
+  };
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -91304,6 +91360,7 @@ function createDaemon(inputs) {
   );
   const frameFeeds = new FrameFeeds({
     publishFrame,
+    acknowledgeDisplayed,
     requestChanged: (session, previous2) => declaredBarPanes.reported(session, previous2?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
@@ -91374,18 +91431,6 @@ function createDaemon(inputs) {
     },
     log
   });
-  const reaches = {
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice.
-    eventAnswered: (event) => {
-      launcher.answeredPipeEvent(event);
-      if (rendererEnded !== null && answeredBy(rendererEnded, event))
-        rendererEnded = { ...rendererEnded, answered: true };
-      if (actFailed !== null && answeredBy(actFailed, event))
-        actFailed = { ...actFailed, answered: true };
-      restateFaults();
-    }
-  };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
@@ -91440,7 +91485,6 @@ function createDaemon(inputs) {
     prepared
   }) => {
     const link = prepared.start({
-      reaches,
       log,
       clock,
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
@@ -91468,7 +91512,10 @@ function createDaemon(inputs) {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        rendererEnded = event;
+        rendererEnded = {
+          ...event,
+          revision: (rendererEnded?.revision ?? 0) + 1
+        };
         restateFaults();
       }
     });
@@ -91510,6 +91557,7 @@ function createDaemon(inputs) {
         stateDir: paths2.state,
         configs: configDiscovery.forRenderer(name),
         closing: cancelling,
+        acknowledgeDisplayed,
         unheard: (text4) => {
           actFailed = joinedEvent(actFailed, text4, instant());
           restateFaults();
@@ -93105,9 +93153,6 @@ buffer/index.js:
    * @license  MIT
    *)
 
-safe-buffer/index.js:
-  (*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> *)
-
 hdr-histogram-js/dist/hdrhistogram.umd.js:
   (*! *****************************************************************************
     Copyright (c) Microsoft Corporation.
@@ -93123,5 +93168,8 @@ hdr-histogram-js/dist/hdrhistogram.umd.js:
     OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
     PERFORMANCE OF THIS SOFTWARE.
     ***************************************************************************** *)
+
+safe-buffer/index.js:
+  (*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> *)
 */
 //# sourceMappingURL=transport.js.map

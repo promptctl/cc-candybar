@@ -2,32 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
-      "timestamp": "2026-11-19T22:29:01.070Z",
-      "commits": [
-        {
-          "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:27:50-07:00",
-          "message": "refactor(renderer): keep transcript readers outside the renderer import graph (#911)"
-        }
-      ]
-    },
-    {
       "version": "pr-910",
       "ref": "refs/pull/910/merge",
-      "sha": "0d007e81f65262f85b646aff299086ce0b3951ac",
-      "timestamp": "2026-11-19T22:14:47.601Z",
+      "sha": "8b3cab0b3d2ef5a632ddd7b3956241d88eb99e06",
+      "timestamp": "2026-11-19T22:30:58.352Z",
       "commits": [
         {
-          "sha": "0d007e81f65262f85b646aff299086ce0b3951ac",
+          "sha": "8b3cab0b3d2ef5a632ddd7b3956241d88eb99e06",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:13:40-07:00",
-          "message": "Merge 00d7e1f2b6e82925144d8a3f1f19b6cfc7586133 into 6815d8573c5c838d7ac874225c050015cf78201b\n"
+          "timestamp": "2026-11-19T15:30:00-07:00",
+          "message": "Merge 464feebef6f9f223795016d2bdb9cb0801ff2fe8 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
+        },
+        {
+          "sha": "464feebef6f9f223795016d2bdb9cb0801ff2fe8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:29:36-07:00",
+          "message": "fix(host): settle displayed events and remove renderer callbacks\n"
+        },
+        {
+          "sha": "d7f550fbf35225f3e700a139fe659e679286b13d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:29:35-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/diagnostics-in-answers\n"
         },
         {
           "sha": "00d7e1f2b6e82925144d8a3f1f19b6cfc7586133",
@@ -42,6 +41,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T14:54:49-07:00",
           "message": "refactor(renderer): return diagnostics with the owning answer\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
+      "timestamp": "2026-11-19T22:29:01.070Z",
+      "commits": [
+        {
+          "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:27:50-07:00",
+          "message": "refactor(renderer): keep transcript readers outside the renderer import graph (#911)"
         }
       ]
     },
