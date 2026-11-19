@@ -629,7 +629,7 @@ export class GitService {
       return classifyForgePr(
         "gh pr view",
         await this.execForgeAsync(
-          FORGE_CLI.github,
+          FORGE_CLI.github.cli,
           ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5000 },
         ),
@@ -641,7 +641,7 @@ export class GitService {
       return classifyForgePr(
         "glab mr view",
         await this.execForgeAsync(
-          FORGE_CLI.gitlab,
+          FORGE_CLI.gitlab.cli,
           ["mr", "view", "--output", "json"],
           {
             cwd: workingDir,

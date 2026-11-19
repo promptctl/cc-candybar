@@ -47,7 +47,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
-import { REPOSITORY_LOCAL_ENV } from "../repository-cli";
+import { REPOSITORY_NAMING_ENV } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -144,14 +144,16 @@ function childEnv(
         // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are withheld
         // from every child that inherits it: a child's repository is its
         // working directory's.
-        { base: scope.inherited, withheld: REPOSITORY_LOCAL_ENV }
+        { base: scope.inherited, withheld: REPOSITORY_NAMING_ENV }
       : // [LAW:one-source-of-truth] A session's own environment passes as it
         // is: the session owns its variables, a GIT_DIR in it included.
         { base: opts.environment, withheld: [] };
   const env: NodeJS.ProcessEnv = { ...base };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
-  // After the overlay, so no launch's overlay puts a withheld name back.
+  // After the overlay: its type refuses a withheld name written in the
+  // source, and a record built at run time passes that type, so this order is
+  // what keeps such a record from putting one back.
   for (const name of withheld) delete env[name];
   return env;
 }

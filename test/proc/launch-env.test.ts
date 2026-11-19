@@ -12,7 +12,7 @@ import path from "node:path";
 import { createOneShotLauncher } from "../../src/proc/launch";
 import type { LaunchOpts } from "../../src/proc/launcher";
 import { systemSpawner, type Spawner } from "../../src/proc/spawner";
-import { REPOSITORY_LOCAL_ENV } from "../../src/repository-cli";
+import { REPOSITORY_NAMING_ENV } from "../../src/repository-cli";
 import { systemTimekeeper } from "../../src/time";
 import { until } from "../helpers/until";
 
@@ -24,7 +24,7 @@ afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 const OWNER_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   ...Object.fromEntries(
-    REPOSITORY_LOCAL_ENV.map((name) => [name, `/elsewhere/${name}`]),
+    REPOSITORY_NAMING_ENV.map((name) => [name, `/elsewhere/${name}`]),
   ),
   KEPT: "kept",
 };
@@ -73,7 +73,7 @@ beforeEach(() => {
 afterEach(() => ending.abort());
 
 const withheld = (env: Record<string, string | undefined>) =>
-  REPOSITORY_LOCAL_ENV.filter((name) => env[name] !== undefined);
+  REPOSITORY_NAMING_ENV.filter((name) => env[name] !== undefined);
 
 describe("a child that inherits its owner's environment", () => {
   it("lacks every repository-local name, by launch", async () => {
@@ -143,15 +143,30 @@ describe("a child that inherits its owner's environment", () => {
 
   it("lacks them as the lifeline", async () => {
     await launcher().launch({ ...printsEnv(), category: "git" });
-    const lifeline = handed.find(({ bin }) => bin === "awk");
-    expect(lifeline?.env).toBeDefined();
-    expect(withheld(lifeline?.env ?? {})).toEqual([]);
+    const env = handed.find(({ bin }) => bin === "awk")?.env;
+    if (env === undefined)
+      throw new Error("the lifeline was handed no environment");
+    expect(withheld(env)).toEqual([]);
   });
 
-  it("lacks them whatever its overlay names", async () => {
+  // The overlay's type refuses a withheld name written in the source.
+  it("cannot name one in an overlay written in the source", () => {
+    const opts: LaunchOpts = {
+      ...printsEnv(),
+      // @ts-expect-error a variable that names a repository is not overlaid
+      envOverlay: { GIT_DIR: "/overlaid" },
+      category: "git",
+    };
+    expect(opts.envOverlay).toEqual({ GIT_DIR: "/overlaid" });
+  });
+
+  it("lacks them whatever an overlay built at run time names", async () => {
+    const overlay: Record<string, string> = Object.fromEntries(
+      REPOSITORY_NAMING_ENV.map((name) => [name, "/overlaid"]),
+    );
     const r = await launcher().launch({
       ...printsEnv(),
-      envOverlay: { GIT_DIR: "/overlaid", GH_REPO: "x/overlaid" },
+      envOverlay: overlay,
       category: "git",
     });
     expect(withheld(parsed(r.stdout))).toEqual([]);
@@ -177,9 +192,9 @@ describe("a child launched in a session's own environment", () => {
   });
 });
 
-// [LAW:one-source-of-truth] The list is git's, read when git changes: a git
-// that adds a repository-local name fails here, not in a session.
-describe("the repository-local names", () => {
+describe("the variables that name a repository", () => {
+  // [LAW:one-source-of-truth] git's part is git's, read when git changes: a
+  // git that adds a repository-local name fails here, not in a session.
   it("hold every name the installed git clears", () => {
     const gits = execFileSync("git", ["rev-parse", "--local-env-vars"], {
       encoding: "utf8",
@@ -187,8 +202,14 @@ describe("the repository-local names", () => {
       .split("\n")
       .filter((name) => name !== "");
     expect(gits.length).toBeGreaterThan(0);
-    expect(gits.filter((name) => !REPOSITORY_LOCAL_ENV.includes(name))).toEqual(
-      [],
+    const named: readonly string[] = REPOSITORY_NAMING_ENV;
+    expect(gits.filter((name) => !named.includes(name))).toEqual([]);
+  });
+
+  // So a list synced to git's output cannot lose the forges' names.
+  it("hold each forge CLI's repository variable", () => {
+    expect(REPOSITORY_NAMING_ENV).toEqual(
+      expect.arrayContaining(["GH_REPO", "GITLAB_REPO"]),
     );
   });
 });

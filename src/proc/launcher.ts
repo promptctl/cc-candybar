@@ -11,6 +11,7 @@ import {
 } from "../utils/event-hold";
 import type { Instant } from "../utils/instant";
 import type { Linked } from "../utils/atomic-write";
+import type { RepositoryNamingVariable } from "../repository-cli";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
 // adding its category here, which forces a code review of the new launch
@@ -90,7 +91,13 @@ export interface LaunchOpts {
   // inherited one: a session's, for a program the host runs for a session.
   environment?: Readonly<Record<string, string>>;
   // Set over the environment the child starts from; null unsets.
-  envOverlay?: Readonly<Record<string, string | null>>;
+  // [LAW:types-are-the-program] It cannot name a variable that names a
+  // repository: the launcher withholds those from every child that inherits
+  // its environment (src/proc/launch.ts), so a value set here would never
+  // arrive, and a session's own `environment` already carries its own.
+  envOverlay?: Readonly<Record<string, string | null>> & {
+    readonly [Name in RepositoryNamingVariable]?: never;
+  };
   timeoutMs?: number;
   stdinInput?: string | Buffer;
   category: LaunchCategory;

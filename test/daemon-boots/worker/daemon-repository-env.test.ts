@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf } from "../../../src/render/frame";
+import { REPOSITORY_NAMING_ENV } from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
 import {
   startDaemon,
@@ -36,13 +37,17 @@ describe("a daemon whose own environment names another repository", () => {
   let session: string;
   let daemon: InWorkerDaemon;
 
-  // Made before the daemon places its environment in this worker, so these
-  // git calls act on the directory they name.
+  // These git calls act on the directory they name whatever this worker's
+  // environment holds: the daemon places its own there.
   function repo(name: string, untracked: number): string {
     const at = path.join(dir, name);
     fs.mkdirSync(at);
+    const named: readonly string[] = REPOSITORY_NAMING_ENV;
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([n]) => !named.includes(n)),
+    );
     const git = (...args: string[]) =>
-      execFileSync("git", args, { cwd: at, stdio: "pipe" });
+      execFileSync("git", args, { cwd: at, env, stdio: "pipe" });
     git("init", "-q", "-b", name);
     git(
       "-c",
