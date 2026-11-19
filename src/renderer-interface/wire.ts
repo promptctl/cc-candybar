@@ -27,6 +27,24 @@ import {
   type TimedRenderer,
 } from "./interface.js";
 
+// [LAW:one-source-of-truth] Change this when the private renderer transport
+// becomes incompatible. A build digest identifies a build, and carries no
+// compatibility decision.
+export const RENDERER_WIRE_VERSION = 1;
+type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
+
+// [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
+// version. A legacy message that omits it admits no renderer input.
+export function rendererWireVersionProblem(
+  peer: "host" | "renderer",
+  version: unknown,
+): string | null {
+  if (version === RENDERER_WIRE_VERSION) return null;
+  const received =
+    version === undefined ? "no version" : `version ${JSON.stringify(version)}`;
+  return `renderer wire version mismatch (${peer} sent ${received}, expected version ${RENDERER_WIRE_VERSION})`;
+}
+
 // What a renderer process builds itself from: the host's view of its machine
 // (its environment, home and temporary directory, from which the renderer
 // finds the user's config and plugins as the host does), the one memory limit
@@ -34,11 +52,6 @@ import {
 // holds it as the renderer spawns.
 export interface RendererBoot {
   readonly stored: StoredState;
-  // [LAW:one-source-of-truth] The digest of the source the host was built
-  // from, which a renderer built from other source refuses: the renderer runs
-  // from the entry on disk, which an install can rewrite under a running
-  // host, and two builds agree on these lines only by being one build.
-  readonly digest: string | null;
   // [LAW:one-source-of-truth] The host's own `Host`, its environment's unset
   // variables left out as JSON leaves them, which a process environment
   // reads the same as absent.
@@ -56,7 +69,11 @@ export interface RendererBoot {
 export type ReachPath = string;
 
 export type HostLine =
-  | { readonly kind: "boot"; readonly boot: RendererBoot }
+  | {
+      readonly kind: "boot";
+      readonly wireVersion: RendererWireVersion;
+      readonly boot: RendererBoot;
+    }
   | {
       readonly kind: "input";
       readonly n: number;
@@ -70,7 +87,11 @@ export type HostLine =
 
 export type RendererLine =
   // The boot answered: the renderer is built, or why it is not.
-  | { readonly kind: "started"; readonly pid: number }
+  | {
+      readonly kind: "started";
+      readonly pid: number;
+      readonly wireVersion: RendererWireVersion;
+    }
   | { readonly kind: "refused"; readonly failure: Failure }
   | {
       readonly kind: "output";

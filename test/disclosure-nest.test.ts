@@ -9,7 +9,7 @@ import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { type VerbContext } from "../src/renderer/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {

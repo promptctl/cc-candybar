@@ -42,6 +42,7 @@ import {
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RequestFacts } from "./foundations/request-event.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import { publishingFrames } from "./foundations/frame-publication.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
 // What builds the renderer: the main renderer, unless a test wraps it.
@@ -77,14 +78,6 @@ export interface LocalBarInputs {
   readonly build?: RendererBuilder;
 }
 
-// One request's answer, with every turn the host took for it, in order: the
-// session's context, then the request, unless the context turn threw.
-export interface LocalDraw {
-  readonly answer: StatuslineAnswer;
-  readonly turns: readonly HostTurn[];
-  readonly facts: RequestFacts;
-}
-
 export type ClickEvent = Extract<Event, { kind: "click" }>;
 
 export interface LocalBar {
@@ -94,15 +87,10 @@ export interface LocalBar {
     req: CheckedRenderRequest,
     environment: SessionEnvironment,
     waitEndsAt: number,
-  ): Promise<LocalDraw>;
+  ): Promise<StatuslineAnswer>;
   // A click the command makes on its own bar, answered as the daemon answers
   // a click: the collector keeps its session, and the renderer takes it.
   click(event: ClickEvent): Promise<HostTurn>;
-  // [LAW:no-ambient-temporal-coupling] The value of `key` on the first turn
-  // record that carries it from this call on, whatever input the turn took —
-  // a request, a click, or a world state the collector delivered — or null
-  // once the monotonic moment `endsAt` passes first, or the bar closes.
-  noted(key: string, endsAt: number): Promise<string | null>;
   // [LAW:no-silent-failure] Every line logged as an error, and every failure
   // the host could put on no bar, in order: a command fails on each.
   errors(): readonly string[];
@@ -187,9 +175,6 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
   const refused = (): never => {
     throw new Error(NO_ACT);
   };
-  const turns: HostTurn[] = [];
-  // A wait on a note: its key and how it ends.
-  const waiting = new Map<string, Set<(value: string | null) => void>>();
   const rendered = rendererHost(
     MAIN_RENDERER,
     world.clock,
@@ -204,12 +189,9 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       stored: () => {},
       holding: (session) => collector.holding(session),
       // A command performs no act, so no change writes a settings file.
-      // [LAW:single-enforcer] Every turn's record, whatever input it took,
-      // so a wait on a note sees each one.
-      recorded: (record) => {
-        for (const [key, value] of record)
-          waiting.get(key)?.forEach((done) => done(value));
-      },
+      // Replies carry their inspection separately. There is no daemon log
+      // for this local command, whose error sink captures failures.
+      recorded: () => {},
     },
     {
       perform: async () => refused(),
@@ -228,23 +210,15 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       unheard: (text) => errors.push(text),
     },
   );
-  // Each turn a request's answer takes, as the host took it.
-  host = {
-    ...rendered,
-    answer: async (make) => {
-      const turn = await rendered.answer(make);
-      turns.push(turn);
-      return turn;
-    },
-  };
-  const answering = host;
+  host = rendered;
+  const publish = publishingFrames(inputs.linkSigner);
   let id = 0;
   return {
     draw: async (req, environment, waitEndsAt) => {
       const facts: RequestFacts = [];
-      const from = turns.length;
       const answer = await answerStatusline(
-        answering,
+        rendered,
+        publish,
         collector,
         world.clock,
         new AbortController().signal,
@@ -255,41 +229,27 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
         ++id as RequestId,
         waitEndsAt,
         facts,
+        true,
       );
       // A command takes its answer as it is drawn.
       answer.settled(true);
-      return { answer, turns: turns.slice(from), facts };
+      return answer;
     },
     click: (event) => {
-      if (event.session?.ok) collector.clicked(event.session.id);
-      return answering.answer(() => ({ kind: "event", event }));
+      if (event.click.scope === "session")
+        collector.clicked(event.click.session);
+      return rendered.answer(() => ({ kind: "event", event }));
     },
-    noted: (key, endsAt) =>
-      new Promise((resolve) => {
-        const waits = waiting.get(key) ?? new Set();
-        waiting.set(key, waits);
-        const done = (value: string | null): void => {
-          waits.delete(done);
-          cancel();
-          resolve(value);
-        };
-        waits.add(done);
-        const cancel = world.clock.after(
-          Math.max(0, endsAt - world.clock.monotonic()),
-          () => done(null),
-        );
-      }),
     errors: () => errors,
     // The daemon's teardown, in its order: no `due` from here, every journal
     // closed, the collector's holds released before the views close, and the
     // runs last.
     close: async () => {
-      for (const waits of waiting.values()) waits.forEach((done) => done(null));
-      answering.closeWake();
-      await answering.ask({ kind: "close-journal" });
+      rendered.closeWake();
+      await rendered.ask({ kind: "close-journal" });
       closing = true;
       collector.close();
-      await answering.ask({ kind: "close-views" });
+      await rendered.ask({ kind: "close-views" });
       sourceRuns.close();
     },
   };

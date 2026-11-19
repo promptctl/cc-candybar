@@ -691,9 +691,9 @@ export interface DrawInputs {
   readonly back: number;
 }
 
-// [LAW:one-source-of-truth] The width a session's bar is drawn to: what its
-// client measured, else the default, less Claude Code's reserve — the one
-// value the payload's `term.cols` and the draw's options both carry.
+// [LAW:one-source-of-truth] Usable columns from the client's measurement or
+// the default, less Claude Code's reserve. Both the canonical payload and a
+// request's presentation derive columns here.
 export function renderWidth(hints: ClientHints): number {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
@@ -908,8 +908,8 @@ export function composePayload(
     ...effectiveInputs(effective),
     history: draw.history,
     navigation: { back: draw.back },
-    // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
-    // measured it (`renderWidth`), the one value the draw's options carry.
+    // The live width for feeds and source keys. A waiting request can
+    // project its own columns into its draw without replacing this payload.
     term: { cols: renderWidth(hints) },
     ...settingCounts,
     ...(configPath !== null && { configPath }),
@@ -958,23 +958,19 @@ export const sourceFactOf = (
   name: string,
 ): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
 
-// [LAW:nothing-unseen] The render event's `sources=`, `sourcesPending=` and
-// `sourcesFailed=`: how many plugin, `shell` and `file` sources the view's
-// config declares; those not answered yet as the draw reads them, each by
-// variable with why (`<name>:unread` or `<name>:superseded`); and those whose
-// reading, or whose key before it ever answered, failed, by variable (`-` for
-// none). So a source that never lands is told from one nothing declared, a
-// run's superseded source from a wait that left one out, and a failure from a
-// wait, by the variable's name, which the host's own line, keyed by run
-// digest, cannot give.
-export function sourcesFactOf(
+// What the draw knows of each source the view declares, including the
+// reason it is pending. Both check and the render record read these values.
+export function sourceSummaryOf(
   names: readonly string[],
   runs: ReadonlyMap<string, SourceRun>,
   facts: Pick<WorldState, "sources" | "runs">,
 ): {
-  readonly sources: string;
-  readonly sourcesPending: string;
-  readonly sourcesFailed: string;
+  readonly count: number;
+  readonly pending: ReadonlyArray<{
+    readonly name: string;
+    readonly why: PendingWhy;
+  }>;
+  readonly failed: readonly string[];
 } {
   const named: ReadonlyArray<readonly [string, Reading<unknown>]> = [
     ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
@@ -989,17 +985,27 @@ export function sourcesFactOf(
     ),
   ];
   return {
-    sources: String(named.length),
+    count: named.length,
+    pending: named.flatMap(([name, fact]) =>
+      fact.kind === "pending" ? [{ name, why: fact.why }] : [],
+    ),
+    failed: named.flatMap(([name, fact]) =>
+      fact.kind === "failed" ? [name] : [],
+    ),
+  };
+}
+
+// [LAW:nothing-unseen] Spell the source summary for the render record.
+export function sourceFieldsOf(summary: ReturnType<typeof sourceSummaryOf>): {
+  readonly sources: string;
+  readonly sourcesPending: string;
+  readonly sourcesFailed: string;
+} {
+  return {
+    sources: String(summary.count),
     sourcesPending:
-      named
-        .flatMap(([name, fact]) =>
-          fact.kind === "pending" ? [`${name}:${fact.why}`] : [],
-        )
-        .join(",") || "-",
-    sourcesFailed:
-      named
-        .flatMap(([name, fact]) => (fact.kind === "failed" ? [name] : []))
-        .join(",") || "-",
+      summary.pending.map(({ name, why }) => `${name}:${why}`).join(",") || "-",
+    sourcesFailed: summary.failed.join(",") || "-",
   };
 }
 

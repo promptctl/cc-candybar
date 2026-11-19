@@ -1,5 +1,6 @@
 // One render of a session, a request's or a frame's, and what it records.
 
+import type { DrawInspection } from "../renderer-interface/interface.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -12,6 +13,7 @@ import {
   refusedHints,
   refusedArgsError,
   refusedHintsError,
+  type ClientHints,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
@@ -24,18 +26,20 @@ import {
   type SessionView,
 } from "./render-cache";
 import { roleOf } from "../daemon/foundations/sighting-roles";
+import { partsOf } from "../dsl/parts.js";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
-import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
+import { standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
+  renderWidth,
   prFactOf,
-  sourcesFactOf,
+  sourceFieldsOf,
+  sourceSummaryOf,
   instantFacts,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { RichText } from "@promptctl/rich-js";
-import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -91,13 +95,9 @@ import {
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import { signingFrames, type LinkSigner } from "../click/link-signer.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
-import {
-  failedWith,
-  renderFailure,
-  RENDER_ANSWERS,
-} from "../daemon/foundations/render-answers";
+import { renderFailure } from "../daemon/foundations/render-answers";
 
 // The renderer's parts: its own state, and what it reaches in the host
 // (`AdapterToHost`, src/renderer-interface/adapter.ts), each by the methods it
@@ -111,8 +111,8 @@ export interface RendererState {
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
   readonly effectSessions: EffectSessions<RenderedLine>;
-  // [LAW:single-enforcer] The signer every link this renderer draws is
-  // signed with, over the state directory's key.
+  // [LAW:single-enforcer] The repository trust question's inner signature.
+  // The host publishes the drawn frames' clickable addresses.
   readonly linkSigner: LinkSigner;
   // Each session's idle period, which a draw reports what it showed to and
   // reads its flash from.
@@ -125,9 +125,8 @@ export interface RendererState {
 export type RendererParts = RendererState & AdapterToHost;
 
 // One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The response is what that request
-// would draw, in the bytes its lanes read whatever encoding it asked its own
-// answer in, and the bar moves when its effects say it does.
+// instant, by the render a request gets. The host presents the bar or its
+// statusline handoff, and the bar moves when its effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.
@@ -159,23 +158,14 @@ export function renderFrame(
       { by: "feed", fps },
       feeds,
     );
-    // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
-    // what the statusline shows alike, each link once.
-    const signed = signingFrames(parts.linkSigner);
-    const bar = signed(drawn.body);
-    const answer = RENDER_ANSWERS.ansi(bar);
+    const bar = drawn.body;
     const statusline = statuslineOf(
       sessionId,
       setup.state.writable,
       drawn,
       handedOffTo(lanes, following),
     );
-    const resp = JSON.stringify(answer);
-    // Mostly the bar itself, and one frame encodes once.
-    const statuslineResp =
-      statusline === drawn.body
-        ? resp
-        : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+    const handoff = statusline === bar ? null : statusline;
     // Kept once nothing of the turn is left to throw: a frame that fails
     // part-way leaves the last frame's memory standing.
     keepDraw(parts, setup, kept);
@@ -190,8 +180,7 @@ export function renderFrame(
       eventsShown: [],
     });
     return {
-      bar,
-      answers: { resp, statusline: statuslineResp },
+      frame: { kind: "drawn", bar, handoff },
       evaluated,
       cellBreaks,
       failure: null,
@@ -199,11 +188,8 @@ export function renderFrame(
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
-    const answer = failedWith(outcome.message);
-    const failed = JSON.stringify(answer);
     return {
-      bar: renderFailedFrame(answer.error),
-      answers: { resp: failed, statusline: failed },
+      frame: { kind: "failed", message: outcome.message },
       evaluated: 0,
       cellBreaks: 0,
       failure: { level, line: `frame ${line}` },
@@ -238,6 +224,8 @@ export function viewLanes(
   );
 }
 
+type TerminalSize = Pick<ClientHints, "termCols" | "termRows">;
+
 // What a render of a checked request draws with, resolved once and held for
 // the render: the state and the session's view of it, the globals it resolves
 // under the session's picks, and what its payload reads. Disposing it releases
@@ -253,10 +241,14 @@ interface RenderSetup extends Disposable {
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
+  readonly terminal?: TerminalSize;
 }
 
 // What a render notes of the context it draws by.
-function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
+export function contextFacts(
+  req: CheckedRenderRequest,
+  facts: RequestFacts,
+): void {
   noteFacts(facts, { sid: req.hookData.session_id });
   const { hints } = req;
   noteFacts(facts, {
@@ -290,54 +282,10 @@ function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
 const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 
-// [LAW:single-enforcer] A `context` turn: the facts of the context it carries
-// noted, what the context says recorded, its world state taken, and the
-// session's view opened at it and let go, so the turn's output names what the
-// view reads before the request after it waits. The record goes first, so a
-// durable click on a session whose opening threw still resolves the origin
-// that opening was for, and the facts before it, so the request's event says
-// what a failed opening was for.
-//
-// [LAW:one-source-of-truth] The world state and the view's context are taken
-// in one action, so nothing drawn between the two pairs either with another
-// context's.
-export function configureSession(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  worldState: WorldState,
-  facts: RequestFacts,
-): void {
-  runInAction(() => {
-    takeContext(parts, req, worldState, facts);
-    openSession(parts, req);
-  });
-}
-
-// What a `context` does whether or not its origin's config is held: its
-// facts noted, and it and its world state taken, so the
-// session's documents are taken in the order the host hands them in, and the
-// origin it renders from is the session's.
-export function takeContext(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  worldState: WorldState,
-  facts: RequestFacts,
-): void {
-  contextFacts(req, facts);
-  noteFacts(facts, { encoding: req.encoding });
-  runInAction(() => {
-    parts.worldStates.take(worldState);
-    parts.worldStates.heard(req);
-  });
-}
-
 // The session's view opened at the context, and let go: what a `context`
 // waits for its origin's config to do.
-export function openSession(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-): void {
-  holdSessionAt(parts, req)[Symbol.dispose]();
+export function openSession(parts: RendererParts, session: SessionId): void {
+  holdSessionAt(parts, parts.worldStates.requestOf(session))[Symbol.dispose]();
 }
 
 // [LAW:single-enforcer] A `retire` turn: the session's world state goes, and
@@ -359,9 +307,8 @@ export function retireSession(
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:
 // opened, or kept and refreshed, at the origin the context names. A
-// `context` turn opens it ahead of the request, and the request holds it again
-// at its own context, so it draws by the context it carries and needs nothing
-// to outlive the turn before it: a view closed between the two opens again.
+// `context` turn opens it ahead of the request. If the cache evicts the
+// view before the request draws, the request can open it again at the live context.
 function holdSessionAt(
   parts: RendererParts,
   req: CheckedRenderRequest,
@@ -378,6 +325,7 @@ export function setUpRender(
   req: CheckedRenderRequest,
   readings: Readings,
   facts: RequestFacts,
+  terminal?: TerminalSize,
 ): RenderSetup {
   // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
   // session's `view` of it, are what this render resolves its payload from and
@@ -390,7 +338,7 @@ export function setUpRender(
   // its `context`.
   const hintsError = hintsErrorOf(req);
   const hold = holdSessionAt(parts, req);
-  return setUpDraw(parts, hold, req, hintsError, readings, facts);
+  return setUpDraw(parts, hold, req, hintsError, readings, facts, terminal);
 }
 
 // [LAW:effects-at-boundaries] A frame's setup: the session's view as it finds
@@ -432,6 +380,7 @@ function setUpDraw(
   hintsError: string | null,
   readings: Readings,
   facts: RequestFacts,
+  terminal?: TerminalSize,
 ): RenderSetup {
   try {
     const { entry, state, view } = hold;
@@ -451,6 +400,7 @@ function setUpDraw(
       state,
       view,
       hintsError,
+      terminal,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -470,6 +420,7 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
+  inspect?: true,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -483,6 +434,7 @@ export function drawRender(
   copies: ReadonlyMap<string, string>;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
+  inspection: DrawInspection | undefined;
   // What the draw made, which the turn that drew it keeps (`keepDraw`).
   kept: DrawMemory;
 } {
@@ -505,10 +457,9 @@ export function drawRender(
   // the resolver applies, and why each rung sits where it does, lives
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
   // [LAW:one-source-of-truth] The payload, the globals and the document are
-  // derived from the request and the world state the renderer took in one
-  // action, and what the draw takes of the client (its tmux pane, its width)
-  // is read off the payload, so a draw never mixes a document with a request
-  // it was not composed from.
+  // derived from the context and the world state the renderer took together.
+  // A request's own terminal size is a presentation input; action targets
+  // and source readings stay tied to the session's live context.
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
@@ -520,11 +471,10 @@ export function drawRender(
     // The preset the session's settings resolve to, which the draw uses.
     preset: effective.preset,
   });
-  // [LAW:one-source-of-truth] The width is `renderWidth` of the turn's hints —
-  // the client's cols, else the default, less Claude Code's reserve — which
-  // its payload carries as `term.cols`.
-  const hints = view.source.hints();
-  const width = payload.term.cols;
+  const { terminal } = setup;
+  const width =
+    terminal === undefined ? payload.term.cols : renderWidth(terminal);
+  const rows = viewerRowCap((terminal ?? view.source.hints()).termRows);
   noteFacts(facts, { width: String(width) });
   // [LAW:no-ambient-temporal-coupling] The click error dispatch held for this
   // session, at this draw's instant and for whom it draws: shown by every
@@ -645,14 +595,12 @@ export function drawRender(
     ...instantFacts(document.builtins, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
-  noteFacts(
-    facts,
-    sourcesFactOf(
-      [...view.state.sources.keys()],
-      view.registry.runSources(),
-      document,
-    ),
+  const sources = sourceSummaryOf(
+    [...view.state.sources.keys()],
+    view.registry.runSources(),
+    document,
   );
+  noteFacts(facts, sourceFieldsOf(sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -671,6 +619,29 @@ export function drawRender(
   // not honour (`RenderWarning`) is this frame's own, recorded for its
   // renderer by the turn that keeps the frame, so the bar still renders and
   // the indicator counts them.
+  const draw = () =>
+    drawDsl(
+      state.config,
+      state.compiled,
+      view.store,
+      view.registry,
+      projected,
+      at,
+      renderOpts,
+      // [LAW:one-source-of-truth] The draw's own settings, the session's
+      // effect memory and the record of the surface's last frame of the view.
+      // The theme, style and effect are not among them: the view's slots settle
+      // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
+      // fields read.
+      {
+        ...effective,
+        effects,
+        record: view.frames.get(drawing.by),
+        idleSince: idleSince ?? undefined,
+      },
+    );
+  // [LAW:one-source-of-truth] Template term.cols and the physical strip use
+  // the same width, including a client whose request waited through a resize.
   const {
     frame,
     memory,
@@ -679,26 +650,9 @@ export function drawRender(
     evaluated,
     cellBreaks,
     rules,
-  } = drawDsl(
-    state.config,
-    state.compiled,
-    view.store,
-    view.registry,
-    projected,
-    at,
-    renderOpts,
-    // [LAW:one-source-of-truth] The draw's own settings, the session's
-    // effect memory and the record of the surface's last frame of the view.
-    // The theme, style and effect are not among them: the view's slots settle
-    // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
-    // fields read.
-    {
-      ...effective,
-      effects,
-      record: view.frames.get(drawing.by),
-      idleSince: idleSince ?? undefined,
-    },
-  );
+  } = width === payload.term.cols
+    ? draw()
+    : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
   // renderer last delivered, never text carried in the link. Recorded when
@@ -720,7 +674,7 @@ export function drawRender(
   const recorded = renderWarnings.moves(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
-    rows: viewerRowCap(hints.termRows),
+    rows,
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
     colorCompatibility: frame.depth,
@@ -842,6 +796,16 @@ export function drawRender(
     eventsShown,
     copies,
     lanes,
+    inspection:
+      inspect === true
+        ? {
+            preset: effective.preset,
+            faults,
+            unreadSources: sources.pending.flatMap(({ name, why }) =>
+              why === "unread" ? [name] : [],
+            ),
+          }
+        : undefined,
     kept: {
       session: sessionId,
       by: drawing.by,
@@ -1022,6 +986,7 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
+  readonly inspection: DrawInspection | undefined;
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -1029,34 +994,34 @@ export interface RequestAnswer {
 export function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
+  presentation: TerminalSize & Pick<ClientHints, "client">,
   facts: RequestFacts,
-  // The request's turn's effects, which the setups its session's clicks owe
-  // join.
+  inspect?: true,
 ): RequestAnswer {
   const { time, feeds } = parts;
+  const sessionId = req.hookData.session_id;
   using setup = setUpRender(
     parts,
     req,
     { at: time.at, tick: time.tick },
     facts,
+    presentation,
   );
-  const sessionId = req.hookData.session_id;
-  const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
-    parts,
-    setup,
-    ANSWERING,
-    feeds.feedsOf(sessionId, time.tick),
-  );
+  const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } =
+    drawRender(
+      parts,
+      setup,
+      ANSWERING,
+      feeds.feedsOf(sessionId, time.tick),
+      inspect,
+    );
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
-  const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-  // [LAW:single-enforcer] Signed as it leaves the renderer, each link once.
-  const frame = signingFrames(parts.linkSigner)(
-    toStatusline
-      ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
-      : drawn.body,
-  );
+  const toStatusline = roleOf(presentation.client ?? null) === "statusline";
+  const frame = toStatusline
+    ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
+    : drawn.body;
   // Kept once nothing of the turn is left to throw.
   keepDraw(parts, setup, kept);
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
@@ -1066,6 +1031,7 @@ export function answerRequest(
   });
   return {
     frame,
+    inspection,
     delivery: {
       session: sessionId,
       by: ANSWERING.by,

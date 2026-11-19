@@ -267,6 +267,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  holder        ${s.mailbox.holder ?? "-"}`);
   lines.push(`  held          ${s.mailbox.heldMs}ms`);
   lines.push(`  queued        ${s.mailbox.queued}`);
+  lines.push("");
+  lines.push("renderer turns");
+  lines.push(`  parked        ${s.rendererTurns.parked}`);
+  lines.push(`  presents      ${s.rendererTurns.presents}`);
+  lines.push(`  deferrals     ${s.rendererTurns.deferrals}`);
   lines.push(``);
   lines.push(`sessionState`);
   lines.push(`  sessions      ${s.sessionState.sessions}`);

@@ -6,6 +6,8 @@
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
 import {
   failureOf,
   type Failure,
@@ -13,6 +15,7 @@ import {
 import {
   rendererOf,
   type AdapterOutput,
+  type PushedFrame,
   type RendererOutput,
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
@@ -285,7 +288,21 @@ test("an input carries the clock's two readings as its slot comes, never as it w
 
 test("a taker that throws fails no turn that answered: it is said on every bar, and the frames are still taken", async () => {
   const unheard: string[] = [];
-  const frames: number[] = [];
+  const frames: PushedFrame[] = [];
+  const pushed: PushedFrame = {
+    session: sessionIdOf("s"),
+    frame: {
+      kind: "drawn",
+      bar: {
+        depth: "none",
+        rows: [{ kind: "diagnostic", runs: [{ text: "the bar" }] }],
+        nextChange: null,
+        motion: "still",
+        pending: [],
+      },
+      handoff: null,
+    },
+  };
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
@@ -293,13 +310,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       rendererOf({
         event: async () => ({
           ...answered(),
-          frames: [
-            {
-              session: "s" as never,
-              bar: { rows: [] } as never,
-              answers: { resp: "r", statusline: "s" },
-            },
-          ],
+          frames: [pushed],
         }),
         adapter: async () => {
           throw new Error("no push here");
@@ -311,7 +322,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       subscribed: () => {
         throw new Error("the collector broke");
       },
-      frames: (taken) => void frames.push(taken.length),
+      frames: (taken) => void frames.push(...taken),
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
@@ -323,7 +334,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     event: { kind: "due" },
   }));
   expect(turn.kind).toBe("answered");
-  expect(frames).toEqual([1]);
+  expect(frames).toEqual([pushed]);
   expect(unheard).toEqual([
     expect.stringMatching(
       /^renderer main's subscriptions could not be taken: .*the collector broke/,
@@ -347,8 +358,18 @@ test("a failed record and a rejected act leave the answer and both effect acknow
             effects:
               event.kind === "due"
                 ? [
-                    { kind: "copy", id: 1 as never, session: null, text: "first" },
-                    { kind: "copy", id: 2 as never, session: null, text: "second" },
+                    {
+                      kind: "copy",
+                      id: 1 as never,
+                      session: null,
+                      text: "first",
+                    },
+                    {
+                      kind: "copy",
+                      id: 2 as never,
+                      session: null,
+                      text: "second",
+                    },
                   ]
                 : [],
           };
@@ -393,21 +414,86 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
 });
 
+test("a config named by a push reaches the renderer before the next queued event", async () => {
+  const origin = {
+    projectDir: "/p",
+    cwd: "/p",
+    target: { source: "search" as const },
+  };
+  const subscriptions = { ...NONE, configs: [origin] };
+  const seen: string[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async ({ event }) => {
+          seen.push(event.kind);
+          return { ...answered(), subscriptions };
+        },
+        adapter: async () => {
+          seen.push("push");
+          return {
+            kind: "replied",
+            reply: { kind: "close-journal" },
+            subscriptions,
+            stored: [],
+          };
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      configs: {
+        ...NO_ACTS.configs,
+        follow: () => {},
+        snapshotOf: () => ({
+          chain: [],
+          repo: null,
+          plugins: [],
+          strays: [],
+          checkout: { root: origin.cwd, git: false },
+          notices: [],
+          watch: null,
+        }),
+      },
+    },
+  );
+  const push = host.ask({ kind: "close-journal" });
+  const next = host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  await Promise.all([push, next]);
+  expect(seen).toEqual(["push", "config", "due"]);
+});
+
 test("a failed start's input does not keep the previous renderer's served config", async () => {
-  const origin = { projectDir: "/p", cwd: "/p", target: { source: "search" as const } };
+  const origin = {
+    projectDir: "/p",
+    cwd: "/p",
+    target: { source: "search" as const },
+  };
   const read: string[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
-    held(rendererOf({
-      event: async () => ({
-        ...answered(),
-        subscriptions: { ...NONE, configs: [origin] },
+    held(
+      rendererOf({
+        event: async () => ({
+          ...answered(),
+          subscriptions: { ...NONE, configs: [origin] },
+        }),
+        adapter: async () => {
+          throw new Error("no push here");
+        },
       }),
-      adapter: async () => {
-        throw new Error("no push here");
-      },
-    })),
+    ),
     () => {},
     {
       subscribed: () => {},
@@ -558,7 +644,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
   await settled();
 });
 
-test("a `due` waits behind every input that arrives while it waits, so a click that has arrived lands before an idle close", async () => {
+test("a scheduled turn gives a short burst of queued input its turn first", async () => {
   const fire: Array<() => void> = [];
   const heard: string[] = [];
   const read = { wall: 0, mono: 0 };
@@ -617,10 +703,89 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
   await settled();
   read.mono = 1000;
   fire[0]!();
-  // Arrives after the `due` joined the mailbox, as a click would.
-  const behind = retire("click");
+  // Arrives after the `due` joined the mailbox and keeps its ordinary slot.
+  const behind = retire("next");
   open();
   await Promise.all([long, behind]);
   await settled();
-  expect(heard).toEqual(["retire:first", "retire:long", "retire:click", "due"]);
+  expect(heard).toEqual(["retire:first", "retire:long", "retire:next", "due"]);
+});
+
+
+test("a scheduled frame is published while ordinary renderer turns replenish the mailbox", async () => {
+  const fire: Array<() => void> = [];
+  const read = { wall: 0, mono: 0 };
+  let open = (): void => {};
+  const heldTurn = new Promise<void>((resolve) => (open = resolve));
+  let end = (): void => {};
+  const done = new Promise<void>((resolve) => (end = resolve));
+  let traffic = 0;
+  const receivedAt: number[] = [];
+  const session = sessionIdOf("frame-viewer");
+  const host = rendererHost(
+    MAIN_RENDERER,
+    {
+      ...clockAt(read),
+      after: (_ms, run) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(rendererOf({
+      event: async ({ event }) => {
+        if (event.kind === "due") return {
+          ...answered(),
+          frames: [{
+            session,
+            frame: {
+              kind: "drawn",
+              bar: {
+                depth: "none",
+                rows: [{ kind: "bar", runs: [{ text: "frame" }] }],
+                nextChange: null,
+                motion: "still",
+                pending: [],
+              },
+              handoff: null,
+            },
+          }],
+        };
+        if (event.kind === "retire") await heldTurn;
+        if (event.kind === "viewers") {
+          traffic++;
+          if (traffic < 3 * FOREGROUND_BURST) void submit();
+          else end();
+        }
+        return {
+          ...answered(),
+          subscriptions: { ...NONE, wake: traffic === 0 ? (1 as Tick) : null },
+        };
+      },
+      adapter: async () => { throw new Error("no push here"); },
+    })),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: (frames) => {
+        if (frames.some((frame) => frame.session === session)) receivedAt.push(traffic);
+      },
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const submit = () => host.deliver(
+    () => ({ kind: "event", event: { kind: "viewers", viewers: {} } }),
+    [],
+  );
+  await host.start(() => ({ kind: "event", event: { kind: "start", viewers: {}, sessions: [] } }), []);
+  const blocked = host.deliver(() => ({ kind: "event", event: { kind: "retire", session } }), []);
+  read.mono = 1000;
+  fire[0]!();
+  const first = submit();
+  open();
+  await Promise.all([blocked, first, done]);
+  expect(receivedAt).toEqual([FOREGROUND_BURST]);
+  expect(traffic).toBe(3 * FOREGROUND_BURST);
 });

@@ -20,10 +20,11 @@ import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
-import { bakedDigest } from "./daemon/build-currency.js";
 import {
   hostOverLines,
   lineSplitter,
+  rendererWireVersionProblem,
+  RENDERER_WIRE_VERSION,
   serveRenderer,
   type HostLine,
   type RendererBoot,
@@ -62,6 +63,7 @@ export function runRenderer(world: World): void {
 
   let served: ((line: HostLine) => void) | null = null;
   const heard = (text: string): void => {
+    if (leaving) return;
     const line = JSON.parse(text) as HostLine;
     if (served !== null) {
       served(line);
@@ -70,6 +72,8 @@ export function runRenderer(world: World): void {
     if (line.kind !== "boot") throw new Error(`a ${line.kind} before the boot`);
     let renderer: TimedRenderer;
     try {
+      const mismatch = rendererWireVersionProblem("host", line.wireVersion);
+      if (mismatch !== null) throw new Error(mismatch);
       renderer = booted(world, line.boot, host);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
@@ -93,7 +97,11 @@ export function runRenderer(world: World): void {
         }
       },
     });
-    send({ kind: "started", pid: process.pid });
+    send({
+      kind: "started",
+      pid: process.pid,
+      wireVersion: RENDERER_WIRE_VERSION,
+    });
   };
   const lines = lineSplitter(heard);
   process.stdin.setEncoding("utf8");
@@ -111,11 +119,6 @@ function booted(
   boot: RendererBoot,
   reaches: AdapterToHost,
 ): TimedRenderer {
-  const own = bakedDigest();
-  if (boot.digest !== own)
-    throw new Error(
-      `the host was built from source ${boot.digest ?? "of no digest"}; this renderer from ${own ?? "source of no digest"}, which the next daemon runs`,
-    );
   // [LAW:no-silent-failure] A key the host could not read refuses this boot
   // with its reason, on the bar's ⚠; the host's next start reads it again.
   if (boot.linkKey.kind === "failed")

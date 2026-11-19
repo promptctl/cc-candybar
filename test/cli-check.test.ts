@@ -29,6 +29,10 @@ import { ansiOf, textOf } from "../src/render/frame";
 import { barOf } from "./helpers/drawn-frame";
 import { answerRepo } from "./helpers/repo-approval";
 import { createGates } from "../src/daemon/foundations/gates";
+import { previewSigner } from "../src/click/link-signer";
+import { linkKeyFile } from "../src/daemon/link-key";
+import { stateDir } from "../src/daemon/paths";
+import { urlWriting } from "./helpers/daemon-e2e";
 
 // The budget a verdict waits for a source that will not answer in time: long
 // enough that a settling source is not mistaken for a straggler, short enough
@@ -75,6 +79,22 @@ function expectFatal(outcome: CheckOutcome): string {
 }
 
 describe("checkConfig — explicit target", () => {
+  it("publishes clickable previews using its own key when the daemon's key file is malformed", async () => {
+    runOn({ XDG_STATE_HOME: path.join(dir, "preview-state") });
+    const key = linkKeyFile(stateDir(host));
+    fs.mkdirSync(path.dirname(key), { recursive: true });
+    fs.writeFileSync(key, "not a daemon key");
+    const file = write(
+      "preview-link.json5",
+      `{ variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+    );
+    const result = await checkConfig(world, createGates(), file, dir);
+    if (result.kind !== "clean") throw new Error(`check failed: ${result.kind}`);
+    const link = urlWriting(result.rendered, "face", "open");
+    expect(previewSigner().openLink(link).kind).toBe("ok");
+    expect(fs.readFileSync(key, "utf8")).toBe("not a daemon key");
+  });
+
   it("reports a valid config clean, with the rendered line", async () => {
     const p = write(
       "ok.json5",

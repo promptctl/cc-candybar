@@ -10,7 +10,7 @@ import type { RendererHost } from "../../src/daemon/renderer-host";
 import { instantAt } from "../../src/utils/instant";
 import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
-import type { ViewFacts } from "../../src/renderer-interface/request-context";
+import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 import { daemonFactsOf } from "./daemon-facts";
@@ -31,7 +31,7 @@ export interface Collected {
   serve(cache: Served): void;
   // A session's `config` turn: its world state taken, the session's view
   // opened as `hold` opens it, and the turn's subscriptions handed back.
-  config<H>(facts: ViewFacts, hold: () => H): H;
+  config<H>(facts: CheckedRenderRequest, hold: () => H): H;
   // Every input the collector hands in goes through `host` from now on, as
   // the daemon's does, so it takes its place in the host's mailbox behind
   // the turns sent before it: a case whose requests go through `host` must
@@ -86,7 +86,7 @@ export function collected(
       routed = host;
     },
     config: (facts, hold) => {
-      worldStates.take(collector.requested(facts, TEST_ENVIRONMENT));
+      worldStates.open(facts, collector.requested(facts, TEST_ENVIRONMENT));
       const held = hold();
       collector.subscribed(cache().subscriptions());
       return held;

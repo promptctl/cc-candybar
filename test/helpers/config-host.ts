@@ -9,7 +9,11 @@ import {
   type ConfigTarget,
   type RenderOrigin,
 } from "../../src/config-hint";
-import { ConfigDiscovery } from "../../src/daemon/config-discovery/config-discovery";
+import {
+  ConfigDiscovery,
+  type RendererConfigs,
+} from "../../src/daemon/config-discovery/config-discovery";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import type { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import type { Locations } from "../../src/config/loader/chain-places";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
@@ -51,7 +55,7 @@ export interface ConfigHost {
   // Every followed origin discovered again now, each one that moved handed
   // in: what the host does when file events catch up.
   again(): void;
-  readonly discovery: ConfigDiscovery;
+  readonly discovery: RendererConfigs;
   close(): void;
 }
 
@@ -60,13 +64,13 @@ export function configHost(
   world: {
     readonly locations: Locations;
     readonly stateDir: string;
-    readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+    readonly watchers: Pick<WatcherRegistry, "batch">;
     readonly log?: DaemonLogger;
   },
 ): ConfigHost {
   const origins = new Map<string, RenderOrigin>();
   const handIn = (origin: RenderOrigin): void => {
-    const snapshot = discovery.snapshotOf(origin);
+    const snapshot = configs.snapshotOf(origin);
     if (snapshot === null)
       throw new Error(`${originKey(origin)} is not followed`);
     cache.configure(origin, snapshot);
@@ -76,13 +80,14 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
-    moved: (moved) => moved.forEach(handIn),
+    moved: (_renderer, moved) => moved.forEach(handIn),
   });
+  const configs = discovery.forRenderer(MAIN_RENDERER);
   const follow = (origin: RenderOrigin): RenderOrigin => {
     const key = originKey(origin);
     if (!origins.has(key)) {
       origins.set(key, origin);
-      discovery.follow([...origins.values()]);
+      configs.follow([...origins.values()]);
       handIn(origin);
     }
     return origin;
@@ -92,7 +97,7 @@ export function configHost(
       follow(originOf(projectDir, cwd, configFile)),
     follow,
     again: () => discovery.again("test"),
-    discovery,
+    discovery: configs,
     close: () => discovery.close(),
   };
 }
@@ -128,9 +133,9 @@ export class DiscoveringCache<
       stateDir,
       watchers,
       ...deps
-    }: RenderDeps<S> & {
+    }: RenderDeps<S, F> & {
       readonly stateDir: string;
-      readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+      readonly watchers: Pick<WatcherRegistry, "batch">;
     },
     opts: ConstructorParameters<typeof RenderCache<S, F>>[1],
   ) {

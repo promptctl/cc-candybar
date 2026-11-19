@@ -1,21 +1,41 @@
 // [LAW:no-ambient-temporal-coupling] FIFO per key: each key's tasks run one at
-// a time, each after the last has settled, and a rejection is its own caller's
-// and never stops the tasks behind it. A task runs at once, in the caller's
-// turn, while its key is idle. A task placed `first` runs next, ahead of every
-// task waiting on its key, behind only the one running. A task placed `idle`
-// runs once no other task waits on its key: every task placed `first` or
-// `last` before it starts runs ahead of it, whenever it was placed.
-export type Place = "first" | "last" | "idle";
+// a time, each after the last has settled. A task runs at once while its key
+// is free. A `first` task takes the next slot, as renderer startup requires.
+// Scheduled tasks take one slot after a burst of ordinary tasks, or at once
+// if none wait. A rejection reaches its caller without stopping the queue.
+export type Place = "first" | "last" | "scheduled";
+
+export const FOREGROUND_BURST = 8;
 
 type Entry = () => Promise<void>;
 
+interface Waiting {
+  readonly first: Entry[];
+  readonly last: Entry[];
+  readonly scheduled: Entry[];
+  ordinary: number;
+}
+
+// [LAW:single-enforcer] The burst counts ordinary slots selected while
+// scheduled work waits. A running slot and priority starts are outside the
+// bound. Reset after each scheduled slot so ordinary work gets its turn too.
+function next(waiting: Waiting): Entry | undefined {
+  const first = waiting.first.pop();
+  if (first !== undefined) return first;
+  if (
+    waiting.scheduled.length > 0 &&
+    (waiting.last.length === 0 || waiting.ordinary === FOREGROUND_BURST)
+  ) {
+    waiting.ordinary = 0;
+    return waiting.scheduled.shift();
+  }
+  const last = waiting.last.shift();
+  if (last !== undefined && waiting.scheduled.length > 0) waiting.ordinary++;
+  return last;
+}
+
 export class KeyedSerialQueue<K> {
-  // Each key's tasks still to run, while one runs: those placed `idle` apart,
-  // since every other waits ahead of them.
-  private readonly waiting = new Map<
-    K,
-    { readonly tasks: Entry[]; readonly idle: Entry[] }
-  >();
+  private readonly waiting = new Map<K, Waiting>();
 
   run<T>(key: K, task: () => Promise<T>, at: Place = "last"): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -30,16 +50,19 @@ export class KeyedSerialQueue<K> {
       };
       const behind = this.waiting.get(key);
       if (behind !== undefined) {
-        if (at === "first") behind.tasks.unshift(entry);
-        else if (at === "last") behind.tasks.push(entry);
-        else behind.idle.push(entry);
+        behind[at].push(entry);
         return;
       }
-      const waiting = { tasks: [] as Entry[], idle: [] as Entry[] };
+      const waiting: Waiting = {
+        first: [],
+        last: [],
+        scheduled: [],
+        ordinary: 0,
+      };
       this.waiting.set(key, waiting);
-      const drain = (next: Entry): void =>
-        void next().then(() => {
-          const after = waiting.tasks.shift() ?? waiting.idle.shift();
+      const drain = (entry: Entry): void =>
+        void entry().then(() => {
+          const after = next(waiting);
           if (after === undefined) this.waiting.delete(key);
           else drain(after);
         });

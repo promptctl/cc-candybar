@@ -14,7 +14,7 @@ import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
-import { clickSessionOf } from "../src/click/wire";
+import { admitClick } from "../src/click/wire";
 import { instantOf, type Instant, type Tick } from "../src/utils/instant";
 import {
   sessionIdOf,
@@ -91,6 +91,18 @@ describe("the idle period: a close is due a timeout after it began, while a menu
     expect(idle.next()).toBe(30);
     idle.clicked(S, tick(25));
     expect(idle.next()).toBe(55);
+  });
+
+  test("a session with a pending click retains its idle deadline while another expires", () => {
+    const idle = new MenuIdle();
+    const busy = new Set([S]);
+    idle.drew(S, tick(0), true, 30);
+    idle.drew(T, tick(0), true, 30);
+    expect(idle.due(tick(30), busy)).toEqual([
+      { session: T, idle: { idleS: 30, timeoutS: 30 } },
+    ]);
+    expect(idle.next(busy)).toBeNull();
+    expect(idle.next()).toBe(30);
   });
 
   test("a menu first shown long after the last click is due a timeout after it appears", () => {
@@ -192,7 +204,7 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
+    expect(admitClick(verb, v)).toMatchObject({ scope: "session", session: SID });
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

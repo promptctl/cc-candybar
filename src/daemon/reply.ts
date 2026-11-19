@@ -29,15 +29,15 @@ import {
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
-import { clickSessionOf } from "../click/wire";
+import type { AdmittedClick } from "../click/wire";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import {
   badRequest,
   ClickAbandoned,
+  DaemonClosing,
   failureOf,
 } from "./foundations/verb-error";
-import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import type { ClickArrival } from "../renderer-interface/click-arrival";
@@ -134,6 +134,56 @@ export function renderRecord(rendered: {
   };
 }
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
+
+// [LAW:no-silent-failure] A late request gets a normal verdict without opening
+// a world document or taking a renderer turn. Ingress preserves the close as
+// its render or click outcome even when there is no renderer left to record it.
+function closingResponse(
+  parts: DaemonParts,
+  rawKind: unknown,
+  accepted: Acceptance,
+): Response {
+  const kind =
+    rawKind === "render" || rawKind === "click" ? rawKind : "request";
+  const failure = failureOf(new DaemonClosing(kind));
+  if (kind === "render" || kind === "click") {
+    if (kind === "render") {
+      parts.stats.requestsTotal++;
+      parts.stats.requestsErrored++;
+    }
+    const event = requestEvent(
+      kind,
+      [["req", String(accepted.id)]],
+      failure,
+      elapsedMs(parts.clock, accepted.at),
+    );
+    parts.log(event.level, event.line);
+  }
+  return failedWith(failure.message);
+}
+
+export function refuseClosingReply(
+  parts: DaemonParts,
+  kind: unknown,
+  accepted: Acceptance,
+): Reply {
+  return stay(closingResponse(parts, kind, accepted));
+}
+
+export function refuseClosingInbound(
+  parts: DaemonParts,
+  inbound: Inbound,
+  accepted: Acceptance,
+): HandledRequest {
+  return inbound.kind === "url"
+    ? {
+        kind: "url",
+        awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
+        verdict: closingResponse(parts, "click", accepted),
+        land: async () => {},
+      }
+    : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
+}
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
 // but a subscribe, the compiler naming one added to the protocol until it is.
@@ -357,7 +407,6 @@ export async function replyTo(
     // [LAW:one-source-of-truth] The request's id, its place in the order the
     // daemon accepted requests, is that order.
     const order = accepted.id;
-    const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in drawRender. It is written as the request
@@ -381,29 +430,11 @@ export async function replyTo(
         at,
         order,
       );
-    if (checked.ok) {
-      sighted(checked.req, "drawing");
-      // [LAW:one-source-of-truth] A request past the checkpoint is the
-      // session's data from now on; a followed session's next frame is drawn
-      // from it, brought forward as its view takes it up. Its answer is its
-      // own client's, drawn for a request and never pushed: its `encoding`
-      // says how that answer is spelled, and no feed reads it
-      // (src/daemon/frame-feed.ts).
-      frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
-      // [LAW:one-source-of-truth] The book keeps what the newest request says,
-      // never one that arrived behind it.
-      if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-        parts.sessionBook.heard(checked.req, checked.environment);
-      const tmux = checked.req.hints.tmux;
-      if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
-    }
     // The request's event, written on every exit, and its reply.
-    const recorded = (rendered: {
-      outcome: RequestOutcome;
-      resp: Response;
-      settled: (delivered: boolean) => void;
-    }): Reply => {
-      const { reply, outcome } = renderRecord(rendered);
+    const recorded = ({
+      reply,
+      outcome,
+    }: ReturnType<typeof renderRecord>): Reply => {
       if (outcome.kind !== "ok") stats.requestsErrored++;
       // Whether the client was already told TIMEOUT while this render ran on,
       // and how long the request was queued, from the connection's accept,
@@ -422,55 +453,69 @@ export async function replyTo(
       parts.log(level, line);
       return reply;
     };
-    if (!checked.ok) return recorded(refusedRender(checked.problems));
-    const answered = await answerStatusline(
-      parts.renderer,
-      parts.collector,
-      clock,
-      parts.closing,
-      parts.log,
-      checkoutLocation,
-      checked.req,
-      // [LAW:one-source-of-truth] The book's, the newest request's, so a
-      // request that arrived behind a newer one runs nothing in its older
-      // environment.
-      parts.sessionBook.environmentOf(checked.req.hookData.session_id),
-      order,
-      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-      // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/foundations/request-deadline.ts).
-      t0 +
-        waitBudgetMs(checked.req.deadline, accepted.at, {
-          epochMs: started.getTime(),
-          monoMs: t0,
-        }),
-      facts,
-    ).catch(
-      // [LAW:no-silent-failure] The driver hands every turn's failure back
-      // as a value; a throw here is its own bug, answered as any throw is.
-      (error: unknown): StatuslineAnswer => {
+    const draw = async (): Promise<ReturnType<typeof renderRecord>> => {
+      let answered: StatuslineAnswer | undefined;
+      try {
+        const checked = checkRenderRequest(req, stats, parts.log, parts.home);
+        if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        sighted(checked.req, "drawing");
+        // [LAW:one-source-of-truth] A request past the checkpoint is the
+        // session's data from now on; a followed session's next frame is drawn
+        // from it, brought forward as its view takes it up. Its answer is its
+        // own client's, drawn for a request and never pushed: its `encoding`
+        // says how that answer is spelled, and no feed reads it
+        // (src/daemon/frame-feed.ts).
+        frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+        // [LAW:one-source-of-truth] The book keeps what the newest request says,
+        // never one that arrived behind it.
+        if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
+          parts.sessionBook.heard(checked.req, checked.environment);
+        const tmux = checked.req.hints.tmux;
+        if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
+        answered = await answerStatusline(
+          parts.renderer,
+          parts.publishFrame,
+          parts.collector,
+          clock,
+          parts.closing,
+          parts.log,
+          checkoutLocation,
+          checked.req,
+          // [LAW:one-source-of-truth] The book's, the newest request's, so a
+          // request that arrived behind a newer one runs nothing in its older
+          // environment.
+          parts.sessionBook.environmentOf(checked.req.hookData.session_id),
+          order,
+          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+          // fixed at its arrival: early enough before its client hangs up to
+          // draw (src/daemon/foundations/request-deadline.ts).
+          t0 +
+            waitBudgetMs(checked.req.deadline, accepted.at, {
+              epochMs: started.getTime(),
+              monoMs: t0,
+            }),
+          facts,
+        );
+        noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
+        const rendered = renderRecord(answered);
+        sighted(
+          checked.req,
+          rendered.reply.unsent === null ? answered.seen : "failed",
+        );
+        return rendered;
+      } catch (error) {
+        // [LAW:single-enforcer] If the answer never reaches the connection,
+        // it still settles the present that the renderer handed back.
+        answered?.settled(false);
         const failure = renderFailure(failureOf(error));
-        return {
+        return renderRecord({
           outcome: failure,
           resp: failedWith(failure.message),
-          seen: "failed",
           settled: NOTHING_TO_SETTLE,
-        };
-      },
-    );
-    // [LAW:nothing-unseen] What the host's caches answered by this render's
-    // end.
-    noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
-    // [LAW:single-enforcer] The answer's present is owed its one effect-done
-    // on every exit: a reply that never reaches the connection settles here.
-    try {
-      const reply = recorded(answered);
-      sighted(checked.req, reply.unsent === null ? answered.seen : "failed");
-      return reply;
-    } catch (e) {
-      answered.settled(false);
-      throw e;
-    }
+        });
+      }
+    };
+    return recorded(await draw());
   }
 
   if (req.kind === "click") {
@@ -680,9 +725,8 @@ function urlClick(
   };
 }
 
-// [LAW:types-are-the-program] A click as the host read it, run: a refusal is
-// its outcome, a range runs the link the status line drew there, and a link
-// runs through its verb.
+// [LAW:types-are-the-program] A refused click has an outcome already.
+// An admitted click enters the renderer mailbox.
 async function ranClick(
   parts: DaemonParts,
   read: ReadClick,
@@ -691,13 +735,13 @@ async function ranClick(
 ): Promise<RequestOutcome> {
   switch (read.kind) {
     case "refused":
+      if (read.signed !== undefined) noteFacts(facts, read.signed);
       return badRequest(read.problem);
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
         parts,
-        read.verb,
-        read.value,
+        read.click,
         { via: "link", delivery: read.delivery },
         facts,
         click,
@@ -715,43 +759,34 @@ async function ranClick(
 // daemon's failure.
 async function handleClick(
   parts: DaemonParts,
-  verb: string,
-  value: string,
+  admitted: AdmittedClick,
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
-  // [LAW:nothing-unseen] What the host knows of the click is recorded before
-  // anything about it can fail: the verb it runs, then its session as it
-  // crossed the one session-id checkpoint. One that failed is never recorded,
-  // and a click naming none records `sid=-`.
-  noteFacts(facts, { verb });
-  const session = clickSessionOf(verb, value);
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    parts.collector.clicked(session.id);
-  }
+  const { verb } = admitted;
+  const session = admitted.scope === "session" ? admitted.session : null;
+  noteFacts(facts, { verb, sid: session ?? "-" });
+  if (session !== null) parts.collector.clicked(session);
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
   // again cannot revert a toggle.
-  const delivered: HostTurn = await parts.renderer.answer(() =>
+  const delivered = await parts.renderer.answerClick(session, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
       : {
           kind: "event",
           event: {
             kind: "click",
-            verb,
-            value,
-            session,
+            click: admitted,
             arrival,
-            context: session?.ok
-              ? parts.sessionBook.contextOf(
-                  session.id,
-                  parts.frameFeeds.latest(session.id),
-                )
-              : null,
+            context:
+              session === null
+                ? null
+                : parts.sessionBook.contextOf(
+                    session,
+                    parts.frameFeeds.latest(session),
+                  ),
           },
         },
   );

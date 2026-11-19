@@ -8,15 +8,14 @@
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
-import type {
-  ParsedSessionId,
-  SessionId,
-} from "../daemon/foundations/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
+import type { AdmittedClick } from "../click/wire";
 import type { Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
+import type { Fault } from "./noted-faults";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
@@ -183,6 +182,7 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
+      readonly inspect?: true;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -207,19 +207,11 @@ export type Event =
       readonly outcome: EffectOutcome;
     }
   | {
-      // A click on a link the bar drew: the renderer decides what it means
-      // and acts on it in this turn, so the output names what the act moved.
+      // A click admitted by the host, with its decoded arguments.
       readonly kind: "click";
-      readonly verb: string;
-      readonly value: string;
-      // The click's session as it crossed the host's session-id checkpoint:
-      // null when the click names none.
-      readonly session: ParsedSessionId | null;
+      readonly click: AdmittedClick;
       readonly arrival: ClickArrival;
-      // [LAW:one-source-of-truth] The click's session as the host's book
-      // holds it: what it renders from, and, once heard since the daemon
-      // started, the request whose hints are the pane its lanes follow. Null
-      // when the click names no session, or the book holds none of it.
+      // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
     }
   | {
@@ -233,6 +225,9 @@ export type Event =
       // The tick the renderer last declared (`Subscriptions.wake`) has
       // come: what is due by the turn's tick runs in it.
       readonly kind: "due";
+      // An admitted click postpones only its session's idle close. Omitted
+      // by older hosts and direct callers when no click hold is supplied.
+      readonly pendingClicks?: readonly SessionId[];
     };
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
@@ -280,6 +275,13 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
+// The facts a command inspects on the frame that answered its request.
+export interface DrawInspection {
+  readonly preset: string;
+  readonly faults: readonly Fault[];
+  readonly unreadSources: readonly string[];
+}
+
 // [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
 // the statusline's arm carries the request it answers.
 export interface Present {
@@ -290,6 +292,7 @@ export interface Present {
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
+  readonly inspection?: DrawInspection;
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
@@ -423,21 +426,24 @@ export interface Subscriptions {
   readonly wake: Tick | null;
 }
 
-// A frame's two answers, serialized once for every subscriber: `resp`, which
-// a lane drawing the bar elsewhere is sent, and `statusline`, what Claude
-// Code's statusline shows (the bar, or the handoff line in its place while a
-// lane draws it elsewhere, src/renderer/lane-handoff.ts).
-export interface Answers {
-  readonly resp: string;
-  readonly statusline: string;
-}
+// [LAW:types-are-the-program] A feed's draw has one bar. A handoff stands
+// in for it only in Claude Code's statusline. A failed draw carries its
+// reason to whichever presentation publishes it.
+export type FeedFrame<Body = WireFrame> =
+  | {
+      readonly kind: "drawn";
+      readonly bar: Body;
+      readonly handoff: Body | null;
+    }
+  | { readonly kind: "failed"; readonly message: string };
 
 // A frame a feed drew, for the session's subscribers.
 // [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
 // is the host's to judge, per subscriber, against what that one was sent.
 export interface PushedFrame {
   readonly session: SessionId;
-  readonly answers: Answers;
+  // Read through `parseFrame`: Infinity crosses as null.
+  readonly frame: FeedFrame;
 }
 
 // How a turn ended, a turn that threw included: its failure as data, a class

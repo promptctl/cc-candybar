@@ -21,8 +21,13 @@ import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
+import { runTeardown } from "../utils/teardown.js";
 import type { World } from "../host";
-import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
+import {
+  createDaemon,
+  type PreparedDaemon,
+  type RunningBundle,
+} from "./daemon.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
 import { createGates } from "./foundations/gates.js";
@@ -38,8 +43,7 @@ import { resetSpawnBackoff } from "./acquire";
 // single-instance enforcer (two daemons cannot both bind the same path; the
 // kernel makes duplicate-daemon unrepresentable). Listens for one request per
 // connection. Any uncaught error exits non-zero; the next client obtains a
-// fresh daemon via obtainDaemonKick() (fire-and-forget caller) or
-// obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
+// fresh daemon via a later ordinary statusline tick in src/daemon/acquire.ts.
 // [LAW:one-source-of-truth] Our own kernel start-time, read once at startup and
 // stamped into our lease so a future daemon's arbitration can prove whether our
 // pid still names THIS process or a recycled ghost (process-fingerprint.ts).
@@ -55,9 +59,11 @@ let myStartTime = "";
 // waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
 
-// The daemon this process serves, from when it is built; null before, when a
-// death has nothing to close.
-let serving: Daemon | null = null;
+// [LAW:effects-at-boundaries] The daemon the process owns during bind and
+// service. Close is available even when bind never succeeds.
+let prepared: PreparedDaemon | null = null;
+// Shutdown waits for admission to hand over any registry path it claimed.
+let startup: Promise<void> | null = null;
 
 // [LAW:effects-at-boundaries] The process this daemon is: the world its main
 // handed it, every path it touches (parsed from that world's host here and
@@ -135,7 +141,7 @@ export function runDaemon(world: World): void {
   // [LAW:single-enforcer] Refused through the same death funnel as every other
   // boot failure: the detached spawn discards stderr, so the one line that says
   // why the daemon never came up would otherwise go nowhere.
-  boot().catch(refuseBoot);
+  startup = boot().catch(refuseBoot);
 }
 
 function refuseBoot(err: unknown): void {
@@ -164,6 +170,7 @@ async function boot(): Promise<void> {
     process.pid,
     systemProbe(world.launcher).startTime,
   );
+  if (shuttingDown) return;
   const admission = await admitDaemon(
     realBreakerDeps(world, myStartTime, paths.registry, (message) =>
       serverLog("warn", message),
@@ -178,6 +185,7 @@ async function boot(): Promise<void> {
     return;
   }
   breakerRegistryPath = admission.registryPath;
+  if (shuttingDown) return;
 
   fs.mkdirSync(paths.state, { recursive: true });
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
@@ -190,8 +198,7 @@ async function boot(): Promise<void> {
   // as a daemon exit; the client falls back to the last cached render.
   ensureSocketParentSafe(paths.socket);
 
-  // The daemon is built now that we know we are the daemon process: it loads
-  // prior session state and becomes the sole writer of the state file.
+  // Prepare before binding. The socket winner loads prior state in onListening.
   const daemon = createDaemon({
     rendererName: MAIN_RENDERER,
     ...productionAdapters(paths, daemonLog, world.clock),
@@ -212,7 +219,7 @@ async function boot(): Promise<void> {
     gates: createGates(),
     exit: shutdown,
   });
-  serving = daemon;
+  prepared = daemon;
   // [LAW:single-enforcer] Same death funnel as the signals and the memory backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
@@ -227,7 +234,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const server = net.createServer((sock) => handleConnection(daemon, sock));
+  const server = net.createServer();
 
   // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
   // Two daemons cannot both bind the same Unix socket path; the kernel makes
@@ -240,7 +247,7 @@ async function boot(): Promise<void> {
 // discover an existing one"). The bind result is the data that decides the
 // next step; callers do not get to choose whether to spawn.
 function bindOrAttachAndExit(
-  daemon: Daemon,
+  daemon: PreparedDaemon,
   server: net.Server,
   sockPath: string,
   retried: boolean,
@@ -264,12 +271,12 @@ function bindOrAttachAndExit(
       // Lost a rebind race with another duplicate. The kernel arbitrated; we
       // are the loser. Exit cleanly so the winner serves.
       serverLog("info", "lost rebind race; another daemon is alive — exiting");
-      process.exit(0);
+      shutdown(0);
       return;
     }
     handleAddressInUse(daemon, server, sockPath).catch(refuseBoot);
   });
-  server.listen(sockPath, () => onListening(daemon, sockPath));
+  server.listen(sockPath, () => onListening(daemon, server, sockPath));
 }
 
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
@@ -286,7 +293,7 @@ function bindOrAttachAndExit(
 // over the lease read + the injected probe; the kill / unlink / rebind effects
 // are performed here at the edge.
 async function handleAddressInUse(
-  daemon: Daemon,
+  daemon: PreparedDaemon,
   server: net.Server,
   sockPath: string,
 ): Promise<void> {
@@ -298,14 +305,10 @@ async function handleAddressInUse(
     process.pid,
     (pid, startTime) => liveness(pid, startTime, systemProbe(daemon.launcher)),
   );
+  if (shuttingDown) return;
   if (decision.kind === "attach-and-exit") {
     serverLog("info", `EADDRINUSE: ${decision.reason} — exiting`);
-    process.exit(0);
-    // [LAW:no-ambient-temporal-coupling] process.exit() halts synchronously, so
-    // the reclaim below is already unreachable — but the explicit return makes
-    // that structural, matching the sibling `retried` branch, so no future
-    // refactor of the exit path can accidentally fall through to unlinking a
-    // live daemon's socket.
+    shutdown(0);
     return;
   }
   serverLog(
@@ -332,7 +335,12 @@ async function handleAddressInUse(
   bindOrAttachAndExit(daemon, server, sockPath, /* retried */ true);
 }
 
-function onListening(daemon: Daemon, sockPath: string): void {
+function onListening(
+  daemon: PreparedDaemon,
+  server: net.Server,
+  sockPath: string,
+): void {
+  if (shuttingDown) return;
   // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
   // identity (dev+ino) as the fingerprint the ownership self-check re-stats
   // against, BEFORE claiming the lease. Captured from the PATH, not the bound
@@ -382,6 +390,12 @@ function onListening(daemon: Daemon, sockPath: string): void {
   } catch (e) {
     serverLog("warn", `chmod socket failed: ${(e as Error).message}`);
   }
+  // [LAW:no-ambient-temporal-coupling] A socket becomes a request entry
+  // point only after its owner loads the renderer and arms production work.
+  const served = daemon.serve();
+  served.arm();
+  if (shuttingDown) return;
+  server.on("connection", (sock) => handleConnection(served, sock));
   serverLog(
     "info",
     // [FRAMING:representation] Report the heap cap V8 actually applied (the
@@ -389,14 +403,13 @@ function onListening(daemon: Daemon, sockPath: string): void {
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
       `heapCap=${mb(v8.getHeapStatistics().heap_size_limit)}MB ` +
-      `memoryLimit=${mb(daemon.memoryLimitBytes)}MB`,
+      `memoryLimit=${mb(served.memoryLimitBytes)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
   // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
   // longer applies once a daemon is actually serving.
   resetSpawnBackoff(daemonProcess().paths.spawnBackoff);
-  daemon.arm();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
 
@@ -505,27 +518,21 @@ async function closeThenExit(code: number): Promise<void> {
   // a close that failed still gives up the registry slot. An unhandled
   // rejection here would only reach a shutdown already under way, and the
   // backstop's SIGKILL would end the process in place of the exit below.
-  const steps: ReadonlyArray<readonly [string, () => unknown]> = [
-    ["close", () => serving?.close()],
-    // [LAW:single-enforcer] The lease stays, as the socket path does; why is
-    // at writeLease.
-    // [LAW:single-enforcer] The registry's one removal (removeEntry). A slot
-    // this daemon never claimed (exempt production, or refused before
-    // claiming one) is null and skipped.
+  await runTeardown(
     [
-      "registry release",
-      () =>
-        breakerRegistryPath !== null &&
-        removeEntry(breakerRegistryPath, (p) => fs.unlinkSync(p)),
+      ["finish admission", () => startup ?? undefined],
+      ["close", () => prepared?.close()],
+      // [LAW:single-enforcer] The lease stays, as the socket path does (writeLease).
+      [
+        "registry release",
+        () => {
+          if (breakerRegistryPath !== null)
+            removeEntry(breakerRegistryPath, (p) => fs.unlinkSync(p));
+        },
+      ],
     ],
-  ];
-  for (const [step, run] of steps) {
-    try {
-      await run();
-    } catch (e) {
-      serverLog("error", `shutdown ${step} failed: ${inspect(e)}`);
-    }
-  }
+    (_level, message) => serverLog("error", `shutdown ${message}`),
+  );
   // The log writes every line still waiting as the process exits (log.ts), so
   // the death line lands without a flush here.
   process.exit(code);

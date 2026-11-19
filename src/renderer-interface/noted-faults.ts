@@ -1,6 +1,6 @@
 // What a draw's turn record says of the faults its frame met: every error and
-// warning the bar listed, each whole, so a reader of the record (the host,
-// `check`) learns what the frame could not honour without the bar's viewer.
+// warning the bar listed, each whole. The same fault values accompany a
+// frame when a command requests a typed inspection.
 //
 // [LAW:one-source-of-truth] The renderer writes the note and the host reads
 // it, so both spellings live here, in the zone both processes load.

@@ -90,6 +90,7 @@ export interface RendererStats {
   readonly effectCache: StatsSnapshot["effectCache"];
   readonly sessionState: StatsSnapshot["sessionState"];
   readonly menuIdle: MenuIdleStats;
+  readonly rendererTurns: StatsSnapshot["rendererTurns"];
   // Frames the renderer's feeds drew.
   readonly framesDrawn: number;
 }

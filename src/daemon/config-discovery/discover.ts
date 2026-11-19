@@ -6,34 +6,37 @@
 // [LAW:one-way-deps] It is the host's, so the zone rule refuses the renderer
 // any import of it: the renderer loads what it is handed and reads no disk.
 
-import fs from "node:fs";
 import path from "node:path";
-import JSON5 from "json5";
+import { parseJson5Syntax } from "../../config/loader/diagnostics.js";
 import type {
   ConfigSnapshot,
   Layer,
   PluginFile,
   Stray,
 } from "../../config/config-snapshot.js";
-import { checkoutOf, type Checkout } from "../../utils/git-root.js";
+import type { Checkout } from "../../utils/git-root.js";
 import type { Unchecked } from "../../utils/presence.js";
 import { repoConfigs } from "./repo-configs.js";
 import type { LayerRole } from "../../config/layer-role.js";
 import {
   chainPlaces,
-  configCandidates,
   configResolutionNotice,
-  dslConfigCandidatePaths,
   scopeOf,
   type ConfigLayer,
   type ConfigQuery,
-  type ConfigResolution,
   type Locations,
 } from "../../config/loader/chain-places.js";
-import { detectConfigCollisions, searchConfig } from "./config-search.js";
-import { listFolders, pluginRoots, type PluginRoot } from "./plugin-folders.js";
+import { configCollisionNotice, searchConfig } from "./config-search.js";
+import {
+  discoveryFiles,
+  diskFiles,
+  readNamedText,
+  type DiscoveryFiles,
+} from "./discovery-files.js";
+import { pluginRoots, type PluginRoot } from "./plugin-folders.js";
 import {
   DEFINITION_FILE,
+  pluginDefinitionProblem,
   listedPath,
   pluginList,
 } from "../../config/loader/plugins.js";
@@ -65,6 +68,8 @@ export interface SharedFacts {
   readonly locs: Locations;
   readonly answers: RepoAnswers;
   readonly installed: readonly RootListing[];
+  readonly files: DiscoveryFiles;
+  readonly references: (text: string) => readonly string[];
 }
 
 export interface DiscoveryWorld {
@@ -72,23 +77,44 @@ export interface DiscoveryWorld {
   readonly stateDir: string;
 }
 
-export function readShared(world: DiscoveryWorld): SharedFacts {
+export function readShared(
+  world: DiscoveryWorld,
+  source: DiscoveryFiles = diskFiles,
+): SharedFacts {
+  const files = discoveryFiles(source);
+  const included = new Map<string, readonly string[]>();
   return {
     locs: world.locations,
     answers: repoConfigs(world.stateDir).read(),
-    installed: installedRoots(world.locations),
+    installed: installedRoots(world.locations, files),
+    files,
+    // The same bytes can name different physical files relative to their
+    // layers. Parse the reference names once and resolve them at each layer.
+    references: (text) => {
+      const held = included.get(text);
+      if (held !== undefined) return held;
+      const names = pluginRefs(text);
+      included.set(text, names);
+      return names;
+    },
   };
 }
 
 // The installed roots, lowest precedence first, each listed and its
 // definitions read: origin-independent, as no repository's root is among
 // them.
-export function installedRoots(locs: Locations): readonly RootListing[] {
-  return pluginRoots(locs, null).map(listRoot);
+export function installedRoots(
+  locs: Locations,
+  files: DiscoveryFiles = discoveryFiles(),
+): readonly RootListing[] {
+  return pluginRoots(locs, null).map((root) => listRoot(root, files));
 }
 
-function listRoot({ dir, scope }: PluginRoot): RootListing {
-  const listed = listFolders(dir);
+function listRoot(
+  { dir, scope }: PluginRoot,
+  files: DiscoveryFiles,
+): RootListing {
+  const listed = files.folders(dir);
   return {
     root: dir,
     scope,
@@ -97,7 +123,11 @@ function listRoot({ dir, scope }: PluginRoot): RootListing {
         ? listed
         : {
             folders: listed.folders.map((name) =>
-              readDefinition(path.join(dir, name, DEFINITION_FILE), scope),
+              readDefinition(
+                path.join(dir, name, DEFINITION_FILE),
+                scope,
+                files,
+              ),
             ),
             files: listed.files,
           },
@@ -110,31 +140,34 @@ function listRoot({ dir, scope }: PluginRoot): RootListing {
  * loader refuses it by its name before it would read it, and it could be any
  * file at all.
  */
-export function readDefinition(file: string, scope: PluginScope): PluginFile {
-  if (path.basename(file) !== DEFINITION_FILE) {
+export function readDefinition(
+  file: string,
+  scope: PluginScope,
+  files: DiscoveryFiles = diskFiles,
+): PluginFile {
+  const badPath = pluginDefinitionProblem(file);
+  if (badPath !== null)
     return {
       scope,
       path: file,
-      definition: {
-        kind: "unreadable",
-        error: `not read: a plugin's definition is its folder's ${DEFINITION_FILE}`,
-      },
+      definition: { kind: "unreadable", error: badPath },
     };
-  }
-  try {
-    const text = fs.readFileSync(file, "utf-8");
-    // [LAW:one-source-of-truth] The real path: a plugin's `run` runs in its
-    // folder and its storage lives under it, so a linked folder replaced by
-    // an install is another folder.
-    const dir = fs.realpathSync(path.dirname(file));
-    return { scope, path: file, definition: { kind: "text", text, dir } };
-  } catch (e) {
+  // [LAW:one-source-of-truth] The same physical plugin folder determines
+  // its definition read, sources and programs. Keep the original path for
+  // the name, legacy data paths and diagnostics.
+  const dir = files.realpath(path.dirname(file));
+  if (typeof dir !== "string")
     return {
       scope,
       path: file,
-      definition: { kind: "unreadable", error: (e as Error).message },
+      definition: { kind: "unreadable", error: dir.error },
     };
-  }
+  const read = readNamedText(files, dir, file);
+  return {
+    scope,
+    path: file,
+    definition: read.kind === "text" ? { ...read, dir } : read,
+  };
 }
 
 // What a session's plugins are, wherever its chain comes from: one definition
@@ -156,10 +189,11 @@ export function sessionPlugins(
   installed: readonly RootListing[],
   repo: ApprovedRepo | null,
   cwd: string,
+  files: DiscoveryFiles = discoveryFiles(),
 ): SessionPlugins {
   const repoRoots = pluginRoots(locs, repo)
     .filter((r) => r.scope === "repo")
-    .map(listRoot);
+    .map((root) => listRoot(root, files));
   const byNs = new Map<string, PluginFile>();
   const strays: Stray[] = [];
   const notices: string[] = [];
@@ -189,22 +223,14 @@ export function sessionPlugins(
     // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
     // above it, since an ancestor watch per session is the cost; the next
     // rediscovery reads the new checkout.
-    checkout: checkoutOf(cwd),
+    checkout: files.checkout(cwd),
   };
 }
 
 // A layer file's text, or why it could not be read. A directory's read error
 // names no path, so it is said as what it is.
 export function readLayer(file: string): Layer["content"] {
-  try {
-    return { kind: "text", text: fs.readFileSync(file, "utf-8") };
-  } catch (e) {
-    const error =
-      (e as NodeJS.ErrnoException).code === "EISDIR"
-        ? "not a file"
-        : (e as Error).message;
-    return { kind: "unreadable", error };
-  }
+  return diskFiles.text(file);
 }
 
 /**
@@ -218,8 +244,12 @@ export function layerOf(
   file: string,
   content: Layer["content"],
   home: string,
+  batch: Pick<SharedFacts, "files" | "references"> = {
+    files: diskFiles,
+    references: pluginRefs,
+  },
 ): Layer {
-  const refs = content.kind === "text" ? pluginRefs(content.text) : [];
+  const refs = content.kind === "text" ? batch.references(content.text) : [];
   return {
     role,
     path: file,
@@ -227,7 +257,7 @@ export function layerOf(
     listed: Object.fromEntries(
       refs.map((ref) => [
         ref,
-        readDefinition(listedPath(ref, file, home), scopeOf(role)),
+        readDefinition(listedPath(ref, file, home), scopeOf(role), batch.files),
       ]),
     ),
   };
@@ -237,12 +267,9 @@ export function layerOf(
 // whose list is not one, lists nothing here: the loader parses the whole text
 // and reports both, naming the line.
 function pluginRefs(text: string): readonly string[] {
-  let json: unknown;
-  try {
-    json = JSON5.parse(text);
-  } catch {
-    return [];
-  }
+  const syntax = parseJson5Syntax(text);
+  if (syntax.kind === "invalid") return [];
+  const json = syntax.value;
   return typeof json === "object" && json !== null && "plugins" in json
     ? (pluginList(json.plugins) ?? [])
     : [];
@@ -301,25 +328,27 @@ export function discover(
   query: DiscoverQuery,
   shared: SharedFacts,
 ): Discovered {
-  const { locs, answers } = shared;
-  const { resolution, question } = searchConfig(locs, answers, query);
+  const { locs, answers, files } = shared;
+  const search = searchConfig(locs, answers, query, files);
+  const { resolution, question, locations } = search;
   const { repos } = resolution;
   const session = sessionPlugins(
     locs,
     shared.installed,
     repos.plugins,
     query.cwd,
+    files,
   );
   const places = chainPlaces(resolution, query).map((place) =>
-    contentAt(locs, query, resolution, place),
+    contentAt(search, place, files),
   );
   const chain = places.map((at) =>
-    layerOf(at.role, at.path, at.content, locs.home),
+    layerOf(at.role, at.path, at.content, locs.home, shared),
   );
   // [LAW:dataflow-not-control-flow] Every notice is computed every time; an
   // absent one is a null in the list.
   const notices = [
-    detectConfigCollisions(locs, query.projectDir),
+    configCollisionNotice(locations),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos),
     ...session.notices,
@@ -327,7 +356,9 @@ export function discover(
   return {
     snapshot: { ...snapshotOf(session, chain), repo: question, notices },
     targets: {
-      candidates: dslConfigCandidatePaths(locs, query),
+      candidates: locations.flatMap(({ candidates }) =>
+        candidates.map(({ file }) => file),
+      ),
       roots: pluginRoots(locs, repos.plugins).map((r) => r.dir),
     },
     repos,
@@ -338,36 +369,23 @@ export function discover(
 // found, read; the location stat could not see past; or nothing yet. The
 // load fails naming a layer it could not read.
 function contentAt(
-  locs: Locations,
-  query: ConfigQuery,
-  resolution: ConfigResolution,
+  { resolution, locations }: ReturnType<typeof searchConfig>,
   place: ConfigLayer,
+  files: DiscoveryFiles,
 ): ConfigLayer & { readonly content: Layer["content"] } {
   const at = (path: string, content: Layer["content"]) => ({
     role: place.role,
     path,
     content,
   });
-  switch (resolution.kind) {
-    case "missing":
-      return at(place.path, { kind: "absent" });
-    case "unreadable":
-      return at(place.path, { kind: "unreadable", error: resolution.error });
-    case "chain": {
-      const found = resolution.layers.find((l) => l.role === place.role);
-      if (found !== undefined) return at(found.path, readLayer(found.path));
-      const roles = new Map(
-        configCandidates(locs, query).map((c) => [c.file, c.role]),
-      );
-      const unseen = resolution.unchecked.find(
-        (u) => roles.get(u.path) === place.role,
-      );
-      return at(
-        place.path,
-        unseen === undefined
-          ? { kind: "absent" }
-          : { kind: "unreadable", error: unseen.error },
-      );
-    }
-  }
+  if (resolution.kind === "missing") return at(place.path, { kind: "absent" });
+  if (resolution.kind === "unreadable")
+    return at(place.path, { kind: "unreadable", error: resolution.error });
+  const location = locations.find(({ role }) => role === place.role);
+  if (location?.kind === "found" && location.winner.file === place.path)
+    return at(place.path, readNamedText(files, location.directory, place.path));
+  const unchecked = location?.unchecked[0];
+  return unchecked === undefined
+    ? at(place.path, { kind: "absent" })
+    : at(unchecked.path, { kind: "unreadable", error: unchecked.error });
 }

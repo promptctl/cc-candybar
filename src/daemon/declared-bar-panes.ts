@@ -1,8 +1,7 @@
 import type { LaneSwitches } from "../config/lanes.js";
 import type { Timekeeper } from "../time.js";
-import type { TmuxHint } from "../tmux-hint.js";
+import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { paneKey } from "./acts.js";
 import { failureOf } from "./foundations/verb-error.js";
 import type { SessionId } from "./foundations/session-id.js";
 
@@ -104,12 +103,18 @@ export class DeclaredBarPanes {
         this.reconcile(key, held);
       },
       (error: unknown) => {
+        const failure = failureOf(error);
+        if (failure.kind === "closing") {
+          this.held.delete(key);
+          this.log("info", `${event} — ${failure.message}`);
+          return;
+        }
         held.application = {
           kind: "retry",
           on,
           after: this.clock.monotonic() + RETRY_MS,
         };
-        this.log("warn", `${event} — ${failureOf(error).detail}`);
+        this.log("warn", `${event} — ${failure.detail}`);
         if (!held.listed && !on) this.held.delete(key);
         else this.reconcile(key, held);
       },

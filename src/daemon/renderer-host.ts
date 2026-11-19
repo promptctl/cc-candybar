@@ -61,7 +61,7 @@ import {
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
+import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { RendererName } from "./foundations/renderer-name.js";
 
@@ -77,6 +77,8 @@ type TakenTurn = TurnOutcome & {
   readonly queuedMs: number;
   readonly turnMs: number | null;
   readonly hopMs: number | null;
+  // Failure preparing the origin this context will draw from.
+  readonly configFailure?: Failure;
 };
 
 // What a caller makes as its input's slot comes up: the event, or why there
@@ -95,10 +97,7 @@ export type Made = MadeEvent | Failure;
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
-  readonly configs: Pick<
-    ConfigDiscovery,
-    "follow" | "snapshotOf" | "landed" | "path" | "repoDir"
-  >;
+  readonly configs: RendererConfigs;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -110,6 +109,8 @@ export interface RendererHost {
   // slot comes up, and answers the input, or why there is none to send,
   // which is the turn's failure.
   answer(make: () => Made): Promise<HostTurn>;
+  // A click keeps its session busy until its mailbox slot lands.
+  answerClick(session: SessionId | null, make: () => Made): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
@@ -154,6 +155,19 @@ interface Slotted {
   readonly settled: Promise<readonly EffectOutcome[]>;
 }
 
+type ConfigDelivery = "scheduled" | "received" | "unreceived";
+
+type ConfigFollowing =
+  | { readonly kind: "following"; readonly named: readonly RenderOrigin[] }
+  | { readonly kind: "failed"; readonly failure: Failure };
+
+type ConfigTurn = {
+  readonly settled: Promise<readonly EffectOutcome[]>;
+} & (
+  | { readonly kind: "received"; readonly failure: Failure | null }
+  | { readonly kind: "unreceived"; readonly failure: Failure }
+);
+
 export function rendererHost(
   name: RendererName,
   // The clock every input's readings are made on, a hop is timed on, and the
@@ -187,10 +201,16 @@ export function rendererHost(
   // when: its answer, its changes landing and their `effect-done` turns.
   let holder: { input: string; readonly since: Monotonic } | null = null;
   let queued = 0;
-  // [LAW:one-source-of-truth] The origins, by `originKey`, whose config the
-  // live renderer was served: what its last output named. A `start` is a
-  // renderer that holds none.
-  let served = new Set<string>();
+  // [LAW:one-source-of-truth] A due observes the sessions of admitted clicks
+  // whose slots have yet to land. Outliving effects do not keep a menu busy.
+  const pendingClicks = new Map<
+    SessionId,
+    { readonly session: SessionId; count: number }
+  >();
+  // [LAW:one-source-of-truth] Delivery for the origins in the renderer's
+  // latest subscriptions. Reserve a batch before entering its config turns,
+  // which can publish subscriptions of their own. A start clears delivery.
+  let configs = new Map<string, ConfigDelivery>();
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -251,6 +271,10 @@ export function rendererHost(
       recordTaken("session release", release);
       return unanswered(failureOf(thrown), queuedMs);
     }
+    if (input.event.kind === "config") {
+      const key = originKey(input.event.origin);
+      if (configs.has(key)) configs.set(key, "received");
+    }
     const { subscriptions, frames, stored, turnMs, ...answer } = output;
     const turn: TakenTurn = {
       ...answer,
@@ -258,9 +282,9 @@ export function rendererHost(
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
-    const { settled } = await landInSlot(input.event, output);
+    const { settled, configFailure } = await landInSlot(input.event, output);
     return {
-      turn,
+      turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled.finally(
         () => void recordTaken("session release", release),
       ),
@@ -273,7 +297,10 @@ export function rendererHost(
   const landInSlot = async (
     event: Event,
     output: RendererOutput,
-  ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
+  ): Promise<{
+    readonly settled: Promise<readonly EffectOutcome[]>;
+    readonly configFailure: Failure | null;
+  }> => {
     recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect): effect is ConfigChange => effect.kind === "change",
@@ -282,10 +309,28 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
-    const named = took(output.subscriptions, output.frames, output.stored);
+    const requested =
+      event.kind === "context" ? originKey(event.context.requested) : null;
+    const followed = took(
+      output.subscriptions,
+      output.frames,
+      output.stored,
+      requested,
+    );
+    let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
-    for (const origin of named)
-      waited.push((await configInSlot(origin, "config-subscribed")).settled);
+    const unreceived: RenderOrigin[] = [];
+    if (followed.kind === "failed") {
+      if (requested !== null && configs.get(requested) !== "received")
+        configFailure = followed.failure;
+    } else {
+      for (const origin of followed.named) {
+        const config = await configInSlot(origin, "config-subscribed");
+        if (originKey(origin) === requested) configFailure = config.failure;
+        if (config.kind === "unreceived") unreceived.push(origin);
+        waited.push(config.settled);
+      }
+    }
     const moved =
       landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0)
         ? (recordTaken("landed config discovery", () =>
@@ -349,7 +394,8 @@ export function rendererHost(
       Promise.all(reloaded),
       Promise.all(owed),
     ]).then(([caused, , own]) => [...caused.flat(), ...own]);
-    return { settled };
+    for (const origin of unreceived) markUnreceived(origin);
+    return { settled, configFailure };
   };
 
   const landConfig = (
@@ -376,6 +422,12 @@ export function rendererHost(
     }
   };
 
+  const notTaken = (what: string, failure: Failure): void => {
+    const text = `renderer ${name}'s ${what} could not be taken: ${failure.detail}`;
+    log("error", text);
+    world.unheard(text);
+  };
+
   const recordTaken = <Value>(
     what: string,
     operation: () => Value,
@@ -383,9 +435,7 @@ export function rendererHost(
     try {
       return operation();
     } catch (thrown) {
-      const text = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
+      notTaken(what, failureOf(thrown));
       return null;
     }
   };
@@ -400,27 +450,44 @@ export function rendererHost(
     subscriptions: Subscriptions,
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
-  ): readonly RenderOrigin[] => {
+    requested: string | null,
+  ): ConfigFollowing => {
     recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
-    let named: readonly RenderOrigin[] = [];
-    for (const [what, apply] of [
-      ["stored writes", () => collector.stored(stored)],
-      ["subscriptions", () => collector.subscribed(subscriptions)],
-      ["frames", () => collector.frames(frames)],
-      [
-        "configs",
-        () => {
-          world.configs.follow(subscriptions.configs);
-          named = subscriptions.configs.filter(
-            (o) => !served.has(originKey(o)),
-          );
-          served = new Set(subscriptions.configs.map((o) => originKey(o)));
-        },
-      ],
-    ] as const) {
-      recordTaken(what, apply);
+    recordTaken("stored writes", () => collector.stored(stored));
+    recordTaken("subscriptions", () => collector.subscribed(subscriptions));
+    recordTaken("frames", () => collector.frames(frames));
+    const named: RenderOrigin[] = [];
+    try {
+      const next = new Map<string, ConfigDelivery>();
+      for (const origin of subscriptions.configs) {
+        const key = originKey(origin);
+        const before = configs.get(key);
+        // [LAW:no-ambient-temporal-coupling] A new context retries only the
+        // undelivered config it needs. A feed tick cannot poll it.
+        if (
+          before === undefined ||
+          (key === requested && before === "unreceived")
+        ) {
+          named.push(origin);
+          next.set(key, "scheduled");
+        } else next.set(key, before);
+      }
+      // A renderer has already dropped any unlisted config, even when the
+      // host cannot update its discovery subscriptions.
+      configs = next;
+      world.configs.follow(subscriptions.configs);
+      return { kind: "following", named };
+    } catch (thrown) {
+      for (const origin of named) markUnreceived(origin);
+      const failure = failureOf(thrown);
+      notTaken("configs", failure);
+      return { kind: "failed", failure };
     }
-    return named;
+  };
+
+  const markUnreceived = (origin: RenderOrigin): void => {
+    const key = originKey(origin);
+    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
   };
 
   // [LAW:one-source-of-truth] An origin's `config`, made from what discovery
@@ -442,7 +509,7 @@ export function rendererHost(
   const configInSlot = async (
     origin: RenderOrigin,
     why: string,
-  ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
+  ): Promise<ConfigTurn> => {
     let made: Made;
     try {
       made = configMade(origin)();
@@ -454,6 +521,8 @@ export function rendererHost(
     // that waited on it, so the turn that named it did not do what it asked.
     if (made.kind !== "event")
       return {
+        kind: "unreceived",
+        failure: made,
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
@@ -470,7 +539,14 @@ export function rendererHost(
             },
           ]
         : [];
-    return { settled: settled.then((outcomes) => [...threw, ...outcomes]) };
+    const outcomes = settled.then((outcomes) => [...threw, ...outcomes]);
+    return turn.kind === "threw" && turn.turnMs === null
+      ? { kind: "unreceived", failure: turn.failure, settled: outcomes }
+      : {
+          kind: "received",
+          failure: turn.kind === "threw" ? turn.failure : null,
+          settled: outcomes,
+        };
   };
 
   // [LAW:no-silent-failure] Each effect's outcome goes back to the renderer
@@ -565,37 +641,55 @@ export function rendererHost(
   const throughSlot = (
     make: () => Made,
     at: Place,
-  ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> =>
-    inMailbox(async (queuedMs, holds) => {
-      // [LAW:no-silent-failure] A make that threw is the turn's failure.
-      let made: Made;
+    click: SessionId | null = null,
+  ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
+    const held =
+      click === null
+        ? null
+        : (pendingClicks.get(click) ?? { session: click, count: 0 });
+    if (held !== null) {
+      held.count++;
+      pendingClicks.set(held.session, held);
+    }
+    return inMailbox(async (queuedMs, holds) => {
       try {
-        made = make();
-      } catch (thrown) {
-        made = failureOf(thrown);
+        // [LAW:no-silent-failure] A make that threw is the turn's failure.
+        let made: Made;
+        try {
+          made = make();
+        } catch (thrown) {
+          made = failureOf(thrown);
+        }
+        // A new renderer holds no config, even if its start was not made or
+        // could not be answered. The first mailbox place belongs to start.
+        if (
+          at === "first" ||
+          (made.kind === "event" && made.event.kind === "start")
+        )
+          configs.clear();
+        if (made.kind !== "event")
+          return { event: null, slotted: unanswered(made, queuedMs) };
+        holds(made.event.kind);
+        return {
+          event: made.event,
+          slotted: await inSlot(stamped(made), queuedMs),
+        };
+      } finally {
+        // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
+        // select another slot, including when this click was refused.
+        if (held !== null && --held.count === 0)
+          pendingClicks.delete(held.session);
       }
-      // A new renderer holds no config, even if its start was not made or
-      // could not be answered. The first mailbox place belongs to start.
-      if (
-        at === "first" ||
-        (made.kind === "event" && made.event.kind === "start")
-      )
-        served.clear();
-      if (made.kind !== "event")
-        return { event: null, slotted: unanswered(made, queuedMs) };
-      holds(made.event.kind);
-      return {
-        event: made.event,
-        slotted: await inSlot(stamped(made), queuedMs),
-      };
     }, at);
+  };
   // One input from its arrival to its settling: its acts settled after its
   // slot.
   const taken = async (
     make: () => Made,
     at: Place = "last",
+    click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
-    const { event, slotted } = await throughSlot(make, at);
+    const { event, slotted } = await throughSlot(make, at, click);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled },
@@ -603,6 +697,10 @@ export function rendererHost(
   };
   const answer = async (make: () => Made): Promise<HostTurn> =>
     (await taken(make)).turn;
+  const answerClick = async (
+    session: SessionId | null,
+    make: () => Made,
+  ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const recorded =
@@ -636,13 +734,15 @@ export function rendererHost(
           push,
           ...readingsAt(clock),
         });
-        // A push answers in no slot of a turn: each origin it newly names
-        // gets its `config` turn behind it.
-        for (const origin of took(subscriptions, [], stored))
-          unawaited(
-            "config",
-            deliver(configMade(origin), [["why", "config-subscribed"]]),
-          );
+        // [LAW:no-ambient-temporal-coupling] A push's newly named configs
+        // enter before the next queued slot, as they do for an event.
+        const followed = took(subscriptions, [], stored, null);
+        if (followed.kind === "following")
+          for (const origin of followed.named) {
+            const config = await configInSlot(origin, "config-subscribed");
+            if (config.kind === "unreceived") markUnreceived(origin);
+            unawaited("config", config.settled);
+          }
         return answered;
       } catch (thrown) {
         return {
@@ -691,11 +791,9 @@ export function rendererHost(
   // [LAW:single-enforcer] The one timer the renderer's turns are scheduled
   // by: its `due` is an input like any other, made in its slot, and refused
   // once the wake has closed.
-  // [LAW:no-ambient-temporal-coupling] A `due` is the renderer's idle work:
-  // every input that arrives while it waits goes ahead of it, so a click that
-  // has arrived lands before an idle close reads its session idle. The wake
-  // hears the turn once the renderer has answered it: the acts it returned
-  // settle on their own, and hold back no later `due`.
+  // [LAW:no-ambient-temporal-coupling] The mailbox bounds the ordinary turns
+  // ahead of a `due`. Its input carries any pending clicks so the renderer
+  // can leave those sessions' menus alone. Its acts settle outside the slot.
   const wake: RendererWake = new RendererWake({
     clock,
     due: async () => {
@@ -710,8 +808,14 @@ export function rendererHost(
                 message: "the daemon is closing",
                 detail: "a due made after the renderer's wake closed",
               }
-            : { kind: "event", event: { kind: "due" } },
-        "idle",
+            : {
+                kind: "event",
+                event: {
+                  kind: "due",
+                  pendingClicks: [...pendingClicks.keys()],
+                },
+              },
+        "scheduled",
       );
       unawaited("due acts", settled);
       record(event, [], turn);
@@ -725,6 +829,7 @@ export function rendererHost(
   return {
     name,
     answer,
+    answerClick,
     deliver,
     start: recorded("first"),
     ask,
@@ -763,7 +868,7 @@ function sessionOf(event: Event): SessionId | null {
     case "world-state":
       return event.worldState.session;
     case "click":
-      return event.session?.ok ? event.session.id : null;
+      return event.click.scope === "session" ? event.click.session : null;
     case "retire":
     case "effect-done":
       return event.session;

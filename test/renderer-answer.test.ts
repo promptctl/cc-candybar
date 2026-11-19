@@ -21,7 +21,10 @@ import {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type ReaderRenderRequest,
+} from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
@@ -39,7 +42,9 @@ import {
   setUpRender,
   type RendererParts,
 } from "../src/renderer/draw-bar";
-import { renderFailedFrame } from "../src/render/frame";
+import { renderWidth } from "../src/renderer/render-payload";
+import { parseFrame, textOf } from "../src/render/frame";
+import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
@@ -59,12 +64,16 @@ import {
 } from "./helpers/session-rig";
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
-import { rendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
 import type {
   MainRendererParts,
   RendererVerbs,
 } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
+import { TEST_SIGNER } from "./helpers/link-signer";
+import { linksOf } from "../src/click/read";
+import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
 import {
@@ -142,8 +151,12 @@ function renderer(
 // A statusline request for the rig's session, through the host's checkpoint.
 // It passes a flag the client does not know, so its bar lists one error.
 // `pane` is the tmux pane its client reports, if any.
-function checked(pane?: string): CheckedRenderRequest {
-  const configFile = path.join(dir, "config.json5");
+function checked(
+  pane?: string,
+  file = "config.json5",
+  terminal: Pick<ReaderRenderRequest, "termCols" | "termRows"> = {},
+): CheckedRenderRequest {
+  const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
   const { hookData } = requestOf(dir);
   const result = checkRenderRequest(
@@ -155,6 +168,7 @@ function checked(pane?: string): CheckedRenderRequest {
       cwd: PROJECT,
       encoding: "frame",
       env: TEST_ENV,
+      ...terminal,
       ...(pane === undefined
         ? {}
         : { tmux: { socket: "/tmp/tmux.sock", pane, truecolor: null } }),
@@ -448,9 +462,7 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
-  // [LAW:no-silent-failure] A feed's render that threw reaches a lane as a
-  // Frame saying so, with no failure branch in the lane.
-  test("whose render threw is the failure's Frame, a still bar in the error glyph's words, and its answers say so", () => {
+  test("whose render threw names the failure for the host to publish", () => {
     const parts = {
       renderCache: {
         holdView: () => null,
@@ -465,12 +477,9 @@ describe("a feed's frame", () => {
       new Set(["pane"]),
       UNFOLLOWED_FEEDS,
     )!;
-    expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
-    expect(frame.bar.nextChange).toBe(Infinity);
-    expect(JSON.parse(frame.answers.resp)).toMatchObject({
-      ok: false,
-      code: "RENDER_FAILED",
-      error: "the view would not open",
+    expect(frame.frame).toEqual({
+      kind: "failed",
+      message: "the view would not open",
     });
     expect(frame.failure).not.toBeNull();
   });
@@ -512,33 +521,37 @@ describe("a feed's frame", () => {
     expect(parts.effectSessions.getStats().sessions).toBe(1);
   });
 
-  // A frame that fails as it leaves the renderer reached no lane, so the
-  // next frame compares against the last one that did.
-  test("that fails after its draw keeps none of what the draw made", async () => {
+  test("draws clickable addresses without calling the outer signer", async () => {
     const { r, parts, rig } = renderer();
     answered(await request({ r, rig }));
     const view = viewOf(rig)!;
-    const motion = parts.effectSessions.of(SESSION).lastFrame();
-    const failing: RendererParts = {
+    const drawing: RendererParts = {
       ...parts,
       linkSigner: {
         ...parts.linkSigner,
         signLink: () => {
-          throw new Error("the signer is gone");
+          throw new Error("only the host may sign the outer address");
         },
       },
     };
     const frame = renderFrame(
-      failing,
+      drawing,
       SESSION,
       MOVING_FPS,
       READ,
       new Set(),
       UNFOLLOWED_FEEDS,
     );
-    expect(frame?.failure).not.toBeNull();
-    expect(view.frames.get("feed")).toBeUndefined();
-    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+    expect(frame?.failure).toBeNull();
+    if (frame?.frame.kind !== "drawn") throw new Error("the feed drew no bar");
+    const links = linksOf(frame.frame.bar).filter(({ url }) => isBarLink(url));
+    expect(links.length).toBeGreaterThan(0);
+    for (const { url } of links)
+      expect(TEST_SIGNER.openLink(url)).toMatchObject({
+        kind: "failed",
+        reason: expect.stringContaining("no signature"),
+      });
+    expect(view.frames.get("feed")).toBeDefined();
   });
 
   // A feed that opens again draws its first frame, fading nothing in from
@@ -618,7 +631,7 @@ describe("the world state the host hands in", () => {
     expect(t.logged.filter((line) => line.startsWith("error"))).toEqual([]);
   });
 
-  test("a retire whose session teardown throws still drops its world state, so the host's next record for the session is taken", async () => {
+  test("a failed teardown retires the session until another context admits it", async () => {
     const t = renderer();
     await request(t);
     const held = t.rig.served.worldStates.of(SESSION);
@@ -639,8 +652,21 @@ describe("the world state the host hands in", () => {
     expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
       /no world state for session/,
     );
-    // A new record starts again below the seq the dropped document had.
-    await handIn(t.r, { kind: "world-state", worldState: held });
+    const late = answered(
+      await handIn(t.r, { kind: "world-state", worldState: held }),
+    );
+    expect(late.record).toContainEqual(["world-state", "no-live-session"]);
+    expect(() => t.rig.served.worldStates.of(SESSION)).toThrow(
+      /no world state for session/,
+    );
+    // A new context can start below the seq the retired document had.
+    answered(
+      await handIn(t.r, {
+        kind: "context",
+        context: checked(),
+        worldState: held,
+      }),
+    );
     expect(t.rig.served.worldStates.of(SESSION)).toBe(held);
   });
 
@@ -657,6 +683,62 @@ describe("the world state the host hands in", () => {
     });
   });
 });
+
+// The real host/renderer ordering with the test's config discovery on the
+// host side. A barrier finishes any acknowledgement queued by the caller.
+function productionAnswer(
+  t: ReturnType<typeof renderer>,
+  seen: Event[],
+  override: Partial<Pick<HostWorld["configs"], "follow" | "snapshotOf">> = {},
+  closing = new AbortController().signal,
+) {
+  const { discovery } = t.rig.cache.configs;
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      hearingEvents(t.r, ({ event }) => {
+        if (event.kind !== "viewers") seen.push(event);
+      }),
+    ),
+    () => {},
+    unfollowedCollector(t.rig.served.collector),
+    {
+      ...NO_ACTS,
+      unheard: (text) => void t.logged.push(text),
+      configs: {
+        ...NO_ACTS.configs,
+        follow: discovery.follow.bind(discovery),
+        snapshotOf: discovery.snapshotOf.bind(discovery),
+        ...override,
+      },
+    },
+  );
+  return Object.assign(
+    () =>
+      answerStatusline(
+        host,
+        publishingFrames(TEST_SIGNER),
+        t.rig.served.collector,
+        systemTimekeeper,
+        closing,
+        () => {},
+        checkoutLocation,
+        checked(),
+        TEST_ENVIRONMENT,
+        REQUEST,
+        systemTimekeeper.monotonic() + 5000,
+        [],
+      ),
+    {
+      drain: () =>
+        host.answer(() => ({
+          kind: "event",
+          event: { kind: "viewers", viewers: {} },
+        })),
+    },
+  );
+}
 
 describe("the session's config, ahead of its request", () => {
   test("opens the session's view and names what it reads, with no effect", async () => {
@@ -696,6 +778,7 @@ describe("the session's config, ahead of its request", () => {
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
+      publishingFrames(TEST_SIGNER),
       t.rig.served.collector,
       systemTimekeeper,
       new AbortController().signal,
@@ -718,6 +801,149 @@ describe("the session's config, ahead of its request", () => {
     // context the opening was for carried.
     expect(facts[0]).toEqual(["sid", SESSION]);
     expect(new Map(facts).get("badArgs")).toMatch(/--bogus/);
+  });
+
+  test("a cold render waits for config in its context slot, then owns one present and acknowledgement", async () => {
+    const t = renderer();
+    const seen: Event[] = [];
+    const ask = productionAnswer(t, seen);
+    const reply = await ask();
+    expect(reply.resp.ok).toBe(true);
+
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "config",
+      "request",
+    ]);
+    expect(seen.at(-1)).toMatchObject({ id: REQUEST });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.filter((event) => event.kind === "effect-done")).toEqual([
+      expect.objectContaining({
+        kind: "effect-done",
+        session: SESSION,
+        outcome: { kind: "ok" },
+      }),
+    ]);
+    expect(t.recorded).toHaveLength(1);
+  });
+
+  test("a failed config ends the original cold render before it waits or draws", async () => {
+    const t = renderer();
+    t.rig.cache.configure = () => {
+      throw new Error("config load broke");
+    };
+    const waits = jest.spyOn(t.rig.served.collector, "settled");
+    const seen: Event[] = [];
+    const ask = productionAnswer(t, seen);
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: its config turn: config load broke",
+    });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual(["context", "config"]);
+    expect(waits).not.toHaveBeenCalled();
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("closing during preparation ends the request without a present", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    const closing = new AbortController();
+    const ask = productionAnswer(
+      t,
+      seen,
+      {
+        snapshotOf: (origin) => {
+          closing.abort();
+          return discovery.snapshotOf(origin);
+        },
+      },
+      closing.signal,
+    );
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: the daemon closed: render refused",
+    });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual(["context", "config"]);
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("a config discovery failure answers the first request and the next request can configure", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    let first = true;
+    const ask = productionAnswer(t, seen, {
+      follow: (origins) => {
+        if (first) {
+          first = false;
+          throw new Error("config discovery broke");
+        }
+        discovery.follow(origins);
+      },
+    });
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: its config turn: config discovery broke",
+    });
+    expect(seen.map((event) => event.kind)).toEqual(["context"]);
+    const ready = await ask();
+    expect(ready.resp.ok).toBe(true);
+    ready.settled(false);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "context",
+      "config",
+      "request",
+      "effect-done",
+    ]);
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("a snapshot that never reached the renderer can be served at the next context", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    let attempts = 0;
+    const ask = productionAnswer(t, seen, {
+      snapshotOf: (origin) => {
+        if (++attempts === 1) {
+          throw new Error("config snapshot could not be sent");
+        }
+        return discovery.snapshotOf(origin);
+      },
+    });
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error:
+        "renderer main: its config turn: config snapshot could not be sent",
+    });
+    expect(seen.map((event) => event.kind)).toEqual(["context"]);
+    await ask.drain();
+    expect(attempts).toBe(1);
+    const ready = await ask();
+    expect(ready.resp.ok).toBe(true);
+    ready.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "context",
+      "config",
+      "request",
+      "effect-done",
+    ]);
+    expect(attempts).toBe(2);
+    expect(t.recorded).toHaveLength(1);
   });
 
   test("a request with no config before it is refused, naming the session", async () => {
@@ -751,6 +977,23 @@ describe("an event that waits for its origin's config", () => {
     expect(Object.keys(configured.subscriptions.sources)).toEqual([SESSION]);
   });
 
+  test("a premature request owns no present and a later request is answered in its own turn", async () => {
+    const t = renderer();
+    const context = checked();
+    const waiting = answered(await contextTurn(t, context));
+    const request = { kind: "request", id: REQUEST, context } as const;
+    const early = threw(await handIn(t.r, request));
+    expect(early.failure.message).toMatch(/config is pending for session/);
+    expect(early.effects).toEqual([]);
+
+    const configured = answered(await configsNamed(t, waiting));
+    expect(configured.effects).toEqual([]);
+    const drawn = answered(await handIn(t.r, request));
+    const present = presentOf(drawn.effects);
+    expect(present.request).toBe(REQUEST);
+    answered(await done(t.r, present, true));
+  });
+
   test("a world state handed in while its context is parked is taken in its order, and the config turn opens the view at it", async () => {
     const t = renderer();
     const parked = answered(await contextTurn(t, checked()));
@@ -759,6 +1002,21 @@ describe("an event that waits for its origin's config", () => {
     answered(await handIn(t.r, { kind: "world-state", worldState: next }));
     answered(await configsNamed(t, parked));
     expect(viewOf(t.rig)?.source.facts()).toBe(next);
+  });
+
+  test("config arriving for a previous origin leaves the opening at the newest context", async () => {
+    const t = renderer();
+    const first = checked("%1", "first.json5");
+    const current = checked("%2");
+    const firstWaiting = answered(await contextTurn(t, first));
+    const currentWaiting = answered(await contextTurn(t, current));
+    expect(currentWaiting.subscriptions.configs).toEqual([current.requested]);
+
+    answered(await configsNamed(t, firstWaiting));
+    expect(viewOf(t.rig)).toBeNull();
+
+    answered(await configsNamed(t, currentWaiting));
+    expect(viewOf(t.rig)?.facts()).toBe(current);
   });
 
   test("a parked context its session retired before the config came opens nothing, and the origin is let go", async () => {
@@ -807,6 +1065,7 @@ describe("two requests of one session at different keys", () => {
     );
     t.rig.providers.tmuxService.declare = tmux.declare as never;
     const requests: WorldState[] = [];
+    const drawings: RequestId[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
       systemTimekeeper,
@@ -814,6 +1073,7 @@ describe("two requests of one session at different keys", () => {
         hearingEvents(t.r, (input) => {
           if (input.event.kind === "context")
             requests.push(input.event.worldState);
+          if (input.event.kind === "request") drawings.push(input.event.id);
         }),
       ),
       () => {},
@@ -824,12 +1084,13 @@ describe("two requests of one session at different keys", () => {
     const ask = (pane: string, id: number) =>
       answerStatusline(
         host,
+        publishingFrames(TEST_SIGNER),
         t.rig.served.collector,
         systemTimekeeper,
         new AbortController().signal,
         () => {},
         checkoutLocation,
-        checked(pane),
+        checked(pane, `${id}.json5`),
         TEST_ENVIRONMENT,
         id as RequestId,
         systemTimekeeper.monotonic() + 10_000,
@@ -856,7 +1117,11 @@ describe("two requests of one session at different keys", () => {
     expect(firstAnswered).toBe(false);
     landings.get("%2")!();
     const answered = await Promise.all([first, second]);
-    for (const { resp } of answered) expect(resp).toMatchObject({ ok: true });
+    for (const answer of answered) {
+      expect(answer.resp).toMatchObject({ ok: true });
+      answer.settled(true);
+    }
+    expect([...drawings].sort()).toEqual([1, 2]);
     const view = viewOf(t.rig)!;
     expect(view.facts().hints.tmux?.pane).toBe("%2");
     expect(view.source.facts().builtins.tmux).toMatchObject({
@@ -866,6 +1131,158 @@ describe("two requests of one session at different keys", () => {
   });
 });
 
+test("overlapping requests draw the latest pane with each client's width, then a feed and a regular request use the live width", async () => {
+  const t = renderer();
+  const narrow = checked("%1", "config.json5", { termCols: 80, termRows: 4 });
+  const wide = checked("%2", "config.json5", { termCols: 200, termRows: 18 });
+  if (wide.requested.target.path === undefined)
+    throw new Error("test needs a config file");
+  fs.writeFileSync(
+    wide.requested.target.path,
+    `{
+    globals: { autoWrap: true },
+    variables: {
+      paneSession: { kind: "input", path: "tmux.session", default: "unknown" },
+      width: { kind: "template", template: "{{ .term.cols }}" },
+    },
+    segments: {
+      geometry: { template: "width={{ .width }} pane={{ .tmux.pane }} world={{ .paneSession }}" },
+      longA: { template: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+      longB: { template: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+    },
+    root: { h: ["geometry", "longA", "longB"] },
+  }`,
+  );
+
+  // The test releases the older request last, after the newer pane's read.
+  const landings = new Map<string, () => void>();
+  const tmux = fakeTmux(
+    (_holds, hint) =>
+      new Promise((resolve) =>
+        landings.set(hint.pane, () => resolve(ok(`on ${hint.pane}`))),
+      ),
+  );
+  t.rig.providers.tmuxService.declare = tmux.declare as never;
+  const contexts: WorldState[] = [];
+  const drawings: RequestId[] = [];
+  const collector = t.rig.served.collector;
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      hearingEvents(t.r, ({ event }) => {
+        if (event.kind === "context") contexts.push(event.worldState);
+        if (event.kind === "request") drawings.push(event.id);
+      }),
+    ),
+    () => {},
+    unfollowedCollector(collector),
+    { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+  );
+  t.rig.served.route(host);
+  let resumeOlder = (): void => {};
+  const olderCanDraw = new Promise<void>((resolve) => {
+    resumeOlder = resolve;
+  });
+  let olderSourcesReady = false;
+  const earlierCollector = {
+    requested: collector.requested.bind(collector),
+    holding: collector.holding.bind(collector),
+    settled: async (...args: Parameters<typeof collector.settled>) => {
+      await collector.settled(...args);
+      olderSourcesReady = true;
+      await olderCanDraw;
+    },
+  };
+  const ask = (
+    context: CheckedRenderRequest,
+    id: number,
+    sources: typeof earlierCollector,
+  ) =>
+    answerStatusline(
+      host,
+      publishingFrames(TEST_SIGNER),
+      sources,
+      systemTimekeeper,
+      new AbortController().signal,
+      () => {},
+      checkoutLocation,
+      context,
+      TEST_ENVIRONMENT,
+      id as RequestId,
+      systemTimekeeper.monotonic() + 10_000,
+      [],
+    );
+
+  const first = ask(narrow, 1, earlierCollector);
+  const second = ask(wide, 2, collector);
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(contexts.map((w) => w.builtins.tmux.kind)).toEqual([
+    "pending",
+    "pending",
+  ]);
+  landings.get("%1")!();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(olderSourcesReady).toBe(false);
+  landings.get("%2")!();
+  const newer = await second;
+  resumeOlder();
+  const older = await first;
+  expect(drawings).toEqual([2, 1]);
+  const expectFrame = (resp: typeof newer.resp) => {
+    if (!resp.ok || !("frame" in resp))
+      throw new Error(`expected a frame: ${JSON.stringify(resp)}`);
+    return parseFrame(resp.frame);
+  };
+  const wideFrame = expectFrame(newer.resp);
+  const narrowFrame = expectFrame(older.resp);
+  const label = (request: CheckedRenderRequest) =>
+    `width=${renderWidth(request.hints)} pane=%2 world=on %2`;
+  expect(textOf(narrowFrame)).toContain(label(narrow));
+  expect(textOf(wideFrame)).toContain(label(wide));
+  expect(narrowFrame.rows.length).toBeGreaterThan(wideFrame.rows.length);
+  for (const answer of [newer, older]) answer.settled(true);
+
+  const view = viewOf(t.rig)!;
+  expect(view.facts().hints).toMatchObject({
+    tmux: { pane: "%2" },
+    termCols: 200,
+  });
+  expect(view.source.facts().builtins.tmux).toMatchObject({
+    kind: "ok",
+    value: { session: "on %2" },
+  });
+  expect(view.source.payload().term.cols).toBe(renderWidth(wide.hints));
+  const feed = renderFrame(
+    t.parts,
+    SESSION,
+    MOVING_FPS,
+    READ,
+    new Set(),
+    UNFOLLOWED_FEEDS,
+  );
+  if (feed?.frame.kind !== "drawn") throw new Error("the feed did not draw");
+  expect(textOf(feed.frame.bar)).toContain(label(wide));
+
+  const again = await ask(wide, 3, collector);
+  expect(textOf(expectFrame(again.resp))).toContain(label(wide));
+  again.settled(true);
+});
+
+test("diagnostics use the requesting client's rows or its own default ceiling", async () => {
+  const t = renderer();
+  const current = checked(undefined, "config.json5", { termRows: 18 });
+  await configure(t, current);
+  for (const [terminal, rows] of [
+    [{ termRows: 4 }, 4],
+    [{}, MAX_VIEWER_ROWS],
+  ] as const) {
+    using setup = setUpRender(t.parts, current, READ, [], terminal);
+    const { drawn } = drawRender(t.parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+    expect(drawn.geometry.rows).toBe(rows);
+  }
+});
+
 describe("a click", () => {
   // A click on the rig's session's link, delivered by the CLI.
   const click = (
@@ -873,11 +1290,83 @@ describe("a click", () => {
     live: CheckedRenderRequest | null = null,
   ): Event => ({
     kind: "click",
-    verb,
-    value: "",
-    session: { ok: true, id: SESSION },
+    click: { scope: "session", verb, session: SESSION, steps: [] },
     arrival: { via: "link", delivery: { kind: "cli" } },
     context: live === null ? null : heardContextOf(live),
+  });
+
+  test("a parked click waits for the current origin and reads its latest context", async () => {
+    const seen: Array<SessionContext | null> = [];
+    const t = renderer({
+      ...NO_VERBS,
+      click: (_click, facts) => void seen.push(facts.context),
+    });
+    const first = checked("%1", "first.json5");
+    const current = checked("%2");
+    const firstWaiting = answered(await contextTurn(t, first));
+    const waiting = answered(await handIn(t.r, click("act")));
+    expect(waiting.record).toContainEqual(["parked", "click"]);
+
+    const currentWaiting = answered(await contextTurn(t, current));
+    answered(await configsNamed(t, firstWaiting));
+    expect(seen).toEqual([]);
+    answered(await configsNamed(t, currentWaiting));
+    expect(seen).toEqual([heardContextOf(current)]);
+  });
+
+  test("failed config settles parked clicks and a later config does not replay them", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, click: acted });
+    const context = checked();
+    answered(await contextTurn(t, context));
+    answered(await handIn(t.r, click("act", context)));
+    const { discovery } = t.rig.cache.configs;
+    discovery.follow([context.requested]);
+    const config = discovery.snapshotOf(context.requested);
+    if (config === null) throw new Error("expected the followed config");
+    const configEvent = {
+      kind: "config",
+      origin: context.requested,
+      config,
+    } as const;
+
+    const configureCache = t.rig.cache.configure.bind(t.rig.cache);
+    t.rig.cache.configure = () => {
+      throw new Error("config turn failed");
+    };
+    const failure = threw(await handIn(t.r, configEvent));
+    expect(failure.failure.message).toBe("config turn failed");
+    expect(failure.record).toEqual([]);
+    expect(t.parts.sessionState.get(SESSION, "click.error")).toContain(
+      "config turn failed",
+    );
+    expect(
+      threw(await handIn(t.r, click("act", context))).failure.message,
+    ).toBe("config turn failed");
+    expect(acted).not.toHaveBeenCalled();
+
+    t.rig.cache.configure = configureCache;
+    answered(await handIn(t.r, configEvent));
+    expect(viewOf(t.rig)?.facts()).toBe(context);
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
+    expect(acted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retirement cancels a parked click and the late config runs no handler", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, click: acted });
+    const context = checked();
+    const waiting = answered(await contextTurn(t, context));
+    answered(await handIn(t.r, click("act", context)));
+
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: SESSION }),
+    );
+    expect(retired.subscriptions.configs).toEqual([]);
+    answered(await configsNamed(t, waiting));
+    expect(viewOf(t.rig)).toBeNull();
+    expect(acted).not.toHaveBeenCalled();
   });
 
   test("answers with what the open views read once its handler has run", async () => {
@@ -886,7 +1375,7 @@ describe("a click", () => {
     let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      click: () => act(),
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -907,7 +1396,7 @@ describe("a click", () => {
     let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      click: () => act(),
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -927,12 +1416,9 @@ describe("a click", () => {
     let seen: SessionContext | null | undefined;
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) =>
-        verb === "act"
-          ? (_value, facts) => {
-              seen = facts.context;
-            }
-          : undefined,
+      click: (_click, facts) => {
+        seen = facts.context;
+      },
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -945,15 +1431,6 @@ describe("a click", () => {
     answered(await handIn(t.r, click("act", latest)));
     expect(seen).toEqual(heardContextOf(latest));
   });
-
-  test("of a verb the renderer does not have is its bad request", async () => {
-    const t = renderer();
-    const { failure } = threw(await handIn(t.r, click("nope")));
-    expect(failure).toMatchObject({
-      kind: "bad-request",
-      message: "unknown click verb: nope",
-    });
-  });
 });
 
 describe("the idle close", () => {
@@ -961,7 +1438,6 @@ describe("the idle close", () => {
     const closed: Array<[string, number]> = [];
     const t = renderer({
       ...NO_VERBS,
-      handler: () => undefined,
       closeIdle: (sessionId, _latest, { idleS }) => {
         closed.push([sessionId, idleS]);
       },

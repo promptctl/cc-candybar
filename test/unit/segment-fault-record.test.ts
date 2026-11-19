@@ -1,3 +1,4 @@
+import { admitClick } from "../../src/click/wire";
 // [LAW:verifiable-goals] A placement that cannot draw shows its ⚠ cell, and
 // its whole message reaches the two places a reader without the cell looks:
 // the bar's ⚠ list, whose viewer shows it, and the turn record, whose
@@ -205,9 +206,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   answered(
     await handIn(r, {
       kind: "click",
-      verb,
-      value,
-      session: { ok: true, id: session },
+      click: admitClick(verb, value),
       arrival: { via: "link", delivery: { kind: "cli" } },
       context: { session, durable: { origin: context.requested }, live: context },
     }),

@@ -4,6 +4,8 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { reaction } from "mobx";
+import { partsOf } from "../src/dsl/parts";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { linksOf } from "../src/click/read";
@@ -12,7 +14,6 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
-import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick, CLICK_VERBS } from "./helpers/click";
 import {
@@ -77,6 +78,46 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   };
   return { compiled, registry, errors, warnings, draw };
 }
+
+test("a failed width override restores the template value and leaves the source key unchanged", () => {
+  const config = parseAndValidate(
+    "<test>",
+    `{
+      variables: {
+        width: { kind: "template", template: "{{ .term.cols }}" },
+        keyed: { kind: "shell", command: "echo ok", cache: { key: "{{ .width }}" } },
+      },
+      segments: { shown: { template: "{{ .width }}" } },
+      root: { h: ["shown"] },
+    }`,
+  );
+  const view = viewOf(config);
+  view.draw({}, A);
+  const { registry, compiled } = view;
+  const store = registry.variableStore;
+  const keep = registry.subscriptions();
+  expect(keep).toHaveLength(1);
+  const published: unknown[] = [];
+  const stop = reaction(
+    () => registry.subscriptions(),
+    (subscriptions) => published.push(subscriptions),
+  );
+  try {
+    expect(() =>
+      partsOf(compiled, store).withTerminalWidth(80, () => {
+        expect(store.read("width")).toBe("80");
+        throw new Error("draw failed");
+      }),
+    ).toThrow("draw failed");
+    expect(store.read("width")).toBe(String(OPTS.width));
+    expect(registry.subscriptions()).toEqual(keep);
+    expect(published).toEqual([]);
+    expect(textOf(view.draw({}, B).frame)).toContain(String(OPTS.width));
+  } finally {
+    stop();
+    registry.dispose();
+  }
+});
 
 describe("a frame evaluates the parts whose inputs moved", () => {
   const CONFIG = parseAndValidate(

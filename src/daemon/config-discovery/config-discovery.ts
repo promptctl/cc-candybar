@@ -3,10 +3,9 @@
 // when that may have moved. The renderer reads every config text from what
 // this hands it, and opens no file. (docs/design/host-and-renderer.md §6, §7)
 //
-// [LAW:one-source-of-truth] A snapshot is a fact about an origin, never a
-// session's: the origins followed are exactly the set the renderer's latest
-// output named, keyed by `originKey`, and one it stops naming is dropped
-// with its watch.
+// [LAW:one-source-of-truth] A snapshot is a fact about an origin. Every
+// renderer whose latest output names that origin holds the same snapshot
+// and watch, until the last renderer lets it go.
 
 import path from "node:path";
 import { originKey, type RenderOrigin } from "../../config-hint.js";
@@ -21,11 +20,14 @@ import {
   type DiscoveryWorld,
   type SharedFacts,
 } from "./discover.js";
+import type { DiscoveryFiles } from "./discovery-files.js";
 import { REPO_PLUGIN_DIR } from "./plugin-folders.js";
 import { repoConfigsPath } from "./repo-configs.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
+import type { RendererName } from "../foundations/renderer-name.js";
+import { failureOf } from "../foundations/verb-error.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -36,7 +38,7 @@ import {
 
 // One origin followed: what discovery found there last, its digest, and the
 // watch over where that can change.
-interface Followed {
+interface ObservedOrigin {
   readonly origin: RenderOrigin;
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
@@ -44,16 +46,35 @@ interface Followed {
   readonly filePaths: readonly string[];
 }
 
+interface Followed extends ObservedOrigin {
+  readonly renderers: Set<RendererName>;
+}
+
+// The config facts available to one renderer and the demands it can replace.
+export interface RendererConfigs {
+  follow(origins: readonly RenderOrigin[]): void;
+  snapshotOf(origin: RenderOrigin): ConfigSnapshot | null;
+  path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
+  repoDir(origin: RenderOrigin): string | null | undefined;
+  landed(files: readonly string[], answered: boolean): readonly RenderOrigin[];
+}
+
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
-  readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+  readonly watchers: Pick<WatcherRegistry, "batch">;
+  readonly files?: DiscoveryFiles;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
-  // moved go: the renderer's `config` turns.
-  readonly moved: (origins: readonly RenderOrigin[]) => void;
+  // moved go: each live holder's `config` turns.
+  readonly moved: (
+    renderer: RendererName,
+    origins: readonly RenderOrigin[],
+  ) => void;
 }
 
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
+  private readonly watches: ReturnType<WatcherRegistry["batch"]>;
+  private readonly invalidated = new Set<string>();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -61,68 +82,94 @@ export class ConfigDiscovery {
   private closed = false;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
+    // [LAW:single-enforcer] One watch delivery window for all config origins
+    // means one discovery batch for the paths an event made relevant.
+    this.watches = deps.watchers.batch(() => {
+      const keys = [...this.invalidated];
+      this.invalidated.clear();
+      this.heard(keys, "config-watch");
+    });
     const answers = repoConfigsPath(deps.stateDir);
-    this.answersWatch = deps.watchers.acquire(
+    this.answersWatch = this.watches.acquire(
       `repo-configs:${answers}`,
       { dirs: [], polled: [answers] },
-      () => this.heard(this.asking(), "answers-watch"),
+      () => {
+        for (const key of this.asking()) this.invalidated.add(key);
+      },
     );
   }
 
-  // [LAW:single-enforcer] The origins followed become exactly `origins`. Each
-  // new one is discovered, all in one batch over one read of what origins
-  // share, and its watch acquired before any let go is released, so a
+  // [LAW:single-enforcer] Use the same holder to name demands, send a config
+  // turn and resolve edits. A queued reload for a dropped origin cannot read
+  // through another renderer's hold.
+  forRenderer(renderer: RendererName): RendererConfigs {
+    const held = (origin: RenderOrigin): ConfigSnapshot | undefined => {
+      const followed = this.followed.get(originKey(origin));
+      return followed?.renderers.has(renderer) ? followed.snapshot : undefined;
+    };
+    return {
+      follow: (origins) => this.follow(renderer, origins),
+      snapshotOf: (origin) => held(origin) ?? null,
+      path: (origin, role) => {
+        const snapshot = held(origin);
+        return snapshot === undefined
+          ? undefined
+          : (snapshot.chain.find((layer) => layer.role === role)?.path ?? null);
+      },
+      repoDir: (origin) => {
+        const snapshot = held(origin);
+        return snapshot === undefined
+          ? undefined
+          : (snapshot.repo?.dir ?? null);
+      },
+      landed: (files, answered) => this.landed(renderer, files, answered),
+    };
+  }
+
+  // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
+  // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
-  follow(origins: readonly RenderOrigin[]): void {
+  private follow(
+    renderer: RendererName,
+    origins: readonly RenderOrigin[],
+  ): void {
     if (this.closed) return;
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
-    const gone = [...this.followed].filter(([key]) => !wanted.has(key));
-    if (fresh.length + gone.length === 0) return;
     if (fresh.length > 0) {
-      const shared = readShared(this.deps);
+      const shared = readShared(this.deps, this.deps.files);
       for (const [key, origin] of fresh)
-        this.followed.set(key, this.discovered(origin, shared, null));
+        this.followed.set(key, {
+          ...this.discovered(origin, shared, null),
+          renderers: new Set([renderer]),
+        });
     }
-    for (const [key, { watch }] of gone) {
+    let released = 0;
+    for (const [key, { renderers, watch }] of this.followed) {
+      if (wanted.has(key)) {
+        renderers.add(renderer);
+        continue;
+      }
+      if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
       watch.handle.release();
+      released++;
     }
+    if (fresh.length + released === 0) return;
     this.deps.log(
       "info",
-      `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${gone.length}`,
+      `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`,
     );
   }
 
-  // What discovery found at `origin` last: null while it is not followed.
-  snapshotOf(origin: RenderOrigin): ConfigSnapshot | null {
-    return this.followed.get(originKey(origin))?.snapshot ?? null;
-  }
-
-  // [LAW:single-enforcer] The file `role` names in `origin`'s chain, as
-  // discovery last found it: what a write naming that layer lands in.
-  // Undefined while the origin is not followed; null when its chain holds no
-  // such layer.
-  path(origin: RenderOrigin, role: LayerRole): string | null | undefined {
-    const followed = this.followed.get(originKey(origin));
-    if (followed === undefined) return undefined;
-    return followed.snapshot.chain.find((l) => l.role === role)?.path ?? null;
-  }
-
-  // The repository `origin`'s directories ask about: undefined while the
-  // origin is not followed, null when they hold nothing to ask about.
-  repoDir(origin: RenderOrigin): string | null | undefined {
-    const followed = this.followed.get(originKey(origin));
-    return followed === undefined
-      ? undefined
-      : (followed.snapshot.repo?.dir ?? null);
-  }
-
-  // A turn's changes landed on `files`, and, when `answered`, answers to the
-  // trust book: every origin whose chain holds one of the files, or, for an
-  // answer, every origin with a repository to ask about, is discovered again.
-  // Answers those whose snapshot moved.
-  landed(files: readonly string[], answered: boolean): readonly RenderOrigin[] {
+  // Rediscover origins watching one of the files the turn actually wrote, or
+  // asking about repository trust when the turn answered the book.
+  // The writer reloads in this slot; the other holders get their own turns.
+  private landed(
+    writer: RendererName,
+    files: readonly string[],
+    answered: boolean,
+  ): readonly RenderOrigin[] {
     const changed = new Set(files);
     const touched = [...this.followed]
       .filter(
@@ -131,7 +178,7 @@ export class ConfigDiscovery {
           filePaths.some((file) => changed.has(file)),
       )
       .map(([key]) => key);
-    return this.rediscovered(touched, "landed");
+    return this.publish(this.rediscovered(touched, "landed"), writer);
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
@@ -143,6 +190,7 @@ export class ConfigDiscovery {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.invalidated.clear();
     this.answersWatch.release();
     for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
@@ -159,8 +207,25 @@ export class ConfigDiscovery {
   // moved go to the renderer.
   private heard(keys: readonly string[], why: string): void {
     if (this.closed) return;
-    const moved = this.rediscovered(keys, why);
-    if (moved.length > 0) this.deps.moved(moved);
+    this.publish(this.rediscovered(keys, why), null);
+  }
+
+  // [LAW:single-enforcer] The snapshot's current holders define recipients
+  // for both a watch and a landed write. Only the writer already has a slot.
+  private publish(
+    moved: readonly Followed[],
+    writer: RendererName | null,
+  ): readonly RenderOrigin[] {
+    const byRenderer = new Map<RendererName, RenderOrigin[]>();
+    for (const { origin, renderers } of moved)
+      for (const renderer of renderers) {
+        const origins = byRenderer.get(renderer) ?? [];
+        origins.push(origin);
+        byRenderer.set(renderer, origins);
+      }
+    for (const [renderer, origins] of byRenderer)
+      if (renderer !== writer) this.deps.moved(renderer, origins);
+    return writer === null ? [] : (byRenderer.get(writer) ?? []);
   }
 
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
@@ -169,16 +234,29 @@ export class ConfigDiscovery {
   private rediscovered(
     keys: readonly string[],
     why: string,
-  ): readonly RenderOrigin[] {
+  ): readonly Followed[] {
     if (keys.length === 0) return [];
-    const shared = readShared(this.deps);
-    const moved: RenderOrigin[] = [];
+    const shared = readShared(this.deps, this.deps.files);
+    const moved: Followed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
-      const now = this.discovered(was.origin, shared, was.watch);
-      this.followed.set(key, now);
-      if (now.digest !== was.digest) moved.push(now.origin);
+      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
+      // last snapshot for a retry. Its failure cannot suppress a sibling's
+      // already-observed change or reverse a successful write.
+      try {
+        const now = {
+          ...this.discovered(was.origin, shared, was.watch),
+          renderers: was.renderers,
+        };
+        this.followed.set(key, now);
+        if (now.digest !== was.digest) moved.push(now);
+      } catch (thrown) {
+        this.deps.log(
+          "error",
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
+        );
+      }
     }
     this.deps.log(
       "info",
@@ -194,7 +272,7 @@ export class ConfigDiscovery {
     origin: RenderOrigin,
     shared: SharedFacts,
     held: HeldWatch | null,
-  ): Followed {
+  ): ObservedOrigin {
     const found = discover(
       {
         projectDir: origin.projectDir,
@@ -216,9 +294,9 @@ export class ConfigDiscovery {
     // whole chain, so a higher-precedence file appearing supersedes a lower
     // one; which path changed does not filter it, as the origin already
     // scopes the watch set.
-    const { watch, move } = this.deps.watchers.follow(held, spec, () =>
-      this.heard([key], "config-watch"),
-    );
+    const { watch, move } = this.watches.follow(held, spec, () => {
+      this.invalidated.add(key);
+    });
     if (move === "rebound") this.bound(origin, paths);
     const snapshot: ConfigSnapshot = {
       ...found.snapshot,

@@ -43,7 +43,8 @@ import { collected } from "./helpers/collected";
 import {
   projectSources,
   renderOptionsOf,
-  sourcesFactOf,
+  sourceFieldsOf,
+  sourceSummaryOf,
 } from "../src/renderer/render-payload";
 import {
   sessionSource,
@@ -66,6 +67,7 @@ import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
+import { heardRequest } from "./helpers/click";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
@@ -86,6 +88,7 @@ import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
 import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
@@ -300,13 +303,13 @@ function rig(): Rig {
     collector: served.collector,
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
-      const facts = viewFacts(dir, sid);
+      const facts = heardRequest(sid, dir);
       return served.config(facts, () =>
         cache.holdSession(configs.at(dir, dir, configFile), facts),
       );
     },
     inTurn: (configFile, read) => {
-      const facts = viewFacts(dir, "s1");
+      const facts = heardRequest("s1", dir);
       let seen: ReturnType<typeof read> | undefined;
       const held = served.config(facts, () => {
         const opened = cache.holdSession(
@@ -902,6 +905,7 @@ function statusline(r: Rig, configFile: string) {
     const facts: RequestFacts = [];
     const answered = await answerStatusline(
       host,
+      publishingFrames(TEST_SIGNER),
       r.collector,
       systemTimekeeper,
       new AbortController().signal,
@@ -984,6 +988,8 @@ describe("the session subscribes to every source the config declares", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending and failed ones", () => {
+    const sourcesFactOf = (...args: Parameters<typeof sourceSummaryOf>) =>
+      sourceFieldsOf(sourceSummaryOf(...args));
     expect(sourcesFactOf([], new Map(), { sources: {}, runs: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",

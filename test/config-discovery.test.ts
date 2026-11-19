@@ -10,12 +10,28 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
+import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
 import { originKey, type RenderOrigin } from "../src/config-hint";
-import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import { discover, readShared } from "../src/daemon/config-discovery/discover";
 import {
+  diskFiles,
+  type DiscoveryFiles,
+} from "../src/daemon/config-discovery/discovery-files";
+import {
+  ConfigDiscovery,
+  type RendererConfigs,
+} from "../src/daemon/config-discovery/config-discovery";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+  type RendererName,
+} from "../src/daemon/foundations/renderer-name";
+import {
+  DEBOUNCE_MS,
+  POLL_MS,
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
@@ -59,7 +75,7 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig() {
+function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -69,26 +85,35 @@ function discoveryRig() {
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+    clock,
     counters,
     logger: () => {},
   });
   const moved: string[] = [];
   const logged: string[] = [];
-  const discovery = new ConfigDiscovery({
+  const delivered: Array<readonly [RendererName, string]> = [];
+  const service = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: stateDir(HOST),
     watchers,
+    files,
     log: (_level, line) => logged.push(line),
-    moved: (origins) => moved.push(...origins.map(originKey)),
+    moved: (renderer, origins) => {
+      for (const origin of origins) {
+        const key = originKey(origin);
+        moved.push(key);
+        delivered.push([renderer, key]);
+      }
+    },
   });
   cleanups.push(() => watchers.closeAll());
-  cleanups.push(() => discovery.close());
-  return { discovery, counters, moved, logged };
+  cleanups.push(() => service.close());
+  const discovery = service.forRenderer(MAIN_RENDERER);
+  return { service, discovery, counters, moved, logged, delivered };
 }
 
 const textOfLayer = (
-  discovery: ConfigDiscovery,
+  discovery: RendererConfigs,
   origin: RenderOrigin,
   file: string,
 ): string | null => {
@@ -191,11 +216,285 @@ test("an answer to the trust book moves every origin with a repository to ask ab
 });
 
 test("once closed, it follows nothing and lets every watch go", () => {
-  const { discovery, counters } = discoveryRig();
+  const { service, discovery, counters } = discoveryRig();
   const { origin } = named("a");
   discovery.follow([origin]);
-  discovery.close();
+  service.close();
   expect(counters.watchersClosed).toBe(counters.watchersOpened);
   discovery.follow([origin]);
   expect(discovery.snapshotOf(origin)).toBeNull();
+});
+
+test("two named renderers share one read and watch until the last releases", async () => {
+  const { origin, file } = named("shared-origin");
+  const name = rendererNameOf("next");
+  const key = originKey(origin);
+  let reads = 0;
+  const {
+    service,
+    discovery: first,
+    counters,
+    delivered,
+  } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (read === file) reads++;
+      return diskFiles.text(read);
+    },
+  });
+  const second = service.forRenderer(name);
+  first.follow([origin]);
+  const opened = counters.watchersOpened;
+  const closed = counters.watchersClosed;
+  expect(first.snapshotOf(origin)).not.toBeNull();
+  expect(second.snapshotOf(origin)).toBeNull();
+  second.follow([{ ...origin, target: { ...origin.target } }]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+  expect(counters.watchersOpened).toBe(opened);
+  expect(reads).toBe(1);
+
+  let n = 0;
+  const edit = () => fs.writeFileSync(file, `{ globals: { n: ${++n} } }`);
+  await untilHeard(edit, () => delivered.length >= 2, "both renderer names");
+  expect(delivered.slice(0, 2)).toEqual([
+    [MAIN_RENDERER, key],
+    [name, key],
+  ]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+
+  first.follow([]);
+  expect(first.snapshotOf(origin)).toBeNull();
+  expect(first.path(origin, "user")).toBeUndefined();
+  expect(second.path(origin, "user")).toBe(file);
+  expect(counters.watchersClosed).toBe(closed);
+  const began = delivered.length;
+  await untilHeard(
+    edit,
+    () => delivered.length > began,
+    "the remaining renderer",
+  );
+  expect(new Set(delivered.slice(began).map(([renderer]) => renderer))).toEqual(
+    new Set([name]),
+  );
+
+  second.follow([]);
+  expect(second.snapshotOf(origin)).toBeNull();
+  expect(counters.watchersClosed).toBeGreaterThan(closed);
+});
+
+test("a landed write synchronously returns only the writer's reloads and routes all others", () => {
+  const { origin, file } = named("written-origin");
+  const { service, discovery: first, delivered } = discoveryRig();
+  const name = rendererNameOf("next");
+  const second = service.forRenderer(name);
+  first.follow([origin]);
+  second.follow([origin]);
+  fs.writeFileSync(file, "{ globals: {} }");
+  expect(first.landed([file], false)).toEqual([origin]);
+  expect(delivered).toEqual([[name, originKey(origin)]]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+  expect(textOfLayer(second, origin, file)).toBe("{ globals: {} }");
+});
+
+test("a shared file's watch window reads it once for different held origins and stops on close", () => {
+  const { origin, file } = named("shared-first");
+  const dir = project("shared-next");
+  const other = originOf(dir, dir, file);
+  const name = rendererNameOf("next");
+  const clock = heldClock(new Date(0));
+  let reads = 0;
+  const { service, discovery, delivered } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (read === file) reads++;
+        return diskFiles.text(read);
+      },
+    },
+    clock,
+  );
+  const second = service.forRenderer(name);
+  discovery.follow([origin]);
+  second.follow([other]);
+  reads = 0;
+
+  const next = "{ globals: { padding: 1 } }";
+  fs.writeFileSync(file, next);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(reads).toBe(1);
+  expect(delivered).toEqual([
+    [MAIN_RENDERER, originKey(origin)],
+    [name, originKey(other)],
+  ]);
+  expect(textOfLayer(discovery, origin, file)).toBe(next);
+  expect(textOfLayer(second, other, file)).toBe(next);
+
+  fs.writeFileSync(file, "{}");
+  clock.advance(POLL_MS - DEBOUNCE_MS);
+  service.close();
+  expect(clock.pending()).toBe(0);
+  clock.advance(DEBOUNCE_MS);
+  expect(reads).toBe(1);
+  expect(delivered).toHaveLength(2);
+});
+
+test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+  const a = named("published");
+  const b = named("failed-once");
+  const name = rendererNameOf("next");
+  let refuse = false;
+  const {
+    service,
+    discovery: writer,
+    delivered,
+    logged,
+  } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (refuse && read === b.file) throw new Error("rediscovery failed");
+      return diskFiles.text(read);
+    },
+  });
+  const second = service.forRenderer(name);
+  const origins = [a.origin, b.origin];
+  writer.follow(origins);
+  second.follow(origins);
+  const next = "{ globals: { padding: 1 } }";
+  for (const { file } of [a, b]) fs.writeFileSync(file, next);
+
+  refuse = true;
+  expect(writer.landed([a.file, b.file], false)).toEqual([a.origin]);
+  expect(delivered).toEqual([[name, originKey(a.origin)]]);
+  expect(textOfLayer(second, a.origin, a.file)).toBe(next);
+  expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  expect(logged).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
+    ]),
+  );
+
+  refuse = false;
+  service.again("events-resumed");
+  expect(delivered).toEqual([
+    [name, originKey(a.origin)],
+    [MAIN_RENDERER, originKey(b.origin)],
+    [name, originKey(b.origin)],
+  ]);
+  expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+});
+
+test("a batch reads shared layer, plugin root and definition paths once", () => {
+  const dir = project("shared");
+  const nested = project("shared/nested");
+  const pluginRoot = path.join(dir, ".cc-candybar", "plugins");
+  const pluginDir = path.join(pluginRoot, "widget");
+  const plugin = path.join(pluginDir, "plugin.json5");
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(plugin, '{ segments: { row: { template: "widget" } } }');
+  const alias = path.join(dir, "alias");
+  fs.symlinkSync(pluginDir, alias);
+  const listed = path.join(alias, "plugin.json5");
+  const config = path.join(dir, ".cc-candybar.json5");
+  const configText = JSON.stringify({ plugins: [listed, plugin] });
+  fs.writeFileSync(config, configText);
+  const configLinks = ["left.json5", "right.json5"].map((name) => {
+    const link = path.join(dir, name);
+    fs.symlinkSync(config, link);
+    return link;
+  });
+  answerRepo(dir);
+  const texts: string[] = [];
+  const roots: string[] = [];
+  const candidates: string[] = [];
+  const resolved: string[] = [];
+  const files: DiscoveryFiles = {
+    ...diskFiles,
+    presence(file) {
+      candidates.push(file);
+      return diskFiles.presence(file);
+    },
+    realpath(file) {
+      resolved.push(file);
+      return diskFiles.realpath(file);
+    },
+    text(file) {
+      texts.push(file);
+      return diskFiles.text(file);
+    },
+    folders(folder) {
+      roots.push(folder);
+      return diskFiles.folders(folder);
+    },
+  };
+  const world = { locations: locations(HOST), stateDir: stateDir(HOST) };
+  const shared = readShared(world, files);
+  for (const cwd of [dir, nested]) {
+    const { snapshot } = discover({ projectDir: dir, cwd }, shared);
+    const layer = snapshot.chain.find(({ path: file }) => file === config);
+    expect(layer?.listed[listed]?.definition).toMatchObject({
+      kind: "text",
+      dir: pluginDir,
+    });
+    expect(layer?.listed[plugin]?.definition).toEqual(
+      layer?.listed[listed]?.definition,
+    );
+    expect(snapshot.plugins).toContainEqual(layer?.listed[plugin]);
+  }
+  for (const configFile of configLinks) {
+    for (const cwd of [dir, nested]) {
+      const { snapshot } = discover({ configFile, cwd }, shared);
+      expect(snapshot.chain).toEqual([
+        expect.objectContaining({
+          path: configFile,
+          content: { kind: "text", text: configText },
+        }),
+      ]);
+    }
+    expect(resolved.filter((file) => file === configFile)).toHaveLength(1);
+    expect(texts).not.toContain(configFile);
+  }
+  expect(candidates.filter((file) => file === config)).toHaveLength(1);
+  expect(roots.filter((folder) => folder === pluginRoot)).toHaveLength(1);
+  for (const file of [config, plugin])
+    expect(texts.filter((read) => read === file)).toHaveLength(1);
+  expect(texts).not.toContain(listed);
+
+  // A later batch sees changed bytes without needing to discard an old cache.
+  fs.writeFileSync(config, "{}");
+  const { snapshot } = discover(
+    { projectDir: dir, cwd: dir },
+    readShared(world, files),
+  );
+  expect(
+    snapshot.chain.find(({ path: file }) => file === config)?.listed,
+  ).toEqual({});
+  expect(texts.filter((file) => file === config)).toHaveLength(2);
+});
+
+test("an unchecked extension remains the unreadable layer at its actual path", () => {
+  const home = project("home");
+  const locked = path.join(home, "cc-candybar", "config.json");
+  const world = {
+    locations: { ...locations(HOST), configHome: home },
+    stateDir: stateDir(HOST),
+  };
+  const files = {
+    ...diskFiles,
+    presence: (file: string) =>
+      file === locked
+        ? { path: file, error: "EACCES" }
+        : diskFiles.presence(file),
+  };
+  const { snapshot } = discover({ cwd: root }, readShared(world, files));
+  expect(snapshot.chain).toEqual([
+    {
+      role: "user",
+      path: locked,
+      content: { kind: "unreadable", error: "EACCES" },
+      listed: {},
+    },
+  ]);
+  expect(snapshot.notices).toContain(
+    `Config location could not be checked: ${locked} — EACCES`,
+  );
 });

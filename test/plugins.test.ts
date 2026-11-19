@@ -826,7 +826,7 @@ describe("an installed plugin", () => {
         repo: gateRepos(
           repoConfigs(stateDir(host)).read(),
           [],
-          repoProject(projectDir),
+          repoProject(projectDir).project,
         ).plugins,
       },
       projectDir,

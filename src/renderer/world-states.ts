@@ -1,79 +1,97 @@
-// The world state of every session a renderer holds, as the host handed it in
-// (src/renderer-interface/interface.ts): written only by a `context`, which carries the
-// document read at its request's keys, and by a `world-state`, and dropped by
-// a `retire`. A view's source reads its session's document here
-// (src/renderer/session-source.ts), so the renderer stamps nothing.
+// The live sessions the host handed in. A context admits both the request
+// and its document. A later world update can replace only a live document.
 
 import { compareStructural, observable, runInAction } from "mobx";
 import {
   heardContextOf,
   type CheckedRenderRequest,
   type SessionContext,
-} from "../renderer-interface/request-context";
-import type { SessionId } from "../daemon/foundations/session-id";
-import type { WorldState } from "../facts/world-state";
+} from "../renderer-interface/request-context.js";
+import type { SessionId } from "../daemon/foundations/session-id.js";
+import type { WorldState } from "../facts/world-state.js";
+
+// [LAW:one-source-of-truth] A session's context and document have one lifetime.
+interface LiveSession {
+  readonly context: CheckedRenderRequest;
+  readonly document: WorldState;
+}
 
 export class WorldStates {
-  private readonly contexts = new Map<SessionId, SessionContext>();
+  private readonly live = observable.map<SessionId, LiveSession>(undefined, {
+    deep: false,
+  });
 
-  // [LAW:one-source-of-truth] One document per session, the newest handed in.
-  private readonly documents = observable.map<SessionId, WorldState>(
-    undefined,
-    { deep: false },
-  );
-
-  // [LAW:no-ambient-temporal-coupling] The host hands each session's documents
-  // in `seq` order, from its collector alone; a document older than the one
-  // held breaks that order, and an equal `seq` that is not the held document is
-  // a second minting of one number. Both are the host's bug, said, never
-  // drawn. The held document stays itself when handed in again, so nothing
-  // reading it wakes.
-  take(document: WorldState): void {
-    const held = this.documents.get(document.session);
-    if (held !== undefined && document.seq <= held.seq) {
-      if (document.seq === held.seq && compareStructural(document, held))
-        return;
+  open(context: CheckedRenderRequest, document: WorldState): void {
+    const session = context.hookData.session_id;
+    if (document.session !== session)
       throw new Error(
-        `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`,
+        `world state for session ${JSON.stringify(document.session)} arrived with context for ${JSON.stringify(session)}`,
       );
-    }
-    runInAction(() => this.documents.set(document.session, document));
+    const held = this.live.get(session);
+    const next = nextDocument(document, held?.document);
+    if (held?.context === context && held.document === next) return;
+    runInAction(() => this.live.set(session, { context, document: next }));
   }
 
-  // [LAW:no-defensive-null-guards] The host delivers a session's `context`,
-  // which carries its document, ahead of each of its requests, and a `retire`
-  // drops the document with the view: a session with none here is the host's
-  // bug, so the read throws, naming it.
+  // [LAW:no-ambient-temporal-coupling] Only context can admit a session.
+  // A world update that arrives after retirement cannot bring it back.
+  take(document: WorldState): boolean {
+    const held = this.live.get(document.session);
+    if (held === undefined) return false;
+    const next = nextDocument(document, held.document);
+    if (next !== held.document)
+      runInAction(() =>
+        this.live.set(document.session, {
+          context: held.context,
+          document: next,
+        }),
+      );
+    return true;
+  }
+
   of(session: SessionId): WorldState {
-    const document = this.documents.get(session);
-    if (document === undefined)
-      throw new Error(
-        `no world state for session ${JSON.stringify(session)}: the host hands one in with the context ahead of every request`,
-      );
-    return document;
+    return this.require(session).document;
   }
 
-  // [LAW:one-source-of-truth] Every session the renderer holds a document
-  // of: from its context until its retire.
+  requestOf(session: SessionId): CheckedRenderRequest {
+    return this.require(session).context;
+  }
+
   sessions(): readonly SessionId[] {
-    return [...this.documents.keys()];
+    return [...this.live.keys()];
   }
 
-  // A session's context, as its `context` handed it in: kept beside its
-  // document, for as long as it, so a live session's context is always the
-  // one its document was read at.
-  heard(req: CheckedRenderRequest): void {
-    this.contexts.set(req.hookData.session_id, heardContextOf(req));
-  }
-
-  // The newest context of a live session, or null for one the renderer does
-  // not hold.
   contextOf(session: SessionId): SessionContext | null {
-    return this.contexts.get(session) ?? null;
+    const held = this.live.get(session);
+    return held === undefined ? null : heardContextOf(held.context);
   }
 
   drop(session: SessionId): void {
-    this.contexts.delete(session);
-    runInAction(() => this.documents.delete(session));
+    runInAction(() => this.live.delete(session));
   }
+
+  // [LAW:no-silent-failure] The host admits a session before asking for its
+  // first draw. A request outside that lifetime reports what went wrong.
+  private require(session: SessionId): LiveSession {
+    const held = this.live.get(session);
+    if (held === undefined)
+      throw new Error(
+        `no world state for session ${JSON.stringify(session)}: the host hands one in with the context ahead of every request`,
+      );
+    return held;
+  }
+}
+
+// [LAW:single-enforcer] Admission and collector pushes use the same sequence
+// rule. A repeated document keeps its identity so its readers need not wake.
+function nextDocument(
+  document: WorldState,
+  held: WorldState | undefined,
+): WorldState {
+  if (held === undefined || document.seq > held.seq) return document;
+  if (document.seq === held.seq && compareStructural(document, held))
+    return held;
+  throw new Error(
+    `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`,
+  );
 }

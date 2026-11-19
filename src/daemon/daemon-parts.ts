@@ -14,6 +14,7 @@ import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { RetiredTmuxStatus } from "./retired-tmux-status.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
@@ -34,6 +35,7 @@ export interface DaemonParts {
   readonly stats: RuntimeStats;
   // What every click is opened with before any renderer sees it.
   readonly linkSigner: LinkSigner;
+  readonly publishFrame: PublishFrame;
   readonly renderSightings: RenderSightings;
   readonly watcherRegistry: WatcherRegistry;
   readonly refreshLedger: RefreshLedger;

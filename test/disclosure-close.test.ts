@@ -42,7 +42,6 @@ import {
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
-import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import {
   recordRender,

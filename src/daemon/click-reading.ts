@@ -1,33 +1,29 @@
-// [LAW:single-enforcer] The host's one reading of a click, whoever delivered
-// it: the URL handler app's frame, or `cc-candybar url-handle`. Any web page
-// can open a `cc-candybar://` link, so no link reaches a renderer until its
-// signature is opened here.
+// [LAW:single-enforcer] The URL handler and CLI enter through the same
+// signature and argument admission before a click reaches a renderer.
 
 import type { LinkSigner } from "../click/link-signer.js";
-import { isBarLink, parseHandlerUrl, URL_SCHEME } from "../click/wire.js";
+import {
+  admitClick,
+  isBarLink,
+  parseHandlerUrl,
+  URL_SCHEME,
+  type AdmittedClick,
+} from "../click/wire.js";
 import type { Delivery } from "../renderer-interface/click-arrival.js";
+import { BadVerbArgs } from "./foundations/verb-error.js";
 
-interface Refused {
-  readonly kind: "refused";
-  readonly problem: string;
-}
-
-// A link the bar drew, opened: its verb and its still-encoded value, and the
-// link with its signature taken off, for the click's event.
-export type OpenedLink =
+export type ReadClick =
   | {
       readonly kind: "link";
-      readonly verb: string;
-      readonly value: string;
+      readonly click: AdmittedClick;
       readonly link: string;
+      readonly delivery: Delivery;
     }
-  | Refused;
-
-// [LAW:types-are-the-program] A click as the host reads it, with who
-// delivered it where that is a fact of what it does.
-export type ReadClick =
-  | (Extract<OpenedLink, { kind: "link" }> & { readonly delivery: Delivery })
-  | Refused;
+  | {
+      readonly kind: "refused";
+      readonly problem: string;
+      readonly signed?: { readonly link: string; readonly verb: string };
+    };
 
 export function parseClick(
   url: string,
@@ -39,18 +35,24 @@ export function parseClick(
       kind: "refused",
       problem: `expected a ${URL_SCHEME}:// link, got: ${url}`,
     };
-  const opened = openClick(url, links);
-  return opened.kind === "link" ? { ...opened, delivery } : opened;
-}
-
-// A link a frame drew, opened by its signature and split as a click: what a
-// clicked link is.
-export function openClick(signed: string, links: LinkSigner): OpenedLink {
-  const opened = links.openLink(signed);
+  const opened = links.openLink(url);
   if (opened.kind === "failed")
     return { kind: "refused", problem: opened.reason };
   const link = parseHandlerUrl(opened.value);
-  return link.ok
-    ? { kind: "link", verb: link.verb, value: link.value, link: opened.value }
-    : { kind: "refused", problem: link.problem };
+  if (!link.ok) return { kind: "refused", problem: link.problem };
+  try {
+    return {
+      kind: "link",
+      click: admitClick(link.verb, link.value),
+      link: opened.value,
+      delivery,
+    };
+  } catch (e) {
+    if (!(e instanceof BadVerbArgs)) throw e;
+    return {
+      kind: "refused",
+      problem: e.message,
+      signed: { link: opened.value, verb: link.verb },
+    };
+  }
 }

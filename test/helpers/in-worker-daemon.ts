@@ -13,8 +13,9 @@ import type { Duplex } from "node:stream";
 import { handleConnection } from "../../src/daemon/connection";
 import {
   createDaemon,
-  type Daemon,
+  type ServedDaemon,
   type DaemonInputs,
+  type PreparedDaemon,
   type RunningBundle,
 } from "../../src/daemon/daemon";
 import type { ProfileStorage } from "../../src/daemon/held-stores";
@@ -64,8 +65,8 @@ export function bundleAt(
 }
 
 // A daemon with the log it writes to, which the case that built it ends.
-export interface BuiltDaemon {
-  readonly daemon: Daemon;
+interface DaemonHarness<Core> {
+  readonly daemon: Core;
   readonly daemonLog: DaemonLog;
   // Where the daemon was aimed, which the env no longer says once a case passes
   // its own.
@@ -79,7 +80,21 @@ export interface BuiltDaemon {
 // hears a watch only by a delivered event, which is what a watcher case proves.
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
-export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
+export function buildDaemon(
+  overrides: DaemonOverrides = {},
+): DaemonHarness<ServedDaemon> {
+  const built = prepareDaemon(overrides);
+  try {
+    return { ...built, daemon: built.daemon.serve() };
+  } catch (error) {
+    if (overrides.daemonLog === undefined) built.daemonLog.dispose();
+    throw error;
+  }
+}
+
+export function prepareDaemon(
+  overrides: DaemonOverrides = {},
+): DaemonHarness<PreparedDaemon> {
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
@@ -91,7 +106,6 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
-      // test/setup.ts points it at a closed port.
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
       gates: createGates(),
@@ -109,7 +123,6 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
         ...overrides.profile?.(log),
       }),
     });
-    daemon.serve();
     return { daemon, daemonLog, paths };
   } catch (e) {
     // A log this call opened is the call's to end when no daemon takes it up.
@@ -120,7 +133,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
 
 // The daemon's counts from its request handling, past the connection: the 200 ms
 // guard is the connection's, and a busy machine is no fact about them.
-export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
+export async function statsOf(daemon: ServedDaemon): Promise<StatsSnapshot> {
   const { resp } = await daemon.reply(
     { v: PROTOCOL_VERSION, kind: "stats" },
     () => false,
@@ -133,7 +146,7 @@ export async function statsOf(daemon: Daemon): Promise<StatsSnapshot> {
 }
 
 export interface InWorkerDaemon extends DaemonEndpoint {
-  readonly daemon: Daemon;
+  readonly daemon: ServedDaemon;
   // A client's end of a new connection.
   connect(): Duplex;
   // Serves a real socket too, for a client that opens one itself: the frame
@@ -190,7 +203,7 @@ export function startDaemon(
   }
   const before = held?.before ?? { ...process.env };
   placeEnv(env);
-  let daemon: Daemon;
+  let daemon: ServedDaemon;
   let daemonLog: DaemonLog;
   let paths: DaemonPaths;
   try {

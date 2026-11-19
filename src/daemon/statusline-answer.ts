@@ -5,6 +5,7 @@
 
 import path from "node:path";
 import type {
+  DrawInspection,
   Effect,
   Event,
   Present,
@@ -28,7 +29,7 @@ import {
   type Failure,
 } from "./foundations/verb-error.js";
 import type { Response } from "./foundations/protocol";
-import { parseFrame } from "../render/frame.js";
+import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
@@ -42,6 +43,7 @@ import {
 export interface StatuslineAnswer {
   readonly outcome: RequestOutcome;
   readonly resp: Response;
+  readonly inspection?: DrawInspection;
   // What the client's sighting records the frame drew as.
   readonly seen: FrameSeen;
   // [LAW:effects-at-boundaries] Told by the connection, once, whether the
@@ -102,6 +104,7 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 
 export async function answerStatusline(
   host: RendererHost,
+  publish: PublishFrame,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
@@ -114,6 +117,7 @@ export async function answerStatusline(
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
+  inspectDraw?: true,
 ): Promise<StatuslineAnswer> {
   const req = located(arrived, locate);
   const session = req.hookData.session_id;
@@ -165,12 +169,15 @@ export async function answerStatusline(
       noteFacts(facts, { renderer: host.name });
       return failed(host, configured.failure, "its context turn: ");
     }
-    // Rules 1 and 2 of the model: the answer shows what this request
-    // carried, so it waits for the first value of every fact of its world
-    // state it waits on, until its client's deadline. A warm session's world
-    // state is current already, so its request is delivered at once. What
-    // has not answered by then draws as pending, and lands for the next
-    // frame.
+    // [LAW:single-enforcer] The context's matching config turn is part of
+    // readiness. Its failure ends this request before the collector wait.
+    if (configured.configFailure !== undefined) {
+      noteFacts(facts, { renderer: host.name });
+      return failed(host, configured.configFailure, "its config turn: ");
+    }
+    // Wait for the session's sources until this client's deadline. A newer
+    // context can move those sources while this client still owns the reply.
+    // What has not answered by the deadline draws as pending.
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
     noteFacts(facts, {
@@ -197,7 +204,12 @@ export async function answerStatusline(
     // comes, so it draws the instant it is drawn at, after every input
     // ahead of it: a click that landed during the wait included.
     delivered = await host.answer(
-      unlessClosing({ kind: "request", id, context: req }),
+      unlessClosing({
+        kind: "request",
+        id,
+        context: req,
+        ...(inspectDraw === true ? { inspect: true } : {}),
+      }),
     );
   } finally {
     release();
@@ -238,6 +250,11 @@ export async function answerStatusline(
             effect,
             `presents request ${effect.request}, not this turn's ${id}`,
           );
+        else if (effect.session !== session)
+          done(
+            effect,
+            `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
+          );
         else if (answer !== null)
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
@@ -256,7 +273,7 @@ export async function answerStatusline(
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {
-    resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
+    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
   } catch (e) {
     const failure = failureOf(e);
     done(presented, `encoding its frame threw: ${failure.message}`);
@@ -269,6 +286,9 @@ export async function answerStatusline(
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
+    ...(presented.inspection === undefined
+      ? {}
+      : { inspection: presented.inspection }),
     settled: (took) =>
       done(presented, took ? null : "the client did not take the answer"),
   };

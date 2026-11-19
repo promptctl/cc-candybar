@@ -13,13 +13,19 @@
 
 import { inspect } from "node:util";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
+import {
+  failedWith,
+  renderFailed,
+  RENDER_ANSWERS,
+} from "./foundations/render-answers";
+import type { PublishFrame } from "./foundations/frame-publication.js";
 import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
 import type { Level } from "../renderer-interface/adapter";
 import type {
-  Answers,
+  FeedFrame,
   LaneViewers,
   PushedFrame,
   SessionViewers,
@@ -35,6 +41,7 @@ export interface Subscriber {
 }
 
 export interface FeedDeps<Req> {
+  readonly publishFrame: PublishFrame;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
@@ -65,8 +72,30 @@ interface Watched {
   // frame left as it was is not sent it again; and where it joined.
   readonly followers: Map<Subscriber, { sent: string | null; joined: number }>;
   // The last frame drawn: what a subscriber is handed as it joins.
-  last: Answers | null;
+  last: EncodedFeed | null;
   pushed: number;
+}
+
+interface EncodedFeed {
+  readonly resp: string;
+  readonly statusline: string;
+}
+
+const failedFeed = (refusal: Refusal): EncodedFeed => {
+  const encoded = JSON.stringify(refusal);
+  return { resp: encoded, statusline: encoded };
+};
+
+// [LAW:single-enforcer] Encode the host's structured frame once for all of
+// its subscribers. With no separate handoff there is only one presentation.
+function encodeFeed(frame: FeedFrame, publish: PublishFrame): EncodedFeed {
+  if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.bar)));
+  const statusline =
+    frame.handoff === null
+      ? resp
+      : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.handoff)));
+  return { resp, statusline };
 }
 
 // [LAW:no-ambient-temporal-coupling] Where the viewers stand with the
@@ -249,11 +278,24 @@ export class FrameFeeds<Req> {
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
   took(frames: readonly PushedFrame[]): void {
-    for (const { session, answers } of frames) {
+    for (const { session, frame } of frames) {
       const watched = this.watched.get(session);
       // Unwatched since the renderer drew it.
       if (watched === undefined) continue;
-      watched.last = answers;
+      try {
+        watched.last = encodeFeed(frame, this.deps.publishFrame);
+      } catch (error) {
+        // [LAW:no-silent-failure] A bad presentation is visible to the lane,
+        // and leaves other sessions' frames deliverable.
+        const refused = renderFailed(error);
+        const failed = failedFeed(refused);
+        if (watched.last?.resp !== failed.resp)
+          this.deps.log(
+            "error",
+            `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused.error)}`,
+          );
+        watched.last = failed;
+      }
       for (const sub of watched.followers.keys()) this.send(watched, sub);
     }
   }
