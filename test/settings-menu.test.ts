@@ -173,12 +173,12 @@ describe("the global settings menu is reachable from a user config", () => {
 
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
-    const { render, clickWriting, sessionState } = menuBar(
+    const { render, clickWriting, sessionState, ctx, click } = menuBar(
       userConfig(TWO_SEGMENT_ROW),
     );
     await clickWriting(render(), SETTINGS_ANCHOR, "open");
     await clickWriting(render(), EDIT_MODE_KEY, "arrange");
-    expect(sessionState.get(S1, EDIT_MODE_KEY)).toBe("arrange");
+    expect(ctx.edits.view.get(S1, EDIT_MODE_KEY)).toBe("arrange");
     // The menu stays as it was, so its tabs and ◁ back stay in reach while
     // the bar is arranged.
     expect(sessionState.get(S1, SETTINGS_ANCHOR)).toBe("open");
@@ -190,8 +190,11 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(editing.length).toBeGreaterThan(0);
     // Leaving needs no trip back into the menu: edit mode's own `✓ done`,
     // top left, lands on the plain bar.
-    await clickWriting(render(), EDIT_MODE_KEY, DISCLOSURE_CLOSED);
-    expect(sessionState.get(S1, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    const done = linkUrls(render()).find((u) =>
+      effectsOf(u).some((e) => e.verb === "save"),
+    );
+    await click(done!);
+    expect(ctx.edits.view.get(S1, EDIT_MODE_KEY)).toBeNull();
   });
 
   test("the preset picker's click is admitted by the derived gate", async () => {

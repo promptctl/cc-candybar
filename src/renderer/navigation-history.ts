@@ -1,5 +1,5 @@
 // [LAW:one-source-of-truth] The one back history over what a session has OPEN:
-// its menu, tab, pickers, page cursors, edit mode and the placement it
+// its menu, tab, pickers, page cursors, and the placement it
 // configures. It is the settings history's twin (src/renderer/settings-history.ts)
 // over the keys that one deliberately leaves out, so `↶` steps what a session
 // SET and `◁` steps what it LOOKED AT, and neither can reach the other's keys.
@@ -12,6 +12,7 @@
 // `back` writes each change's `before`; the history is held in memory only, so
 // a daemon restart starts every session with nothing to go back to.
 
+import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "../renderer-interface/history-storage";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
@@ -41,7 +42,10 @@ const MAX_SESSIONS = 32;
 // and the diagnostics viewer, which is paged and closed by its own ‹ › ✕, so
 // a step through the messages never fills the history ◁ walks.
 const isNavigationKey = (key: string): boolean =>
-  !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
+  key !== EDIT_MODE_KEY &&
+  !isSettingKey(key) &&
+  !isConfirmKey(key) &&
+  key !== DIAGNOSTICS_VIEWING;
 
 // Records one click's navigation. Writes through `sessionState` land in the
 // store it wraps and are recorded; `commit` turns them into one step.
