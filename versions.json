@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-872",
+      "ref": "refs/pull/872/merge",
+      "sha": "8e703fdfc7a277107b813851ce1bf782525bdaf2",
+      "timestamp": "2026-11-19T14:23:13.596Z",
+      "commits": [
+        {
+          "sha": "8e703fdfc7a277107b813851ce1bf782525bdaf2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:22:11Z",
+          "message": "Merge 8d40716bea9fefa465785b42eef38346d4951940 into 3a30e23db763050eca5ec970685f4d4872978e3e\n"
+        },
+        {
+          "sha": "8d40716bea9fefa465785b42eef38346d4951940",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:20:29-07:00",
+          "message": "fix(host): launch desktop and tmux actions from their reporting session\n"
+        },
+        {
+          "sha": "8429dd2dada84a1c24178224b337af002dbc91ae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:13:47-07:00",
+          "message": "test(native): exercise cold and steady statusline ticks over the socket\n"
+        },
+        {
+          "sha": "10918aca6bebd17ea875bf635d35c1ae512f3a9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:09:38-07:00",
+          "message": "fix(host): admit compact renders through the shared checkpoint\n"
+        },
+        {
+          "sha": "a2b8dc1c596d9d062c23a13331a60d7c7d2ad113",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:27:19-07:00",
+          "message": "perf(host): reuse the reported environment for each session\n"
+        },
+        {
+          "sha": "c0dd9bd2aa1d0d557bdc44e046b90d7680d9fa41",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:17:52-07:00",
+          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
+        },
+        {
+          "sha": "548d522e463e0b953e23f424476e350b52e62a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:10:17-07:00",
+          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
+        }
+      ]
+    },
+    {
       "version": "pr-880",
       "ref": "refs/pull/880/merge",
       "sha": "7320e2868136ef2c2fa8180fbbefff7525b0d600",
@@ -121,56 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:18:15-07:00",
           "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-872",
-      "ref": "refs/pull/872/merge",
-      "sha": "da4ce4a89f5a51a083d43cd3ec2c52fe62f3ea77",
-      "timestamp": "2026-11-19T14:15:15.099Z",
-      "commits": [
-        {
-          "sha": "da4ce4a89f5a51a083d43cd3ec2c52fe62f3ea77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:13:55Z",
-          "message": "Merge f04e46b70a6ab4dbbad30bd7c730cc50cd98eefe into 4521bf6f3ff8442f1ade1eb3785e9b245dd454e6\n"
-        },
-        {
-          "sha": "f04e46b70a6ab4dbbad30bd7c730cc50cd98eefe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:13:47-07:00",
-          "message": "test(native): exercise cold and steady statusline ticks over the socket\n"
-        },
-        {
-          "sha": "f640d6b641eb11524137e5306d4cf425bf6938ce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:09:38-07:00",
-          "message": "fix(host): admit compact renders through the shared checkpoint\n"
-        },
-        {
-          "sha": "24878b346030488dd9d37a125b2de34074c686c3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:27:19-07:00",
-          "message": "perf(host): reuse the reported environment for each session\n"
-        },
-        {
-          "sha": "07d82157d982619e28da49f5011561624ec66210",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:17:52-07:00",
-          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
-        },
-        {
-          "sha": "a635d76888c88b437fe7e9400e183f367bd0ae54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:10:17-07:00",
-          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
         }
       ]
     },

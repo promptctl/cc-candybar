@@ -30463,6 +30463,13 @@ var SessionBook = class {
     const held = this.environments.get(session) ?? NOT_HEARD;
     return "execution" in held ? { kind: "ok", value: held.execution } : held;
   }
+  // A desktop tool or tmux command inherits the working directory and
+  // environment of the same reported session. Only the directory is durable.
+  programContextOf(session) {
+    const durable = this.book.get(session);
+    const environment = this.environmentOf(session);
+    return durable !== void 0 && environment.kind === "ok" ? { cwd: durable.origin.cwd, environment: environment.value } : null;
+  }
   reportedFor(session, key) {
     const held = this.environments.get(session);
     return held && "key" in held && held.key === key ? held : null;
@@ -53950,11 +53957,13 @@ var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/utils/regular-text.ts
 init_globals();
-function readRegularTextSync(path31) {
+function withRegularTextFile(path31, use) {
   const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
-    if (!fstatSync(fd).isFile()) throw new Error("not a file");
-    return readFileSync(fd, "utf8");
+    const stat3 = () => fstatSync(fd, { bigint: true });
+    const observed2 = stat3();
+    if (!observed2.isFile()) throw new Error("not a file");
+    return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
   } finally {
     try {
       closeSync(fd);
@@ -53962,6 +53971,9 @@ function readRegularTextSync(path31) {
       debug(`close ${path31}: ${String(error)}`);
     }
   }
+}
+function readRegularTextSync(path31) {
+  return withRegularTextFile(path31, (file) => file.text());
 }
 
 // src/utils/git-root.ts
@@ -86502,8 +86514,8 @@ var EditTransactions = class {
     runInAction(() => this.entries.delete(sid));
   }
   update(sid, draft) {
-    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision }));
+    const revision2 = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision: revision2 }));
   }
 };
 
@@ -89205,6 +89217,18 @@ function oncePerPath(read2) {
 }
 
 // src/daemon/config-discovery/discovery-files.ts
+function textFrom(read2) {
+  return (file) => {
+    try {
+      return { kind: "text", text: read2(file) };
+    } catch (e) {
+      return {
+        kind: "unreadable",
+        error: types.isNativeError(e) ? e.message : String(e)
+      };
+    }
+  };
+}
 var diskFiles = {
   presence,
   realpath(file) {
@@ -89215,16 +89239,7 @@ var diskFiles = {
     }
   },
   folders: listFolders,
-  text(file) {
-    try {
-      return { kind: "text", text: readRegularTextSync(file) };
-    } catch (e) {
-      return {
-        kind: "unreadable",
-        error: types.isNativeError(e) ? e.message : String(e)
-      };
-    }
-  },
+  text: textFrom(readRegularTextSync),
   worktree: worktreeLink,
   checkout: checkoutOf
 };
@@ -89549,10 +89564,58 @@ function contentAt({ resolution, locations: locations2 }, place, files) {
   return unchecked === void 0 ? at(place.path, { kind: "absent" }) : at(unchecked.path, { kind: "unreadable", error: unchecked.error });
 }
 
+// src/daemon/config-discovery/config-text.ts
+init_globals();
+var MAX_ENTRIES4 = 256;
+var MAX_BYTES2 = 4 * 1024 * 1024;
+function revision(stat3) {
+  return `${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
+}
+var ConfigText = class {
+  constructor(open2 = withRegularTextFile) {
+    this.open = open2;
+  }
+  open;
+  held = /* @__PURE__ */ new Map();
+  bytes = 0;
+  read(file) {
+    return this.open(file, (opened) => {
+      const key = identityKey(opened.observed);
+      const version = revision(opened.observed);
+      const held = this.held.get(key);
+      if (held !== void 0) {
+        this.held.delete(key);
+        if (held.revision === version) {
+          this.held.set(key, held);
+          return held.text;
+        }
+        this.bytes -= held.bytes;
+      }
+      const text4 = opened.text();
+      const bytes = text4.length * 2;
+      if (bytes <= MAX_BYTES2 && revision(opened.stat()) === version) {
+        this.held.set(key, { revision: version, text: text4, bytes });
+        this.bytes += bytes;
+        for (const [oldest, entry] of this.held) {
+          if (this.held.size <= MAX_ENTRIES4 && this.bytes <= MAX_BYTES2) break;
+          this.held.delete(oldest);
+          this.bytes -= entry.bytes;
+        }
+      }
+      return text4;
+    });
+  }
+  clear() {
+    this.held.clear();
+    this.bytes = 0;
+  }
+};
+
 // src/daemon/config-discovery/config-discovery.ts
 var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
+    this.texts = new ConfigText(deps.openText);
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
@@ -89571,6 +89634,7 @@ var ConfigDiscovery = class {
   followed = /* @__PURE__ */ new Map();
   watches;
   invalidated = /* @__PURE__ */ new Set();
+  texts;
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -89606,7 +89670,7 @@ var ConfigDiscovery = class {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = readShared(this.deps, this.deps.files?.());
+      const shared = this.shared();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -89652,6 +89716,7 @@ var ConfigDiscovery = class {
     this.answersWatch.release();
     for (const { watch: watch2 } of this.followed.values()) watch2.handle.release();
     this.followed.clear();
+    this.texts.clear();
   }
   // The origins an answer to the trust book can move.
   asking() {
@@ -89682,7 +89747,7 @@ var ConfigDiscovery = class {
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = readShared(this.deps, this.deps.files?.());
+    const shared = this.shared();
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
@@ -89706,6 +89771,15 @@ var ConfigDiscovery = class {
       `config discovery why=${why2} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
     return moved2;
+  }
+  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
+  // one physical-text owner reuses bytes once the descriptor proves its revision.
+  shared() {
+    return readShared(this.deps, {
+      ...diskFiles,
+      text: textFrom((file) => this.texts.read(file)),
+      ...this.deps.files?.()
+    });
   }
   // What discovery finds at `origin` now, with its watch following the
   // targets that finding names, and what that watch cannot hear in the
@@ -89964,10 +90038,10 @@ function createDaemon(inputs) {
   const desktopPrograms = programs2(launcher);
   const acts = new Acts({
     programsFor: (session) => {
-      const heard = session === null ? void 0 : sessionBook.environmentOf(session);
-      if (heard?.kind !== "ok") return desktopPrograms;
+      const context = session === null ? null : sessionBook.programContextOf(session);
+      if (context === null) return desktopPrograms;
       return programs2({
-        launch: (options) => launcher.launch({ ...options, environment: heard.value })
+        launch: (options) => launcher.launch({ ...options, ...context })
       });
     },
     run: (run2) => runs.start(run2),
@@ -90093,7 +90167,7 @@ function createDaemon(inputs) {
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
-    files: () => ({ ...diskFiles, ...checkouts.discovery() }),
+    files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
@@ -90476,7 +90550,7 @@ function createDaemon(inputs) {
 // src/daemon/log.ts
 init_globals();
 var import_node_path34 = __toESM(require_path_browserify(), 1);
-var MAX_BYTES2 = 5 * 1024 * 1024;
+var MAX_BYTES3 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
 var EXIT_WAIT_MS = 1e3;
@@ -90695,7 +90769,7 @@ var DaemonLog = class {
       done += written3;
     }
     batch.state = { kind: "landed" };
-    if (endsAt >= MAX_BYTES2) {
+    if (endsAt >= MAX_BYTES3) {
       this.closeSink();
       const now2 = await fs_default.promises.stat(held.path).catch(() => null);
       if (now2 !== null && idOf3(now2) === held.id) await rotate(held.path);
