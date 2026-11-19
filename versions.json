@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-908",
+      "ref": "refs/pull/908/merge",
+      "sha": "ed5856795061e5e1ce4f9b995bb47e9e53a77dbb",
+      "timestamp": "2026-11-19T21:18:21.342Z",
+      "commits": [
+        {
+          "sha": "ed5856795061e5e1ce4f9b995bb47e9e53a77dbb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T21:16:57Z",
+          "message": "Merge b340e4df9c86d8d7854ae84f88d7a9878dd28cc4 into 6a830601d6a9c3e2737510757ff24dcaf67ef2c6\n"
+        },
+        {
+          "sha": "b340e4df9c86d8d7854ae84f88d7a9878dd28cc4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:16:45-07:00",
+          "message": "fix(renderer): keep pending cleanup and encode push failures\n"
+        },
+        {
+          "sha": "3d7342ead03ec4e37234f952c81d2bc0b414ec8a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:01:13-07:00",
+          "message": "fix(renderer): preserve each turn's failure and collected results\n"
+        }
+      ]
+    },
+    {
       "version": "pr-909",
       "ref": "refs/pull/909/merge",
       "sha": "6e1c2fdc0622fbca332e06bf2101fb4e01c1f507",
@@ -20,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T14:16:05-07:00",
           "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-908",
-      "ref": "refs/pull/908/merge",
-      "sha": "555ba77b64745c55775c7bbc1cee73a6355452a9",
-      "timestamp": "2026-11-19T21:05:57.113Z",
-      "commits": [
-        {
-          "sha": "555ba77b64745c55775c7bbc1cee73a6355452a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:04:46-07:00",
-          "message": "Merge 3d7342ead03ec4e37234f952c81d2bc0b414ec8a into 6a830601d6a9c3e2737510757ff24dcaf67ef2c6\n"
-        },
-        {
-          "sha": "3d7342ead03ec4e37234f952c81d2bc0b414ec8a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:01:13-07:00",
-          "message": "fix(renderer): preserve each turn's failure and collected results\n"
         }
       ]
     },

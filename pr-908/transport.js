@@ -77413,13 +77413,6 @@ function serializeSegmentCells(cells, colorCompatibility) {
 }
 
 // src/renderer/main.ts
-function attempted(run2) {
-  try {
-    return { kind: "answered", value: run2() };
-  } catch (thrown2) {
-    return { kind: "threw", failure: failureOf(thrown2) };
-  }
-}
 function mainRenderer(parts, pushed, drains) {
   const { time, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
@@ -77714,38 +77707,48 @@ function mainRenderer(parts, pushed, drains) {
     };
   });
   let observed2;
+  let pruneOwed = false;
   const declare = (configOffered) => {
+    pruneOwed ||= configOffered;
     let next2 = declaration.read();
     if (next2 !== observed2 && next2.unprepared.length > 0) {
       for (const origin of next2.unprepared)
         parts.renderCache.getOrCreate(origin);
       next2 = declaration.read();
     }
-    if (configOffered || subscriptions.configs !== next2.plan.configs)
+    if (pruneOwed || subscriptions.configs !== next2.plan.configs) {
       parts.renderCache.prune(new Set(next2.plan.configs.map(originKey)));
+      pruneOwed = false;
+    }
     observed2 = next2;
     subscriptions = next2.plan;
   };
+  const storeOrder = Object.keys(drains);
   const ending = (input, run2) => {
-    let outcome = attempted(run2);
+    let outcome;
+    try {
+      outcome = { kind: "answered", value: run2() };
+    } catch (thrown2) {
+      outcome = { kind: "threw", failure: failureOf(thrown2) };
+    }
     const stored = [];
     const collect = (stage, read2) => {
-      const taken2 = attempted(read2);
-      if (taken2.kind === "answered") return;
-      if (outcome.kind === "answered") outcome = taken2;
-      else {
-        const after = { stage, failure: taken2.failure };
-        outcome = {
-          ...outcome,
-          secondary: outcome.secondary === void 0 ? [after] : [...outcome.secondary, after]
-        };
+      try {
+        read2();
+      } catch (thrown2) {
+        const failure2 = failureOf(thrown2);
+        if (outcome.kind === "answered") outcome = { kind: "threw", failure: failure2 };
+        else {
+          const after = { stage, failure: failure2 };
+          outcome = {
+            ...outcome,
+            secondary: outcome.secondary === void 0 ? [after] : [...outcome.secondary, after]
+          };
+        }
       }
     };
-    collect("session-state", () => stored.push(...drains["session-state"]()));
-    collect(
-      "settings-history",
-      () => stored.push(...drains["settings-history"]())
-    );
+    for (const store of storeOrder)
+      collect(store, () => stored.push(...drains[store]()));
     collect(
       "subscriptions",
       () => declare(input.kind === "event" && input.event.kind === "config")
@@ -89375,10 +89378,10 @@ var RendererWake = class {
 };
 
 // src/daemon/renderer-host.ts
-var finalizationFields = (secondary) => secondary?.map(({ stage, failure: failure2 }) => [
+var finalizationFields = (outcome) => outcome.kind === "threw" ? outcome.secondary?.map(({ stage, failure: failure2 }) => [
   `finalize.${stage}`,
   `${failure2.kind}: ${failure2.detail}`
-]) ?? [];
+]) : void 0;
 var THREW_AS = {
   "bad-request": "refused",
   threw: "failed",
@@ -89450,9 +89453,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (configs.has(key)) configs.set(key, "received");
     }
     const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
+    const finalization = finalizationFields(answer3);
     const turn = {
       ...answer3,
-      record: answer3.kind === "threw" && answer3.secondary !== void 0 ? [...answer3.record, ...finalizationFields(answer3.secondary)] : answer3.record,
+      record: finalization === void 0 ? answer3.record : [...answer3.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
@@ -89754,8 +89758,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
-        if (delivered.failure.kind === "down" && delivered.secondary === void 0)
-          return;
+        if (delivered.failure.kind === "down") return;
         log(
           LEVEL[delivered.failure.kind],
           eventLine("turn", [
@@ -89848,25 +89851,27 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           }
         return answered;
       } catch (thrown2) {
-        return {
+        const unavailable = {
           kind: "threw",
           failure: failureOf(thrown2),
           turnMs: null
         };
+        return unavailable;
       }
     });
     if (output.kind === "threw") {
-      const took2 = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const fields2 = finalizationFields(output) ?? [];
+      if (output.turnMs !== null)
+        fields2.unshift(["took", `${output.turnMs}ms`]);
+      fields2.push(["error", output.failure.detail]);
       const detail = eventLine(
-        `renderer ${name} push ${push.kind} threw${took2}`,
-        finalizationFields(
-          "secondary" in output ? output.secondary : void 0
-        )
+        `renderer ${name} push ${push.kind} threw`,
+        fields2
       );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `${detail}: ${output.failure.detail}`
+        detail
       });
     }
     if (output.reply.kind !== push.kind)
