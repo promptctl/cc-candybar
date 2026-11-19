@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-887",
+      "ref": "refs/pull/887/merge",
+      "sha": "42909051570bc34706f25713602012b68f5270d9",
+      "timestamp": "2026-11-19T16:35:58.889Z",
+      "commits": [
+        {
+          "sha": "42909051570bc34706f25713602012b68f5270d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:34:48Z",
+          "message": "Merge 8490e8d952b35d642a1051a947eb0c639ad2b099 into d5df8f6d8a5a3e24c1189a1486241b29febe8053\n"
+        },
+        {
+          "sha": "8490e8d952b35d642a1051a947eb0c639ad2b099",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:34:28-07:00",
+          "message": "fix(config): retire superseded project decisions with the write\n"
+        },
+        {
+          "sha": "bbb2c6ac4289383af3edf838a2e98fcdaee4cd3e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:21:14-07:00",
+          "message": "fix(config): poll missing targets without rescanning dangling plugin links\n"
+        },
+        {
+          "sha": "6b0966b6a712724c1314f5d42c3bf85a632ae8dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:12:11-07:00",
+          "message": "test(config): cover newly added local settings and plugins with one approval\n"
+        },
+        {
+          "sha": "2b9f8d0483004e3e0a4030cff4c45c3c330179ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:51:01-07:00",
+          "message": "fix(config): share one project decision across renderers and worktrees\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d5df8f6d8a5a3e24c1189a1486241b29febe8053",
@@ -35,42 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T09:22:01-07:00",
           "message": "refactor(renderer): keep one origin and config layer projection\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-887",
-      "ref": "refs/pull/887/merge",
-      "sha": "06ec0939d4c53f15033eeba79ff3df5b21276ab4",
-      "timestamp": "2026-11-19T16:22:18.862Z",
-      "commits": [
-        {
-          "sha": "06ec0939d4c53f15033eeba79ff3df5b21276ab4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:21:23Z",
-          "message": "Merge d6aef5bebd3b2a0b60f5b62a27d19f1efc9fcb74 into bcc3f89dc35c1a9482586ed4a130a627b6c7962e\n"
-        },
-        {
-          "sha": "d6aef5bebd3b2a0b60f5b62a27d19f1efc9fcb74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:21:14-07:00",
-          "message": "fix(config): poll missing targets without rescanning dangling plugin links\n"
-        },
-        {
-          "sha": "890c8adef6f27a7dc3dcff01bb3c60401c56a15c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:12:11-07:00",
-          "message": "test(config): cover newly added local settings and plugins with one approval\n"
-        },
-        {
-          "sha": "86bc9b4ac7dcc606625396dc85194e0714599942",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:51:01-07:00",
-          "message": "fix(config): share one project decision across renderers and worktrees\n"
         }
       ]
     },
