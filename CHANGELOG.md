@@ -1,3 +1,9 @@
+## [1.233.2](https://github.com/promptctl/cc-candybar/compare/v1.233.1...v1.233.2) (2026-11-19)
+
+### Bug Fixes
+
+* **config:** refuse non-regular files during discovery (ibyq.h8t) ([#869](https://github.com/promptctl/cc-candybar/issues/869)) ([23c326f](https://github.com/promptctl/cc-candybar/commit/23c326f89ca153631c98d23faf4844e8803a63d5))
+
 ## [1.233.1](https://github.com/promptctl/cc-candybar/compare/v1.233.0...v1.233.1) (2026-11-19)
 
 ### Bug Fixes
