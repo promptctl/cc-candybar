@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "4b760ab8b6060959917183e61c064a0fe897da97",
+      "timestamp": "2026-11-19T10:41:04.672Z",
+      "commits": [
+        {
+          "sha": "4b760ab8b6060959917183e61c064a0fe897da97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:39:55-07:00",
+          "message": "refactor: simplify runtime surfaces and daemon startup (#849)\n\n* refactor: remove in-bar update offers and workers\n\n* fix(config): exclude retired update settings from writable targets\n\n* refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n\n* fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n\n* fix(client): make native reconnect consume the passive outcome\n\n* refactor: remove the old Doctor implementation (ibyq.dzq)\n\n* fix(integration): use the retained statusline in daemon checks\n\n* test: verify picker contrast with the retained segment catalogue"
+        }
+      ]
+    },
+    {
       "version": "pr-838",
       "ref": "refs/pull/838/merge",
       "sha": "24400191560c5a4ce91477d058834a7b195f20f3",
@@ -144,77 +159,6 @@
       ]
     },
     {
-      "version": "pr-849",
-      "ref": "refs/pull/849/merge",
-      "sha": "91ba14001618e64f39fc9e400a3c59c17b5612b7",
-      "timestamp": "2026-11-19T10:35:23.537Z",
-      "commits": [
-        {
-          "sha": "91ba14001618e64f39fc9e400a3c59c17b5612b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:34:29-07:00",
-          "message": "Merge b1e715d1f971866d913e1768ef8fe8d9eac86e93 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
-        },
-        {
-          "sha": "b1e715d1f971866d913e1768ef8fe8d9eac86e93",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:32:27-07:00",
-          "message": "test: verify picker contrast with the retained segment catalogue\n"
-        },
-        {
-          "sha": "63c7b6b5e4931f8ce2c610cf036dc5417f3767c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:26:04-07:00",
-          "message": "fix(integration): use the retained statusline in daemon checks\n"
-        },
-        {
-          "sha": "008fef814e980d0d3287dcd0fab7cd61dd993535",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:14:19-07:00",
-          "message": "refactor: remove the old Doctor implementation (ibyq.dzq)\n"
-        },
-        {
-          "sha": "1278cdd4adb6a488aaa01f2459bce93dbe8ade42",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:00-07:00",
-          "message": "fix(client): make native reconnect consume the passive outcome\n"
-        },
-        {
-          "sha": "96fd34f924fdb455ae2a468fbcb6b27659d9f416",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:16-07:00",
-          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
-        },
-        {
-          "sha": "421b0f73da68cdecd7795716b59632d85f2c53bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:20:10-07:00",
-          "message": "refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n"
-        },
-        {
-          "sha": "0f30bea1544575ae3df59920e9f527829ecc7cb5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:42-07:00",
-          "message": "fix(config): exclude retired update settings from writable targets\n"
-        },
-        {
-          "sha": "1206b29d3d1583f19a1462c581b3185fc9c2c24d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:02-07:00",
-          "message": "refactor: remove in-bar update offers and workers\n"
-        }
-      ]
-    },
-    {
       "version": "pr-850",
       "ref": "refs/pull/850/merge",
       "sha": "9a678c864fe4cbbd4872f87299998757a6a95df3",
@@ -240,21 +184,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:29:09-07:00",
           "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "d49ee0ce95ddef495c7948fd1526622b162b7b9b",
-      "timestamp": "2026-11-19T10:32:53.710Z",
-      "commits": [
-        {
-          "sha": "d49ee0ce95ddef495c7948fd1526622b162b7b9b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T10:31:46Z",
-          "message": "chore(release): set `package.json` to 1.232.12\n\n## [1.232.12](https://github.com/promptctl/cc-candybar/compare/v1.232.11...v1.232.12) (2026-11-19)\n\n### Bug Fixes\n\n* **settings:** treat display checkboxes as preferences (ibyq.1sb) ([#839](https://github.com/promptctl/cc-candybar/issues/839)) ([5702b0a](https://github.com/promptctl/cc-candybar/commit/5702b0a6f481af905b25fe6469d345b86a5c5bb3))\n"
         }
       ]
     },
