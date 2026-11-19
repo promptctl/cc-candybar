@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-850",
+      "ref": "refs/pull/850/merge",
+      "sha": "53956f47501be3addae8d0fc4a220953d4aeeb93",
+      "timestamp": "2026-11-19T10:48:24.807Z",
+      "commits": [
+        {
+          "sha": "53956f47501be3addae8d0fc4a220953d4aeeb93",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:47:18Z",
+          "message": "Merge b68a964c35f8c6900dd53785162bb633ea09c633 into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
+        },
+        {
+          "sha": "b68a964c35f8c6900dd53785162bb633ea09c633",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:40:26-07:00",
+          "message": "refactor(config): share origin watches across renderer names (ibyq.5lt)\n"
+        },
+        {
+          "sha": "a4215b5c35f12fe55532cd286dd228a093ed46a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:32:41-07:00",
+          "message": "fix(config): share reads through file symlinks (ibyq.i9x)\n"
+        },
+        {
+          "sha": "e56a941f91b0811fc646ab2b566ba4382ee5b03b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:29:09-07:00",
+          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-852",
       "ref": "refs/pull/852/merge",
       "sha": "4a1ebef405d975880d6439b4fd88479292c94d16",
@@ -88,56 +124,6 @@
       ]
     },
     {
-      "version": "pr-844",
-      "ref": "refs/pull/844/merge",
-      "sha": "054d39665747f8e189d0b7830079421173b6ae19",
-      "timestamp": "2026-11-19T10:42:09.667Z",
-      "commits": [
-        {
-          "sha": "054d39665747f8e189d0b7830079421173b6ae19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:41:00Z",
-          "message": "Merge 45c798705a2fb2e002751b1d0daf28796cb713cb into 4b760ab8b6060959917183e61c064a0fe897da97\n"
-        },
-        {
-          "sha": "45c798705a2fb2e002751b1d0daf28796cb713cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:37:14-07:00",
-          "message": "test(daemon): distinguish a landed write from a refresh failure\n"
-        },
-        {
-          "sha": "dc313e58fa5d3b2b65224739afcde3de2a93baa7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:35:42-07:00",
-          "message": "test(daemon): exercise settlement after Doctor removal\n"
-        },
-        {
-          "sha": "06135992879a69b0268a3f44deb16142c3e34cf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:23:38-07:00",
-          "message": "fix(daemon): reset config coverage for either start entry\n"
-        },
-        {
-          "sha": "b3ff11d52a02cb707355300a7e3d365617384c6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:12:21-07:00",
-          "message": "test(daemon): cover failed starts and wake reporting\n"
-        },
-        {
-          "sha": "b554e9e8e4241f1a66de5cac63cf58a1b1d30c73",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:46-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4b760ab8b6060959917183e61c064a0fe897da97",
@@ -192,35 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:38:14-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-850",
-      "ref": "refs/pull/850/merge",
-      "sha": "9a678c864fe4cbbd4872f87299998757a6a95df3",
-      "timestamp": "2026-11-19T10:34:02.893Z",
-      "commits": [
-        {
-          "sha": "9a678c864fe4cbbd4872f87299998757a6a95df3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:32:47Z",
-          "message": "Merge 846b551aa5efaa9170169d29d1eb763e7809c314 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
-        },
-        {
-          "sha": "846b551aa5efaa9170169d29d1eb763e7809c314",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:32:41-07:00",
-          "message": "fix(config): share reads through file symlinks (ibyq.i9x)\n"
-        },
-        {
-          "sha": "534fddf2b122cd8a0ed3968e313a5057194bcf53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:29:09-07:00",
-          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n"
         }
       ]
     },
