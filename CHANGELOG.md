@@ -1,3 +1,9 @@
+## [1.235.0](https://github.com/promptctl/cc-candybar/compare/v1.234.4...v1.235.0) (2026-11-19)
+
+### Features
+
+* **click:** route actions to their drawing renderer ([#875](https://github.com/promptctl/cc-candybar/issues/875)) ([f10951d](https://github.com/promptctl/cc-candybar/commit/f10951d9400d761190b757a8dd55db47ac30e372))
+
 ## [1.234.4](https://github.com/promptctl/cc-candybar/compare/v1.234.3...v1.234.4) (2026-11-19)
 
 ### Bug Fixes
