@@ -314,7 +314,7 @@ function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
     // What the sighting recorded of the rate-limit windows — the fact the
-    // doctor's segment-data check reads (RenderSightings).
+    // statusline diagnostics retain (RenderSightings).
     rateLimits: req.rateLimits,
   });
 }
@@ -369,7 +369,7 @@ export function takeContext(
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
-    parts.worldStates.take(worldState, facts);
+    parts.worldStates.take(worldState);
     parts.worldStates.heard(req);
   });
 }

@@ -40,7 +40,7 @@ const THEMES = listThemePalettes();
 // Every shade of a role a cell can wear: the ladder and the muted form.
 const ROLE_SHADES: readonly RoleShade[] = [...LADDER, "muted"];
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
-const TABS = ["session", "look", "layout", "config", "tools"] as const;
+const TABS = ["session", "look", "layout", "config"] as const;
 const COLS = 200;
 const AT = instantOf(new Date("2026-10-30T12:00:00Z"));
 

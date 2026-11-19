@@ -112,7 +112,6 @@ function hostOver(
       frames: () => {},
       holding: () => () => {},
       stored: () => {},
-      writableSettings: () => [],
       recorded: () => {},
     },
     { ...NO_ACTS, stateDir: path.join(dir, "state"), configs },

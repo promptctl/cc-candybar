@@ -3,7 +3,6 @@
 // it says.
 
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { NO_DOCTOR } from "./helpers/payload-owners";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -31,7 +30,6 @@ function providers() {
     logger: log,
     ledger: new RefreshLedger(log),
     sourceRuns: unscriptedRuns(),
-    doctor: NO_DOCTOR,
   });
   return { built, watchers };
 }

@@ -18,7 +18,6 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import type { DoctorAsk } from "../src/doctor/gather";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -643,26 +642,6 @@ describe("the world state the host hands in", () => {
     // A new record starts again below the seq the dropped document had.
     await handIn(t.r, { kind: "world-state", worldState: held });
     expect(t.rig.served.worldStates.of(SESSION)).toBe(held);
-  });
-
-  // A view evicted, or one that failed to open, is no reason a run the
-  // session asked for goes unread.
-  test("every output names each session's doctor run, whether or not a view of it is open", async () => {
-    const t = renderer();
-    const other = "no-view-session" as SessionId;
-    const run = (n: number): Subscription => ({
-      kind: "doctor",
-      ask: { run: n } as unknown as DoctorAsk,
-    });
-    t.parts.doctorRuns.subscriptions = () =>
-      new Map([
-        [SESSION, run(1)],
-        [other, run(2)],
-      ]);
-    const { subscriptions } = await request(t);
-    expect(subscriptions.sources[SESSION]?.at(-1)).toEqual(run(1));
-    expect(subscriptions.sources[other]).toEqual([run(2)]);
-    expect(subscriptions.lanes[other]).toBeUndefined();
   });
 
   test("every output names each open view's plugin sources at their storage keys", async () => {

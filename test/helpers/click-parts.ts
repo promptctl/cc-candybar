@@ -98,8 +98,6 @@ export function clickParts(
     mint: minter(),
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
-    // The doctor runs the test's clicks start, whose asks the turn names.
-    doctorRuns: verbCtx.doctorRuns,
   } as unknown as MainRendererParts;
   // The teardown's journal step, answered as the main renderer answers it, in
   // its place in the mailbox: no other push is a click's.
@@ -124,7 +122,6 @@ export function clickParts(
       frames: () => {},
       holding: collector.holding,
       stored: () => {},
-      writableSettings: () => [],
       recorded: () => {},
     },
     world,

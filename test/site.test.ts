@@ -5,7 +5,7 @@
 // a render draws the bar of the simulated repository, a click on the door is
 // the daemon's click and opens the menu, and the scenario moves the bar without
 // taking the session from the visitor (the menu they opened stays open). A
-// copy the page cannot make says so, with its text, and the doctor runs in the
+// copy the page cannot make says so, with its text, and menus run in the
 // page: the daemon it asks about is the page's own.
 
 import { execFileSync, spawn } from "node:child_process";
@@ -70,24 +70,17 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     for (const end = Date.now() + 5_000; !JSON.stringify(working).includes("Finding the race") && Date.now() < end; )
       working = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
     const painted = await transport.render(size);
-    const tools = await transport.click(painted.links.find((l) => l.text.includes("tools")).url, size);
-    const doctored = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
-    // The report lands once the host's read of the machine is in: a later redraw shows it.
-    let doctor = await transport.frame(size);
-    for (const end = Date.now() + 5_000; !JSON.stringify(doctor).includes("daemon") && Date.now() < end; )
-      doctor = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
-    console.log(JSON.stringify({ frames: { cold, first, opened, working, doctor }, refused: clicked.refused, copied: copied.refused, doctorRefused: doctored.refused }));
+    console.log(JSON.stringify({ frames: { cold, first, opened, working }, refused: clicked.refused, copied: copied.refused }));
     process.exit(0);
   `;
   const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
   fs.rmSync(out, { recursive: true, force: true });
   const { frames, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
-    frames: Record<"cold" | "first" | "opened" | "working" | "doctor", Pick<Frame, "rows">>;
+    frames: Record<"cold" | "first" | "opened" | "working", Pick<Frame, "rows">>;
     refused: string | null;
     copied: string | null;
-    doctorRefused: string | null;
   };
-  const r = { ...said, cold: textOf(frames.cold), first: textOf(frames.first), opened: textOf(frames.opened), working: textOf(frames.working), doctor: textOf(frames.doctor) };
+  const r = { ...said, cold: textOf(frames.cold), first: textOf(frames.first), opened: textOf(frames.opened), working: textOf(frames.working) };
   expect(r.cold).toContain("~/c/tidepool");
   expect(r.first).toContain("~/c/tidepool");
   expect(r.first).toContain("fix-cache-timer");
@@ -99,8 +92,6 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   // The seek moved the scenario, not the session: the menu the click opened is still open.
   expect(r.working).toContain("🎨 look");
   expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
-  expect(r.doctorRefused).toBeNull();
-  expect(r.doctor).toContain("✓ daemon");
 });
 
 // [LAW:verifiable-goals] `pnpm site:dev` promises the page as it is on disk, served to this machine

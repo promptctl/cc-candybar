@@ -30,7 +30,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
-import { emptyStores } from "./helpers/doctor-facts";
 import { NO_LAYERS } from "./helpers/history-step";
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 
@@ -82,7 +81,6 @@ const heldOver = (storage: Partial<ProfileStorage>): HeldStores => {
   const stores = new HeldStores({
     session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE,
-    doctor: emptyStores(),
     ...storage,
   });
   stores.load();

@@ -34,7 +34,6 @@ import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
-import type { DoctorMachineEdge } from "../doctor/ports";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
 import { FrameFeeds } from "./frame-feed.js";
@@ -68,7 +67,6 @@ import {
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { DoctorSource, daemonSighted } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -113,12 +111,6 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  // The doctor's reads of the machine, under the daemon's state directory.
-  readonly doctorEdge: (
-    launcher: Launcher,
-    host: Host,
-    stateDir: string,
-  ) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
   // when it started.
@@ -387,28 +379,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watchers: watcherRegistry,
     fileEvents,
   });
-  // [LAW:single-enforcer] The daemon's one reader of the doctor's facts: the
-  // collector holds the run a session's renderer subscribes to.
-  const doctorSource = new DoctorSource({
-    // The doctor's edge sets no signal of its own, so each read's launches
-    // carry the read's.
-    edge: (signal) =>
-      inputs.doctorEdge(
-        { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
-        host,
-        paths.state,
-      ),
-    sighted: (sessionId, now) =>
-      daemonSighted(
-        sessionId,
-        renderSightings.ofSession(sessionId, now),
-        limits.serving(),
-        bundle.path,
-      ),
-    clock,
-    logger: log,
-    ledger: refreshLedger,
-  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -418,7 +388,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     logger: log,
     ledger: refreshLedger,
     sourceRuns,
-    doctor: doctorSource,
   });
   const { managedStorage } = payloadProviders;
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
@@ -715,7 +684,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
-        writableSettings: (session) => collector.writableSettings(session),
         // The daemon waits on no turn's note.
         recorded: () => {},
       },
@@ -813,7 +781,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last of the stores' writers: a run that ends in the teardown holds

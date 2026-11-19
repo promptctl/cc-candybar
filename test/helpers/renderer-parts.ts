@@ -94,7 +94,5 @@ export function rendererParts({
     mint: minter(),
     // A rig's verbs ask no act, so no `effect-done` is an act's.
     acts: { done: () => false },
-    // A rig runs no doctor.
-    doctorRuns: { subscriptions: () => new Map(), retire: () => {} },
   };
 }

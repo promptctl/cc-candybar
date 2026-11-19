@@ -199,10 +199,9 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
   // experimental toggle is a value of the renderer setting.
   // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
   experimentalTmuxStatus: `it became the renderer setting — write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} › renderer, from a session inside tmux)`,
-  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
-  // nerdFont check names the font that lacks them.
+  // The bar draws Nerd Font glyphs.
   charset:
-    "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing.",
+    "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal.",
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {

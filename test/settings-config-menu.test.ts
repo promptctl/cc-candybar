@@ -920,7 +920,7 @@ describe("the drift marker", () => {
   };
   // The tabs the strip marks, read off what a reader sees.
   const markedTabs = (r: ReturnType<typeof rig>): string[] =>
-    ["session", "look", "layout", "config", "tools"].filter((tab) =>
+    ["session", "look", "layout", "config"].filter((tab) =>
       new RegExp(`${tab} •`).test(textOf(r.render())),
     );
   const open = async (source: string): Promise<ReturnType<typeof rig>> => {

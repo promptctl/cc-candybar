@@ -34,7 +34,6 @@ import { declareLanes, type KeyedOwners } from "../src/daemon/readings";
 import { type ViewFacts } from "../src/renderer-interface/request-context";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
-import type { DoctorAsk } from "../src/doctor/gather";
 import { type GitRead, type PullRequest } from "../src/segments/git";
 import { GitService } from "../src/daemon/cache/git-service";
 import { Holds } from "../src/utils/holds";
@@ -110,7 +109,6 @@ function handLanded() {
       declare: (holds: Holds, folder: string) =>
         entry(holds, `source:${folder}`),
     },
-    doctor: { declare: (holds: Holds) => entry(holds, "doctor") },
     log: () => {},
   } satisfies FixtureOwners;
   const land = (key: string, value: Current<unknown>) =>
@@ -434,70 +432,6 @@ describe("the renderer's subscriptions", () => {
     });
     collector.subscribed({ sources: {} });
     expect(held.has("source:/plugin")).toBe(false);
-  });
-
-  // A renderer stops asking for a doctor reading once it took it, and a fix
-  // it makes from that reading comes after.
-  test("the settings files a doctor reading names stay writable after the run is released, until another reading names others", () => {
-    const { owners, held, land } = handLanded();
-    const { collector } = collectorOver(owners);
-    const at = (dir: string) => ({
-      managedDir: "/managed",
-      projectDir: dir,
-      userFile: `${dir}/user.json`,
-    });
-    const reading = (dir: string) =>
-      ok({
-        run: 1,
-        kind: "read",
-        machine: {
-          claudeSettings: { origin: { at: at(dir) }, elsewhere: [] },
-        },
-      });
-    const asking: Pick<Subscriptions, "sources"> = {
-      sources: {
-        [SID]: [{ kind: "doctor", ask: { run: 1 } as unknown as DoctorAsk }],
-      },
-    };
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    collector.subscribed(asking);
-    land("doctor", reading("/p"));
-    collector.subscribed({ sources: {} });
-    expect(held.has("doctor")).toBe(false);
-    expect(collector.writableSettings(SID)).toEqual([
-      "/p/user.json",
-      "/p/.claude/settings.local.json",
-    ]);
-    collector.subscribed(asking);
-    land("doctor", reading("/q"));
-    expect(collector.writableSettings(SID)).toEqual([
-      "/q/user.json",
-      "/q/.claude/settings.local.json",
-    ]);
-  });
-
-  // However a run's lane fails, the failure names that run, so a renderer that
-  // asked a later run never takes it for its own.
-  test("a doctor lane that fails answers a failed reading of the run it was declared for", () => {
-    const { owners, land } = handLanded();
-    const { collector, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    collector.subscribed({
-      sources: {
-        [SID]: [{ kind: "doctor", ask: { run: 7 } as unknown as DoctorAsk }],
-      },
-    });
-    land("doctor", failed("the source closed", "read"));
-    expect(handedIn.at(-1)).toMatchObject({
-      kind: "world-state",
-      worldState: {
-        doctor: {
-          kind: "ok",
-          value: { run: 7, kind: "failed", reason: "the source closed" },
-        },
-      },
-    });
-    expect(collector.writableSettings(SID)).toEqual([]);
   });
 
   test("a run the host refuses is logged once as it joins the set, and stands as its fault; requests judge nothing again", () => {
@@ -833,7 +767,6 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
         plugins: new Map(),
         runs: new Map(),
         env: [],
-        doctor: null,
       },
     ),
   );
@@ -893,7 +826,6 @@ test("a run whose declaration throws answers its failure, and every other run an
           [fine.digest, judgeRun(fine)],
         ]),
         env: [],
-        doctor: null,
       },
     ),
   );

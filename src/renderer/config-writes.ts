@@ -11,7 +11,7 @@
 // so each click reads the snapshot the clicks ahead of it moved, and at most
 // one click is ever landing.
 
-import { diffChanges, type Change } from "../config/config-changes.js";
+import { diffChanges } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   BadVerbArgs,
@@ -75,10 +75,6 @@ export class ConfigWrites {
   } | null = null;
   private closed = false;
   // The open click's changes to Claude Code's settings, which no renderer
-  // reads: each made against what the session's doctor reading saw.
-  private settings: Array<{ readonly file: string; readonly change: Change }> =
-    [];
-  // The open click's answers to the trust book, in the order it gave them.
   private answers: Array<{
     readonly origin: RenderOrigin;
     readonly dir: string;
@@ -152,13 +148,6 @@ export class ConfigWrites {
     });
   }
 
-  // A change of the open click to a settings file of Claude Code's, which the
-  // host lands only while what it read there stands (src/doctor/gather.ts,
-  // `settingChange`).
-  changeSettings(file: string, change: Change): void {
-    this.settings.push({ file, change });
-  }
-
   // The open click answers the trust book for `dir`: it lands with the
   // click's changes.
   answer(dir: string, answer: RepoAnswer): void {
@@ -174,9 +163,7 @@ export class ConfigWrites {
     consequence: Consequence,
   ): void {
     const answers = this.answers;
-    const settings = this.settings;
     this.answers = [];
-    this.settings = [];
     // [LAW:no-ambient-temporal-coupling] The click is over even when reading
     // its layers throws, so the next click opens on nothing of this one's.
     let written;
@@ -201,10 +188,7 @@ export class ConfigWrites {
       this.layersOf = noLayers;
       this.open.clear();
     }
-    const files = [
-      ...written.map(({ path }) => path),
-      ...settings.map(({ file }) => file),
-    ];
+    const files = written.map(({ path }) => path);
     if (files.length === 0 && answers.length === 0) return consequence(effects);
     // [LAW:no-silent-failure] A write is a session's: one with none is the
     // click's bug.
@@ -222,15 +206,6 @@ export class ConfigWrites {
           session,
           target: { kind: "layer", origin, role },
           changes: list,
-        }),
-      ),
-      ...settings.map(
-        ({ file, change }): ConfigChange => ({
-          kind: "change",
-          id: this.mint(),
-          session,
-          target: { kind: "claude-settings", file },
-          changes: [change],
         }),
       ),
       ...answers.map(({ origin, dir, answer }) => ({

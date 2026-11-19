@@ -16,16 +16,7 @@ import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
-import type { DoctorSource } from "../../src/daemon/cache/doctor";
 import type { ManagedStorage } from "../../src/daemon/cache/managed-storage";
-
-// [LAW:no-silent-failure] The doctor owner of a rig that runs no doctor: a
-// subscription naming a doctor run is a test that needs a real one.
-export const NO_DOCTOR: Pick<DoctorSource, "declare"> = {
-  declare: () => {
-    throw new Error("this rig reads no doctor run");
-  },
-};
 
 // [LAW:no-silent-failure] The storage owner of a rig whose configs declare no
 // plugin source: a subscription naming one is a test that needs a real owner.
@@ -382,9 +373,8 @@ const NO_LOG: DaemonLogger = () => {};
 // Every lane answering ABSENT: a payload whose sources have nothing.
 export function absentOwners() {
   return {
-    // No plugin source, no doctor run, and a log nobody reads.
+    // No plugin source, and a log nobody reads.
     managedStorage: NO_STORAGE,
-    doctor: NO_DOCTOR,
     log: NO_LOG,
     // The user's home, which the payload's `home` and the default Claude Code
     // directory come from.
@@ -483,7 +473,6 @@ function openHome(
       plugins: new Map(),
       runs: new Map(),
       env: [],
-      doctor: null,
     },
   );
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken

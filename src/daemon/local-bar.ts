@@ -204,7 +204,6 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       stored: () => {},
       holding: (session) => collector.holding(session),
       // A command performs no act, so no change writes a settings file.
-      writableSettings: () => [],
       // [LAW:single-enforcer] Every turn's record, whatever input it took,
       // so a wait on a note sees each one.
       recorded: (record) => {

@@ -28,13 +28,6 @@ import {
 import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
 import {
-  CHECKS,
-  GLYPH_MARKS,
-  MARKED_CHECKS,
-  type Check,
-  type GlyphMark,
-} from "../../doctor/checks.js";
-import {
   parseSlashLine,
   SLASH_LINE_PATTERN,
 } from "../../claude-input/slash-line.js";
@@ -207,7 +200,6 @@ const actionArms = (
   save: markerArm("save"),
   preset: presetArm,
   themeDefault: themeDefaultArm,
-  doctor: doctorArm,
   slash: slashArm,
   run: runArm(home),
   do: doArm,
@@ -243,7 +235,6 @@ function actionDeclJson(): JsonNode {
       writesJson("save", markerArmJson("save")),
       ...presetArmJson().map((json) => writesJson("preset", json)),
       writesJson("themeDefault", THEME_DEFAULT_ARM_JSON),
-      ...doctorArmJson(),
       SLASH_ARM_JSON,
       RUN_ARM_JSON,
       DO_ARM_JSON,
@@ -368,7 +359,7 @@ function markerArmJson(key: MarkerKey): JsonNode {
 }
 
 // [LAW:types-are-the-program] `preset` (brandon-save-undo-bwi.o6u) is the
-// doctor's shape: `"save"` alone, or `"delete"` with the `name` it removes — a
+// shape: `"save"` alone, or `"delete"` with the `name` it removes — a
 // template, so its preset can be the one the bar is in. `function`, not a
 // const arrow, so actionArms above can reference it directly via hoisting.
 function presetArm(
@@ -451,76 +442,6 @@ const THEME_DEFAULT_ARM_JSON: JsonNode = {
   required: ["themeDefault"],
   additionalProperties: false,
 };
-
-// [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a three-member
-// enum on its own key — `"run"` alone, `"fix"` with the `check` it repairs,
-// or `"mark"` with the `check` whose glyphs were looked at and the `mark`
-// made on them. The check name is gated HERE against `CHECKS`
-// (src/doctor/checks.ts), the same list the daemon's doctor verbs gate the
-// wire against, so an authored `[fix]` over a check that does not exist is a
-// load error naming the ones that do, never a click-time BAD_REQUEST.
-// `function`, not a const arrow, so actionArms above can reference it
-// directly via hoisting.
-const DOCTOR_KEYS: Readonly<Record<string, readonly string[]>> = {
-  run: ["doctor"],
-  fix: ["doctor", "check"],
-  mark: ["doctor", "check", "mark"],
-};
-
-function doctorArm(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): ActionDecl | null {
-  const verb = raw.doctor;
-  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
-  // Every failing key is reported before returning, like the sibling arms —
-  // against the verb's own keys, or every doctor key when the verb is bad.
-  const allowed = known
-    ? DOCTOR_KEYS[verb]!
-    : [...new Set(Object.values(DOCTOR_KEYS).flat())];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue(
-        ctx,
-        `${path}.${k}`,
-        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`,
-      );
-  }
-  if (!known) {
-    issue(
-      ctx,
-      `${path}.doctor`,
-      `doctor must be ${Object.keys(DOCTOR_KEYS)
-        .map((v) => `"${v}"`)
-        .join(", ")}, got ${describeValue(verb)}`,
-    );
-    return null;
-  }
-  if (verb === "run") return { doctor: "run" };
-  const check = raw.check;
-  // A mark names a check that takes one; a fix may name any.
-  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
-  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
-    issue(
-      ctx,
-      `${path}.check`,
-      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
-    );
-    return null;
-  }
-  if (verb === "fix") return { doctor: "fix", check };
-  const mark = raw.mark;
-  if (!(GLYPH_MARKS as readonly unknown[]).includes(mark)) {
-    issue(
-      ctx,
-      `${path}.mark`,
-      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`,
-    );
-    return null;
-  }
-  return { doctor: "mark", check, mark: mark as GlyphMark };
-}
 
 // [LAW:parse-dont-validate] `slash` is the one place a line to type becomes a
 // SlashLine (src/claude-input/slash-line.ts); the verb and the edge take
@@ -642,39 +563,6 @@ const RUN_ARM_JSON: JsonNode = {
   required: ["run"],
   additionalProperties: false,
 };
-
-// [LAW:one-source-of-truth] One schema member per arm `doctorArm` parses, the
-// check enums drawn from the same lists it names, the mark enum from
-// GLYPH_MARKS.
-function doctorArmJson(): readonly JsonNode[] {
-  const names = (checks: readonly Check[]) => ({
-    enum: checks.map((c) => c.name),
-  });
-  return [
-    {
-      type: "object",
-      properties: { doctor: { const: "run" } },
-      required: ["doctor"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: { doctor: { const: "fix" }, check: names(CHECKS) },
-      required: ["doctor", "check"],
-      additionalProperties: false,
-    },
-    {
-      type: "object",
-      properties: {
-        doctor: { const: "mark" },
-        check: names(MARKED_CHECKS),
-        mark: { enum: [...GLYPH_MARKS] },
-      },
-      required: ["doctor", "check", "mark"],
-      additionalProperties: false,
-    },
-  ];
-}
 
 // [LAW:types-are-the-program] `do` names the declared actions one click fires,
 // head first. Two or more: one member is that action itself, and nothing is

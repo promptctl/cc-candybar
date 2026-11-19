@@ -1,11 +1,11 @@
-// The one policy every doctor state file holds (src/doctor/state-file.ts):
+// The one policy every doctor state file holds (src/daemon/state-file.ts):
 // absent is the empty value, anything else must read, and nothing is written
 // over a file that does not.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { stateFile } from "../src/doctor/state-file";
-import type { Asked } from "../src/doctor/checks";
+import { stateFile } from "../src/daemon/state-file";
+import type { Asked } from "../src/utils/outcome";
 
 const NAME = "numbers.json";
 
@@ -14,7 +14,7 @@ const numbers = (doc: unknown): Asked<readonly number[]> =>
     ? { kind: "ok", value: doc }
     : { kind: "failed", reason: "is not a list of numbers" };
 
-describe("a doctor state file", () => {
+describe("a stored JSON document", () => {
   let dir: string;
   let file: string;
   beforeEach(() => {

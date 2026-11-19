@@ -10,9 +10,6 @@ import type { ServingDaemon } from "./memory-limit";
 
 import type { KeyedSourceStats } from "../../utils/keyed-source";
 
-import type { MarkBook, PostMortemsRead } from "../../doctor/checks";
-import type { Asked } from "../../utils/outcome";
-
 // The keyed sources whose entries a view holds, so a period visits only
 // those held: a repo's, a pane's, the host's name and user, a directory
 // set's scans, a plugin's session files, a session's transcript lanes.
@@ -301,27 +298,6 @@ export interface MailboxStats {
   readonly heldMs: number;
   readonly queued: number;
 }
-
-// [LAW:one-source-of-truth] The documents the doctor keeps under the daemon's
-// state directory, by what each holds: the stores that file them
-// (src/doctor/edge.ts) and what a run reads of them both map over this one
-// list.
-export interface DoctorStoreValues {
-  // The marks the user has made on what the doctor showed them, kept for
-  // good (src/doctor/mark-book.ts).
-  readonly marks: MarkBook;
-  // The terminals a doctor click has come back from, kept for good
-  // (src/doctor/clicked-terminals.ts).
-  readonly clicked: readonly string[];
-  // The newest post-mortem the user filed as read
-  // (src/doctor/post-mortems-read.ts).
-  readonly postMortemsRead: PostMortemsRead;
-}
-
-// What each store holds, or why it could not be read.
-export type StoresRead = {
-  readonly [K in keyof DoctorStoreValues]: Asked<DoctorStoreValues[K]>;
-};
 
 // The faults a folder can stand in, by cause: it could not be created, its
 // identity could not be read, the OS refused to open its watch, or the watch

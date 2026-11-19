@@ -287,7 +287,6 @@ describe("the all-pending document", () => {
       sources: new Map(),
       runs: new Map(),
       env: new Map(),
-      doctor: ABSENT,
     },
     today: waiting,
     faults: [],

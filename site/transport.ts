@@ -85,8 +85,7 @@ const pageDaemon = createDaemon({
     targets: [],
   },
   rendererName: MAIN_RENDERER,
-  // Its picks and history live only as long as the page; the doctor files
-  // its documents on the simulated machine, as a daemon's profile does.
+  // Its picks and history live only as long as the page.
   profile: (name, log) => ({
     ...adapters.profile(name, log),
     session: ephemeralSessionFile(),

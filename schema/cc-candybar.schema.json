@@ -1210,72 +1210,6 @@
           {
             "type": "object",
             "properties": {
-              "doctor": {
-                "const": "run"
-              }
-            },
-            "required": [
-              "doctor"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "doctor": {
-                "const": "fix"
-              },
-              "check": {
-                "enum": [
-                  "config",
-                  "install",
-                  "daemon",
-                  "urlHandler",
-                  "links",
-                  "tmuxTruecolor",
-                  "utf8",
-                  "termWidth",
-                  "effectRefresh",
-                  "nerdFont",
-                  "segmentData",
-                  "sessionData"
-                ]
-              }
-            },
-            "required": [
-              "doctor",
-              "check"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "doctor": {
-                "const": "mark"
-              },
-              "check": {
-                "enum": [
-                  "nerdFont"
-                ]
-              },
-              "mark": {
-                "enum": [
-                  "drawn",
-                  "boxes"
-                ]
-              }
-            },
-            "required": [
-              "doctor",
-              "check",
-              "mark"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
               "slash": {
                 "type": "string",
                 "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
@@ -2317,12 +2251,6 @@
             }
           }
         },
-        "missingData": {
-          "enum": [
-            "fail",
-            "ignore"
-          ]
-        },
         "partials": {
           "type": "object",
           "additionalProperties": {
@@ -2921,12 +2849,6 @@
               }
             }
           }
-        },
-        "missingData": {
-          "enum": [
-            "fail",
-            "ignore"
-          ]
         },
         "partials": {
           "type": "object",

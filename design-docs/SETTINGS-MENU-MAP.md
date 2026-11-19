@@ -28,7 +28,6 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 | `🎨 look` | Effect, endcaps, fade in/out and animation speed (nt2) |
 | `📐 layout` | `+ preset` (bwi.o6u) |
 | `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other place holds: `☑ wrap`, `◀ padding ▶` ("Move padding and wrap from the layout menu to config", ek7), `renderer ◀ claude ▶` (offered inside tmux only; open, one aligned row per renderer), then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). Each setting's row in `src/config/globals-fields.ts` names its place — the first line, a tab, or a submenu — so a control lands in exactly one place |
-| `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.
 
@@ -120,25 +119,6 @@ C, from the 8fp variants page, is "base changes per cell, hue changes every few 
 
 Charset and colour depth go: "you can just remove 'charset' and 'colordepth' completely. make users set them in the config file." Both stay as `globals` fields and lose their session halves and menu controls: their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`, or the generator puts them back. `☐ persist?` is already gone: Save replaced it in #256.
 
-## Doctor checks
-
-The doctor began with one check, tmux truecolor. "doctor has nothing to do with compatibility. we just haven't added any additional checks to it yet."
-
-From Brandon:
-
-- **Config is correct.** "no inconsistencies, no unused variables or actions or whatever". It loads with no warnings. No duplicate keys, no `.json`/`.json5` collision, no config file shadowed behind another in the search order. Nothing the user declared goes unused: no variable nothing reads, no action nothing clicks, no helper nothing calls, no user segment absent from every preset. Threshold knobs ascend.
-- **URL handler works.** It is registered for `cc-candybar://`, the staged `url-handler.mjs` exists and matches the running version, and a probe URL opened by the daemon arrives back.
-- **Nerd Font is set up and in use.** A terminal can't be asked for its font (unverified; this is my understanding). The check reads the font from the terminal's config file (kitty, WezTerm, Ghostty, Alacritty, iTerm) and falls back to a row of test glyphs the user marks ✓ or ✗.
-- **Links are available and clickable.** The terminal supports OSC 8 links, and inside tmux, tmux passes them through.
-- **Other terminal features work.** Truecolor (the existing check), a UTF-8 locale, and the client reporting its width.
-
-Added by me, at Brandon's request to fill out the list:
-
-- **Install is current.** The client that drew the bar is the native client of the install the daemon runs from, not the Node fallback, and in a checkout it was built from the Rust source there. The check reads the client the bar actually ran, which reports itself on every render. It does not read the settings file, because managed settings or a launcher script can stand between the file and what runs.
-- **Daemon is healthy.** Exactly one daemon is running. Memory is well under the memory limit. There are no crash reports since the last check.
-- **Segments have their data.** `gitPr` is placed and `gh`/`glab` is installed and logged in. `block`/`weekly` are placed and the hook payload carries `rate_limits`.
-- **Session data is readable.** The transcript can be read.
-
 ## Widths at 80 columns
 
 `pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `drawDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
@@ -152,7 +132,6 @@ Added by me, at Brandon's request to fill out the list:
 | `📐 layout` | 16 |
 | `⚙ config` / drifted | 61 / 69 |
 | ⚙ gear with `⤓ default for catppuccin-frappe` / drifted | 92 / 98 |
-| `🧰 tools` | 17 |
 | Edit mode's save row | 49 |
 
 ## Also recorded
@@ -166,7 +145,7 @@ Added by me, at Brandon's request to fill out the list:
 Under epic brandon-menu-ia-q30 unless noted, in this order:
 
 1. **The menu opens above the bar.** A disclosure placement beside `drop`, replacing the row takeover (`inline`), and the door's two lines (preset and save cell, then tabs).
-2. **Five tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, each body holds what the Structure table lists, and `PLACE` names each setting's tab.
+2. **Tabs** (brandon-menu-tabs-wnu.qqz, already filed): the tab strip is an accordion's triggers, each body holds what the Structure table lists, and `PLACE` names each setting's tab.
 3. **Renames:** look → style, progression → variation, style → endcaps, and the variation values accent / duo / mono. Label, config key, session key and `.effective` variable, with the refusals Renames describes.
 4. **The look tab:** four `◀ name ▶` selectors. The name opens a plain menu whose choices show their effect in text colour on one shared background.
 5. **Charset and colour depth leave the menu** and lose their session halves; their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`.
@@ -174,7 +153,6 @@ Under epic brandon-menu-ia-q30 unless noted, in this order:
 7. **Edit mode save and cancel:** cancel puts back what a savepoint taken when edit mode opens recorded, `↺ reset layout` is renamed, and `☐ live` moves onto the save row.
 8. **Edit mode glyphs:** `✖` in red and `✚` in green, text colour only, with `✚` drawn on no fill.
 9. **The `alt` variation:** the hue changes every few cells partway along a row, which today's colour model cannot express.
-10. **Doctor checks**, one per bullet in Doctor checks, under their own epic.
-11. **Clicking `directory` copies the full path.** The click is the bundled `copyDir` action, which nothing clicked before.
+10. **Clicking `directory` copies the full path.** The click is the bundled `copyDir` action, which nothing clicked before.
 
 brandon-menu-ia-q30.nk8 narrows to the reset-only marker described under Also recorded. brandon-menu-ia-q30.kpl is unchanged.

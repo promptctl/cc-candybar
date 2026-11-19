@@ -7,7 +7,6 @@ import { SESSION_BOOK_FILE } from "./session-book.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
@@ -38,7 +37,6 @@ export function productionAdapters(
     sessionBook: (log) =>
       new SessionFile(SESSION_BOOK_FILE, paths.sessionBook, machine, 500, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
-    doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe, environmentOf) =>

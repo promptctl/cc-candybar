@@ -158,7 +158,6 @@ test("two hooks that differ only in their instantaneous fields read one document
           plugins: new Map(),
           runs: new Map(),
           env: [],
-          doctor: null,
         }),
       ),
       daemonFactsOf(),

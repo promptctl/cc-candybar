@@ -1,22 +1,10 @@
-// What each session's last render REQUEST said about itself, and when — what
-// the doctor reads: the click for its own session, `cc-candybar doctor`
-// through daemon-stats, since the command itself is no statusline client. A
-// request says which client drew the bar (the install check) and whether
-// Claude Code's hook payload carried the rate-limit windows (the segment-data
-// check, brandon-doctor-v62x.onf), and where the session's transcript is (the
-// session-data check, brandon-doctor-v62x.p4l), and whether the bar it drew
-// moves (the effect-refresh check, brandon-doctor-v62x.tgp).
+// The latest render request by session and client role, as daemon-stats reads it.
 //
-// [LAW:no-ambient-temporal-coupling] Held in memory by this daemon process,
-// keyed by session and the client's role, REPLACED by every render: a
-// session's next render after a rebuild shows its new client at once, and a
-// session that stopped rendering only ages. The role is in the key because one
-// session's bar can be drawn by two clients at once — Claude Code's statusline
-// and a `cc-candybar frames` display — and the one rendering last must not
-// hide the other from the check. Native, the Node fallback and a client too
-// old to report are one role, the statusline, so a rebuild replaces it. SessionState is not this record — it is persisted, reloaded on
-// start and never pruned, so a session an older daemon recorded would answer
-// for a client nothing runs any more.
+// [LAW:no-ambient-temporal-coupling] Held in memory. A new request replaces
+// its role's record, and a session that stops rendering only ages. Two
+// clients such as the statusline and frames retain separate sightings.
+// The native statusline, its Node fallback and an older client that did
+// not report its identity share the statusline's role.
 
 import type { SessionId } from "./foundations/session-id.js";
 import type { ClaudeHookData } from "../utils/claude.js";
@@ -50,10 +38,8 @@ export function transcriptSaid(
   };
 }
 
-// [LAW:single-enforcer] The render path is the one writer (`see`, when a
-// request arrives and again when its render settles, both stamped with the
-// instant and order it ARRIVED in); the doctor the one reader — daemon-stats for
-// the CLI (`list`), the click for its own session (`ofSession`).
+// [LAW:single-enforcer] The render path records arrivals and settlements in
+// request order. Daemon-stats reads those records.
 export class RenderSightings {
   private readonly seen = new Map<
     string,
@@ -95,12 +81,5 @@ export class RenderSightings {
       sessionId,
       ago: now - at,
     }));
-  }
-
-  // The latest render in each role that drew one session's bar — none when
-  // this process has served it no render (a daemon restarted under a bar
-  // already on screen).
-  ofSession(sessionId: SessionId, now: Instant): readonly RenderSighting[] {
-    return this.list(now).filter((s) => s.sessionId === sessionId);
   }
 }

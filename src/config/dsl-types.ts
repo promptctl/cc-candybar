@@ -852,11 +852,6 @@ export interface SegmentDecl {
   // is when a placement says nothing. The segment's templates read the
   // placement's resolved values as `.settings.<name>`.
   readonly settings?: Readonly<Record<string, SettingDecl>>;
-  // Whether the doctor counts this segment's missing data as a failure
-  // (brandon-doctor-v62x.onf): a forge CLI that is not installed or logged in,
-  // a payload with no rate limits. Absent is "fail";
-  // read only through `missingDataOf`.
-  readonly missingData?: MissingData;
   // Named sub-templates scoped to THIS segment: a long `template` (or
   // `when`/`bg`/`fg`) dispatches to one by a literal
   // `{{ template "name" ctx }}` instead of nesting every state inline. Scoped,
@@ -869,13 +864,6 @@ export interface SegmentDecl {
   // would otherwise throw uncaught at compile for a config that validated
   // clean. [LAW:one-source-of-truth]
   readonly partials?: Readonly<Record<string, string>>;
-}
-
-export const MISSING_DATA = ["fail", "ignore"] as const;
-export type MissingData = (typeof MISSING_DATA)[number];
-
-export function missingDataOf(seg: SegmentDecl): MissingData {
-  return seg.missingData ?? "fail";
 }
 
 // [LAW:one-source-of-truth] Every `state` variable a config declares, by the

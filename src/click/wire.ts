@@ -141,19 +141,6 @@ export const VERB_BACK = "back";
 // savepoint.
 export const VERB_REWIND = "rewind";
 
-// [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a). `doctor-run`
-// args: `[sessionId]` — runs every check over the session's RECORDED client
-// hints and writes the report into that session's state. `doctor-fix` args:
-// `[sessionId, checkName]` — re-probes that one check and performs the fix its
-// verdict carries, then re-runs. The check name is gated by membership in
-// `CHECKS` (src/doctor/checks.ts); no command, path, or value ever rides the
-// URL — the fix is whatever the check's own verdict describes. `doctor-mark`
-// args: `[sessionId, checkName, mark]` — records the user's mark on the glyphs
-// that check's fresh verdict shows, under the sighting they are, then re-runs.
-export const VERB_DOCTOR_RUN = "doctor-run";
-export const VERB_DOCTOR_FIX = "doctor-fix";
-export const VERB_DOCTOR_MARK = "doctor-mark";
-
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
 // be one a `slash` action in the session's config declares.
@@ -285,9 +272,6 @@ const SAYS = {
   [VERB_REDO]: () => ["redo"],
   [VERB_BACK]: () => ["go back"],
   [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_DOCTOR_RUN]: () => ["run doctor"],
-  [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
-  [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
   [VERB_SLASH]: ([, line]) => [`type ${line}`],
   [VERB_RUN]: ([, action]) => [`run ${action}`],
   [VERB_REPO_CONFIG]: ([, dir, answer]) => [`mark config in ${dir} ${answer}`],
@@ -488,8 +472,6 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
@@ -515,9 +497,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,

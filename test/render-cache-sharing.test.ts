@@ -574,7 +574,6 @@ const MENU_WALK = [
   "🎨 look",
   "📐 layout",
   "⚙ config",
-  "🧰 tools",
   "⚡ session",
   "✖",
 ];

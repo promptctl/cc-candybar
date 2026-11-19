@@ -40,7 +40,6 @@ import { digestOf } from "../../src/utils/plain";
 import { fileHistoryStorage } from "../../src/daemon/history-file";
 import { HeldStores } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
-import { emptyStores } from "./doctor-facts";
 import { recordRender } from "./click";
 
 export interface DurableConfig {
@@ -104,7 +103,6 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     const stores = new HeldStores({
       session: ephemeralSessionFile(),
       history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
-      doctor: emptyStores(),
     });
     stores.load();
     return stores;
