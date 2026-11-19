@@ -212,8 +212,8 @@ export function classify(
   return failed(launchFailure(label, result), "read");
 }
 
-// [LAW:one-source-of-truth] The one spelling of a launch that did not answer,
-// as the bar's `git.prError` reports it.
+// [LAW:one-source-of-truth] The one spelling of a launch that did not answer:
+// a git read's failure and the bar's `git.prError` alike.
 export function launchFailure(
   label: string,
   result: Extract<LaunchResult, { ok: false }>,
@@ -587,14 +587,7 @@ export function classifyForgePr(
   if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr),
-  ]
-    .filter(Boolean)
-    .join(", ");
-  return failed(`${label}: ${detail}`, "read");
+  return failed(launchFailure(label, result), "read");
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
