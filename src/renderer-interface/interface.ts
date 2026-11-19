@@ -423,21 +423,24 @@ export interface Subscriptions {
   readonly wake: Tick | null;
 }
 
-// A frame's two answers, serialized once for every subscriber: `resp`, which
-// a lane drawing the bar elsewhere is sent, and `statusline`, what Claude
-// Code's statusline shows (the bar, or the handoff line in its place while a
-// lane draws it elsewhere, src/renderer/lane-handoff.ts).
-export interface Answers {
-  readonly resp: string;
-  readonly statusline: string;
-}
+// [LAW:types-are-the-program] A feed's draw has one bar. A handoff stands
+// in for it only in Claude Code's statusline. A failed draw carries its
+// reason to whichever presentation publishes it.
+export type FeedFrame<Body = WireFrame> =
+  | {
+      readonly kind: "drawn";
+      readonly bar: Body;
+      readonly handoff: Body | null;
+    }
+  | { readonly kind: "failed"; readonly message: string };
 
 // A frame a feed drew, for the session's subscribers.
 // [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
 // is the host's to judge, per subscriber, against what that one was sent.
 export interface PushedFrame {
   readonly session: SessionId;
-  readonly answers: Answers;
+  // Read through `parseFrame`: Infinity crosses as null.
+  readonly frame: FeedFrame;
 }
 
 // How a turn ended, a turn that threw included: its failure as data, a class

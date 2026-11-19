@@ -170,8 +170,8 @@ interface RendererOutput {
   // [LAW:nothing-unseen] The turn's own record. A renderer writes no log;
   // the host writes this one.
   readonly record: TurnRecord;
-  // The frames this turn's feeds drew, which the host sends each subscriber
-  // whose lane's answer changed.
+  // The frames this turn's feeds drew. The host encodes the bar and any
+  // statusline handoff, then sends each subscriber whose lane's bytes changed.
   readonly frames: readonly PushedFrame[];
 }
 

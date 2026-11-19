@@ -16,13 +16,8 @@ import {
 } from "../../src/daemon/frame-feed";
 import type { Refusal } from "../../src/daemon/foundations/protocol";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
-import {
-  renderFailedFrame,
-  type Frame,
-  type WireFrame,
-} from "../../src/render/frame";
+import type { WireFrame } from "../../src/render/frame";
 import type {
-  Answers,
   PushedFrame,
   Viewers,
 } from "../../src/renderer-interface/interface";
@@ -98,12 +93,28 @@ function subscriber(lane: Lane, drawing = true) {
   return { sub, sent, refusals };
 }
 
+const body = (text: string): WireFrame => ({
+  depth: "none",
+  rows: [{ kind: "diagnostic", runs: [{ text }] }],
+  nextChange: null,
+  motion: "still",
+  pending: [],
+});
+
+const ansiAnswer = (text: string) =>
+  JSON.stringify({ ok: true, output: `${text}\n` });
+
 const frame = (
   session = S,
-  answers: Answers = { resp: "r", statusline: "s" },
+  bar = "r",
+  handoff: string | null = "s",
 ): PushedFrame => ({
   session,
-  answers,
+  frame: {
+    kind: "drawn",
+    bar: body(bar),
+    handoff: handoff === null ? null : body(handoff),
+  },
 });
 
 describe("a session's requests", () => {
@@ -228,10 +239,10 @@ describe("a subscriber", () => {
     const line = subscriber("statusline");
     r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
-    r.feeds.took([frame(S, { resp: "r1", statusline: "s1" })]);
-    r.feeds.took([frame(S, { resp: "r2", statusline: "s1" })]);
-    expect(pane.sent).toEqual(["r1", "r2"]);
-    expect(line.sent).toEqual(["s1"]);
+    r.feeds.took([frame(S, "r1", "s1")]);
+    r.feeds.took([frame(S, "r2", "s1")]);
+    expect(pane.sent).toEqual([ansiAnswer("r1"), ansiAnswer("r2")]);
+    expect(line.sent).toEqual([ansiAnswer("s1")]);
     expect(r.feeds.getStats()).toMatchObject({
       feeds: 1,
       subscribers: 2,
@@ -239,13 +250,55 @@ describe("a subscriber", () => {
     });
   });
 
+  test("both lanes receive identical terminal bytes without a handoff and repeat frames are deduplicated", () => {
+    const { feeds } = rig();
+    const pane = subscriber("pane");
+    const statusline = subscriber("statusline");
+    feeds.subscribe(S, pane.sub);
+    feeds.subscribe(S, statusline.sub);
+    const bar = body("answer");
+    feeds.took([{ session: S, frame: { kind: "drawn", bar, handoff: null } }]);
+    feeds.took([
+      {
+        session: S,
+        frame: {
+          kind: "drawn",
+          bar: { ...bar, nextChange: 45 },
+          handoff: null,
+        },
+      },
+    ]);
+    expect(pane.sent).toEqual([ansiAnswer("answer")]);
+    expect(statusline.sent).toEqual(pane.sent);
+  });
+
+  test("a failed draw uses the same refusal bytes in both lanes", () => {
+    const { feeds } = rig();
+    const pane = subscriber("pane");
+    const statusline = subscriber("statusline");
+    feeds.subscribe(S, pane.sub);
+    feeds.subscribe(S, statusline.sub);
+    const failure: PushedFrame = {
+      session: S,
+      frame: { kind: "failed", message: "draw broke" },
+    };
+    feeds.took([failure, failure]);
+    expect(pane.sent).toHaveLength(1);
+    expect(statusline.sent).toEqual(pane.sent);
+    expect(JSON.parse(pane.sent[0]!)).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+      error: "draw broke",
+    });
+  });
+
   test("joining later is handed the bar as it stands, at once", () => {
     const r = rig();
     r.feeds.subscribe(S, subscriber("pane").sub);
-    r.feeds.took([frame(S, { resp: "r1", statusline: "s1" })]);
+    r.feeds.took([frame(S, "r1", "s1")]);
     const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
-    expect(late.sent).toEqual(["r1"]);
+    expect(late.sent).toEqual([ansiAnswer("r1")]);
   });
 
   test("of a session unwatched since the renderer drew it is sent nothing", () => {
@@ -303,7 +356,7 @@ describe("a subscription's lane", () => {
     // The other lane streams on.
     r.feeds.took([frame(S)]);
     expect(pane.sent).toEqual([]);
-    expect(line.sent).toEqual(["s"]);
+    expect(line.sent).toEqual([ansiAnswer("s")]);
   });
 });
 
