@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-839",
+      "ref": "refs/pull/839/merge",
+      "sha": "9411bc82f12d4cfac06df913e0fb2ff27b3e804a",
+      "timestamp": "2026-11-19T10:17:53.088Z",
+      "commits": [
+        {
+          "sha": "9411bc82f12d4cfac06df913e0fb2ff27b3e804a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:16:55Z",
+          "message": "Merge cd192ef74858f1550a4298afc7ec2439d4706dfa into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "cd192ef74858f1550a4298afc7ec2439d4706dfa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:16:03-07:00",
+          "message": "test(daemon): exercise retained feed and shutdown behavior\n"
+        },
+        {
+          "sha": "52addcd9a9b7d293a011ccd3e43af030d2959dc7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:06:15-07:00",
+          "message": "fix(tmux): reconcile existing panes and retry interrupted splits\n"
+        },
+        {
+          "sha": "aa550653c5d117966068f6435a1ae5009eb63ee3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:56:16-07:00",
+          "message": "fix(settings): satisfy pane reconciliation lint\n"
+        },
+        {
+          "sha": "8c24c50c9f37091b51572669d2dd6a853e46981d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:52:27-07:00",
+          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-846",
       "ref": "refs/pull/846/merge",
       "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
@@ -173,42 +216,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:59-07:00",
           "message": "refactor(plugin): share file reads and coalesce storage refreshes (ibyq.pvx) (#841)\n\n* refactor(plugin): share host file reads and coalesce storage refreshes (pvx)\n\n* fix(plugin): recognize filesystem errors across Node realms"
-        }
-      ]
-    },
-    {
-      "version": "pr-839",
-      "ref": "refs/pull/839/merge",
-      "sha": "938840fd083a826a488c1223d30a25fd23b2685c",
-      "timestamp": "2026-11-19T10:07:32.976Z",
-      "commits": [
-        {
-          "sha": "938840fd083a826a488c1223d30a25fd23b2685c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:06:23Z",
-          "message": "Merge 7ee53e6edd28fbd4910006e4620165f784a3c619 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "7ee53e6edd28fbd4910006e4620165f784a3c619",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:06:15-07:00",
-          "message": "fix(tmux): reconcile existing panes and retry interrupted splits\n"
-        },
-        {
-          "sha": "b1f095e21bef78df16336c65a3253c20d65ad42d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:56:16-07:00",
-          "message": "fix(settings): satisfy pane reconciliation lint\n"
-        },
-        {
-          "sha": "b3b9c11985f0523e3781506a45fa5a3b95ec3324",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:52:27-07:00",
-          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
         }
       ]
     },
