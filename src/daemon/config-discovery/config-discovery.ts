@@ -74,7 +74,7 @@ export interface RendererConfigs {
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly watchers: Pick<WatcherRegistry, "batch">;
-  readonly files?: () => Partial<DiscoveryFiles>;
+  readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch

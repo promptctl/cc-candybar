@@ -3,6 +3,7 @@
 // names (test/setup.ts isolates it per test file) — through the daemon's own
 // recording, so no test spells the book's path or shape.
 
+import { writeStatePlan } from "./state-file";
 import fs from "node:fs";
 import { hostOf } from "./host";
 import {
@@ -34,10 +35,10 @@ export function recordAnswer(
   answer: RepoAnswer,
 ): Asked<Recorded> {
   let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
-  const filed = store.update((book) => {
+  const filed = writeStatePlan(store.plan((book) => {
     const answered = answering(book, dir, answer);
     recorded = answered.recorded;
     return answered.book;
-  });
+  }));
   return filed.kind === "failed" ? filed : ok(recorded);
 }

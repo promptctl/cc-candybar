@@ -9,6 +9,14 @@ export interface FileRewrite {
   readonly will: string | null;
 }
 
+// A superseded file goes to an unsearched name in its own directory. A
+// separately edited older copy keeps its bytes, and a relative symlink
+// continues pointing at the same destination.
+export interface FileRetirement {
+  readonly from: string;
+  readonly to: string;
+}
+
 const writeText = (file: string, text: string | null): void =>
   text === null
     ? fs.rmSync(resolvedTarget(file), { force: true })
@@ -16,7 +24,7 @@ const writeText = (file: string, text: string | null): void =>
 
 export function writeRevisions(
   rewrites: Iterable<FileRewrite>,
-  retire: string | null,
+  retire: FileRetirement | null,
 ): readonly string[] {
   const written: FileRewrite[] = [];
   try {
@@ -26,14 +34,15 @@ export function writeRevisions(
     }
     const files = written.map(({ file }) => file);
     if (retire !== null) {
-      // Retire the older directory entry itself, including when it is a
+      // [LAW:single-enforcer] Retire the directory entry itself, even a
       // symlink. Nothing else can fail after this entry goes away.
-      fs.rmSync(retire, { force: true });
-      files.push(retire);
+      fs.renameSync(retire.from, retire.to);
+      files.push(retire.from, retire.to);
     }
     return files;
   } catch (cause) {
     const error = asError(cause);
+    // [LAW:no-silent-failure] Try every restore and name each failure.
     const failed: string[] = [];
     for (const { file, was } of written.reverse()) {
       try {

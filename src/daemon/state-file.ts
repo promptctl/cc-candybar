@@ -8,9 +8,10 @@
 // planned here and published by the shared file writer.
 
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { asError, linkChain } from "../utils/atomic-write.js";
-import { writeRevisions, type FileRewrite } from "./file-rewrites.js";
+import type { FileRetirement, FileRewrite } from "./file-rewrites.js";
 import { ok, type Asked } from "../utils/outcome.js";
 import { readTextIfPresent } from "../utils/regular-text.js";
 
@@ -24,19 +25,13 @@ export interface StateObservation<T> {
 export interface StateFile<T> {
   readonly observe: () => StateObservation<T>;
   readonly read: () => Asked<T>;
-  // The file with `next` of what it holds, and what it holds now — or, when
-  // the file does not read, that failure, with nothing filed: a document's
-  // other contents are never lost to a filing. A `next` that returns what it
-  // was given writes only when promoting an older file. Only a write that
-  // fails throws.
-  readonly update: (next: (current: T) => T) => Asked<T>;
   // The observed bytes and the changes an explicit update would publish.
   readonly plan: (next: (current: T) => T) => Asked<Planned<T>>;
 }
 
 export interface Planned<T> {
   readonly rewrite: FileRewrite | null;
-  readonly retire: string | null;
+  readonly retire: FileRetirement | null;
   readonly value: T;
 }
 
@@ -83,35 +78,35 @@ export function stateFile<T>(
     const { result: current, source, text } = observe();
     if (current.kind === "failed") return current;
     const value = next(current.value);
+    // [LAW:one-source-of-truth] The same observation supplies both the
+    // value and the precise bytes to restore if another write fails.
     const promote = source !== null && source !== file;
     const rewrite =
       promote || value !== current.value
         ? { file, was: source === file ? text : null, will: textOf(value) }
         : null;
-    return {
-      kind: "ok",
-      value: {
-        rewrite,
-        retire: previousName(file, previous, source),
-        value,
-      },
-    };
+    try {
+      const old = previousName(file, previous, source);
+      const retire =
+        old === null
+          ? null
+          : { from: old, to: `${old}.migrated-${randomUUID()}` };
+      return ok({ rewrite, retire, value });
+    } catch (e) {
+      return {
+        kind: "failed",
+        reason: `cannot inspect the former state file ${previous}: ${asError(e).message}`,
+      };
+    }
   };
   return {
     observe,
     read: () => observe().result,
     plan,
-    update: (next) => {
-      const planned = plan(next);
-      if (planned.kind === "failed") return planned;
-      const { rewrite, retire, value } = planned.value;
-      writeRevisions(rewrite === null ? [] : [rewrite], retire);
-      return ok(value);
-    },
   };
 }
 
-// An explicit update also retires a leftover copy from older installers.
+// [LAW:single-enforcer] An explicit update retires a leftover legacy name.
 // A name the current book resolves through is still its backing file.
 // Compare directory entries without following a final symlink at that entry.
 function previousName(
@@ -119,12 +114,21 @@ function previousName(
   previous: string | undefined,
   source: string | null,
 ): string | null {
-  if (previous === undefined || source === null) return null;
+  if (previous === undefined) return null;
   if (source === previous) return previous;
   const old = fs.lstatSync(previous, { throwIfNoEntry: false });
   if (!old?.isFile() && !old?.isSymbolicLink()) return null;
-  const entry = (at: string): string =>
-    path.join(fs.realpathSync.native(path.dirname(at)), path.basename(at));
+  const entry = (at: string): string | null => {
+    try {
+      return path.join(
+        fs.realpathSync.native(path.dirname(at)),
+        path.basename(at),
+      );
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw cause;
+    }
+  };
   const oldEntry = entry(previous);
   return linkChain(file).some((hop) => entry(hop) === oldEntry)
     ? null

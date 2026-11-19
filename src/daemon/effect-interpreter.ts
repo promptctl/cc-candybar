@@ -7,7 +7,11 @@
 // puts back the files already written. No renderer writes a config file, or
 // Claude Code's settings.
 
-import { writeRevisions, type FileRewrite } from "./file-rewrites.js";
+import {
+  writeRevisions,
+  type FileRewrite,
+  type FileRetirement,
+} from "./file-rewrites.js";
 import {
   addressText,
   applyChanges,
@@ -98,7 +102,7 @@ export function performChanges(
   const rewrites = new Map<string, FileRewrite>();
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
-  let retire: string | null = null;
+  let retire: FileRetirement | null = null;
   let answered: readonly string[] = [];
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
@@ -180,7 +184,7 @@ export function performChanges(
       reason: `config write failed: ${asError(e).message}`,
     };
   }
-  for (const line of answered) book!.said(line);
+  for (const line of answered) book?.said(line);
   return { kind: "ok", files: landed };
 }
 

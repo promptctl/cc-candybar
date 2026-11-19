@@ -3,6 +3,7 @@
 // approved the repository, and every resolution (the render and the durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { writeStatePlan } from "./helpers/state-file";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -331,7 +332,7 @@ describe("the book in the state directory", () => {
 
   test("the first answer recorded writes it into the folder, with the answer", () => {
     write(loose(), { [project]: "approved" });
-    repoConfigs(state()).update((book) => ({ ...book, [other()]: "declined" }));
+    writeStatePlan(repoConfigs(state()).plan((book) => ({ ...book, [other()]: "declined" })));
     const filed = {
       kind: "ok",
       value: { [project]: "approved", [other()]: "declined" },
@@ -348,7 +349,7 @@ describe("the book in the state directory", () => {
     fs.mkdirSync(state());
     fs.symlinkSync(external, loose());
     const store = repoConfigs(state());
-    store.update((book) => ({ ...book, [other()]: "declined" }));
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
     expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
     expect(JSON.parse(fs.readFileSync(external, "utf8"))).toEqual({ [project]: "approved" });
     fs.unlinkSync(repoConfigsPath(state()));
@@ -361,7 +362,22 @@ describe("the book in the state directory", () => {
     const store = repoConfigs(state());
     expect(store.read()).toEqual({ kind: "ok", value: { [project]: "declined" } });
     expect(fs.existsSync(loose())).toBe(true);
-    store.update((book) => ({ ...book, [other()]: "approved" }));
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "approved" })));
+    const backups = fs.readdirSync(state()).filter((name) => name.startsWith("repo-configs.json.migrated-"));
+    expect(backups).toHaveLength(1);
+    expect(JSON.parse(fs.readFileSync(path.join(state(), backups[0]!), "utf8"))).toEqual({ [project]: "approved" });
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("a dangling legacy link cannot revive an answer after the current book is reset", () => {
+    fs.mkdirSync(state());
+    const target = path.join(root, "offline-answers.json");
+    fs.symlinkSync(target, loose());
+    const store = repoConfigs(state());
+    writeStatePlan(store.plan(() => ({ [project]: "declined" })));
+    expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
+    write(target, { [project]: "approved" });
     fs.unlinkSync(repoConfigsPath(state()));
     expect(store.read()).toEqual({ kind: "ok", value: {} });
   });
@@ -371,7 +387,7 @@ describe("the book in the state directory", () => {
     fs.mkdirSync(path.dirname(repoConfigsPath(state())));
     fs.symlinkSync(loose(), repoConfigsPath(state()));
     const store = repoConfigs(state());
-    store.update((book) => ({ ...book, [other()]: "declined" }));
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
     expect(store.read()).toEqual({ kind: "ok", value: { [project]: "approved", [other()]: "declined" } });
     expect(fs.lstatSync(repoConfigsPath(state())).isSymbolicLink()).toBe(true);
   });
@@ -391,7 +407,7 @@ describe("the book in the state directory", () => {
     const store = repoConfigs(state());
     const failed = { kind: "failed", reason: expect.stringContaining("ENOTDIR") };
     expect(store.read()).toMatchObject(failed);
-    expect(store.update(() => ({}))).toMatchObject(failed);
+    expect(writeStatePlan(store.plan(() => ({})))).toMatchObject(failed);
     expect(JSON.parse(fs.readFileSync(loose(), "utf8"))).toEqual({ [project]: "approved" });
   });
 });
@@ -486,7 +502,7 @@ describe("a repository's worktrees answer as the repository", () => {
     });
 
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => legacy);
+    writeStatePlan(state.plan(() => legacy));
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",
       value: { superseded: [wt], absent: [], unchecked: [] },
@@ -500,7 +516,7 @@ describe("a repository's worktrees answer as the repository", () => {
   test("an entry whose directory is gone is kept and named, and the answer is recorded", () => {
     const gone = path.join(root, "removed-worktree");
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => ({ [gone]: "approved" }));
+    writeStatePlan(state.plan(() => ({ [gone]: "approved" })));
     expect(recordAnswer(state, project, "declined")).toEqual({
       kind: "ok",
       value: { superseded: [], absent: [gone], unchecked: [] },
@@ -531,7 +547,7 @@ describe("a repository's worktrees answer as the repository", () => {
     const moved = path.join(root, "moved");
     fs.renameSync(wt, moved);
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => ({ [moved]: "approved" }));
+    writeStatePlan(state.plan(() => ({ [moved]: "approved" })));
     expect(resolveAt(state.read() as RepoAnswers, moved).repos).toMatchObject({
       approved: [moved],
       unproven: [{ dir: moved }],

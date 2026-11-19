@@ -1,3 +1,4 @@
+import { writeStatePlan } from "../../helpers/state-file";
 import type { Frame } from "../../../src/render/frame";
 import { hostOf } from "../../helpers/host";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
@@ -281,9 +282,9 @@ describe("a repository's config waits for the user's one answer", () => {
     git("-C", project, "worktree", "add", "-q", "--detach", older);
     // This worktree predates project approvals. The new worktree asks for
     // the project, and the explicit answer replaces the older entry.
-    repoConfigs(stateDir(hostOf(isolated.env))).update(() => ({
+    writeStatePlan(repoConfigs(stateDir(hostOf(isolated.env))).plan(() => ({
       [older]: "declined",
-    }));
+    })));
     try {
       start();
       const asked = await questionOf(

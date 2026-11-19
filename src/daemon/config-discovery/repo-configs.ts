@@ -57,8 +57,7 @@ export interface Recorded {
   readonly unchecked: readonly Unchecked[];
 }
 
-// [LAW:single-enforcer] The one way an answer changes the book — the bar's
-// click and the tests' approvals alike: the repository at `dir` takes the
+// [LAW:single-enforcer] The repository at `dir` takes the
 // answer, and every other entry whose directory is present and answers under
 // `dir` (a linked worktree's own, kept from before answers were kept by
 // repository) goes with it, so a repository holds one answer.
@@ -97,8 +96,8 @@ export interface Answer {
 }
 
 // [LAW:effects-at-boundaries] What answering `answers` in order makes of the
-// book under `stateDir`, unwritten, so it lands with the config files its
-// click changed: the file and its next text, and each answer's line.
+// book under `stateDir`: the disk changes and the messages emitted after
+// those changes commit with the turn's config files.
 export function answeredBook(
   stateDir: string,
   answers: readonly Answer[],
@@ -116,9 +115,10 @@ export function answeredBook(
     }, current),
   );
   if (planned.kind === "failed") return planned;
+  // [LAW:nothing-unseen] Identify the archive after a completed migration.
   if (planned.value.retire !== null)
     said.push(
-      `repo-config: retired ${planned.value.retire} after updating ${repoConfigsPath(stateDir)}`,
+      `repo-config: retired ${planned.value.retire.from} to ${planned.value.retire.to} after updating ${repoConfigsPath(stateDir)}`,
     );
   return ok({ ...planned.value, said });
 }

@@ -6,6 +6,7 @@
 // hand edit an origin's watch hears moves that origin; and an answer to the
 // trust book moves every origin that consulted it.
 
+import { writeStatePlan } from "./helpers/state-file";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -249,7 +250,7 @@ test.each(["landed", "polled"] as const)(
     const worker = service.forRenderer(name);
     const listed = (holder: RendererConfigs, origin: RenderOrigin) =>
       holder.snapshotOf(origin)?.strays.map(({ path }) => path);
-    book.update(() => ({ [dir]: "approved" }));
+    writeStatePlan(book.plan(() => ({ [dir]: "approved" })));
     discovery.follow([main, isolated]);
     worker.follow([other]);
     expect(discovery.snapshotOf(main)?.repo).toBeNull();
@@ -257,7 +258,7 @@ test.each(["landed", "polled"] as const)(
     expect(listed(worker, other)).toEqual([stray]);
     const isolatedBefore = discovery.snapshotOf(isolated);
 
-    book.update(() => ({ [dir]: "declined" }));
+    writeStatePlan(book.plan(() => ({ [dir]: "declined" })));
     if (how === "landed") {
       expect(discovery.landed([repoConfigsPath(state)])).toEqual([main]);
       expect(delivered).toEqual([[name, originKey(other)]]);
@@ -290,7 +291,7 @@ test("a layered renderer follows the older repository book until the first answe
   fs.writeFileSync(old, JSON.stringify({ [dir]: "approved" }));
   clock.advance(POLL_MS + DEBOUNCE_MS);
   expect(standing()).toBe("approved");
-  repoConfigs(state).update(() => ({ [dir]: "declined" }));
+  writeStatePlan(repoConfigs(state).plan(() => ({ [dir]: "declined" })));
   clock.advance(POLL_MS + DEBOUNCE_MS);
   expect(standing()).toBe("declined");
   expect(fs.existsSync(old)).toBe(false);
@@ -717,7 +718,7 @@ test("the two renderers and an answer written through the host read each book re
   const book = repoConfigsPath(state);
   const dir = project("repository");
   fs.writeFileSync(path.join(dir, ".cc-candybar.json5"), "{}");
-  repoConfigs(state).update(() => ({ [dir]: "declined" }));
+  writeStatePlan(repoConfigs(state).plan(() => ({ [dir]: "declined" })));
   const { file } = named("base");
   const a = originOf(dir, dir, file);
   const b = originOf(dir, project("another-cwd"), file);
@@ -931,7 +932,7 @@ test("a project cannot inherit another origin's approval through the same physic
   const same = path.join(other, ".cc-candybar.json5");
   fs.writeFileSync(config, "{}");
   fs.linkSync(config, same);
-  repoConfigs(path.join(root, "state")).update(() => ({ [approved]: "approved" }));
+  writeStatePlan(repoConfigs(path.join(root, "state")).plan(() => ({ [approved]: "approved" })));
   const reads: string[] = [];
   const service = physicalDiscovery(project("empty-data"), reads);
   const first = service.forRenderer(MAIN_RENDERER);

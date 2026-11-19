@@ -265,10 +265,13 @@ describe("performChanges with the trust book", () => {
       answers: [answer(dir)],
       said: (line) => said.push(line),
     });
-    expect(outcome).toEqual({ kind: "ok", files: [current, old] });
+    if (outcome.kind !== "ok") throw new Error(JSON.stringify(outcome));
+    const archive = outcome.files[2]!;
+    expect(outcome.files).toEqual([current, old, expect.stringContaining(`${old}.migrated-`)]);
+    expect(JSON.parse(read(archive))).toEqual({ [user]: "declined" });
     expect(JSON.parse(read(current))).toEqual({ [user]: "declined", [dir]: "approved" });
     expect(fs.existsSync(old)).toBe(false);
-    expect(said).toContain(`repo-config: retired ${old} after updating ${current}`);
+    expect(said).toContain(`repo-config: retired ${old} to ${archive} after updating ${current}`);
   });
 
   test.each(["missing", "existing"] as const)("a loose book that cannot retire restores the config and the %s current book", (current) => {

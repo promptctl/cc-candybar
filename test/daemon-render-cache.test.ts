@@ -20,7 +20,7 @@ import {
 } from "node:fs";
 import fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   RenderCache,
@@ -1044,7 +1044,6 @@ describe("RenderCache", () => {
         throw new Error("observer boom");
       },
     });
-    // The cache's own watch, on the answers for repositories.
     const own = watchers.size();
     try {
       expect(() => cache.getOrCreate(originAt(dir, dir, undefined))).toThrow(
@@ -1063,18 +1062,6 @@ describe("RenderCache", () => {
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
-    }
-  });
-
-  // The book is polled at its path. No OS watch sits on the state directory,
-  // whose log writes on every request, or on the book's folder.
-  test("the answers' book is polled, and no OS watch sits on the state directory", () => {
-    const { cleanups, watchers } = makeCache();
-    try {
-      expect(watchers.watchedDirs()).toEqual([]);
-      expect(watchers.polledPaths()).toBe(1);
-    } finally {
-      for (const fn of cleanups) fn();
     }
   });
 
@@ -1122,9 +1109,9 @@ describe("RenderCache", () => {
     }
   });
 
-  // The answers for repositories are one watch for the whole cache, never one
-  // per entry, and a change to them reloads the entries under the new answer.
-  test("an entry follows the answers through the cache's one watch", async () => {
+  // The host polls the decision file only for interested origins. Watching
+  // its directory would also wake the bar for unrelated state and log writes.
+  test("a layered entry follows the decision file without watching its state directory", async () => {
     const { dir, cleanup } = mkConfigDir();
     const causes: LoadCause["kind"][] = [];
     const { cache, originAt, cleanups, reloads, watchers } = makeCache({
@@ -1134,18 +1121,23 @@ describe("RenderCache", () => {
       },
     });
     try {
+      expect(watchers.polledPaths()).toBe(0);
       const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
       writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.configLayers).toEqual([file]);
       expect(watchers.size()).toBe(own + 1);
+      const state = stateDir(host);
+      const book = repoConfigsPath(state);
+      expect(watchers.watchedDirs()).not.toContain(state);
+      expect(watchers.watchedDirs()).not.toContain(dirname(book));
       // A rewrite of the book, so every retry the signal makes is an event.
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
       await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(stateDir(host)), declined),
+        writeFileSync(book, declined),
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.snapshot.repo?.standing).toBe("declined");
