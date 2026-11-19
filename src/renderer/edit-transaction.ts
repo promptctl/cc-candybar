@@ -2,8 +2,13 @@
 // Closing the transaction releases the draft; only Save sends changes to the host.
 
 import { observable, runInAction } from "mobx";
-import type { ConfigSnapshot, Layer } from "../config/config-snapshot.js";
-import { writable } from "../config/config-snapshot.js";
+import {
+  contentOfText,
+  type ConfigSnapshot,
+  type Layer,
+  type LayerContent,
+} from "../config/config-snapshot.js";
+import { requireLayerText } from "./config-writes.js";
 import {
   addressText,
   applyChanges,
@@ -25,14 +30,6 @@ import {
   type HistoryDepth,
   type Journal,
 } from "./settings-history.js";
-
-function textOf(layer: Layer): string | null {
-  if (!writable(layer.content))
-    throw new BadVerbArgs(
-      `${layer.path} is unreadable: ${layer.content.error}`,
-    );
-  return layer.content.kind === "text" ? layer.content.text : null;
-}
 
 // [LAW:types-are-the-program] An edit turn can keep editing, save, or cancel.
 // Only Save opens a journal over committed settings and stages host writes.
@@ -144,9 +141,12 @@ class EditDraft {
     };
     const files: ConfigFiles = {
       read: (file) =>
-        working.has(file) ? working.get(file)! : textOf(layerAt(file)),
+        working.has(file)
+          ? contentOfText(working.get(file)!)
+          : layerAt(file).content,
       land: (file, _before, after) => {
-        if (after === textOf(layerAt(file))) working.delete(file);
+        if (after === requireLayerText(file, layerAt(file).content))
+          working.delete(file);
         else working.set(file, after);
       },
       roleOf: (file) => layerAt(file).role,
@@ -183,8 +183,8 @@ class EditDraft {
               `save: the ${source.role} layer for this edit moved`,
             );
           const applied = applyChanges(
-            textOf(target),
-            diffChanges(textOf(source), after),
+            requireLayerText(path, target.content),
+            diffChanges(requireLayerText(path, source.content), after),
           );
           if (applied.kind !== "applied")
             throw new BadVerbArgs(
@@ -192,15 +192,17 @@ class EditDraft {
             );
           rewritten.set(path, applied.text);
         }
-        const read = (file: string): string | null =>
-          rewritten.has(file) ? rewritten.get(file)! : destination.read(file);
+        const read = (file: string): LayerContent =>
+          rewritten.has(file)
+            ? contentOfText(rewritten.get(file)!)
+            : destination.read(file);
         for (const [file, text] of rewritten)
           destination.prove(file, text, read);
         for (const [file, text] of rewritten)
           committedJournal.file(
             this.session,
             file,
-            destination.read(file),
+            requireLayerText(file, destination.read(file)),
             text,
           );
         // The save click's own writes take precedence over the current draft,
