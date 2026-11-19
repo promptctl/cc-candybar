@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-851",
+      "ref": "refs/pull/851/merge",
+      "sha": "3c3153cb89e964a1718263d8df8a1aa9529990ac",
+      "timestamp": "2026-11-19T10:58:12.983Z",
+      "commits": [
+        {
+          "sha": "3c3153cb89e964a1718263d8df8a1aa9529990ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:57:11Z",
+          "message": "Merge cb763d8d413a72aec3dce29f07e5b795050801aa into 19a035d767753cfdb962f8696891d8c5f54c8c6f\n"
+        },
+        {
+          "sha": "cb763d8d413a72aec3dce29f07e5b795050801aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:36:12-07:00",
+          "message": "test(config): assert typed layer reads at the click boundary\n"
+        },
+        {
+          "sha": "0ffb763713d3dcf8c8633f6374b21bcf55732926",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:33:41-07:00",
+          "message": "test(integration): verify pane settings activate after saving an edit draft\n"
+        },
+        {
+          "sha": "ca0e375971c79bfc9f8e9aaba95cac2bffcb180d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:25:22-07:00",
+          "message": "refactor(renderer): navigate between menu views\n"
+        },
+        {
+          "sha": "eb7d9deaceec406f97578ede0dda950feff38a06",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:24:20-07:00",
+          "message": "fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n"
+        },
+        {
+          "sha": "67fc74427bb825226f727b0cbbbb5346439568e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:27:11-07:00",
+          "message": "test(edit): verify help and chrome through the active draft\n"
+        },
+        {
+          "sha": "71c492c969b660edbcfe3cd8e38990fa82484b38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:11:37-07:00",
+          "message": "fix(renderer): keep live repository trust in edit previews\n"
+        },
+        {
+          "sha": "110a9b1a87c07a838473c81fc1bb3f67e643a831",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:08:06-07:00",
+          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "19a035d767753cfdb962f8696891d8c5f54c8c6f",
@@ -35,70 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:45:50-07:00",
           "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-851",
-      "ref": "refs/pull/851/merge",
-      "sha": "12b090398792a934cc81efbd73dad444a8bdfa0f",
-      "timestamp": "2026-11-19T10:48:36.552Z",
-      "commits": [
-        {
-          "sha": "12b090398792a934cc81efbd73dad444a8bdfa0f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:47:12-07:00",
-          "message": "Merge 4ba8c21e86c97efb58d967ac58f447c5dfb6492c into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
-        },
-        {
-          "sha": "4ba8c21e86c97efb58d967ac58f447c5dfb6492c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:36:12-07:00",
-          "message": "test(config): assert typed layer reads at the click boundary\n"
-        },
-        {
-          "sha": "56d45de62d5fe5d8bebbaa029ea46359a213453c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:33:41-07:00",
-          "message": "test(integration): verify pane settings activate after saving an edit draft\n"
-        },
-        {
-          "sha": "f7b8d2709ae5f79d2b58f455ffb0967c86ca7aa6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:25:22-07:00",
-          "message": "refactor(renderer): navigate between menu views\n"
-        },
-        {
-          "sha": "584364c0a9ab7cbb337b3ee409cd675bb995c39b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:24:20-07:00",
-          "message": "fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n"
-        },
-        {
-          "sha": "05d768cfcdcc0a1aa11a2310acfd4b72265a1555",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:27:11-07:00",
-          "message": "test(edit): verify help and chrome through the active draft\n"
-        },
-        {
-          "sha": "969a86bb95b7fd86898d16f30b0482d8ea66a09b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:11:37-07:00",
-          "message": "fix(renderer): keep live repository trust in edit previews\n"
-        },
-        {
-          "sha": "d732ee080406f309404de31da27daf731c0a74c1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:06-07:00",
-          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
         }
       ]
     },
@@ -200,64 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:38:14-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-842",
-      "ref": "refs/pull/842/merge",
-      "sha": "3b595f444e3b0259c279c750e47f63d6091a6866",
-      "timestamp": "2026-11-19T10:19:54.135Z",
-      "commits": [
-        {
-          "sha": "3b595f444e3b0259c279c750e47f63d6091a6866",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:18:50Z",
-          "message": "Merge 8641bc56afd0511f92d55e13bd840281ad3c251c into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "8641bc56afd0511f92d55e13bd840281ad3c251c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:00-07:00",
-          "message": "fix(client): make native reconnect consume the passive outcome\n"
-        },
-        {
-          "sha": "6bbb812673e4c644ffa5146037a2667f5640e279",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:16-07:00",
-          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-840",
-      "ref": "refs/pull/840/merge",
-      "sha": "c509779a3bb96ed8549aaa2fa4578885543b675e",
-      "timestamp": "2026-11-19T10:19:50.833Z",
-      "commits": [
-        {
-          "sha": "c509779a3bb96ed8549aaa2fa4578885543b675e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:18:51Z",
-          "message": "Merge 026590dd5866e04a37b282d606eedb73f81c9963 into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "026590dd5866e04a37b282d606eedb73f81c9963",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:42-07:00",
-          "message": "fix(config): exclude retired update settings from writable targets\n"
-        },
-        {
-          "sha": "120b882c8820e21522c7eb64e09dd0642475c9c6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:02-07:00",
-          "message": "refactor: remove in-bar update offers and workers\n"
         }
       ]
     },
