@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-906",
+      "ref": "refs/pull/906/merge",
+      "sha": "f8a50cbc2c2090f130c72fe6fd625542675ad530",
+      "timestamp": "2026-11-19T20:13:27.698Z",
+      "commits": [
+        {
+          "sha": "f8a50cbc2c2090f130c72fe6fd625542675ad530",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:12:20Z",
+          "message": "Merge 08a5c5dbf1a8c29fcc89611774ef1492c344fc02 into 99736d58e59a636f23bf2fc28651bb8eeb1df4da\n"
+        },
+        {
+          "sha": "08a5c5dbf1a8c29fcc89611774ef1492c344fc02",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:31:16-07:00",
+          "message": "fix(config): select plugin definitions before reading them\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "99736d58e59a636f23bf2fc28651bb8eeb1df4da",
@@ -107,28 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-906",
-      "ref": "refs/pull/906/merge",
-      "sha": "3676fe464a95bb50c3d8a35edb8ba07fdc4f9a63",
-      "timestamp": "2026-11-19T19:35:26.833Z",
-      "commits": [
-        {
-          "sha": "3676fe464a95bb50c3d8a35edb8ba07fdc4f9a63",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:34:05-07:00",
-          "message": "Merge 3185991426d5a748cdd66a104c9aa2ec35a75446 into 7df1347f46b6e135236f014e234935a7b5ffc5fc\n"
-        },
-        {
-          "sha": "3185991426d5a748cdd66a104c9aa2ec35a75446",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:31:16-07:00",
-          "message": "fix(config): select plugin definitions before reading them\n"
         }
       ]
     },
