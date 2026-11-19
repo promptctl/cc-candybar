@@ -574,6 +574,13 @@ export function rendererHost(
       } catch (thrown) {
         made = failureOf(thrown);
       }
+      // A new renderer holds no config, even if its start was not made or
+      // could not be answered. The first mailbox place belongs to start.
+      if (
+        at === "first" ||
+        (made.kind === "event" && made.event.kind === "start")
+      )
+        served.clear();
       if (made.kind !== "event")
         return { event: null, slotted: unanswered(made, queuedMs) };
       holds(made.event.kind);
@@ -606,11 +613,6 @@ export function rendererHost(
       return turn;
     };
   const deliver = recorded("last");
-  const start: RendererHost["start"] = (make, about) =>
-    recorded("first")(() => {
-      served.clear();
-      return make();
-    }, about);
   // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
   // is the daemon's, on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
@@ -724,7 +726,7 @@ export function rendererHost(
     name,
     answer,
     deliver,
-    start,
+    start: recorded("first"),
     ask,
     tell,
     moved,
