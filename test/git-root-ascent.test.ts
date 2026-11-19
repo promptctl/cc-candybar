@@ -110,6 +110,25 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     });
   });
 
+  test("a checked error at a nearer .git does not select the enclosing repository", () => {
+    const outer = join(root, "enclosing");
+    initRepo(outer);
+    const inner = join(outer, "inner");
+    mkdirSync(inner);
+    const dotGit = join(inner, ".git");
+    symlinkSync(".git", dotGit);
+
+    const failure = {
+      kind: "failed",
+      failedAt: "read",
+      reason: expect.stringContaining(
+        `ELOOP: too many symbolic links encountered, stat '${dotGit}'`,
+      ),
+    };
+    expect(git.findGitRoot(inner)).toEqual(failure);
+    expect(git.resolveEffectiveGitDir(inner, outer)).toEqual(failure);
+  });
+
   // A bare repo has no work tree, so it has no root to report — `--show-toplevel`
   // printed nothing there and `nonEmpty` turned that into absent. Same answer.
   test("a bare repo is absent, not its own root", async () => {

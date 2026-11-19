@@ -16,6 +16,7 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { CheckoutLocation } from "../utils/git-root.js";
+import type { Outcome } from "../utils/outcome.js";
 import {
   failedWith,
   RENDER_ANSWERS,
@@ -70,22 +71,38 @@ function failed(
 
 // Where a directory sits in its repository: the disk's answer for a session
 // on this machine, a fixture's for a faked one.
-export type Locate = (dir: string) => CheckoutLocation;
+export type Locate = (dir: string) => Outcome<CheckoutLocation>;
+
+const NO_REPOSITORY: CheckoutLocation = {
+  main: "",
+  worktree: "",
+  subpath: "",
+  noRepo: true,
+};
 
 // [LAW:effects-at-boundaries] The request's context as both its turns take
 // it: the checkout its directory is in, read by the host, so the renderer
 // reads no file for it and the two turns read one location.
-export function located(
+function located(
   req: CheckedRenderRequest,
   locate: Locate,
-): CheckedRenderRequest {
+): { readonly req: CheckedRenderRequest; readonly error: string | null } {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  if (dir === undefined || !path.isAbsolute(dir)) return { req, error: null };
+  const found = locate(dir);
   return {
-    ...req,
-    hookData: {
-      ...req.hookData,
-      ...(dir !== undefined &&
-        path.isAbsolute(dir) && { location: locate(dir) }),
+    error: found.kind === "failed" ? found.reason : null,
+    req: {
+      ...req,
+      hookData: {
+        ...req.hookData,
+        location:
+          found.kind === "ok"
+            ? found.value
+            : found.kind === "absent"
+              ? NO_REPOSITORY
+              : undefined,
+      },
     },
   };
 }
@@ -118,7 +135,7 @@ export async function answerStatusline(
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
-  const req = located(arrived, locate);
+  const { req, error: checkoutError } = located(arrived, locate);
   const session = req.hookData.session_id;
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
@@ -148,6 +165,9 @@ export async function answerStatusline(
     // session, which the event's readers key on (`render sid=`), and says
     // what the context was, whether or not a request turn runs after it.
     recorded(facts, configured);
+    // [LAW:no-silent-failure] A failed lookup leaves the location unknown.
+    // The request says why, and the bar does not offer to initialize Git.
+    if (checkoutError !== null) noteFacts(facts, { checkoutError });
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
       return failed(host, configured.failure, "its context turn: ");

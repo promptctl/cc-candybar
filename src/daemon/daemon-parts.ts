@@ -21,7 +21,7 @@ import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
-import type { CheckoutLocation } from "../utils/git-root.js";
+import type { Locate } from "./statusline-answer.js";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -32,7 +32,7 @@ export interface DaemonParts {
   readonly home: string;
   // The temporary directory a click's handoff writes under.
   readonly clock: Timekeeper;
-  readonly checkoutLocation: (dir: string) => CheckoutLocation;
+  readonly checkoutLocation: Locate;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;
   readonly bundle: string;

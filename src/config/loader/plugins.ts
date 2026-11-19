@@ -1195,7 +1195,7 @@ function dataPathOf(
     if (checkout === null) {
       issues.push({
         path: "data.checkout",
-        message: `data is read from the session's checkout, and this load has no session`,
+        message: `data is read from the session's checkout, and this load has no usable checkout root`,
       });
       return undefined;
     }

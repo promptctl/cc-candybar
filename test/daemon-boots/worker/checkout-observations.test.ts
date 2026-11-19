@@ -11,6 +11,7 @@ import {
   hookData,
   renderBody,
 } from "../../helpers/daemon-e2e";
+import { loggedLines, renderLines } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
@@ -39,19 +40,23 @@ beforeEach(() => {
   isolated = prepareIsolatedDaemonEnv("ccb-checkout");
   clock = heldClock(new Date());
   config = path.join(root, "bar.json5");
+  writeConfig(["location"]);
+});
+
+function writeConfig(cells: readonly string[]): void {
   fs.writeFileSync(
     config,
     JSON.stringify({
       segments: {
         location: {
           template:
-            "{{ if .location.noRepo }}no repo{{ else }}{{ .location.main }}|{{ .location.worktree }}|{{ .location.subpath }}{{ end }}",
+            "{{ if .location.noRepo }}no repo{{ else if .location.main }}{{ .location.main }}|{{ .location.worktree }}|{{ .location.subpath }}{{ else }}location unknown{{ end }}",
         },
       },
-      root: { h: ["location"] },
+      root: { h: cells },
     }),
   );
-});
+}
 
 afterEach(async () => {
   await daemon?.stop();
@@ -180,6 +185,109 @@ test("an existing session sees git init after a cached absence expires", async (
   git(plain, "init", "-q");
   await clock.settle(CHECKOUT_FRESH_MS);
   expect(await label(running, "plain", plain)).toContain(`${plain}||`);
+});
+
+test("a checked Git read error does not draw the no-repo state", async () => {
+  const plain = directory("plain");
+  const unreadable = directory("unreadable");
+  const dotGit = path.join(unreadable, ".git");
+  fs.symlinkSync(".git", dotGit);
+  isolated.env.XDG_DATA_HOME = directory("data");
+  const plugin = directory("data/cc-candybar/plugins/checkoutprobe");
+  fs.writeFileSync(
+    path.join(plugin, "plugin.json5"),
+    JSON.stringify({
+      data: { checkout: "marker.json" },
+      segments: {
+        status: { template: "{{ .plugins.checkoutprobe.data.label }}" },
+      },
+    }),
+  );
+  fs.writeFileSync(
+    path.join(plain, "marker.json"),
+    '{"label":"plain plugin data"}',
+  );
+  fs.writeFileSync(
+    path.join(unreadable, "marker.json"),
+    '{"label":"wrong plugin data"}',
+  );
+  writeConfig(["location", "plugins.checkoutprobe.status"]);
+  const running = start();
+
+  const withoutRepo = await label(running, "absent", plain, plain);
+  expect(withoutRepo).toContain("no repo");
+  expect(withoutRepo).toContain("plain plugin data");
+  const failed = await label(running, "unreadable", unreadable, unreadable);
+  expect(failed).toContain("location unknown");
+  expect(failed).not.toContain("wrong plugin data");
+
+  const [absence] = await renderLines(isolated.env, "absent");
+  const [failure] = await renderLines(isolated.env, "unreadable");
+  expect(absence).not.toContain("checkoutError=");
+  expect(failure).toContain('checkoutError="ELOOP:');
+  expect(failure).toContain(dotGit);
+  await loggedLines(
+    isolated.env,
+    (lines) => lines.filter((line) => line.includes("config loaded")),
+    (lines) =>
+      lines.some(
+        (line) =>
+          line.includes("Checkout could not be read: ELOOP") &&
+          line.includes(dotGit),
+      ),
+    "failed checkout discovery recorded without a cwd root",
+  );
+});
+
+test("unreadable worktree proof does not ask for a second decision", async () => {
+  const { main, linked } = linkedCheckout();
+  const back = path.join(main, ".git", "worktrees", "linked", "gitdir");
+  const pointer = fs.readFileSync(back, "utf8");
+  answerRepo(main, "approved", isolated.env);
+  fs.writeFileSync(
+    path.join(linked, ".cc-candybar.json5"),
+    JSON.stringify({
+      segments: { repo: { template: "APPROVED PROJECT" } },
+      root: { h: ["repo"] },
+    }),
+  );
+  fs.unlinkSync(back);
+  fs.symlinkSync("gitdir", back);
+
+  const running = start();
+  const draw = async () =>
+    textOf(
+      await frameRequest(
+        running,
+        renderBody(
+          "worktree-read",
+          linked,
+          { termCols: 300 },
+          configFlag(config),
+        ),
+      ),
+    );
+  const unread = await draw();
+  expect(unread).toContain("location unknown");
+  expect(unread).not.toContain("APPROVED PROJECT");
+  const configLines = await loggedLines(
+    isolated.env,
+    (lines) => lines.filter((line) => line.includes("config loaded")),
+    (lines) =>
+      lines.some(
+        (line) =>
+          line.includes("Repository identity could not be read") &&
+          line.includes(back),
+      ),
+    "unreadable worktree proof recorded instead of a new approval",
+  );
+  expect(configLines.join("\n")).toContain(`repo=unread:${linked}`);
+  expect(configLines.join("\n")).not.toContain("repo=awaiting:");
+
+  fs.unlinkSync(back);
+  fs.writeFileSync(back, pointer);
+  running.daemon.rediscover();
+  expect(await draw()).toContain("APPROVED PROJECT");
 });
 
 // [LAW:parse-dont-validate] A checkout shown as linked a moment ago gives

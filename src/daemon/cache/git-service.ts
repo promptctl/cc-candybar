@@ -10,8 +10,8 @@ import { debug } from "../../utils/logger";
 import {
   commonDirOf,
   gitDirNamed,
+  gitEntryAt,
   gitRootOf,
-  holdsGit,
 } from "../../utils/git-root";
 import {
   type PullRequest,
@@ -103,10 +103,6 @@ export class GitService {
   // close refuses the next read of a pass under way.
   constructor(private readonly launcher: Launcher) {}
 
-  private isGitRepo(workingDir: string): boolean {
-    return holdsGit(workingDir);
-  }
-
   // [LAW:types-are-the-program] args is a string[] so the boundary type
   // forbids the only-space-free-arguments contract the prior whitespace-split
   // implementation relied on. Returns the full LaunchResult — the typed
@@ -144,20 +140,27 @@ export class GitService {
     workingDir: string,
     projectDir?: string,
   ): Outcome<string> {
-    if (this.isWorktree(workingDir)) return ok(workingDir);
-    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
-    if (this.isGitRepo(workingDir)) return ok(workingDir);
-    return this.findGitRoot(workingDir);
+    const working = gitEntryAt(workingDir);
+    if (working.kind === "failed") return working;
+    // [LAW:single-enforcer] A worktree stays the execution directory even
+    // when Claude Code names the repository's main checkout as its project.
+    if (working.kind === "ok" && working.value.isFile()) return ok(workingDir);
+    if (projectDir && projectDir !== workingDir) {
+      const project = gitEntryAt(projectDir);
+      if (project.kind === "ok") return ok(projectDir);
+      if (project.kind === "failed") return project;
+    }
+    return working.kind === "ok"
+      ? ok(workingDir)
+      : this.findGitRoot(workingDir);
   }
 
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
   // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
   // "not in a git repository", the everyday domain answer.
   //
-  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
-  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
-  // already short-circuit on, now asked at every level instead of only at
-  // `workingDir`. Before this, two resolvers answered one question and disagreed
+  // [LAW:one-source-of-truth] The repo root is the nearest directory with a
+  // checked .git entry. Before this, two resolvers answered one question and disagreed
   // — measured on a repo whose config sets `core.worktree = /elsewhere`:
   //
   //   cwd         git's answer   the short-circuit   the old rev-parse
@@ -187,13 +190,8 @@ export class GitService {
   // the DAEMON's environment, which describes whichever shell spawned it rather
   // than the session being rendered.
   //
-  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
-  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
-  // through `classify(…, "absent")` — a state this never produced, so inventing
-  // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir: string): Outcome<string> {
-    const root = gitRootOf(workingDir);
-    return root === undefined ? ABSENT : ok(root);
+    return gitRootOf(workingDir);
   }
 
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
@@ -223,21 +221,9 @@ export class GitService {
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<GitRead>> {
-    let gitDir: string;
-
-    if (this.isWorktree(workingDir)) {
-      // Worktree's .git is a file pointing to the main repo;
-      // git commands must run from the worktree directory.
-      gitDir = workingDir;
-    } else if (projectDir && this.isGitRepo(projectDir)) {
-      gitDir = projectDir;
-    } else if (this.isGitRepo(workingDir)) {
-      gitDir = workingDir;
-    } else {
-      const foundGitRoot = this.findGitRoot(workingDir);
-      if (foundGitRoot.kind !== "ok") return foundGitRoot;
-      gitDir = foundGitRoot.value;
-    }
+    const found = this.resolveEffectiveGitDir(workingDir, projectDir);
+    if (found.kind !== "ok") return found;
+    const gitDir = found.value;
 
     // branch/status/ahead-behind/sha/upstream are the core, and one
     // `git status --porcelain=v2 --branch` yields them all: without branch and
@@ -668,18 +654,6 @@ export class GitService {
     }
     // Recognized neither host → no forge integration for this remote.
     return ABSENT;
-  }
-
-  private isWorktree(workingDir: string): boolean {
-    try {
-      const gitDir = path.join(workingDir, ".git");
-      if (fs.existsSync(gitDir) && fs.statSync(gitDir).isFile()) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
   }
 
   // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2

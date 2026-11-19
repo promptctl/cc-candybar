@@ -54,7 +54,12 @@ const collisionsOf = (locs: Locations, projectDir?: string) =>
     searchConfig(locs, () => observedAnswers(approving()), { kind: "chain", projectDir }).locations,
   );
 
-const NO_PROJECT_ACCESS = { approved: null, question: null, unread: null };
+const NO_PROJECT_ACCESS = {
+  approved: null,
+  question: null,
+  unread: null,
+  unreadIdentity: null,
+};
 
 // Root bypasses directory permissions, so the unsearchable-directory fixtures
 // cannot exist for it.
@@ -235,9 +240,9 @@ describe("the config search", () => {
         home: xdgJson5,
         unchecked: [],
         project: {
+          ...NO_PROJECT_ACCESS,
           approved: repo,
           question: { dir: realpathSync(proj), standing: "approved", unproven: null },
-          unread: null,
         },
       });
       const query = { kind: "chain", projectDir: proj } as const;
@@ -438,6 +443,7 @@ describe("the config search", () => {
       const L = isolated(dir);
       const locked = join(dir, "locked");
       mkdirSync(locked);
+      const physical = realpathSync(locked);
       writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
       const xdgCfgDir = join(dir, "cc-candybar");
       mkdirSync(xdgCfgDir);
@@ -462,8 +468,17 @@ describe("the config search", () => {
             path,
             error: expect.stringContaining("EACCES"),
           })),
-          project: NO_PROJECT_ACCESS,
+          project: {
+            ...NO_PROJECT_ACCESS,
+            unreadIdentity: {
+              dir: physical,
+              reason: expect.stringContaining("EACCES"),
+            },
+          },
         });
+        expect(resolved.project.unreadIdentity?.reason).toContain(
+          join(physical, ".git"),
+        );
         const notice = configResolutionNotice(resolved);
         expect(notice).toContain("Config location could not be checked");
         for (const path of skipped) expect(notice).toContain(path);

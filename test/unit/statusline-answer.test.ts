@@ -42,6 +42,7 @@ import {
 } from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
 import type { Monotonic } from "../../src/time";
+import { ABSENT } from "../../src/utils/outcome";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -70,7 +71,7 @@ const CHECKED = checkRenderRequest(
 if (!CHECKED.ok) throw new Error(CHECKED.problems.join("; "));
 const REQ = CHECKED.req;
 const LOCATION = { main: "", worktree: "", subpath: "", noRepo: true };
-const locate = () => LOCATION;
+const locate = () => ABSENT;
 const CONTEXT = { ...REQ, hookData: { ...REQ.hookData, location: LOCATION } };
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
