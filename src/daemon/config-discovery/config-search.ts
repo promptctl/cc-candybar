@@ -137,12 +137,13 @@ export function searchConfig(
     query.kind === "chain" ? query.projectDir : undefined,
     files,
   );
+  // [LAW:one-source-of-truth] An isolated query consults no decisions. A
+  // layered query derives its gate, question and watch paths from one read.
   const book = query.kind === "file" ? null : readAnswers();
-  const answers = book?.result ?? null;
   const repos =
-    answers === null ? NO_REPOS : gateRepos(answers, dirs, seen.project);
+    book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
   const question =
-    answers === null ? null : repoQuestion(answers, dirs, seen.project);
+    book === null ? null : repoQuestion(book.result, dirs, seen.project);
   const layers: ConfigLayer[] = found
     .filter(
       ({ role, directory }) =>

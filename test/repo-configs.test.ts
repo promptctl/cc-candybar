@@ -1,7 +1,6 @@
-// [LAW:behavior-not-structure] A repository's cc-candybar configs — its cwd
-// and project layers and its `.cc-candybar/plugins/` — load only once the user
-// approved the repository, and every resolution (the render, `check`, the
-// durable writer) answers the same way. The answer is per repository, holds
+// [LAW:behavior-not-structure] A repository's cc-candybar configs — its project
+// and local layers and its `.cc-candybar/plugins/` — load only once the user
+// approved the repository, and every resolution (the render and the durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
 import { bareGates } from "./helpers/gates";
@@ -23,13 +22,12 @@ import {
   type ReloadedEntry,
 } from "../src/renderer/render-cache";
 import {
-  recordAnswer,
   repoConfigs,
   repoConfigsPath,
 } from "../src/daemon/config-discovery/repo-configs";
 import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
-import { answerRepo } from "./helpers/repo-approval";
+import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
@@ -342,6 +340,40 @@ describe("the book in the state directory", () => {
     expect(
       JSON.parse(fs.readFileSync(repoConfigsPath(state()), "utf8")),
     ).toEqual(filed.value);
+  });
+
+  test("retiring an imported symlink leaves its target and makes a deliberate reset stick", () => {
+    const external = path.join(root, "archived-answers.json");
+    write(external, { [project]: "approved" });
+    fs.mkdirSync(state());
+    fs.symlinkSync(external, loose());
+    const store = repoConfigs(state());
+    store.update((book) => ({ ...book, [other()]: "declined" }));
+    expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(external, "utf8"))).toEqual({ [project]: "approved" });
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("an explicit write retires the leftover loose copy from an earlier upgrade", () => {
+    write(loose(), { [project]: "approved" });
+    write(repoConfigsPath(state()), { [project]: "declined" });
+    const store = repoConfigs(state());
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "declined" } });
+    expect(fs.existsSync(loose())).toBe(true);
+    store.update((book) => ({ ...book, [other()]: "approved" }));
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("a current book explicitly linked to the older name keeps its backing file", () => {
+    write(loose(), { [project]: "approved" });
+    fs.mkdirSync(path.dirname(repoConfigsPath(state())));
+    fs.symlinkSync(loose(), repoConfigsPath(state()));
+    const store = repoConfigs(state());
+    store.update((book) => ({ ...book, [other()]: "declined" }));
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "approved", [other()]: "declined" } });
+    expect(fs.lstatSync(repoConfigsPath(state())).isSymbolicLink()).toBe(true);
   });
 
   test("is not read once the folder holds a book", () => {

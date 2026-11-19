@@ -3,7 +3,7 @@
 // before it starts the servers a project's `.mcp.json` declares, and the
 // answer holds across every later edit of the files and every worktree: a
 // directory in a linked worktree answers under its main worktree's
-// counterpart. A repository's configs are its cwd and project layers and its
+// counterpart. A repository's configs are its project and local layers and its
 // `.cc-candybar/plugins/`; the user's XDG file, an explicit config path and
 // the user's and package managers' plugin roots never ask.
 //
@@ -20,8 +20,7 @@ export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
 // The answers, keyed by each repository directory's real path (`answerDir`).
 export type RepoConfigBook = Readonly<Record<string, RepoAnswer>>;
 
-// The book as its reader found it, or why it could not be read: the shape the
-// doctor's state-file store reads, so that one store keeps it.
+// The decisions the host read, or the error that prevented their use.
 export type RepoAnswers = Asked<RepoConfigBook>;
 
 declare const approved: unique symbol;

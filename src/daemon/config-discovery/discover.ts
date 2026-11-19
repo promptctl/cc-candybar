@@ -16,6 +16,7 @@ import type {
 } from "../../config/config-snapshot.js";
 import type { Checkout } from "../../utils/git-root.js";
 import type { Unchecked } from "../../utils/presence.js";
+import type { StateObservation } from "../state-file.js";
 import { repoConfigs } from "./repo-configs.js";
 import type { LayerRole } from "../../config/layer-role.js";
 import {
@@ -49,6 +50,7 @@ import {
   repoUnreadNotice,
   type ApprovedRepo,
   type RepoGate,
+  type RepoConfigBook,
 } from "../../config/loader/repo-gate.js";
 
 // One plugin root as discovery listed it: each folder's definition, read, and
@@ -69,7 +71,7 @@ export interface RootListing {
 // batch of origins discovered together reads each of them once.
 export interface SharedFacts {
   readonly locs: Locations;
-  readonly answers: Parameters<typeof searchConfig>[1];
+  readonly answers: () => StateObservation<RepoConfigBook>;
   readonly installed: readonly RootListing[];
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
@@ -83,12 +85,11 @@ export interface DiscoveryWorld {
 export function readShared(
   world: DiscoveryWorld,
   source: DiscoveryFiles = diskFiles,
-  readBookText?: (file: string) => string | null,
 ): SharedFacts {
   const files = discoveryFiles(source);
   const included = new Map<string, readonly string[]>();
-  const book = repoConfigs(world.stateDir, readBookText);
-  let answers: ReturnType<typeof book.observe> | undefined;
+  const book = repoConfigs(world.stateDir, files.stateText);
+  let answers: StateObservation<RepoConfigBook> | undefined;
   return {
     locs: world.locations,
     answers: () => (answers ??= book.observe()),

@@ -293,9 +293,11 @@ test("a layered renderer follows the older repository book until the first answe
   repoConfigs(state).update(() => ({ [dir]: "declined" }));
   clock.advance(POLL_MS + DEBOUNCE_MS);
   expect(standing()).toBe("declined");
-  fs.writeFileSync(old, "{}");
+  expect(fs.existsSync(old)).toBe(false);
+  fs.unlinkSync(repoConfigsPath(state));
   clock.advance(POLL_MS + DEBOUNCE_MS);
-  expect(moved).toEqual([originKey(origin), originKey(origin)]);
+  expect(standing()).toBe("awaiting");
+  expect(moved).toEqual([originKey(origin), originKey(origin), originKey(origin)]);
 });
 
 test("only an isolated config skips the project's plugin discovery and watch", () => {
@@ -753,8 +755,8 @@ test("the two renderers and an answer written through the host read each book re
     worker,
   );
   expect(result).toEqual({ kind: "ok", files: [book] });
-  // Plan from the current book, then capture the destination for rollback.
-  expect(opens.slice(beforeWrite)).toEqual([book, book]);
+  // The same fresh observation supplies both the plan and the rollback bytes.
+  expect(opens.slice(beforeWrite)).toEqual([book]);
   expect(reads.filter((path) => path === book)).toHaveLength(1);
   expect(worker.landed([book])).toEqual([b]);
   expect(worker.snapshotOf(b)?.repo?.standing).toBe("approved");

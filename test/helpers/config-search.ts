@@ -6,7 +6,7 @@ import { configQuery, type ConfigResolution, type Locations } from "../../src/co
 
 import type { RepoAnswers } from "../../src/config/loader/repo-gate";
 
-export const observedAnswers = (result: RepoAnswers) => ({ result, paths: [] });
+export const observedAnswers = (result: RepoAnswers) => ({ result, paths: [], source: null });
 
 export const resolutionOf = (
   locs: Locations,

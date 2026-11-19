@@ -94,6 +94,8 @@ export class ConfigDiscovery {
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
     this.texts = new ConfigText(deps.openText);
+    // [LAW:one-source-of-truth] Every origin follows the files it consulted.
+    // The shared registry polls each path once across their subscriptions.
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
     this.watches = deps.watchers.batch(() => {
@@ -271,18 +273,19 @@ export class ConfigDiscovery {
       observed.set(file, read.entry);
       return read.text;
     };
-    const facts = readShared(
-      this.deps,
-      { ...diskFiles, text: textFrom(readText), ...this.deps.files?.() },
-      (file) => {
+    const facts = readShared(this.deps, {
+      ...diskFiles,
+      text: textFrom(readText),
+      ...this.deps.files?.(),
+      stateText: (file) => {
         const target = resolvedTarget(file);
         const text = readTextIfPresent(target, readText);
-        // A missing target and its still-present symlink have different
-        // polling entries. Record the absence only against the final target.
+        // [LAW:one-source-of-truth] The book and its writer use the same
+        // final target. A dangling link itself is still present to lstat.
         if (text === null) observed.set(target, absentPolledEntry);
         return text;
       },
-    );
+    });
     return { facts, observed };
   }
 

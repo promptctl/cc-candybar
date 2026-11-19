@@ -253,6 +253,51 @@ describe("performChanges with the trust book", () => {
     expect(said).toEqual([expect.stringMatching(/^repo-config: .* approved /)]);
   });
 
+  test("a click promotes earlier decisions and reports both changed paths", () => {
+    const state = path.join(dir, "state");
+    const old = path.join(state, "repo-configs.json");
+    const current = repoConfigsPath(state);
+    fs.mkdirSync(state);
+    fs.writeFileSync(old, JSON.stringify({ [user]: "declined" }));
+    const said: string[] = [];
+    const outcome = perform([], {
+      stateDir: state,
+      answers: [answer(dir)],
+      said: (line) => said.push(line),
+    });
+    expect(outcome).toEqual({ kind: "ok", files: [current, old] });
+    expect(JSON.parse(read(current))).toEqual({ [user]: "declined", [dir]: "approved" });
+    expect(fs.existsSync(old)).toBe(false);
+    expect(said).toContain(`repo-config: retired ${old} after updating ${current}`);
+  });
+
+  test.each(["missing", "existing"] as const)("a loose book that cannot retire restores the config and the %s current book", (current) => {
+    const state = path.join(dir, "state");
+    const book = repoConfigsPath(state);
+    const old = path.join(state, "repo-configs.json");
+    const previous = JSON.stringify({ [dir]: "declined" });
+    fs.mkdirSync(path.dirname(book), { recursive: true });
+    fs.writeFileSync(old, previous);
+    const currentBytes = JSON.stringify({ [dir]: "declined", [user]: "approved" }, null, 3);
+    if (current === "existing") fs.writeFileSync(book, currentBytes);
+    fs.chmodSync(state, 0o500);
+    try {
+      const said: string[] = [];
+      const outcome = perform(
+        [change(user, USER, USER.replace("dusk", "dawn"))],
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+      );
+      expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringContaining(old) });
+      expect(read(user)).toBe(USER);
+      if (current === "existing") expect(read(book)).toBe(currentBytes);
+      else expect(fs.existsSync(book)).toBe(false);
+      expect(read(old)).toBe(previous);
+      expect(said).toEqual([]);
+    } finally {
+      fs.chmodSync(state, 0o700);
+    }
+  });
+
   test("a trust book that cannot be written leaves every config file as it was", () => {
     const state = path.join(dir, "state");
     const folder = path.dirname(repoConfigsPath(state));

@@ -6,11 +6,14 @@
 import fs from "node:fs";
 import { hostOf } from "./host";
 import {
-  recordAnswer,
+  answering,
+  type Recorded,
   repoConfigs,
 } from "../../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../../src/daemon/paths";
-import type { RepoAnswer } from "../../src/config/loader/repo-gate";
+import type { StateFile } from "../../src/daemon/state-file";
+import { ok, type Asked } from "../../src/utils/outcome";
+import type { RepoAnswer, RepoConfigBook } from "../../src/config/loader/repo-gate";
 
 export function answerRepo(
   dir: string,
@@ -23,4 +26,18 @@ export function answerRepo(
     answer,
   );
   if (filed.kind === "failed") throw new Error(filed.reason);
+}
+
+export function recordAnswer(
+  store: StateFile<RepoConfigBook>,
+  dir: string,
+  answer: RepoAnswer,
+): Asked<Recorded> {
+  let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
+  const filed = store.update((book) => {
+    const answered = answering(book, dir, answer);
+    recorded = answered.recorded;
+    return answered.book;
+  });
+  return filed.kind === "failed" ? filed : ok(recorded);
 }

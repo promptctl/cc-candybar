@@ -35,7 +35,7 @@ export function repoConfigsPath(dir: string): string {
 // [LAW:one-source-of-truth] The book in its folder is the answers. One kept
 // directly in the state directory, where the book used to live, is read
 // only while the folder holds none, and the first answer recorded writes it
-// into the folder with that answer.
+// into the folder with that answer and retires the older name.
 export const repoConfigs = (
   dir: string,
   readText?: (file: string) => string | null,
@@ -62,7 +62,7 @@ export interface Recorded {
 // answer, and every other entry whose directory is present and answers under
 // `dir` (a linked worktree's own, kept from before answers were kept by
 // repository) goes with it, so a repository holds one answer.
-function answering(
+export function answering(
   book: RepoConfigBook,
   dir: string,
   answer: RepoAnswer,
@@ -87,20 +87,6 @@ function answering(
     book: withAnswer(book, dir, answer, recorded.superseded),
     recorded,
   };
-}
-
-export function recordAnswer(
-  store: StateFile<RepoConfigBook>,
-  dir: string,
-  answer: RepoAnswer,
-): Asked<Recorded> {
-  let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
-  const filed = store.update((book) => {
-    const answered = answering(book, dir, answer);
-    recorded = answered.recorded;
-    return answered.book;
-  });
-  return filed.kind === "failed" ? filed : ok(recorded);
 }
 
 // One repository's answer as a click gives it.
@@ -129,5 +115,10 @@ export function answeredBook(
       return answered.book;
     }, current),
   );
-  return planned.kind === "failed" ? planned : ok({ ...planned.value, said });
+  if (planned.kind === "failed") return planned;
+  if (planned.value.retire !== null)
+    said.push(
+      `repo-config: retired ${planned.value.retire} after updating ${repoConfigsPath(stateDir)}`,
+    );
+  return ok({ ...planned.value, said });
 }
