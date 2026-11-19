@@ -65,10 +65,11 @@ import type {
   SessionStore,
 } from "../renderer-interface/session-state.js";
 import {
-  chainOwner,
   holdsOf,
+  ownerIn,
+  ownersOf,
   type Holds,
-  type Owner,
+  type OwnerOf,
 } from "../config/placement-keys.js";
 import { ownedStore, releaseEnded } from "./owned-store.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
@@ -258,13 +259,13 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
-  // [LAW:one-source-of-truth] The chain it was loaded from, as the owner of
-  // the placement keys its sessions write (src/config/placement-keys.ts), and
-  // what each prefix of that chain places: what its load releases against.
-  readonly owner: Owner;
+  // [LAW:one-source-of-truth] What each file of the chain it was loaded from
+  // authors (src/config/placement-keys.ts): what its load releases against,
+  // and the owner of each placement key its sessions write.
   readonly holds: Holds;
+  readonly owners: OwnerOf;
   // [LAW:single-enforcer] The session store as this state's sessions read and
-  // write it, owned by `owner`: what its registry and every render read
+  // write it, owned by `owners`: what its registry and every render read
   // through. The compile names keys owner-free, so it stays shared.
   readonly sessionState: SessionStateRW;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
@@ -748,8 +749,9 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // them too.
   const warnings: string[] = [];
 
-  const owner = chainOwner(layers.map((l) => l.path));
-  const sessionState = ownedStore(deps.sessionState, () => owner);
+  const holds = holdsOf(loaded);
+  const owners = ownerIn(ownersOf(holds, loaded.placed));
+  const sessionState = ownedStore(deps.sessionState, (_sid, at) => owners(at));
   const store = new VariableStore(deps.clock);
   // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
@@ -814,8 +816,8 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     kind: "built",
     state: {
       config,
-      owner,
-      holds: holdsOf(loaded),
+      holds,
+      owners,
       sessionState,
       dropped,
       compileKey: registration.compileKey,

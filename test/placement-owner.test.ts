@@ -38,9 +38,10 @@ import {
   CONFIGURING,
   DRAFTS,
   LIBRARIES,
-  chainOwner,
+  BASE_AUTHOR,
+  fileOwner,
   insertGap,
-  type Owner,
+  type OwnerOf,
   type Placement,
 } from "../src/config/placement-keys";
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../src/config/disclosure";
@@ -111,11 +112,12 @@ function world(sessionState = new SessionState()) {
   );
   const at = (dir: string): RenderOrigin => originOf(dir, dir, undefined);
   const home = at(durable.projectDir);
-  const ownerOf = (origin: RenderOrigin): Owner =>
-    cache.getOrCreate(origin).state.owner;
+  // Who owns each placement a session rendering `origin` draws.
+  const ownerOf = (origin: RenderOrigin): OwnerOf =>
+    cache.getOrCreate(origin).state.owners;
   // The store as a session rendering `origin` reads and writes it.
   const as = (origin: RenderOrigin) =>
-    ownedStore(sessionState, () => ownerOf(origin));
+    ownedStore(sessionState, (_sid, at) => ownerOf(origin)(at));
   // Every key a placement owns, held by `sid` as a session rendering
   // `origin` holds them: a draft, the configure list, a ✚ library and the
   // configure key naming it.
@@ -161,7 +163,7 @@ function world(sessionState = new SessionState()) {
       ),
       {
         configFor: (o) => cache.getOrCreate(o).state.config,
-        ownerFor: (o) => cache.getOrCreate(o).state.owner,
+        ownerFor: (o) => cache.getOrCreate(o).state.owners,
         log: (_level, line) => {
           lines.push(line);
           if (line.startsWith("placement-state released by=click"))
@@ -210,7 +212,7 @@ describe("a placement's state ends with it", () => {
       w.cache
         .holdSession(w.home, viewFacts(durable.projectDir, "s1"))
         [Symbol.dispose]();
-      expect(w.ownerOf(w.home)).toBe(durable.owner);
+      expect(w.ownerOf(w.home)(DIRECTORY)).toBe(durable.owner);
       for (const sid of [S1, S2]) {
         w.seed(w.home, sid, DIRECTORY);
         w.as(w.home).set(
@@ -238,7 +240,7 @@ describe("a placement's state ends with it", () => {
         expect(lines).toContainEqual(
           expect.stringMatching(
             new RegExp(
-              `^placement-state released by=load session=${sid} owner=${durable.owner} chain=${durable.configPath} keys=`,
+              `^placement-state released by=load session=${sid} owner=${durable.owner} file=${durable.configPath} keys=`,
             ),
           ),
         );
@@ -290,7 +292,7 @@ describe("a placement's state ends with it", () => {
     // A chain this load does not read: its keys are not this load's to judge.
     const other = DRAFTS.own(
       DRAFTS.mint({ ...DIRECTORY, setting: "detail" }),
-      chainOwner(["/elsewhere.json5"]),
+      fileOwner("/elsewhere.json5"),
     )!;
     const stored = new SessionState({
       [S1]: {
@@ -403,6 +405,71 @@ describe("a placement's state ends with it", () => {
   });
 });
 
+describe("a placement's owner is the file that authored its node", () => {
+  const SEEDED = {
+    draft: "true",
+    list: DISCLOSURE_OPEN,
+    library: DISCLOSURE_OPEN,
+    configuring: true,
+  };
+
+  test("a draft survives a layer appearing while its placement stands", () => {
+    durable.write(BOTH);
+    const w = world();
+    try {
+      w.seed(w.home, S1, DIRECTORY);
+      // A project file that writes no row: the user file still authors it.
+      answerRepo(durable.projectDir, "approved", durable.host.env);
+      fs.writeFileSync(durable.projectPath, "{}\n");
+      w.cache.configs.again();
+      expect(
+        w.cache
+          .getOrCreate(w.home)
+          .state.holds.has(fileOwner(durable.projectPath)),
+      ).toBe(true);
+      expect(w.ownerOf(w.home)(DIRECTORY)).toBe(durable.owner);
+      expect(w.held(w.home, S1, DIRECTORY)).toEqual(SEEDED);
+    } finally {
+      w.close();
+    }
+  });
+
+  test("a draft survives the first config file being created", () => {
+    const w = world();
+    try {
+      expect(w.ownerOf(w.home)(DIRECTORY)).toBe(fileOwner(BASE_AUTHOR));
+      w.seed(w.home, S1, DIRECTORY);
+      durable.write("{}\n");
+      w.cache.configs.again();
+      expect(w.ownerOf(w.home)(DIRECTORY)).toBe(fileOwner(BASE_AUTHOR));
+      expect(w.held(w.home, S1, DIRECTORY)).toEqual(SEEDED);
+    } finally {
+      w.close();
+    }
+  });
+
+  test("a user's removal of a bundled id they re-placed releases their keys, and the bundled one comes back with none", () => {
+    durable.write(BOTH);
+    const w = world();
+    try {
+      w.seed(w.home, S1, DIRECTORY);
+      durable.write("{}\n");
+      w.cache.configs.again();
+      expect(w.ownerOf(w.home)(DIRECTORY)).toBe(fileOwner(BASE_AUTHOR));
+      expect(w.held(w.home, S1, DIRECTORY)).toEqual(w.NONE);
+      expect(w.released()).toContainEqual(
+        expect.stringMatching(
+          new RegExp(
+            `^placement-state released by=load session=s1 owner=${durable.owner} file=${durable.configPath} keys=`,
+          ),
+        ),
+      );
+    } finally {
+      w.close();
+    }
+  });
+});
+
 describe("two chains placing one id", () => {
   // `durable.projectDir` renders [user, project]; `elsewhere` renders [user].
   const PROJECT = (row: string) => `{ root: { h: [${row}] } }\n`;
@@ -415,9 +482,9 @@ describe("two chains placing one id", () => {
     try {
       const user = w.at(elsewhere);
       const project = w.home;
-      expect(w.ownerOf(user)).toBe(durable.owner);
-      expect(w.ownerOf(project)).toBe(
-        chainOwner([durable.configPath, durable.projectPath]),
+      expect(w.ownerOf(user)(DIRECTORY)).toBe(durable.owner);
+      expect(w.ownerOf(project)(DIRECTORY)).toBe(
+        fileOwner(durable.projectPath),
       );
       // One session in both configs, and another in the project's alone. A
       // session configures one placement at a time, so S1's configure key
@@ -442,7 +509,7 @@ describe("two chains placing one id", () => {
     }
   });
 
-  test("a layer appearing over a chain still releases what the chain under it ended", () => {
+  test("a layer appearing over a chain still releases what the file under it ended", () => {
     durable.write(BOTH);
     const w = world();
     try {
@@ -451,7 +518,6 @@ describe("two chains placing one id", () => {
       fs.writeFileSync(durable.projectPath, PROJECT(`"model"`));
       durable.write(MODEL_ONLY);
       w.cache.configs.again();
-      expect(w.ownerOf(w.home)).not.toBe(durable.owner);
       expect(
         ownedStore(w.sessionState, () => durable.owner).get(
           S1,
@@ -481,7 +547,7 @@ describe("two chains placing one id", () => {
       w.cache.getOrCreate(ta);
       w.cache.getOrCreate(tb);
       expect(w.cache.stats.compiles).toBe(1);
-      expect(w.ownerOf(ta)).not.toBe(w.ownerOf(tb));
+      expect(w.ownerOf(ta)(DIRECTORY)).not.toBe(w.ownerOf(tb)(DIRECTORY));
       w.seed(ta, S1, DIRECTORY);
       expect(w.held(tb, S1, DIRECTORY)).toEqual(w.NONE);
       fs.writeFileSync(path.join(b, ".cc-candybar.json5"), PROJECT(`"model"`));
@@ -492,7 +558,7 @@ describe("two chains placing one id", () => {
     }
   });
 
-  test("going back restores the step's own config's keys, never the config the session renders now", async () => {
+  test("going back never restores a step over another file's placement", async () => {
     durable.write(BOTH);
     fs.writeFileSync(durable.projectPath, PROJECT(`"directory", "model"`));
     answerRepo(durable.projectDir, "approved", durable.host.env);
@@ -510,11 +576,11 @@ describe("two chains placing one id", () => {
       // It then renders the project's config, whose ✚ beside the same id is closed.
       w.as(project).set(S1, library, DISCLOSURE_CLOSED);
       const inProject = w.clicker(project, S1);
-      // The step names the user config's key as the store holds it, so going
-      // back reopens that library, and the project's stays closed.
-      await w.fire(inProject, "back", S1);
+      // The step names the user file's library, and the project file
+      // authors the placement here: it is discarded, and nothing reopens.
+      await expect(w.fire(inProject, "back", S1)).rejects.toThrow(BadVerbArgs);
       expect(w.as(project).get(S1, library)).toBe(DISCLOSURE_CLOSED);
-      expect(w.as(user).get(S1, library)).toBe(open);
+      expect(w.as(user).get(S1, library)).toBe(DISCLOSURE_CLOSED);
     } finally {
       w.close();
     }

@@ -124,9 +124,36 @@ export function* fragmentNodePaths(
 // branch is over the fragment's own two intents, which is the entire point of
 // RootFragment's union.
 export function mergeRoot(fragment: RootFragment, base: Root): Root {
+  return {
+    ...(isRowsFragment(fragment) ? { ...base, ...fragment } : rootOf(fragment)),
+    rows: mergedRows(fragment, base.rows, (rows) => rows),
+  };
+}
+
+// [LAW:one-source-of-truth] Which file's text each row of a merge is: the
+// fragment's author for every row it writes, the base's author for every row
+// it inherits. The merge decides authorship per row, so a node's author is
+// its row's, and it is decided by the same cascade as the rows themselves.
+export function rowAuthors<A>(
+  fragment: RootFragment,
+  author: A,
+  base: Readonly<Record<string, A>>,
+): Readonly<Record<string, A>> {
+  return mergedRows(fragment, base, (rows) =>
+    Object.fromEntries(Object.keys(rows).map((name) => [name, author])),
+  );
+}
+
+// The one branch of the cascade, over rows of any kind: a rows map lays its
+// rows over the base's by name, and a whole tree's rows replace them.
+function mergedRows<R>(
+  fragment: RootFragment,
+  base: Readonly<Record<string, R>>,
+  own: (rows: Root["rows"]) => Readonly<Record<string, R>>,
+): Readonly<Record<string, R>> {
   return isRowsFragment(fragment)
-    ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } }
-    : rootOf(fragment);
+    ? { ...base, ...own(fragment.rows) }
+    : own(rootOf(fragment).rows);
 }
 
 // A cell one rendered tree could not place, and why.

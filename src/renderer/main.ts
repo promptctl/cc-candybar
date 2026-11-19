@@ -518,11 +518,12 @@ export function mainRendererOf(
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with, over
         // the store as the steps name its keys, owned.
-        navigation: (sessionId, config) =>
+        navigation: (sessionId, { config, owners }) =>
           navigationHistory.depth(
             sessionId,
             sessionState,
             gates.state.gateFor(config),
+            owners,
           ),
       }),
     },
@@ -617,7 +618,7 @@ export function mainRendererOf(
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin).state.config,
-    ownerFor: (origin) => renderCache.getOrCreate(origin).state.owner,
+    ownerFor: (origin) => renderCache.getOrCreate(origin).state.owners,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,

@@ -3,11 +3,11 @@
 // raw store refuses a placement's key in owner-free form, as the daemon's
 // does, so a test seeds and reads those keys through this view.
 
-import { chainOwner, type Owner } from "../../src/config/placement-keys";
+import { fileOwner, type Owner } from "../../src/config/placement-keys";
 import { ownedStore } from "../../src/renderer/owned-store";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 
-export const TEST_OWNER: Owner = chainOwner(["<test>"]);
+export const TEST_OWNER: Owner = fileOwner("<test>");
 
 export const ownedView = (
   store: SessionStateRW,

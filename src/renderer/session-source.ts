@@ -24,6 +24,7 @@ import {
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
+import type { OwnerOf } from "../config/placement-keys.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import {
   type WorldState,
@@ -73,10 +74,11 @@ export interface SessionSourceDeps {
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: SessionId) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
-  // view draws with — NavigationHistory.depth in the daemon.
+  // view draws with and the owners of its placements — NavigationHistory.depth
+  // in the daemon.
   readonly navigation: (
     sessionId: SessionId,
-    config: ValidatedConfig,
+    state: { readonly config: ValidatedConfig; readonly owners: OwnerOf },
   ) => number;
 }
 
@@ -84,8 +86,8 @@ export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
   return ({ sessionId, state, store, requested }) => {
-    // [LAW:single-enforcer] Through the state's own view of the store, owned
-    // by the chain it was loaded from.
+    // [LAW:single-enforcer] Through the state's own view of the store, each
+    // placement's keys owned by the file that authors it.
     const pick = (key: string): string | null =>
       state.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
@@ -119,7 +121,7 @@ export function sessionSource(
           layers: layerFlags(state.writable),
         },
         history: deps.history(sessionId),
-        back: deps.navigation(sessionId, state.config),
+        back: deps.navigation(sessionId, state),
       }),
     );
     const document = (): WorldState => deps.worldStates.of(sessionId);

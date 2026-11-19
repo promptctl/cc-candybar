@@ -69,7 +69,7 @@ import {
   type Globals,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import { DRAFTS, type Owner } from "../../config/placement-keys";
+import { DRAFTS, type OwnerOf } from "../../config/placement-keys";
 import { ownedStore, releaseEnded } from "../owned-store";
 import {
   durableLanding,
@@ -203,10 +203,10 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
-  // The owner of the placement keys a session rendering from `origin` writes
-  // (src/config/placement-keys.ts): the chain of the same entry `configFor`
-  // reads the config of.
-  readonly ownerFor: (origin: RenderOrigin) => Owner;
+  // The owner of each placement key a session rendering from `origin` writes
+  // (src/config/placement-keys.ts): the file that authors the placement, in
+  // the same entry `configFor` reads the config of.
+  readonly ownerFor: (origin: RenderOrigin) => OwnerOf;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -1157,6 +1157,7 @@ const back: VerbHandler = (value, ctx) => {
     sid,
     ctx.journal.sessionState,
     ctx.gates.state.gateFor(ctx.configFor(origin)),
+    ctx.ownerFor(origin),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -1623,16 +1624,17 @@ function journaled<C extends DaemonContext>(
   });
   const lanes = sid === null ? null : laneMeter(ctx, sid, context);
   // [LAW:single-enforcer] The click's own seam where its session's placement
-  // keys gain their owner: the chain its session renders from as the click
-  // began. A session with no origin has no config, so it owns no placement.
+  // keys gain their owner: the files of the chain its session renders from
+  // as the click began. A session with no origin has no config, so it owns no
+  // placement.
   const owner = origin === null ? null : ctx.ownerFor(origin);
   const owned = (store: SessionStateRW): SessionStateRW =>
-    ownedStore(store, (session) => {
+    ownedStore(store, (session, at) => {
       if (session !== sid || owner === null)
         throw new BadVerbArgs(
           `${verb}: session ${session} has not rendered in this click — no config owns its placements`,
         );
-      return owner;
+      return owner(at);
     });
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),

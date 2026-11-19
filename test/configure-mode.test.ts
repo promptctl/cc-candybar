@@ -739,7 +739,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
     expect(logged.join("\n")).toContain(
-      `placement-state released by=click session=${SID} owner=${durable.owner} chain=${durable.configPath} keys=${ownedKey(inB, () => durable.owner)}`,
+      `placement-state released by=click session=${SID} owner=${durable.owner} file=${durable.configPath} keys=${ownedKey(inB, () => durable.owner)}`,
     );
   });
 });

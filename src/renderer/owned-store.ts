@@ -15,31 +15,47 @@ import {
   ownedValue,
   type Holds,
   type Owner,
+  type OwnerOf,
+  type Placement,
 } from "../config/placement-keys";
 
-// [LAW:locality-or-seam] `inner` as the chain `ownerOf` names reads and
-// writes it: an owner-free family key, and a configure member written to the
-// configure key, are mapped to their owned form; a configure member another
-// owner holds reads as unset. Every other key, a key already owned among
-// them, passes straight through, as do the revision and the key list.
+// [LAW:locality-or-seam] `inner` as a view whose placements `ownerOf` owns
+// reads and writes it: an owner-free family key, and a configure member
+// written to the configure key, are mapped to their owned form; a configure
+// member its owner no longer authors reads as unset. Every other key, a key
+// already owned among them, passes straight through, as do the revision and
+// the key list.
+// [LAW:no-silent-failure] A placement nothing owns holds no state: it reads
+// as unset, and a write to it is refused, naming it.
 export function ownedStore(
   inner: SessionStateRW,
-  ownerOf: (sessionId: SessionId) => Owner,
+  ownerOf: (sessionId: SessionId, at: Placement) => Owner | null,
 ): SessionStateRW {
-  const key = (sessionId: SessionId, k: string): string =>
-    ownedKey(k, () => ownerOf(sessionId));
+  const by =
+    (sessionId: SessionId): OwnerOf =>
+    (at) =>
+      ownerOf(sessionId, at);
+  const written = <T>(k: string, owned: T | null): T => {
+    if (owned === null)
+      throw new Error(
+        `session state: refused a write of ${k}, whose placement no config file places here, so nothing owns its state`,
+      );
+    return owned;
+  };
   const pair = (
     sessionId: SessionId,
     { key: k, value }: { readonly key: string; readonly value: string },
   ) => ({
-    key: key(sessionId, k),
-    value: ownedValue(k, value, () => ownerOf(sessionId)),
+    key: written(k, ownedKey(k, by(sessionId))),
+    value: written(`${k}=${value}`, ownedValue(k, value, by(sessionId))),
   });
   return {
-    get: (sessionId, k) =>
-      freeValue(k, inner.get(sessionId, key(sessionId, k)), () =>
-        ownerOf(sessionId),
-      ),
+    get: (sessionId, k) => {
+      const key = ownedKey(k, by(sessionId));
+      return key === null
+        ? null
+        : freeValue(k, inner.get(sessionId, key), by(sessionId));
+    },
     revision: (sessionId) => inner.revision(sessionId),
     keys: (sessionId) => inner.keys(sessionId),
     set: (sessionId, k, value) => {
@@ -51,12 +67,15 @@ export function ownedStore(
         sessionId,
         pairs.map((p) => pair(sessionId, p)),
       ),
-    clear: (sessionId, k) => inner.clear(sessionId, key(sessionId, k)),
+    clear: (sessionId, k) => {
+      const key = ownedKey(k, by(sessionId));
+      if (key !== null) inner.clear(sessionId, key);
+    },
   };
 }
 
 // [LAW:one-source-of-truth] Releases, in each of `sessions`, every key whose
-// owner `holds` names and whose placement that owner no longer places, and
+// owner `holds` names and whose placement that owner no longer authors, and
 // every family key in a form naming no owner. Keys of any other owner, and
 // keys no family spells, stay. `store` is read and cleared as it spells
 // keys, owned: the raw store for a load, the click's journal for a click,
@@ -87,12 +106,9 @@ export function releaseEnded(
       }
       for (const [owner, keys] of released) {
         for (const key of keys) store.clear(sessionId, key);
-        const chain =
-          owner === "none"
-            ? "-"
-            : holds.get(owner)!.paths.join(",") || "<default>";
+        const file = owner === "none" ? "-" : holds.get(owner)!.file;
         lines.push(
-          `placement-state released by=${by} session=${sessionId} owner=${owner} chain=${chain} keys=${keys.join(",")}`,
+          `placement-state released by=${by} session=${sessionId} owner=${owner} file=${file} keys=${keys.join(",")}`,
         );
       }
     }

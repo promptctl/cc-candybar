@@ -23,6 +23,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
 import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_OWNER } from "./helpers/owned";
 
 const S1 = sessionIdOf("s1");
 
@@ -65,7 +66,12 @@ function setup() {
     // What the bar's ◁ counts: measured against the gate of the config the
     // session renders now.
     depth: (): number =>
-      ctx.navigation.depth(S1, sessionState, ctx.gates.state.gateFor(config)),
+      ctx.navigation.depth(
+        S1,
+        sessionState,
+        ctx.gates.state.gateFor(config),
+        () => TEST_OWNER,
+      ),
     // The session's config reloads as `next`.
     reload: (next: DslConfig): void => {
       config = next;
@@ -127,7 +133,7 @@ describe("back", () => {
     journal.sessionState.set(S1, MENU, "open");
     journal.sessionState.set(S1, MENU, "closed");
     journal.commit();
-    history.back(S1, store, stateGate(EMPTY_DEFAULT));
+    history.back(S1, store, stateGate(EMPTY_DEFAULT), () => TEST_OWNER);
     expect(store.get(S1, MENU)).toBeNull();
   });
 

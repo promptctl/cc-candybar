@@ -3,11 +3,13 @@
 // beside it and their page cursors, and the configure key's value naming it —
 // in both of its forms, and the one reading of each back.
 //
-// A placement's end is a fact about two loads of what places it, and several
-// configs can place one preset and id. So a key the session store holds names
-// its OWNER: the chain prefix, the ordered config files whose merge placed it.
-// A load can then release a key by reading the key alone, and a key never
-// lands on another config's placement that takes its id.
+// A placement's end is a fact about two loads of the file that places it, and
+// several files can place one preset and id. So a key the session store holds
+// names its OWNER: the file whose text wrote the placement's node, or the
+// bundled base. A load can then release a key by reading the key alone, a key
+// never lands on another file's placement that takes its id, and a file
+// appearing or going that writes no placement's node leaves its owner as it
+// was.
 //
 // [LAW:one-source-of-truth] The compile is shared by every entry whose config
 // compiles alike (.claude/memory/daemon-memory.md), so it captures nothing
@@ -24,19 +26,34 @@ import { escapedIdent, unescapedIdent } from "./ident.js";
 import { menuPageKey } from "./menu-keys.js";
 import { MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
 import { EDIT_CONFIGURE_KEY, PLACEMENT_DRAFT_NS } from "./loader/edit-mode.js";
-import { placementIds, type DslConfig } from "./dsl-types.js";
-import { presetNames, presetRoot } from "./presets.js";
+import {
+  placementId,
+  placementIds,
+  walkNodes,
+  type DslConfig,
+  type RawDslConfig,
+} from "./dsl-types.js";
+import { presetByName, presetNames, presetRoot } from "./presets.js";
+import { EMPTY_ROWS, mergeRoot, rowAuthors } from "./root.js";
 import { digestOf } from "../utils/plain.js";
 import { escapeRegExp } from "../utils/regex.js";
 
-// [LAW:types-are-the-program] What owns a placement's session state: a chain
-// prefix, spelled `o` and 16 hex digits of the digest of its files, lowest
-// first. The bundled default alone is the empty chain.
+// [LAW:types-are-the-program] What owns a placement's session state: the
+// file that authored its node, spelled `o` and 16 hex digits of the digest of
+// its path.
 export type Owner = string & { readonly __placementOwner: unique symbol };
 
-export function chainOwner(paths: readonly string[]): Owner {
-  return `o${digestOf([...paths]).slice(0, 16)}` as Owner;
+export function fileOwner(file: string): Owner {
+  return `o${digestOf(file).slice(0, 16)}` as Owner;
 }
+
+// The author of every node the bundled base places: the bundled default and
+// the installed plugins, which write no tree of their own.
+export const BASE_AUTHOR = "<bundled>";
+
+// Who owns each placement a session's view reads and writes: null for one no
+// file places here, whose state nothing owns.
+export type OwnerOf = (at: Placement) => Owner | null;
 
 // A placement: the preset whose tree holds it and its id there, as written.
 export interface Placement {
@@ -315,38 +332,64 @@ const KEY_FAMILIES: ReadonlyArray<Omit<Family<Placement>, "mint">> = [
   paged(LIBRARIES),
 ];
 
-// The owned form of an owner-free family key, or the key itself when it is
-// no family's. `by` is asked only for a family's key: a click naming no
-// session that has rendered has no owner, and writes none of these.
-export function ownedKey(key: string, by: () => Owner): string {
-  const f = KEY_FAMILIES.find((family) => family.free(key) !== null);
-  return f === undefined ? key : f.own(key, by())!;
+// The owned form of an owner-free family key, the key itself when it is no
+// family's, or null for a placement nothing owns. `by` is asked only for a
+// family's key: a click naming no session that has rendered has no owner,
+// and writes none of these.
+export function ownedKey(key: string, by: OwnerOf): string | null {
+  for (const f of KEY_FAMILIES) {
+    const at = f.free(key);
+    if (at === null) continue;
+    const owner = by(at);
+    return owner === null ? null : f.own(key, owner)!;
+  }
+  return key;
 }
 
-// The value `key` stores for `value`: a configure member is stored owned;
-// every other value as it is.
+// The value `key` stores for `value`: a configure member is stored owned, or
+// null for a placement nothing owns; every other value as it is.
 export function ownedValue(
   key: string,
   value: string,
-  by: () => Owner,
-): string {
-  return isOwnerFreeValue(key, value) ? CONFIGURING.own(value, by())! : value;
+  by: OwnerOf,
+): string | null {
+  const at = isOwnerFreeValue(key, value) ? CONFIGURING.free(value)! : null;
+  if (at === null) return value;
+  const owner = by(at);
+  return owner === null ? null : CONFIGURING.own(value, owner)!;
 }
 
-// What a stored value of `key` reads as under `by`: a configure member `by`
-// holds, owner-free; a member another owner holds, or one in a form naming
-// no owner, configures nothing here (null: the key's default).
+// What a stored value of `key` reads as under `by`: a configure member whose
+// owner still authors it, owner-free; a member another owner holds, or one in
+// a form naming no owner, configures nothing here (null: the key's default).
 export function freeValue(
   key: string,
   value: string | null,
-  by: () => Owner,
+  by: OwnerOf,
 ): string | null {
   if (key !== EDIT_CONFIGURE_KEY || value === null || !isMember(value))
     return value;
   const read = CONFIGURING.read(value);
-  return read !== null && read.owner === by()
+  return read !== null && read.owner === by(read.at)
     ? CONFIGURING.mint(read.at)
     : null;
+}
+
+// Whether a stored (key, value) is state of the placements as `by` owns them
+// now: every placement it names is owned by the owner it names. A key or
+// value of no family names none, so it is current.
+export function isCurrent(
+  key: string,
+  value: string | null,
+  by: OwnerOf,
+): boolean {
+  const named = [
+    ...KEY_FAMILIES.map((f) => f.read(key)),
+    key === EDIT_CONFIGURE_KEY && value !== null
+      ? CONFIGURING.read(value)
+      : null,
+  ];
+  return named.every((read) => read === null || by(read.at) === read.owner);
 }
 
 // [LAW:one-source-of-truth] A stored (key, value) as the config names it, its
@@ -419,56 +462,134 @@ export function classify(key: string, value: () => string | null): Classified {
   return key.startsWith(PLACEMENT_DRAFT_NS) ? OLD : FOREIGN;
 }
 
-// What one chain prefix holds: its files, lowest first, and every placement
-// its trees place, as configure members.
+// What one file holds: its path, and every placement whose node its text
+// writes, as configure members.
 export interface Hold {
-  readonly paths: readonly string[];
+  readonly file: string;
   readonly placed: ReadonlySet<string>;
 }
 
-// [LAW:types-are-the-program] What a load holds, by owner: every prefix of
-// its chain. A key whose owner is not here belongs to a chain this load did
-// not read, and the load says nothing about it.
+// [LAW:types-are-the-program] What a load holds, by owner: the bundled base
+// and every file of its chain, lowest first. A key whose owner is not here
+// belongs to a file this load did not read, and the load says nothing about
+// it.
 export type Holds = ReadonlyMap<Owner, Hold>;
 
 type Trees = Pick<DslConfig, "presets" | "root">;
 
-// Each prefix's trees as it renders them, every insert cell its files write
-// placed (the loader's `placed`): a placement an insert cell adds has not
-// ended, and one whose segment the load does not declare has not either. A
-// prefix merges alike whatever sits above it (inheritedConfig), so the
-// prefix through one file holds the same placements in every chain holding
-// that file.
+// What each file authors, measured on the trees the prefix of the chain
+// through it renders (the loader's `placed`, every insert cell placed): a
+// prefix merges alike whatever sits above it, so a file holds the same
+// placements in every chain holding it, and a file above that re-places one
+// of its nodes ends nothing of the file below. A node's author is the file
+// whose text won its row (`rowAuthors`), or the file whose insert cell placed
+// it.
 export function holdsOf(chain: {
   readonly base: Trees;
   readonly layers: ReadonlyArray<{
     readonly path: string;
+    readonly raw: Pick<RawDslConfig, "root" | "presets">;
+    readonly config: Trees;
     readonly placed: Trees;
   }>;
 }): Holds {
-  const prefixes = [
-    { paths: [] as readonly string[], trees: chain.base },
-    ...chain.layers.map((layer, i) => ({
-      paths: chain.layers.slice(0, i + 1).map((l) => l.path),
-      trees: layer.placed,
-    })),
-  ];
-  return new Map(
-    prefixes.map(({ paths, trees }) => [
-      chainOwner(paths),
-      { paths, placed: placedIn(trees) },
-    ]),
+  // Who wrote each row of the config's own root, and each preset's root:
+  // the base all of its own, then each file what its text writes.
+  let rows = rowAuthors(chain.base.root, BASE_AUTHOR, {});
+  let fragments: ReadonlyMap<string, string> = new Map();
+  const hold = (
+    file: string,
+    merged: Trees,
+    placed: Trees,
+    root: Readonly<Record<string, string>>,
+    byPreset: ReadonlyMap<string, string>,
+  ) =>
+    [
+      fileOwner(file),
+      {
+        file,
+        placed: authoredIn(merged, placed, file, (preset) =>
+          rowAuthors(
+            presetByName(merged.presets, preset).root ?? EMPTY_ROWS,
+            byPreset.get(preset) ?? BASE_AUTHOR,
+            root,
+          ),
+        ),
+      },
+    ] as const;
+  const holds = [hold(BASE_AUTHOR, chain.base, chain.base, rows, fragments)];
+  for (const layer of chain.layers) {
+    rows = rowAuthors(layer.raw.root ?? EMPTY_ROWS, layer.path, rows);
+    fragments = new Map([
+      ...fragments,
+      ...Object.entries(layer.raw.presets ?? {})
+        .filter(([, preset]) => preset.root !== undefined)
+        .map(([name]) => [name, layer.path] as const),
+    ]);
+    holds.push(hold(layer.path, layer.config, layer.placed, rows, fragments));
+  }
+  return new Map(holds);
+}
+
+// Every placement `file` authors among those `placed` renders: by its own
+// insert cell, or in a row of the merged trees (`merged`, before any cell is
+// placed, where rows keep their names) whose author `rowsOf` names.
+function authoredIn(
+  merged: Trees,
+  placed: Trees,
+  file: string,
+  rowsOf: (preset: string) => Readonly<Record<string, string>>,
+): Set<string> {
+  return new Set(
+    presetNames(placed.presets).flatMap((preset) => {
+      const authors = rowsOf(preset);
+      const fragment = presetByName(merged.presets, preset).root ?? EMPTY_ROWS;
+      const byRow = new Map(
+        Object.entries(mergeRoot(fragment, merged.root).rows).flatMap(
+          ([name, row]) =>
+            [...walkNodes(row)].flatMap((n) =>
+              n.kind === "segment"
+                ? [[placementId(n), authors[name]] as const]
+                : [],
+            ),
+        ),
+      );
+      return [...walkNodes(presetRoot(placed, preset).node)].flatMap((n) =>
+        n.kind === "segment" &&
+        (n.insertedBy?.file ?? byRow.get(placementId(n))) === file
+          ? [CONFIGURING.mint({ preset, id: placementId(n) })]
+          : [],
+      );
+    }),
   );
 }
 
-// Every (preset, id) a config's trees place, over every preset: a row can be
-// shared, so a tree one preset renders can hold another's placement.
-function placedIn(trees: Trees): Set<string> {
-  return new Set(
-    presetNames(trees.presets).flatMap((preset) =>
-      placementIds(presetRoot(trees, preset).node).map((id) =>
+// [LAW:one-source-of-truth] Who owns each placement the chain renders
+// (`rendered`, its trees as placed): the highest file that authors it. A file
+// below that also writes it holds its own keys for its own chains, which this
+// view never reads; a placement the chain does not render has no owner here.
+export function ownersOf(
+  holds: Holds,
+  rendered: Trees,
+): ReadonlyMap<string, Owner> {
+  const shown = new Set(
+    presetNames(rendered.presets).flatMap((preset) =>
+      placementIds(presetRoot(rendered, preset).node).map((id) =>
         CONFIGURING.mint({ preset, id }),
       ),
     ),
   );
+  return new Map(
+    [...holds].flatMap(([owner, { placed }]) =>
+      [...placed]
+        .filter((member) => shown.has(member))
+        .map((member) => [member, owner] as const),
+    ),
+  );
 }
+
+// A view's owner lookup over `ownersOf`.
+export const ownerIn =
+  (owners: ReadonlyMap<string, Owner>): OwnerOf =>
+  (at) =>
+    owners.get(CONFIGURING.mint(at)) ?? null;

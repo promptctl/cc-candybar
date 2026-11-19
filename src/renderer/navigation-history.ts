@@ -22,7 +22,7 @@ import { type SessionStateRW } from "../renderer-interface/session-state";
 import type { Gate } from "../daemon/foundations/validator-registry";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import type { SessionId } from "../daemon/foundations/session-id";
-import { ownerFree } from "../config/placement-keys";
+import { isCurrent, ownerFree, type OwnerOf } from "../config/placement-keys";
 
 export interface NavigationChange {
   readonly key: string;
@@ -65,8 +65,13 @@ export class NavigationHistory {
 
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId: SessionId, store: SessionStateRW, gate: Gate): number {
-    return this.restorable(sessionId, store, gate).length;
+  depth(
+    sessionId: SessionId,
+    store: SessionStateRW,
+    gate: Gate,
+    owners: OwnerOf,
+  ): number {
+    return this.restorable(sessionId, store, gate, owners).length;
   }
 
   // The steps going back would restore, oldest first: walking down from the
@@ -77,13 +82,15 @@ export class NavigationHistory {
   // layout edit releasing the placement it configured), or no longer one the
   // config admits (that placement removed, a group renamed) — and is
   // discarded rather than replayed. A step names keys as the store holds them,
-  // owned (src/config/placement-keys.ts), so a step made in another config
-  // restores that config's keys alone; the gate, derived from the compile,
-  // names them owner-free.
+  // owned (src/config/placement-keys.ts), and is restored only while `owners`
+  // owns each placement it names as it names it: a step made where another
+  // file authored a placement is that file's state, which this view does not
+  // draw. The gate, derived from the compile, names keys owner-free.
   private restorable(
     sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
+    owners: OwnerOf,
   ): readonly NavigationStep[] {
     const state = new Map<string, string | null>();
     const read = (key: string): string | null =>
@@ -96,6 +103,8 @@ export class NavigationHistory {
     for (const step of [...(this.past.get(sessionId) ?? [])].reverse()) {
       const holds = step.every(
         (c) =>
+          isCurrent(c.key, c.before, owners) &&
+          isCurrent(c.key, c.after, owners) &&
           read(c.key) === c.after &&
           (c.before === null || admits(c.key, c.before)),
       );
@@ -147,9 +156,10 @@ export class NavigationHistory {
     sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
+    owners: OwnerOf,
   ): { readonly step: NavigationStep; readonly discarded: number } {
     const all = this.past.get(sessionId) ?? [];
-    const steps = this.restorable(sessionId, store, gate);
+    const steps = this.restorable(sessionId, store, gate, owners);
     const step = steps.at(-1);
     const discarded = all.length - steps.length;
     if (step === undefined) {

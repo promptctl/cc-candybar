@@ -71,7 +71,7 @@ A segment declaration is a definition. Each node in a layout is a placement, ide
 - A removal target or an anchor is a placement id, and it's checked only at click time. A load-time check would reject the config its own click wrote.
 - An insertion mints its id at click time, over the rendered tree.
 - Edit chrome is named by the placement and preset it serves, each spelled injectively, because a name keyed on walk position hands an open menu or list to a neighbour on every add, and the identifier collapse would merge names that differ only in punctuation.
-- A placement ends only between two loads of the files that place it, so its session state (its drafts, its lists, the configure key naming it) is keyed to those files.
+- A placement ends only between two loads of the file whose text wrote its node, so its session state (its drafts, its lists, the configure key naming it) is keyed to that file. The merge decides authorship per row, and each file is measured on the trees of the chain up to it, because a file above that re-places a node would otherwise end the state of the file below in every chain that file still renders in.
 - Configuring is a level inside arranging and is held in its own key, so configuring two placements at once can't be represented, and leaving edit mode by any control clears it.
 - No variable may live under `settings`, because that name holds the placement's settings.
 - Every placement has a theme setting and an effect setting without declaring them, and a segment that declares either is an error.

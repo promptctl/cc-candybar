@@ -8,7 +8,11 @@ import {
   CONFIGURING,
   DRAFTS,
   LIBRARIES,
-  chainOwner,
+  BASE_AUTHOR,
+  fileOwner,
+  holdsOf,
+  ownerIn,
+  ownersOf,
   classify,
   freeValue,
   insertGap,
@@ -30,14 +34,17 @@ import {
   EDIT_MODE_KEY,
 } from "../../src/config/loader/edit-mode";
 import { SessionState } from "../../src/renderer/session-state";
+import { EMPTY_ROWS, mergeRoot } from "../../src/config/root";
+import type {
+  LayoutNode,
+  Root,
+  RootFragment,
+} from "../../src/config/dsl-types";
 import { ownedStore, releaseEnded } from "../../src/renderer/owned-store";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
-const A = chainOwner(["/home/u/.config/cc-candybar/config.json5"]);
-const B = chainOwner([
-  "/home/u/.config/cc-candybar/config.json5",
-  "/p/.cc-candybar.json5",
-]);
+const A = fileOwner("/home/u/.config/cc-candybar/config.json5");
+const B = fileOwner("/p/.cc-candybar.json5");
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -78,7 +85,7 @@ describe("every family reads back what it minted", () => {
 
   test("a page cursor owns as its menu does", () => {
     const list = CONFIGURE_LISTS.mint({ preset: "default", id: "vcs" });
-    const owned = ownedKey(menuPageKey(list), () => A);
+    const owned = ownedKey(menuPageKey(list), () => A)!;
     expect(owned).toBe(menuPageKey(CONFIGURE_LISTS.own(list, A)!));
     expect(classify(owned, () => null)).toEqual({
       kind: "owned",
@@ -205,7 +212,7 @@ describe("a release", () => {
       store,
       store.sessions(),
       new Map([
-        [A, { paths: ["/u.json5"], placed: new Set([CONFIGURING.mint(git)]) }],
+        [A, { file: "/u.json5", placed: new Set([CONFIGURING.mint(git)]) }],
       ]),
       "load",
     );
@@ -218,8 +225,8 @@ describe("a release", () => {
     expect(a.get(S1, EDIT_CONFIGURE_KEY)).toBeNull();
     expect(lines).toEqual([
       // Sessions in the store's order: the last written first released last.
-      `placement-state released by=load session=${S2} owner=${A} chain=/u.json5 keys=${DRAFTS.own(draftOf(vcs), A)}`,
-      `placement-state released by=load session=${S1} owner=${A} chain=/u.json5 keys=${DRAFTS.own(draftOf(vcs), A)},${EDIT_CONFIGURE_KEY}`,
+      `placement-state released by=load session=${S2} owner=${A} file=/u.json5 keys=${DRAFTS.own(draftOf(vcs), A)}`,
+      `placement-state released by=load session=${S1} owner=${A} file=/u.json5 keys=${DRAFTS.own(draftOf(vcs), A)},${EDIT_CONFIGURE_KEY}`,
     ]);
   });
 
@@ -235,22 +242,22 @@ describe("a release", () => {
     const lines = releaseEnded(store, store.sessions(), new Map(), "load");
     expect(store.keys(S1)).toEqual(["theme"]);
     expect(lines).toEqual([
-      `placement-state released by=load session=${S1} owner=none chain=- keys=${draftOf(vcs)},edit.draft.vcs.detail,${EDIT_CONFIGURE_KEY}`,
+      `placement-state released by=load session=${S1} owner=none file=- keys=${draftOf(vcs)},edit.draft.vcs.detail,${EDIT_CONFIGURE_KEY}`,
     ]);
   });
 
-  test("the bundled default alone is the empty chain", () => {
+  test("the bundled base's keys are its own owner's, named so", () => {
     const store = new SessionState();
-    const d = chainOwner([]);
+    const d = fileOwner(BASE_AUTHOR);
     ownedStore(store, () => d).set(S1, draftOf(vcs), "true");
     const lines = releaseEnded(
       store,
       [S1],
-      new Map([[d, { paths: [], placed: new Set<string>() }]]),
+      new Map([[d, { file: BASE_AUTHOR, placed: new Set<string>() }]]),
       "load",
     );
     expect(lines).toEqual([
-      `placement-state released by=load session=${S1} owner=${d} chain=<default> keys=${DRAFTS.own(draftOf(vcs), d)}`,
+      `placement-state released by=load session=${S1} owner=${d} file=${BASE_AUTHOR} keys=${DRAFTS.own(draftOf(vcs), d)}`,
     ]);
   });
 
@@ -258,7 +265,7 @@ describe("a release", () => {
     const store = new SessionState();
     ownedStore(store, () => A).set(S1, draftOf(vcs), "true");
     const holds = new Map([
-      [A, { paths: ["/u.json5"], placed: new Set([CONFIGURING.mint(vcs)]) }],
+      [A, { file: "/u.json5", placed: new Set([CONFIGURING.mint(vcs)]) }],
     ]);
     expect(releaseEnded(store, [S1], holds, "click")).toEqual([
       "placement-state released by=click sessions=1 keys=0",
@@ -296,5 +303,108 @@ describe("the families spell what the menus derive", () => {
       key: "theme",
       value: "ocean",
     });
+  });
+});
+
+describe("a placement's owner is the file that authored its node", () => {
+  const seg = (name: string, by?: string): LayoutNode => ({
+    kind: "segment",
+    name,
+    ...(by !== undefined && { insertedBy: { file: by, entry: "insert.0" } }),
+  });
+  const BASE = {
+    presets: {},
+    root: { rows: { top: seg("directory"), side: seg("model") } },
+  };
+  const USER = "/u.json5";
+  const PROJECT = "/p.json5";
+  // A chain of files over the base, each a raw root merged as the loader
+  // merges it, with its insert cells and every cell below it placed (nodes
+  // added as rows of their own).
+  const chain = (
+    ...files: ReadonlyArray<{
+      readonly path: string;
+      readonly root?: RootFragment;
+      readonly adds?: Readonly<Record<string, LayoutNode>>;
+    }>
+  ) => {
+    let below: Root = BASE.root;
+    let cells: Readonly<Record<string, LayoutNode>> = {};
+    return {
+      base: BASE,
+      layers: files.map(({ path, root, adds = {} }) => {
+        const merged = mergeRoot(root ?? EMPTY_ROWS, below);
+        below = merged;
+        cells = { ...cells, ...adds };
+        return {
+          path,
+          raw: root === undefined ? {} : { root },
+          config: { presets: {}, root: merged },
+          placed: {
+            presets: {},
+            root: { ...merged, rows: { ...merged.rows, ...cells } },
+          },
+        };
+      }),
+    };
+  };
+  const owners = (c: ReturnType<typeof chain>) =>
+    ownerIn(ownersOf(holdsOf(c), c.layers.at(-1)?.placed ?? BASE));
+  const at = (id: string): Placement => ({ preset: "default", id });
+
+  test("a file that writes no placement's row leaves every owner as it was", () => {
+    const by = owners(
+      chain(
+        { path: USER, root: { rows: { extra: seg("cost") } } },
+        { path: PROJECT },
+      ),
+    );
+    expect(by(at("directory"))).toBe(fileOwner(BASE_AUTHOR));
+    expect(by(at("cost"))).toBe(fileOwner(USER));
+  });
+
+  test("a file whose row re-places an id authors it, and a whole tree every row", () => {
+    expect(
+      owners(chain({ path: USER, root: { rows: { top: seg("directory") } } }))(
+        at("directory"),
+      ),
+    ).toBe(fileOwner(USER));
+    const whole = owners(chain({ path: USER, root: seg("model") }));
+    expect(whole(at("model"))).toBe(fileOwner(USER));
+    // The whole tree no longer renders it, so nothing owns it here.
+    expect(whole(at("directory"))).toBeNull();
+  });
+
+  test("a file above that re-places a node takes the view, and the file below keeps its own", () => {
+    const c = chain(
+      { path: USER, root: { rows: { top: seg("directory") } } },
+      { path: PROJECT, root: { rows: { top: seg("directory") } } },
+    );
+    expect(owners(c)(at("directory"))).toBe(fileOwner(PROJECT));
+    expect(holdsOf(c).get(fileOwner(USER))!.placed).toContain(
+      CONFIGURING.mint(at("directory")),
+    );
+  });
+
+  test("an inserted node is its insert cell's file's", () => {
+    const by = owners(
+      chain(
+        { path: USER, adds: { more: seg("mine", USER) } },
+        { path: PROJECT },
+      ),
+    );
+    expect(by(at("mine"))).toBe(fileOwner(USER));
+  });
+
+  test("a placement nothing owns holds no state: it reads unset and a write is refused", () => {
+    const store = new SessionState();
+    const view = ownedStore(store, () => null);
+    const draft = DRAFTS.mint({ ...at("directory"), setting: "detail" });
+    expect(view.get(S1, draft)).toBeNull();
+    expect(() => view.set(S1, draft, "true")).toThrow(/nothing owns its state/);
+    expect(() =>
+      view.set(S1, EDIT_CONFIGURE_KEY, CONFIGURING.mint(at("directory"))),
+    ).toThrow(/nothing owns its state/);
+    expect(store.keys(S1)).toEqual([]);
   });
 });

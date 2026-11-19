@@ -1107,7 +1107,7 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  // What each prefix of the chain the write leaves places: what the click
+  // What each file of the chain the write leaves authors: what the click
   // releases its own session's ended placements against.
   return {
     placed,

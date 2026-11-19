@@ -596,7 +596,7 @@ Configuring `block`:
 
 | Region | Click |
 |---|---|
-| A control | session `edit.draft.<preset>.<id>.<setting>` ← the new value, held under the config files that place it (`edit.draft.<owner>.<preset>.<id>.<setting>`); the placement renders it at once and `💾 save` counts it |
+| A control | session `edit.draft.<preset>.<id>.<setting>` ← the new value, held under the config file that authors its node (`edit.draft.<owner>.<preset>.<id>.<setting>`); the placement renders it at once and `💾 save` counts it |
 | `✕` | closes configure mode, back to arranging |
 | Another `🔧` | configures that placement instead (one at a time) |
 

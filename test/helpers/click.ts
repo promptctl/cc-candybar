@@ -391,7 +391,7 @@ export function testVerbContext(
     },
     // Every session here renders one chain, whose owner the rig's draws own
     // their keys by (test/helpers/owned.ts).
-    ownerFor: () => owner,
+    ownerFor: () => () => owner,
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
     sourcesFor: () => {
