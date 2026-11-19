@@ -25,6 +25,7 @@ import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
+import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 
@@ -105,27 +106,30 @@ test("an ask answered with another push's reply rejects, naming both", async () 
 });
 
 test("an ask whose push threw rejects with the renderer's failure and the turn's time", async () => {
+  const failure = failureOf(new Error("the view broke"));
   const { host } = hostOver({
     kind: "threw",
-    failure: failureOf(new Error("the view broke")),
+    failure,
   });
-  await expect(host.ask({ kind: "stats" })).rejects.toThrow(
-    /renderer main push stats threw: .*the view broke/,
+  const reported = await host.ask({ kind: "stats" }).then(() => {
+    throw new Error("expected this push to fail");
+  }, failureOf);
+  expect(reported.message).toBe("renderer main push stats threw: the view broke");
+  expect(fieldsOf(reported.detail)).toEqual(
+    new Map([["took", "0ms"], ["error", failure.detail]]),
   );
-  await expect(host.ask({ kind: "stats" })).rejects.toMatchObject({
-    failure: { detail: expect.stringMatching(/ took=\d+ms: /) },
-  });
 });
 
 test("a tell that fails is said on the log, and nothing rejects", async () => {
+  const failure = failureOf(new Error("no such session"));
   const { host, said } = hostOver({
     kind: "threw",
-    failure: failureOf(new Error("no such session")),
+    failure,
   });
   expect(host.tell({ kind: "close-views" })).toBe(undefined);
-  expect(await said).toMatch(
-    /^error renderer main push close-views threw.*: .*no such session/,
-  );
+  const line = await said;
+  expect(line).toMatch(/^error renderer main push close-views threw /);
+  expect(fieldsOf(line).get("error")).toBe(failure.detail);
 });
 
 // Every promise chain a turn starts settles on microtasks alone: these

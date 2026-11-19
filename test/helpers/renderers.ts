@@ -62,7 +62,11 @@ export function pushRenderer(
 
 // The stored writes of a rig whose host holds no store: its renderer's turns
 // tell it none.
-export const NOTHING_STORED = (): readonly [] => [];
+const noneStored = (): readonly [] => [];
+export const NOTHING_STORED = {
+  "session-state": noneStored,
+  "settings-history": noneStored,
+};
 
 // The pushes of a rig that hands its renderer none: one would be the rig's
 // bug, said.
@@ -94,7 +98,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
 export const NO_ACTS: HostWorld = {
-  authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
+  authorizeRun: (request, captures) =>
+    authorizeRun(TEST_SIGNER, request, captures),
   perform: async (act) => ({
     kind: "failed",
     reason: `${act.kind}: this rig performs no act`,
