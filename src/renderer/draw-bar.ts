@@ -17,7 +17,7 @@ import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
 import { repoQuestions } from "../config/repo-question";
 import {
-  placementsJudged,
+  stateJudged,
   type CacheEntry,
   type RenderCache,
   type DslRenderState,
@@ -449,17 +449,17 @@ function setUpDraw(
 // Before a session draws, it lets go of what it holds for placements the
 // config it draws no longer places (src/renderer/placement-release.ts), so a
 // placement that takes a removed one's id opens with nothing of it.
-// [LAW:carrying-cost] The placements are judged once per load, and a render
-// whose placements are the ones its view last judged has nothing new to
-// judge: one comparison per tick.
+// [LAW:carrying-cost] What a config declares is built once per load, and a
+// render judged against what its view last judged has nothing new to judge:
+// one comparison per tick.
 function releaseBeforeDraw(
   parts: RendererParts,
   sessionId: SessionId,
   entry: CacheEntry,
   view: SessionView<SessionSource, CheckedRenderRequest>,
 ): void {
-  const placements = placementsJudged(entry);
-  if (view.released === placements) return;
+  const declared = stateJudged(entry);
+  if (view.released === declared) return;
   const log = (line: string): void => parts.log("info", line);
   // [LAW:single-enforcer] Written as every session write is, through the
   // closing view over the config the session draws.
@@ -471,9 +471,9 @@ function releaseBeforeDraw(
   logReleased(
     parts.log,
     sessionId,
-    releaseUnplaced(store, sessionId, placements),
+    releaseUnplaced(store, sessionId, declared),
   );
-  view.released = placements;
+  view.released = declared;
 }
 
 // [LAW:one-source-of-truth] The one draw of a render, a request's or a

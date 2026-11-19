@@ -408,6 +408,58 @@ describe("a session lets go of a placement's state when its config no longer pla
     });
   });
 
+  // An inserted cell is shown, not edited: it declares no drafts, `✚`
+  // libraries or configure member, so nothing the session held for the id
+  // could be drawn or saved, and would come back on an editable id again.
+  test("a placement only an insert entry places edits nothing, so the session lets go of what it held", async () => {
+    await withDaemon(
+      SRC(true),
+      async (c) => {
+        await render(c.daemon, S1, c.project);
+        await hold(c, S1);
+        // While the session is idle, the repository's layer takes `a` over:
+        // the user's row drops it and an insert entry places it.
+        fs.writeFileSync(
+          c.projectFile,
+          `{ insert: [{ seg: 'a', after: 'b' }] }\n`,
+        );
+        fs.writeFileSync(c.userFile, SRC(false));
+        await renderUntil(
+          c.daemon,
+          S1,
+          c.project,
+          (f) => textOf(f).indexOf("AAA") > textOf(f).indexOf("BBB"),
+          "a placed by the insert",
+        );
+        await releasedWith(c, S1, [A.draft, EDIT_CONFIGURE_KEY, A.gap]);
+        fs.writeFileSync(c.projectFile, `{}\n`);
+        await reAddedReleased(c, S1);
+      },
+      true,
+    );
+  });
+
+  test("a standing warning that drops nothing holds nothing back", async () => {
+    await withDaemon(SRC(true), async (c) => {
+      // A `.json` beside the `.json5`: the bar warns of it for as long as
+      // both are there.
+      fs.writeFileSync(c.userFile.replace(/\.json5$/, ".json"), "{}\n");
+      await render(c.daemon, S1, c.project);
+      await hold(c, S1);
+      fs.writeFileSync(c.userFile, SRC(false));
+      await renderUntil(c.daemon, S1, c.project, (f) => !drawsA(f), "a gone");
+      expect(
+        fs
+          .readFileSync(c.daemon.log, "utf8")
+          .split("\n")
+          .filter((l) => l.includes("config loaded"))
+          .at(-1),
+      ).not.toContain("warnings=none");
+      await releasedWith(c, S1, [A.draft, EDIT_CONFIGURE_KEY, A.gap]);
+      await reAddedReleased(c, S1);
+    });
+  });
+
   // Why a click that loaded nothing judges nothing: the config it lands on
   // gates every write, so no link drawn before a removal still writes a key
   // the removed placement held.
@@ -572,44 +624,6 @@ describe("a placement that still stands keeps its state", () => {
         expect(textOf(frame)).toContain("AAA-");
         expect(holding(frame)).toEqual(HOLDING);
         expect(releasesOf(c, S1)).toEqual([]);
-      },
-      true,
-    );
-  });
-
-  test("a placement that only an insert entry places", async () => {
-    await withDaemon(
-      SRC(true),
-      async (c) => {
-        await render(c.daemon, S1, c.project);
-        await hold(c, S1);
-        // While the session is idle, the repository's layer takes `a` over:
-        // the user's row drops it and an insert entry places it.
-        fs.writeFileSync(
-          c.projectFile,
-          `{ insert: [{ seg: 'a', after: 'b' }] }\n`,
-        );
-        fs.writeFileSync(c.userFile, SRC(false));
-        await renderUntil(
-          c.daemon,
-          S2,
-          c.project,
-          (f) => textOf(f).indexOf("AAA") > textOf(f).indexOf("BBB"),
-          "a placed by the insert",
-        );
-        await render(c.daemon, S1, c.project);
-        expect(releasesOf(c, S1)).toEqual([]);
-        // Back in the user's row, it draws what the session left unsaved.
-        fs.writeFileSync(c.projectFile, `{}\n`);
-        fs.writeFileSync(c.userFile, SRC(true));
-        const frame = await renderUntil(
-          c.daemon,
-          S1,
-          c.project,
-          (f) => textOf(f).includes("AAA-"),
-          "a back in the user's row",
-        );
-        expect(holding(frame)).toEqual(HOLDING);
       },
       true,
     );

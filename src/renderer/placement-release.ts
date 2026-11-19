@@ -10,27 +10,23 @@
 // and no load releases anything for anyone.
 
 import { runInAction } from "mobx";
-import {
-  placementHolding,
-  type Placements,
-} from "../config/placement-state.js";
+import type { DeclaredState } from "../config/declared-state.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
-// The keys of `sessionId` held for placements `placements` does not hold,
-// cleared through `store`. [LAW:single-enforcer] Both moments hand in a
+// The keys of `sessionId` that `declared` no longer holds, cleared through
+// `store`. [LAW:single-enforcer] Both moments hand in a
 // closing view (src/renderer/closing-view.ts), so a clear that closes a
 // disclosure folds what is open inside it, as every session write does.
 export function releaseUnplaced(
   store: SessionStateRW,
   sessionId: SessionId,
-  placements: Placements,
+  declared: DeclaredState,
 ): readonly string[] {
-  const released = store.entries(sessionId).flatMap(([key, value]) => {
-    const owner = placementHolding(key, value);
-    return owner === null || placements.has(owner) ? [] : [key];
-  });
+  const released = store
+    .entries(sessionId)
+    .flatMap(([key, value]) => (declared.holds(key, value) ? [] : [key]));
   if (released.length === 0) return released;
   runInAction(() => {
     for (const key of released) store.clear(sessionId, key);

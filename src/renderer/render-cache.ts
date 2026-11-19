@@ -50,10 +50,10 @@ import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
-  EVERY_PLACEMENT_STANDS,
-  placementsOf,
-  type Placements,
-} from "../config/placement-state.js";
+  declaredStateOf,
+  EVERY_KEY_STANDS,
+  type DeclaredState,
+} from "../config/declared-state.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   fixedSource,
@@ -252,9 +252,9 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
-  // [LAW:one-source-of-truth] Every placement `config` places, judged once
-  // per load: what a session's placement state is released against.
-  readonly placements: Placements;
+  // [LAW:one-source-of-truth] The edit chrome state `config` declares, built
+  // once per load: what a session's placement state is released against.
+  readonly declared: DeclaredState;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
   readonly dropped: readonly DroppedFileError[];
@@ -464,22 +464,26 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] What a session drawn from the entry judges its
-// placement state against: the placements of the config it renders, while
-// that config is all its files say. A failed load draws the last config that
-// loaded, or the bundled default; one that dropped an entry (an undeclared
-// segment, a plugin whose checkout is missing) or warned draws less than its
-// files hold. Either way the bar shows its ⚠, and nothing is judged gone until
-// a load is clean.
-export function placementsJudged(
-  entry: Pick<CacheEntry, "lastError" | "lastWarnings"> & {
-    readonly state: Pick<DslRenderState, "placements" | "dropped">;
+// placement state against: what the config it renders declares, while that
+// config places everything its files do. A failed load draws the last config
+// that loaded, or the bundled default; one that dropped a placement (a
+// segment its files do not declare) draws without it, and one that dropped a
+// plugin it places draws a stand-in for each of its cells. The settings of a
+// placement dropped or stood in for are unknown, so no declaration names its
+// keys, and none of the session's keys is judged gone until the drop is fixed.
+// Each shows a red ⚠. A plain warning drops nothing, so it holds nothing back.
+export function stateJudged(
+  entry: Pick<CacheEntry, "lastError"> & {
+    readonly state: Pick<DslRenderState, "declared" | "dropped"> & {
+      readonly plugins: Pick<DslRenderState["plugins"], "dropped">;
+    };
   },
-): Placements {
-  const clean =
+): DeclaredState {
+  const placesAll =
     entry.lastError === null &&
-    entry.lastWarnings.length === 0 &&
-    entry.state.dropped.length === 0;
-  return clean ? entry.state.placements : EVERY_PLACEMENT_STANDS;
+    entry.state.dropped.length === 0 &&
+    entry.state.plugins.dropped.length === 0;
+  return placesAll ? entry.state.declared : EVERY_KEY_STANDS;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -816,7 +820,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     kind: "built",
     state: {
       config,
-      placements: placementsOf(config),
+      declared: declaredStateOf(config),
       dropped,
       compileKey: registration.compileKey,
       loadKey: load.key,
@@ -1026,10 +1030,10 @@ export interface SessionView<
   // held here so it goes with the view.
   readonly frames: Map<Drawing["by"], FrameRecord<RenderedLine>>;
   lastRenderCellsBySegment: ReadonlyMap<string, readonly RichText[]>;
-  // The placements the session's state was last judged against. A render
-  // that finds them as they were has nothing new to judge: every write since
-  // was a click, and a click judges its own (src/renderer/verbs/index.ts).
-  released: Placements | null;
+  // What the session's state was last judged against. A render that finds
+  // it as it was has nothing new to judge: every write since was a click,
+  // and a click judges its own (src/renderer/verbs/index.ts).
+  released: DeclaredState | null;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.

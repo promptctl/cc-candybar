@@ -59,8 +59,8 @@ import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
-import { placementsOf } from "../../src/config/placement-state";
-import { placementsJudged } from "../../src/renderer/render-cache";
+import { declaredStateOf } from "../../src/config/declared-state";
+import { stateJudged } from "../../src/renderer/render-cache";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
 // beside the rig's session state, which a click reads its own session's from
@@ -311,11 +311,14 @@ export function testVerbContext(
     // What the session's placement state is judged against, judged as the
     // daemon judges it: whichever config this context's `configFor` reads, a
     // spread override's included, as a load that came out clean.
-    placementsFor(origin) {
-      return placementsJudged({
+    declaredFor(origin) {
+      return stateJudged({
         lastError: null,
-        lastWarnings: [],
-        state: { placements: placementsOf(this.configFor(origin)), dropped: [] },
+        state: {
+          declared: declaredStateOf(this.configFor(origin)),
+          dropped: [],
+          plugins: { dropped: [] },
+        },
       });
     },
     // A test that drives a run click hands in its own run owner and the

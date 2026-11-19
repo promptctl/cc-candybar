@@ -26,7 +26,7 @@ import {
   type LayerRole,
 } from "../../config/layer-role";
 import type { SessionStateRW } from "../../renderer-interface/session-state";
-import type { Placements } from "../../config/placement-state";
+import type { DeclaredState } from "../../config/declared-state";
 import { logReleased, releaseUnplaced } from "../placement-release";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
@@ -182,9 +182,10 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
-  // What a session's placement state is judged against: the placements of
-  // the config `configFor` reads, or none judged gone while its load fails.
-  readonly placementsFor: (origin: RenderOrigin) => Placements;
+  // What a session's placement state is judged against: what the config
+  // `configFor` reads declares, or every key standing while its load failed
+  // or dropped a placement.
+  readonly declaredFor: (origin: RenderOrigin) => DeclaredState;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -1434,7 +1435,7 @@ function journaled<C extends DaemonContext>(
         released = releaseUnplaced(
           closing(journal.sessionState),
           sid,
-          ctx.placementsFor(origin),
+          ctx.declaredFor(origin),
         );
       } catch (e) {
         failed.push(e);

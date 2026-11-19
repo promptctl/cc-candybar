@@ -69,7 +69,7 @@ import { WorldStates } from "./world-states.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
-  placementsJudged,
+  stateJudged,
   RenderCache,
   renderCacheBudget,
   type SessionView,
@@ -557,9 +557,8 @@ export function mainRendererOf(
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin).state.config,
-    // The placements that same entry judges its sessions' state against.
-    placementsFor: (origin) =>
-      placementsJudged(renderCache.getOrCreate(origin)),
+    // What that same entry judges its sessions' state against.
+    declaredFor: (origin) => stateJudged(renderCache.getOrCreate(origin)),
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,

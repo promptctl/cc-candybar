@@ -89,6 +89,20 @@ import {
 // is what a disclosure ref already names, so both gates below derive from the
 // one term spelling rather than a second `eq`.
 export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
+
+// [LAW:one-source-of-truth] Where every session key edit chrome keeps lies:
+// its own names, and the menu state and page keys the menus it hosts derive
+// from them, by the derivation those menus use. An authored menu key cannot
+// fall here (the loader refuses edit chrome's namespace in `ident` space), so
+// whatever lies here is chrome's, declared by the config that draws it or
+// held for a placement that config no longer edits
+// (src/config/declared-state.ts).
+const EDIT_MENU_NS = sharedMenuStateKey(EDIT_NS);
+export const EDIT_CHROME_STATE_NS: readonly string[] = [
+  EDIT_NS,
+  EDIT_MENU_NS,
+  menuPageKey(EDIT_MENU_NS),
+];
 // The toggle's text per state, names view (closed) first.
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 // Leaving edit mode, kept: `✓ save` while there is something to keep, `✓ done`
