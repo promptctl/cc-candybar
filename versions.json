@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-912",
+      "ref": "refs/pull/912/merge",
+      "sha": "6cd4c98355499ce43512949713e30567ccf3ea41",
+      "timestamp": "2026-11-19T23:01:15.919Z",
+      "commits": [
+        {
+          "sha": "6cd4c98355499ce43512949713e30567ccf3ea41",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:00:16-07:00",
+          "message": "Merge ed8a3be286f3756a0f32c9aefcc80ae416eb418a into 5958f3e3ec33bdf9e73072353c8948838a4d6b57\n"
+        },
+        {
+          "sha": "ed8a3be286f3756a0f32c9aefcc80ae416eb418a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:59:06-07:00",
+          "message": "test(renderer): compare core construction in captured replay\n"
+        },
+        {
+          "sha": "9a34bf20c6c9a68128e7392d7ce3e267ef68b6cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:58:09-07:00",
+          "message": "refactor(renderer): deliver inspection and shutdown as events\n"
+        },
+        {
+          "sha": "976edc2c7e11ab41f4a2988638d9753487230835",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:56:44-07:00",
+          "message": "refactor(renderer): boot with only the transport clock\n"
+        },
+        {
+          "sha": "bd5c9a309bbe416a92b11d1d421d8a1e9a91a419",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:55:24-07:00",
+          "message": "test(renderer): replay captured private-wire turns\n"
+        },
+        {
+          "sha": "87cb60aed90886e80f07714445e3bcee929f5ae4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:57:43-07:00",
+          "message": "build(renderer): reject host modules across the process import graph\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5958f3e3ec33bdf9e73072353c8948838a4d6b57",
