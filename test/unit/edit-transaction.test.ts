@@ -3,6 +3,9 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { EditTransactions } from "../../src/renderer/edit-transaction";
 import { SessionState } from "../../src/renderer/session-state";
+import { UNREAD_CONFIG } from "../helpers/history-step";
+import { accordionKey, menuPageKey } from "../../src/config/menu-keys";
+import { EDIT_NS } from "../../src/config/reserved-names";
 
 type Standing = NonNullable<ConfigSnapshot["repo"]>["standing"];
 const origin: RenderOrigin = {
@@ -52,9 +55,9 @@ test("the draft keeps its edits but follows live repository trust", () => {
   const committed = new SessionState();
   const edits = new EditTransactions(committed, () => {});
   edits.open(sid, origin, snapshot("approved"));
-  const turn = edits.draft(sid)!.begin(() => {});
+  const turn = edits.draft(sid)!.begin(() => UNREAD_CONFIG);
   const edited = "{ globals: { padding: 2 } }";
-  turn.journal.file(sid, user.path, userText, edited);
+  turn.journal.file(sid, user.path, userText, edited, UNREAD_CONFIG);
   turn.journal.sessionState.set(sid, "theme", "nord");
   turn.commit();
 
@@ -69,4 +72,14 @@ test("the draft keeps its edits but follows live repository trust", () => {
   expect(edits.snapshot(origin, other)).toBeNull();
   expect(edits.view.get(sid, "theme")).toBe("nord");
   expect(committed.get(sid, "theme")).toBeNull();
+});
+
+test("chrome an older build left in the store reads as absent", () => {
+  const store = new SessionState();
+  store.set(sid, "edit.mode", "arrange");
+  const pages = menuPageKey(accordionKey(EDIT_NS, "list"));
+  store.set(sid, pages, "2");
+  const edits = new EditTransactions(store, () => {});
+  expect(edits.committed.get(sid, "edit.mode")).toBeNull();
+  expect(edits.view.get(sid, pages)).toBeNull();
 });

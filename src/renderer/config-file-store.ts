@@ -431,7 +431,12 @@ function requireValueTarget(key: string): ValueTarget {
 // writes no file and keeps no history.
 export interface EditStore {
   readonly read: (file: string) => LayerContent;
-  readonly record: (file: string, before: string | null, after: string) => void;
+  readonly record: (
+    file: string,
+    before: string | null,
+    after: string,
+    loaded: DslConfig,
+  ) => void;
 }
 
 // [LAW:one-source-of-truth] The layer a click writes, as the snapshot the
@@ -544,7 +549,7 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(into, before) }).chain;
   refuseNewDrops(into, was, will);
   refuse(into, was, will);
-  store.record(into.path, before, after);
+  store.record(into.path, before, after, will.config);
   return will.config;
 }
 
@@ -684,8 +689,8 @@ export function proveLoads(
   layer: WriteLayer,
   text: string | null,
   read: (file: string) => LayerContent,
-): void {
-  loadOrRefuse(seenBy(layer, read), text);
+): DslConfig {
+  return loadOrRefuse(seenBy(layer, read), text).config;
 }
 
 // The config `text` loads to as the written layer, or the click's refusal naming why

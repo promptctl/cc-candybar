@@ -44,7 +44,7 @@ import {
   type Palette,
   type RichText,
 } from "@promptctl/rich-js";
-import { sharedMenuStateKey } from "../../src/config/menu-keys";
+import { accordionKey } from "../../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../src/config/settings-menu";
 import { SETTINGS_NS } from "../../src/config/reserved-names";
 import { resolvedStyle } from "../../src/render/rich-theme";
@@ -103,7 +103,7 @@ const FRAMES: ReadonlyArray<readonly [string, (bar: SessionBar) => void]> = [
         (bar: SessionBar) => {
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
           bar.pick(`${SETTINGS_NS}tab`, tab);
-          bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
+          bar.pick(accordionKey(SETTINGS_NS, "pickers"), "gear");
         },
       ] as const,
   ),

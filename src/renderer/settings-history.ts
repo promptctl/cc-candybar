@@ -54,6 +54,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
+import type { DslConfig } from "../config/dsl-types.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
 export interface HistoryDepth {
@@ -85,7 +86,7 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 // (src/renderer/config-writes.ts).
 // [LAW:single-enforcer] `prove` is the gate every click's write passes: the
 // text loads as the file it is written to, between the files as `read` gives
-// them, or the click is refused.
+// them, or the click is refused. It returns the config that load produced.
 // `roleOf` and `pathOf` name a file of the click's chain by its role and back.
 export type ConfigFiles = Pick<
   ConfigWrites,
@@ -95,12 +96,15 @@ export type ConfigFiles = Pick<
     file: string,
     text: string | null,
     read: (file: string) => LayerContent,
-  ) => void;
+  ) => DslConfig;
 };
 
 // Records one click's changes. Handlers write through `sessionState` (which
 // records settings keys once they are written, and holds every write until
-// `commit`) and report their config-file writes through `file`. `undo`,
+// `commit`) and report their config-file writes through `file`, each with the
+// config its load produced. `produced` is the config the click's files load to
+// as it leaves them — its last write's, since each write is proved over the
+// click's earlier ones — or null when it wrote none. `undo`,
 // `redo` step the session's history in the same click, each
 // first making what the click changed so far a step of its own, so one click
 // behaves exactly as the same clicks made one at a time; each returns the
@@ -112,7 +116,9 @@ export interface Journal {
     file: string,
     before: string | null,
     after: string | null,
+    loaded: DslConfig,
   ): void;
+  produced(): DslConfig | null;
   undo(sessionId: SessionId): Step;
   redo(sessionId: SessionId): Step;
   writes(sessionId: SessionId): ReadonlyMap<string, string | null>;
@@ -190,9 +196,13 @@ export class SettingsHistory {
     const held = heldWrites(this.sessionState);
     // Each session's history as this click leaves it.
     const working = new Map<SessionId, SessionHistory>();
+    let produced: DslConfig | null = null;
     const click: Click = {
       held,
-      files,
+      files: {
+        ...files,
+        prove: (file, text, read) => (produced = files.prove(file, text, read)),
+      },
       historyOf: (sessionId) =>
         working.get(sessionId) ?? this.history(sessionId),
       move: (sessionId, history) => working.set(sessionId, history),
@@ -230,7 +240,9 @@ export class SettingsHistory {
     return {
       sessionState,
       writes: held.writes,
-      file: (sessionId, file, before, after) => {
+      produced: () => produced,
+      file: (sessionId, file, before, after, loaded) => {
+        produced = loaded;
         note(sessionId, {
           kind: "layer",
           role: files.roleOf(file),

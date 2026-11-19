@@ -38,6 +38,9 @@ export interface DisclosureNest {
   readonly inside: (parent: Disclosure) => readonly NestedKey[];
   // What `key` holds in a fresh session.
   readonly defaultOf: (key: string) => string;
+  // The members `key` can hold open: each a disclosure hung in a tree or
+  // toggled by an action.
+  readonly membersOf: (key: string) => ReadonlySet<string>;
   // Every menu: a disclosure that hangs a body or drops a `{{ menu }}`, the
   // rows a frame counts as menu rows and flashes. A toggle that hangs neither
   // (edit mode, its `☑ live`, an author's `when` gate) is not one.
@@ -48,6 +51,7 @@ export interface DisclosureNest {
 export const NO_NEST: DisclosureNest = {
   inside: () => [],
   defaultOf: () => DISCLOSURE_CLOSED,
+  membersOf: () => new Set(),
   menus: [],
 };
 
@@ -156,6 +160,7 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
     // A disclosure that declares no default starts closed: its toggle counts
     // an unknown value as its first member, `closed`.
     defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED,
+    membersOf: (key) => members.get(key) ?? new Set(),
   };
 }
 

@@ -37,10 +37,15 @@ import {
 import {
   anchorUnderGate,
   countAnchors,
+  PICKER_KEY,
   POLLED,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
-import { isReservedName, SETTINGS_NS } from "../src/config/reserved-names";
+import {
+  isChromeKey,
+  isReservedName,
+  SETTINGS_NS,
+} from "../src/config/reserved-names";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
@@ -207,7 +212,7 @@ describe("the global settings menu is reachable from a user config", () => {
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1]?.startsWith("menus.candybar_") && e.args[2] !== DISCLOSURE_CLOSED,
+        (e) => e.args[1] === PICKER_KEY && e.args[2] !== DISCLOSURE_CLOSED,
       ),
     );
     expect(pickerUrl).toBeDefined();
@@ -647,13 +652,11 @@ describe("the menu in a config that declares no variables", () => {
 
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
 
-// [LAW:behavior-not-structure] brandon-menus-du8. The settings menu's four config
-// pickers share the accordion key `candybar.pickers`, and a shared key joining an
-// accordion is the mechanism BY DESIGN — so a user menu that derives the same key
-// joined that accordion, and opening the user's menu closed the settings picker
-// with no error naming the cause. The pin is the BEHAVIOUR, over every spelling
-// `ident()` collapses to the same identifier, not the one spelling the reviewer's
-// proposed `isReservedName(key)` check would have caught.
+// [LAW:behavior-not-structure] The settings menu's config pickers share one
+// accordion key, and a shared key joining an accordion is the mechanism BY
+// DESIGN — so a user menu whose key matched it would close the settings picker
+// with no error naming the cause. The pin is the BEHAVIOUR: every key an author
+// can spell loads, as its own key, and none is the pickers'.
 describe("a user menu cannot join a synthesized accordion", () => {
   // A real declared action, so the only thing a case can fail on is the key.
   const withKey = (key: string): string => `{
@@ -664,80 +667,39 @@ describe("a user menu cannot join a synthesized accordion", () => {
     root: { h: ['hello'] },
   }`;
 
-  // The three spellings `ident()` collapses to `candybar_pickers` — the key the
-  // settings menu's picker accordion mints. Only the first starts with the
-  // authored prefix `"candybar."`, which is why a check on the authored spelling
-  // closes one case of three and the collapse has to be compared instead.
-  for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
-    test(`the key "${key}" is a load error naming the reserved namespace`, () => {
-      try {
-        parseAndValidate("<user>", withKey(key), ALLOWED);
-        throw new Error(`expected a ConfigError for key "${key}"`);
-      } catch (err) {
-        expect(err).toBeInstanceOf(ConfigError);
-        const message = (err as ConfigError).message;
-        expect(message).toContain(SETTINGS_NS);
-        // It names the derived key, so the author sees WHY their spelling is the
-        // reserved one — the collapse is the part they cannot see.
-        expect(message).toContain("menus.candybar_pickers");
-        expect(message).toContain("hello");
-      }
-    });
-  }
-
-  // Every namespace on the one reserved list, not just the one that mints an
-  // accordion today: a later pass minting one under `groups.`/`edit.`/`menus.`
-  // must not have to remember to extend a second list [LAW:carrying-cost].
-  for (const key of ["groups.main", "edit.things", "menus.mine"]) {
-    test(`the key "${key}" is refused too — the rule is the one namespace list`, () => {
-      expect(() => parseAndValidate("<user>", withKey(key), ALLOWED)).toThrow(
-        ConfigError,
-      );
-    });
-  }
-
-  // The rule is about the NAMESPACE, not about the word: the reserved prefixes
-  // all carry a dot, so a bare name that merely looks like one is an ordinary
-  // accordion key and keeps working.
-  for (const key of ["settings", "pickers", "mysettings"]) {
-    test(`the ordinary key "${key}" still loads and owns its own state key`, () => {
+  for (const key of [
+    "candybar.pickers",
+    "candybar-pickers",
+    "candybar_pickers",
+    "pickers",
+    "groups.main",
+    "edit.things",
+    "menus.mine",
+  ]) {
+    test(`the key "${key}" loads, holding its own state apart from the settings pickers`, () => {
       const config = parseAndValidate("<user>", withKey(key), ALLOWED);
       const stateKey = sharedMenuStateKey(key);
       expect(Object.keys(config.variables)).toContain(stateKey);
-      // …and it is not the settings pickers' key, which is what "does not share
-      // state" means in this ticket's own words.
-      expect(stateKey).not.toBe(sharedMenuStateKey(`${SETTINGS_NS}pickers`));
+      expect(stateKey).not.toBe(PICKER_KEY);
+      expect(isChromeKey(stateKey)).toBe(false);
     });
   }
 
-  test("the collision the gate exists for is real, as a value", () => {
-    // Independent of the gate: these three spellings derive ONE state key, and it
-    // is the settings pickers' key. If someone ever "simplifies" ident() so this
-    // stops holding, the gate above becomes theatre and this test says so.
-    const settingsPickers = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-    for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
-      expect(sharedMenuStateKey(key)).toBe(settingsPickers);
-    }
-  });
-
-  test("a shared key and an independent key can never be the same key", () => {
-    // The other half of why only the reserved case needed a gate: ident() emits
-    // no dot, so a shared key holds none after the namespace and an independent
-    // one holds exactly one. The two ranges are disjoint for ALL inputs, which is
-    // why an authored independent menu needs no reservation of its own.
-    const independent = menuStateKey("settings", "pickers", undefined);
-    expect(independent).toBe("menus.settings.pickers");
-    expect(sharedMenuStateKey("settings.pickers")).not.toBe(independent);
-    for (const key of ["a", "a.b", "a-b-c", "settings.pickers"]) {
-      expect(sharedMenuStateKey(key).slice("menus.".length)).not.toContain(".");
-    }
+  test("no two spellings share a key, and no key starts another", () => {
+    const spellings = ["a", "a.b", "a_b", "a-b", "a b", "settings.pickers"];
+    const keys = [
+      ...spellings.map(sharedMenuStateKey),
+      ...spellings.flatMap((p) =>
+        spellings.map((m) => menuStateKey(p, m, undefined)),
+      ),
+    ];
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const k of keys)
+      for (const other of keys)
+        if (k !== other) expect(other.startsWith(`${k}.`)).toBe(false);
   });
 
   test("the settings menu's own pickers still share one accordion", () => {
-    // The gate runs at load over AUTHORED menus only; the settings menu
-    // synthesizes its artifacts in validateConfig, after that pass, so its own
-    // reserved key is never asked to pass its own gate. If that ordering ever
-    // changed, this is the test that would say so.
     const config = parseAndValidate(
       "<user>",
       `{
@@ -746,12 +708,11 @@ describe("a user menu cannot join a synthesized accordion", () => {
       }`,
       ALLOWED,
     );
-    const pickerStateKey = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-    expect(Object.keys(config.variables)).toContain(pickerStateKey);
+    expect(Object.keys(config.variables)).toContain(PICKER_KEY);
     // One key, and more than one menu's cycle action written onto it — that IS
     // the accordion.
     const cyclesOnIt = Object.values(config.actions).filter(
-      (a) => "cycle" in a && "set" in a && a.set === pickerStateKey,
+      (a) => "cycle" in a && "set" in a && a.set === PICKER_KEY,
     );
     expect(cyclesOnIt.length).toBeGreaterThan(1);
   });

@@ -179,8 +179,9 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const base = testVerbContext(sessionState, history, undefined, durable.host);
   const context = bookedContext(sessionState, sessionId)!;
   const draftText = () =>
-    base.edits.snapshot(context.durable.origin, sessionId)?.chain
-      .find((layer) => layer.role === "user")?.content;
+    base.edits
+      .snapshot(context.durable.origin, sessionId)
+      ?.chain.find((layer) => layer.role === "user")?.content;
   let loaded = src;
   let authored = config;
   let registry = new SourceRegistry(store, "", base.edits.view);
@@ -189,7 +190,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
   });
   const effective = () => {
     const draft = draftText();
-    const text = draft?.kind === "text" ? draft.text : durable.text() ?? "{}";
+    const text = draft?.kind === "text" ? draft.text : (durable.text() ?? "{}");
     if (text !== loaded) {
       loaded = text;
       authored = parseAndValidate("<test>", text, ALLOWED);
@@ -393,6 +394,27 @@ describe("edit mode is in every config", () => {
         ALLOWED,
       ),
     ).toThrow(/reserved "edit\." namespace/);
+  });
+
+  // Chrome lives only inside an edit, so a key the file writes there would be
+  // dropped at every write.
+  test.each([
+    [
+      "a state variable's",
+      `variables: { mine: { kind: 'state', key: 'edit.mine', default: 'a' } },`,
+    ],
+    [
+      "an action's",
+      `actions: { mine: { set: 'menupages.edit.mine', to: '1' } },`,
+    ],
+  ])("%s key in edit mode's namespace is a load error", (_, decl) => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        `{ globals: {}, ${decl} segments: { s: { template: 'x' } }, root: 's' }`,
+        ALLOWED,
+      ),
+    ).toThrow(/is edit mode's own/);
   });
 });
 
@@ -642,7 +664,9 @@ describe("edit chrome names follow their placement, not the walk", () => {
       };
       const leading = named(at - 2).filter((n) => n.includes(".insertSeg."));
       const calls = [cell.lead, cell.trail].flatMap((t) =>
-        t === undefined ? [] : templateActionRefs(t, {}).map(({ name }) => name),
+        t === undefined
+          ? []
+          : templateActionRefs(t, {}).map(({ name }) => name),
       );
       return [
         ...leading,
@@ -663,7 +687,10 @@ describe("edit chrome names follow their placement, not the walk", () => {
 
   test.each([
     ["in its row", "[ { h: ['directory', 'gitPr', 'git'] }, 'trigger' ]"],
-    ["in an earlier row", "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]"],
+    [
+      "in an earlier row",
+      "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]",
+    ],
   ])("an add %s renames no other placement's chrome", (_where, rows) => {
     const before = parseAndValidate("<test>", BASE, ALLOWED);
     const after = parseAndValidate("<test>", withRows(rows), ALLOWED);
@@ -786,7 +813,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    await CLICK_VERBS.get("set-state")!(`${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`, ctx);
+    await CLICK_VERBS.get("set-state")!(
+      `${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`,
+      ctx,
+    );
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -862,9 +892,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const original = durable.text()!;
     const placed = (target: string) =>
       ownUrls(render()).some((url) =>
-        effectsOf(url).some((effect) =>
-          effect.verb === "apply-layout-op" &&
-          effect.args[3] === encodeLayoutOp({ op: "remove", target }),
+        effectsOf(url).some(
+          (effect) =>
+            effect.verb === "apply-layout-op" &&
+            effect.args[3] === encodeLayoutOp({ op: "remove", target }),
         ),
       );
 
@@ -1031,7 +1062,9 @@ describe("edit mode's save and cancel", () => {
     expect(durable.text()).toBe(original);
     await cancel(rt);
     expect(durable.text()).toBe(original);
-    expect(rt.sessionState.get(S1, EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
+    expect(rt.ctx.edits.view.get(S1, EDIT_MODE_KEY)).not.toBe(
+      EDIT_MODE_ARRANGE,
+    );
     expect(rt.history.depth(S1)).toEqual({
       undo: 0,
       redo: 0,
@@ -1108,8 +1141,6 @@ describe("edit mode's save and cancel", () => {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });
-    expect(logs.join("\n")).toMatch(
-      /rewind: discarded draft \(session=s1\)/,
-    );
+    expect(logs.join("\n")).toMatch(/rewind: discarded draft \(session=s1\)/);
   });
 });

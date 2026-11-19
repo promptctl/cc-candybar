@@ -3,7 +3,7 @@
 // writes. Driven through the real loader and `drawDsl`.
 
 import { linksOf } from "../src/click/read";
-import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { accordionKey } from "../src/config/menu-keys";
 import { resolveOptionDomain } from "../src/config/option-domain";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
@@ -18,8 +18,8 @@ function menu() {
   const raw = (): Frame => bar.render(instantOf(new Date())).frame;
   const open = (list: string): Frame => {
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    bar.pick(sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
-    bar.pick(sharedMenuStateKey(`${SETTINGS_NS}gearPickers`), list);
+    bar.pick(accordionKey(SETTINGS_NS, "pickers"), "gear");
+    bar.pick(accordionKey(SETTINGS_NS, "gearPickers"), list);
     return raw();
   };
   const writes = (frame: Frame, key: string): string[] =>

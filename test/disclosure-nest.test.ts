@@ -10,7 +10,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { type VerbContext } from "../src/renderer/verbs";
-import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { PICKER_KEY, SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   EDIT_MODE_KEY,
@@ -20,11 +20,17 @@ import { disclosureNest } from "../src/config/disclosure-nest";
 import { insertGap } from "../src/config/edit-chrome";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import {
+  accordionKey,
+  menuStateKey,
+} from "../src/config/menu-keys";
+import { SETTINGS_NS } from "../src/config/reserved-names";
+import { arrange } from "./helpers/configure";
 
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
-const GEAR_PICKERS = "menus.candybar_gearPickers";
+const PICKERS = PICKER_KEY;
+const GEAR_PICKERS = accordionKey(SETTINGS_NS, "gearPickers");
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -62,7 +68,7 @@ function nestBar(src: string) {
   };
   // What the session reads: a cleared key holds its state variable's default.
   const held = (key: string): string =>
-    sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
+    ctx.edits.view.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, sessionState, render, clickWriting, held, logged, ctx };
 }
 
@@ -231,7 +237,7 @@ const GROUPS = `{
     { kind: 'group', name: 'other', label: 'other', key: 'acc', children: ['model'] },
   ] },
 }`;
-const MENU_KEY = "menus.picky.applyTheme";
+const MENU_KEY = menuStateKey("picky", "applyTheme", undefined);
 
 describe("cases 7–9: a config's nested groups and menus", () => {
   test("case 7: a nested group closes with its parent", async () => {

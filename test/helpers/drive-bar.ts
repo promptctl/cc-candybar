@@ -52,6 +52,8 @@ import {
   type DrawnLink,
 } from "../../src/click/read";
 import { isBarLink } from "../../src/click/wire";
+import { sessionStatePath } from "../../src/daemon/paths";
+import { hostOf } from "./host";
 
 const SESSION_ID = BAR_SESSION_ID;
 const REPLY_BUDGET_MS = 10_000;
@@ -95,6 +97,14 @@ export interface Bar {
   click(text: string, nth?: number): Promise<Clicked>;
   /** Click the link of the last render that carries `url`, then render again. */
   follow(url: string): Promise<Clicked>;
+  /** Click a link an older render drew, as a terminal still showing it does. */
+  followStale(link: DrawnLink): Promise<Clicked>;
+  /**
+   * Stop the daemon and start another over the same files, as a reboot
+   * mid-session does. Resolves to what the stopped daemon left stored of the
+   * session: its keys and values.
+   */
+  restart(): Promise<Readonly<Record<string, string>>>;
   stop(): Promise<void>;
 }
 
@@ -143,6 +153,12 @@ export async function startBar(
   };
   const configPath = path.join(scratch, "config.json5");
   const claudeConfigDir = path.join(scratch, "claude");
+  const env = {
+    ...daemonEnv.env,
+    // An empty Claude Code config dir, so the daemon reads none of the host's
+    // Claude Code settings or transcripts.
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+  };
   let daemon: BarDaemon;
   try {
     fs.writeFileSync(
@@ -150,12 +166,7 @@ export async function startBar(
       opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
     );
     fs.mkdirSync(claudeConfigDir);
-    daemon = await startDaemon({
-      ...daemonEnv.env,
-      // An empty Claude Code config dir, so the daemon reads none of the host's
-      // Claude Code settings or transcripts.
-      CLAUDE_CONFIG_DIR: claudeConfigDir,
-    });
+    daemon = await startDaemon(env);
   } catch (e) {
     removeDirs();
     throw e;
@@ -237,6 +248,16 @@ export async function startBar(
     },
     click,
     follow,
+    followStale: send,
+    restart: async () => {
+      await daemon.stop();
+      const file = sessionStatePath(hostOf(env));
+      const stored: Record<string, Record<string, string>> = fs.existsSync(file)
+        ? JSON.parse(fs.readFileSync(file, "utf8"))
+        : {};
+      daemon = await startDaemon(env);
+      return stored[SESSION_ID] ?? {};
+    },
     stop: async () => {
       await daemon.stop();
       removeDirs();

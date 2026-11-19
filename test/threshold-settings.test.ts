@@ -84,7 +84,7 @@ function thresholdBar(src: string, utilization: number) {
     return hits[0]!;
   };
   const pick = (id: string, setting: string): string | null =>
-    sessionState.get(SID, placementDraftKey("default", id, setting));
+    rig.ctx.edits.view.get(SID, placementDraftKey("default", id, setting));
   // `rig.click` goes through the verb the URL names — `dispatch` included,
   // which is what turns a refused effect into the bar's transient `click.error`.
   return { ...rig, render, stepper, pick };
@@ -96,7 +96,7 @@ const roleBg = (role: string): string => getThemePalette(THEME)!.get(role)!.hex;
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
     const rt = thresholdBar(BLOCK_ONLY, 45);
-    configurePlacement(rt.sessionState, SID, "default", "block");
+    configurePlacement(rt.ctx, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
     expect(backgroundsOf(rt.render())).not.toContain(roleBg("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
@@ -107,7 +107,7 @@ describe("block's thresholds are settings configure mode steps", () => {
 
   test("a step that would drop errorAt below warnAt is refused, naming both", async () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
-    configurePlacement(rt.sessionState, SID, "default", "block");
+    configurePlacement(rt.ctx, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
     for (let i = 0; i < 6; i++)
       await rt.click(rt.stepper("block", "errorAt", -5));
@@ -147,14 +147,14 @@ describe("block's thresholds are settings configure mode steps", () => {
 describe("a stride wider than 1 reaches both ends", () => {
   test("a step past a bound stops on it; only a step from the bound wraps", async () => {
     const rt = thresholdBar(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
-    configurePlacement(rt.sessionState, SID, "default", "session");
+    configurePlacement(rt.ctx, SID, "default", "session");
     const budget = placementDraftKey("default", "session", "budget");
-    rt.sessionState.set(SID, budget, "9998");
+    rt.ctx.edits.view.set(SID, budget, "9998");
     await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("10000");
     await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("0");
-    rt.sessionState.set(SID, budget, "3");
+    rt.ctx.edits.view.set(SID, budget, "3");
     await rt.click(rt.stepper("session", "budget", -5));
     expect(rt.pick("session", "budget")).toBe("0");
     await rt.click(rt.stepper("session", "budget", -5));

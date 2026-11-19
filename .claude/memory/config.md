@@ -71,7 +71,9 @@ A segment declaration is a definition. Each node in a layout is a placement, ide
 - A removal target or an anchor is a placement id, and it's checked only at click time. A load-time check would reject the config its own click wrote.
 - An insertion mints its id at click time, over the rendered tree.
 - Edit chrome is named by the placement and preset it serves, each spelled injectively, because a name keyed on walk position hands an open menu or list to a neighbour on every add, and the identifier collapse would merge names that differ only in punctuation.
-- Configuring is a level inside arranging and is held in its own key, so configuring two placements at once can't be represented, and leaving edit mode by any control clears it.
+- Configuring is a level inside arranging and is held in its own key, so configuring two placements at once can't be represented.
+- Edit chrome is known by its key alone: every key edit mode mints sits in a namespace no author spelling reaches, so one classifier decides at every read and write whether a key belongs to the open edit. Chrome lives in the edit beside its drafts, outside undo, and dies with the edit by any route, a restart included. A chrome write with no edit open is dropped and logged, because a terminal can still show, and click, a link from an edit that has closed.
+- A placement's own session state ends only when a click's layout write drops the placement, judged between the config the click acted on and the config its write loaded, and cleared through that click's journal so undo brings it back. A refresh never releases: a file saved half-written would otherwise close every menu on the bar.
 - No variable may live under `settings`, because that name holds the placement's settings.
 - Every placement has a theme setting and an effect setting without declaring them, and a segment that declares either is an error.
 - If a helper reads a setting, the segment that calls it must declare that setting.

@@ -43,7 +43,7 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import { undoOf, NO_LAYERS } from "./helpers/history-step";
+import { undoOf, NO_LAYERS, UNREAD_CONFIG } from "./helpers/history-step";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";
 
@@ -604,7 +604,7 @@ describe("settings history: a step lands whole, and records only what landed", (
         land: () => {},
         roleOf: (f) => (f === "/a" ? "user" : "project"),
       });
-      journal.file(sid, file, big(from), big(to));
+      journal.file(sid, file, big(from), big(to), UNREAD_CONFIG);
       journal.commit();
     };
     step(OLD, "/a", "a", "b"); // 4 MB

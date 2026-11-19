@@ -68,8 +68,6 @@ import { floorOf } from "../config/globals-fields.js";
 import { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { EditTransactions } from "./edit-transaction.js";
-import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
-import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
 import { disclosureNest } from "../config/disclosure-nest.js";
@@ -612,12 +610,11 @@ export function mainRendererOf(
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
-  // A legacy edit-mode flag has no draft after a restart.
-  for (const sid of Object.keys(inputs.stored.sessions))
-    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
+  // [LAW:single-enforcer] Every session write passes the edits' router, so
+  // edit chrome reaches only an open edit and never the stored sessions.
   const edits = new EditTransactions(sessionState, log);
   const settingsHistory = new SettingsHistory(
-    sessionState,
+    edits.committed,
     log,
     inputs.stored.history,
   );
@@ -663,7 +660,7 @@ export function mainRendererOf(
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, {
+          navigationHistory.depth(sessionId, edits.view, {
             gate: gates.state.gateFor(config),
             nest: () => disclosureNest(config),
             edit: edits.draft(sessionId)?.navigationScope ?? null,
@@ -730,7 +727,7 @@ export function mainRendererOf(
   };
   const verbCtx: DaemonVerbContext = {
     gates,
-    sessionState,
+    sessionState: edits.committed,
     snapshotFor: (origin) => renderCache.snapshotFor(origin),
     locations: inputs.locations,
     configWrites,

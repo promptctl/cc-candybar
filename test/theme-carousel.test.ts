@@ -56,7 +56,8 @@ import {
   renderLayoutPreview,
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
-import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
+import { SETTINGS_NS } from "../src/config/reserved-names";
+import { accordionKey, menuPageKey } from "../src/config/menu-keys";
 import { PLACE, TABS, within } from "../src/config/menu-places";
 import type { SettingName } from "../src/config/setting-projections";
 import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
@@ -71,6 +72,7 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { arrange } from "./helpers/configure";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("ef6");
@@ -102,12 +104,12 @@ function rig(
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  recordRender(sessionState, SID);
+  const ctx = testVerbContext(sessionState, undefined, config);
+  const registry = new SourceRegistry(store, "", ctx.edits.view);
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp",
   });
-  recordRender(sessionState, SID);
-  const ctx = testVerbContext(sessionState, undefined, config);
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
   let last: Frame;
@@ -116,7 +118,7 @@ function rig(
   const render = (cols = width): Frame => {
     const effective = resolveEffectiveGlobals(
       config,
-      (key) => sessionState.get(SID, key),
+      (key) => ctx.edits.view.get(SID, key),
       () => false,
     );
     const depth = effective.colorCompatibility;
@@ -195,6 +197,7 @@ function rig(
     },
     segments: () => latest,
     sessionState,
+    ctx,
     dispose: () => registry.dispose(),
   };
 }
@@ -389,8 +392,8 @@ const PRESET_CONTROL = `${CAROUSEL_PREV} ▦ preset ${CAROUSEL_NEXT}`;
 // then — for a setting behind the theme picker's gear — the gear, then its
 // list: the click on the label between its arrows (on the theme picker, its
 // label). Where a control is comes from the menu's map, as the menu lays it.
-const PICKERS = sharedMenuStateKey("candybar.pickers");
-const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
+const PICKERS = accordionKey(SETTINGS_NS, "pickers");
+const GEAR_PICKERS = accordionKey(SETTINGS_NS, "gearPickers");
 async function openPicker(
   rt: ReturnType<typeof rig>,
   control: SettingName,
@@ -952,8 +955,8 @@ describe("the preset control's list carries the layout beneath it", () => {
     const rt = rig(`{}`);
     await openPicker(rt, "preset");
     const outside = previewLabels(rt.render());
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    rt.sessionState.set(SID, EDIT_LIVE_KEY, "open");
+    arrange(rt.ctx, SID);
+    rt.ctx.edits.view.set(SID, EDIT_LIVE_KEY, "open");
     const rendered = rt.render();
     // Edit mode is on: its chrome is on the bar the preview describes.
     expect(
@@ -966,7 +969,7 @@ describe("the preset control's list carries the layout beneath it", () => {
   test("in edit mode's names view the preview draws every placed segment, shown or not", async () => {
     const rt = rig(`{}`);
     await openPicker(rt, "preset");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     // Every segment the default preset places, in order: the labels stand in
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
@@ -991,7 +994,7 @@ describe("the preset control's list carries the layout beneath it", () => {
       `{ root: { rows: { status: { h: ['model', { seg: 'model', id: 'model-2' }] } } } }`,
     );
     await openPicker(rt, "preset");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const rendered = rt.render();
     expect(textOf(rendered)).not.toContain("⚠");
     expect(previewLabels(rendered)[1]).toEqual(["model", "model"]);

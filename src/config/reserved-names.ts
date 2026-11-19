@@ -30,11 +30,31 @@ export const RESERVED_NAMESPACES = [
   SETTINGS_NS,
 ] as const;
 
+// The reserved namespace `name` lies in, or none for a name a user can author.
+export function namespaceOf(name: string): string | undefined {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+}
+
 // A name a user can never author: every synthesized artifact lives under one
 // of the prefixes above, so membership alone proves "synthesized, not
 // declared" — the fact edit chrome (structural, not removable content), the
 // delta-able segment set (a delta targets an authorable name), and the test
 // helpers all read from here rather than re-spelling the prefix list.
 export function isReservedName(name: string): boolean {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return namespaceOf(name) !== undefined;
+}
+
+// [LAW:single-enforcer] THE classifier of a session key as edit chrome: the
+// open or closed state of edit mode's own controls (its toggles, its ✚
+// libraries, its configure lists, and the page cursor of any of them). It
+// reads the key alone, with no layout and no open edit, because the key is
+// spelled in edit mode's namespace by whatever minted it — a menu's key in its
+// host's namespace inside `menus.` — and no author identifier reaches that
+// namespace (the loader refuses an authored store key there). Chrome lives
+// only as long as the edit it serves, so every read and every write of the
+// session store asks this one question.
+export function isChromeKey(key: string): boolean {
+  return [MENU_PAGE_NS, MENU_NS]
+    .reduce((k, ns) => (k.startsWith(ns) ? k.slice(ns.length) : k), key)
+    .startsWith(EDIT_NS);
 }

@@ -799,30 +799,31 @@ describe("a project layer inserting into the user's row", () => {
   });
 
   test("a clash only the cell brings refuses the cell, at its entry, and the user's bar draws", () => {
-    // `p-q` and `p_q` are distinct ids whose menus collapse to one state
-    // key: the clash exists only once the repo's cell is placed.
+    // Two menus sharing a key over one apply action are one identity twice:
+    // the clash exists only once the repo's cell is placed.
     fs.writeFileSync(
       userFile,
       `{
         actions: { act: { set: "theme", from: "themes" } },
         segments: {
           mine: { template: "USERSEG" },
-          m: { template: 'M {{ menu "act" "▸" "▾" }}' },
+          m: { template: 'M {{ menu "act" "▸" "▾" (dict "key" "s") }}' },
         },
-        root: { rows: { status: { h: ["mine", { seg: "m", id: "p-q" }] } } },
+        root: { rows: { status: { h: ["mine", "m"] } } },
       }`,
     );
     writeProject(
-      `[{ seg: "m", id: "p_q", after: "mine" }]`,
-      `x: { template: "X" }`,
+      `[{ seg: "n", after: "mine" }]`,
+      `n: { template: 'N {{ menu "act" "▸" "▾" (dict "key" "s") }}' }`,
     );
     const { drawn, warnings } = barLoad();
-    expect(drawn("default").filter((n) => n === "m")).toHaveLength(1);
+    expect(drawn("default")).not.toContain("n");
+    expect(drawn("default")).toContain("m");
     expect(drawn("default")).toContain("mine");
     const refused = warnings.filter((w) => w.includes("insert.0"));
     expect(refused).toHaveLength(1);
     expect(refused[0]).toContain(projectFile);
-    expect(refused[0]).toContain("normalize to the same state key");
+    expect(refused[0]).toContain("same identity");
   });
 
   test("an error the user's own bar has still refuses it, with or without the repo's cells", () => {

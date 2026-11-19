@@ -1602,7 +1602,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 |---|---|---|---|
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
-| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`) is a load error |
+| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. Any string is a key of its own: no key you spell joins an accordion the bar synthesizes |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the endcaps pick closing its
@@ -2280,28 +2280,6 @@ Menu identity is gated at load; every option value must be a literal:
 
 ```error
 whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)
-```
-
-### A `{{ menu }}` accordion key in a reserved namespace
-
-The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
-
-```json5 check:fail
-{
-  actions: {
-    applyTheme: { set: "theme", from: "themes" },
-  },
-  segments: {
-    themePicker: {
-      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar-pickers") }}',
-    },
-  },
-  root: { rows: { identity: { h: ["directory", "themePicker"] } } },
-}
-```
-
-```error
-segment "themePicker" has a {{ menu }} whose accordion key "candybar-pickers" lands in the reserved "candybar." namespace — a key is collapsed to an identifier ("candybar-pickers" becomes "menus.candybar_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit

@@ -20,11 +20,13 @@ import type { ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
 import {
   EDIT_NS,
+  isChromeKey,
   isReservedName,
   MENU_NS,
   MENU_PAGE_NS,
   SETTINGS_NS,
 } from "../../src/config/reserved-names";
+import { PLACEMENT_DRAFT_KEY_NS } from "../../src/config/loader/edit-mode";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
 import {
@@ -35,7 +37,6 @@ import {
   VERB_STEP_STATE,
 } from "../../src/click/wire";
 import { effectsOf } from "./click";
-import { ident } from "../../src/config/ident";
 import { parseAndValidate } from "./parse-and-validate";
 
 // [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
@@ -47,15 +48,13 @@ function isReservedChromeKey(key: string): boolean {
     // A page cursor is chrome when the menu it pages is.
     (key.startsWith(MENU_PAGE_NS) &&
       isReservedChromeKey(key.slice(MENU_PAGE_NS.length))) ||
-    key.startsWith(SETTINGS_NS) ||
+    // The settings menu's keys, its menus' included: a menu a synthesized
+    // placement hosts is keyed in that placement's namespace.
+    isSettingsMenuKey(key) ||
+    isChromeKey(key) ||
     key.startsWith(EDIT_NS) ||
-    // The settings menu's own pickers, hosted on `candybar.<setting>`.
-    key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`) ||
-    // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
-    // `edit.<preset>.insertSeg.<before|after>.<placement>` segment (insertGap
-    // calls menuStateKey directly), and `ident()` collapses the dots — so a
-    // bundled-default config really does derive 30+ keys under this prefix.
-    key.startsWith(`${MENU_NS}${ident(EDIT_NS)}`) ||
+    // A placement's unsaved setting value, written by its configure panel.
+    key.startsWith(PLACEMENT_DRAFT_KEY_NS) ||
     // Edit chrome registers a preset-root key per preset the moment any
     // `+`/`-` affordance exists — which is now every config, since the settings
     // menu makes edit mode reachable from every bar.
@@ -143,15 +142,13 @@ function keysWrittenBy(url: string): string[] {
     .filter((k): k is string => k !== undefined);
 }
 
-// The settings menu's OWN surfaces: its `🍫` toggle and — the part a substring
-// match on the anchor missed — its hosted pickers, whose shared disclosure key
-// is `menus.candybar_pickers.…` and shares none of the anchor's spelling. A
-// test that opens the menu before collecting links would otherwise have counted
-// a picker's toggle as one of its fixture's own regions.
+// The settings menu's OWN surfaces: its `🍫` toggle and its hosted pickers,
+// whose disclosure keys share its namespace. A test that opens the menu before
+// collecting links would otherwise have counted a picker's toggle as one of
+// its fixture's own regions.
 function isSettingsMenuKey(key: string): boolean {
   return (
-    key.startsWith(SETTINGS_NS) ||
-    key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`)
+    key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}${SETTINGS_NS}`)
   );
 }
 
@@ -167,9 +164,7 @@ function isSettingsMenuKey(key: string): boolean {
 // own link and makes the assertion vacuous. The loud direction wins.
 export function ownLinks(urls: readonly string[]): string[] {
   // [LAW:one-source-of-truth] Reads the same reserved-key predicate the
-  // validator filter does, rather than restating a prefix list that drifted
-  // once already: matching `edit.` alone missed edit chrome's own insert-menu
-  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<before|after>_<placement>.…`.
+  // validator filter does, rather than restating a prefix list.
   //
   // Safe for a layout-edit test's own subject because `apply-layout-op` is not
   // a key-writing verb — `keysWrittenBy` reports nothing for it, so a `+`/`-`

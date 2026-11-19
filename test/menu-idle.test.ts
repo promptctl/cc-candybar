@@ -38,6 +38,7 @@ import {
 import { MenuIdle } from "../src/renderer/menu-idle";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
+import { PICKER_KEY } from "../src/config/settings-menu";
 
 const at = (s: number): Instant => s as Instant;
 const S = sessionIdOf("s");
@@ -161,7 +162,7 @@ describe("the idle period: a close is due a timeout after it began, while a menu
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
+const PICKERS = PICKER_KEY;
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -270,8 +271,10 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
   });
 
   test("a toggle that hangs no menu is a view preference, and is left as it is", async () => {
-    const rt = idleBar(BUNDLED);
-    await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    const rt = idleBar(`{
+      segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
+      root: { h: ['directory', 'arrange'] },
+    }`);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     await rt.clickWriting(EDIT_LIVE_KEY, "open");
     await closeIdleMenus(
@@ -281,7 +284,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       rt.ctx,
       rt.ctx.effects,
     );
-    expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
   });
 

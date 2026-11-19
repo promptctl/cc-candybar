@@ -35,7 +35,7 @@ import {
 } from "../src/themes/policy";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { PICKER_KEY, SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
@@ -157,10 +157,10 @@ async function forEachStage(
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
     "preset picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
+      opener(r, PICKER_KEY, (v) => v.endsWith("preset")),
     "look tab": (r) => opener(r, "candybar.tab", (v) => v === "look"),
     "theme picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("theme")),
+      opener(r, PICKER_KEY, (v) => v.endsWith("theme")),
     "layout tab": (r) => opener(r, "candybar.tab", (v) => v === "layout"),
     "config tab": (r) => opener(r, "candybar.tab", (v) => v === "config"),
   };

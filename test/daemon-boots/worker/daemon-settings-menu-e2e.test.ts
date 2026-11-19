@@ -25,7 +25,7 @@ import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
+import { PICKER_KEY, SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
 import {
@@ -138,7 +138,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         daemon,
         urlWriting(
           await bar(),
-          "menus.candybar_pickers",
+          PICKER_KEY,
           "candybar.apply.preset",
         ),
       );

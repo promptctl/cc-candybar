@@ -30,6 +30,7 @@ import { picked, selectionFor } from "./helpers/selection";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { buildRig } from "./helpers/rig";
+import { arrange } from "./helpers/configure";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
@@ -39,10 +40,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import {
-  EDIT_MODE_ARRANGE,
-  EDIT_MODE_KEY,
-} from "../src/config/loader/edit-mode";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
@@ -185,9 +182,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // Edit mode draws each placement as its label (`edit.label:<id>:<segment>`),
     // so the staged render is compared with an edit-mode render of the theme.
     const arrangedBg = (source: string): string => {
-      const { render, sessionState, dispose } = themeBar(source);
+      const { render, ctx, dispose } = themeBar(source);
       try {
-        sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+        arrange(ctx, SID);
         return render(90).bg("edit.label:plain:plain");
       } finally {
         dispose();

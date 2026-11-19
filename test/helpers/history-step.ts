@@ -24,6 +24,11 @@ import type {
 } from "../../src/renderer/settings-history";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
+import type { DslConfig } from "../../src/config/dsl-types";
+
+// The config a write loaded to, for a history no click reads it from: only a
+// click's turn releases what its write ended (src/renderer/verbs/index.ts).
+export const UNREAD_CONFIG = {} as DslConfig;
 
 // A history's files with no click around it: the chain's layers at the paths
 // `layers` names, read from and written to the disk at once, with no home to
@@ -37,7 +42,7 @@ export function inPlace(
       after === null
         ? rmSync(file, { force: true })
         : writeFileSync(file, after),
-    prove: () => {},
+    prove: () => UNREAD_CONFIG,
     roleOf: (file) => {
       const role = LAYER_ROLES.find((r) => layers[r] === file);
       if (role === undefined)

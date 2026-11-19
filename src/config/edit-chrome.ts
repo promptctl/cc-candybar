@@ -52,6 +52,7 @@ import {
   EDIT_MODE_GATE,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
+  PLACEMENT_DRAFT_KEY_NS,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./reserved-names.js";
@@ -65,7 +66,7 @@ import {
   menuActionName,
   menuMember,
   menuPageKey,
-  sharedMenuStateKey,
+  accordionKey,
   menuStateKey,
 } from "./menu-keys.js";
 import {
@@ -328,7 +329,7 @@ export function placementDraftKey(
   id: string,
   setting: string,
 ): string {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
+  return `${PLACEMENT_DRAFT_KEY_NS}${presetIdent}.${id}.${setting}`;
 }
 
 // What configure mode adds to one placement: the `🔧` that
@@ -357,22 +358,12 @@ function configureParts(
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
-  // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold],
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member,
-  };
+  // [LAW:one-source-of-truth] The accordion this placement's lists share,
+  // spelled in edit mode's namespace: it is edit chrome, so it lives and dies
+  // with the edit (reserved-names.ts). Closing configure, by any control,
+  // closes it with it (disclosure-nest.ts).
+  const listKey = accordionKey(EDIT_NS, enter);
+  ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);

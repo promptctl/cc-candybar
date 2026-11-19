@@ -17,6 +17,10 @@ import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
 import type { LayoutNode } from "../src/config/dsl-types";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import {
+  menuStateKey,
+  sharedMenuStateKey,
+} from "../src/config/menu-keys";
 const S1 = sessionIdOf("s1");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -124,8 +128,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
 
   test("each placement's menu is keyed by its id, and opening one leaves the other closed", async () => {
     const rt = placementBar(SRC);
-    expect(rt.config.variables["menus.picker.applyTheme"]).toBeDefined();
-    expect(rt.config.variables["menus.second.applyTheme"]).toBeDefined();
+    expect(rt.config.variables[menuStateKey("picker", "applyTheme", undefined)]).toBeDefined();
+    expect(rt.config.variables[menuStateKey("second", "applyTheme", undefined)]).toBeDefined();
     const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
         effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "applyTheme"),
@@ -133,8 +137,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
       if (url === undefined) throw new Error(`no toggle for ${key}`);
       await rt.click(url);
     };
-    await open("menus.second.applyTheme");
-    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
+    await open(menuStateKey("second", "applyTheme", undefined));
+    expect(rt.sessionState.get(S1, menuStateKey("second", "applyTheme", undefined))).toBe(
       "applyTheme",
     );
     rt.render();
@@ -142,11 +146,11 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.segments().get("second")!.length).toBeGreaterThan(
       rt.segments().get("picker")!.length,
     );
-    await open("menus.picker.applyTheme");
-    expect(rt.sessionState.get(S1, "menus.picker.applyTheme")).toBe(
+    await open(menuStateKey("picker", "applyTheme", undefined));
+    expect(rt.sessionState.get(S1, menuStateKey("picker", "applyTheme", undefined))).toBe(
       "applyTheme",
     );
-    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
+    expect(rt.sessionState.get(S1, menuStateKey("second", "applyTheme", undefined))).toBe(
       "applyTheme",
     );
   });
@@ -184,7 +188,7 @@ describe("a placement is named by its id", () => {
       }`,
       ALLOWED,
     );
-    expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
+    expect(config.variables[menuStateKey("picker", "applyTheme", undefined)]).toBeDefined();
   });
 
   test("two placements of a keyed menu share the open state its key names", () => {
@@ -197,7 +201,7 @@ describe("a placement is named by its id", () => {
       }`,
       ALLOWED,
     );
-    expect(config.variables["menus.k"]).toBeDefined();
+    expect(config.variables[sharedMenuStateKey("k")]).toBeDefined();
   });
 
   test("edit mode labels each placement with its id", () => {

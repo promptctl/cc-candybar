@@ -74,19 +74,13 @@ import type {
   NavigationTurn,
 } from "../navigation-history";
 import {
-  placementId,
   settingSpelling,
-  walkNodes,
+  stateVarDecls,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
+import { PLACEMENT_DRAFT_KEY_NS } from "../../config/loader/edit-mode";
 import {
   durableLanding,
   placementDrafts,
@@ -102,7 +96,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
@@ -471,7 +464,7 @@ function refuseDisorderedPicks(
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_KEY_NS));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -577,7 +570,7 @@ function proveLoadsAsLayer(
   file: string,
   text: string | null,
   read: (file: string) => LayerContent,
-): void {
+): DslConfig {
   const layer =
     origin === null
       ? undefined
@@ -586,7 +579,7 @@ function proveLoadsAsLayer(
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,
     );
-  proveLoads(heldLayer(ctx, origin, layer.role), text, read);
+  return proveLoads(heldLayer(ctx, origin, layer.role), text, read);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -653,7 +646,8 @@ function configArgs(
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
   return {
     read: ctx.readConfigFile,
-    record: (file, before, after) => ctx.journal.file(sid, file, before, after),
+    record: (file, before, after, loaded) =>
+      ctx.journal.file(sid, file, before, after, loaded),
   };
 }
 
@@ -975,45 +969,31 @@ const resetConfig: VerbHandler = (args, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
+// [LAW:one-source-of-truth] What a layout write ends in the session: every
+// state key the config a click acted on declares and the config its write
+// produced does not — a removed placement's drafts, its menus and their pages,
+// its configure lists — and every key both declare whose open member only the
+// first one hung — an accordion member the placement held, the configure key
+// naming it. A later placement given the same id is a new instance, and
+// inherits none of it.
+function endedKeys(
   before: DslConfig,
   after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(preset, placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
+  read: (key: string) => string | null,
 ): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
+  const declared = (config: DslConfig): ReadonlySet<string> =>
+    new Set([...stateVarDecls(config)].map(([, decl]) => decl.key));
+  const kept = declared(after);
+  const hung = disclosureNest(before);
+  const hangs = disclosureNest(after);
+  return [...declared(before)].filter((key) => {
+    const value = read(key);
+    return (
+      value !== null &&
+      (!kept.has(key) ||
+        (hung.membersOf(key).has(value) && !hangs.membersOf(key).has(value)))
+    );
+  });
 }
 
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
@@ -1033,8 +1013,7 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     args: [key = "", opToken = ""],
   } = configArgs("apply-layout-op", args);
   const origin = sessionOrigin(ctx);
-  const before = ctx.configFor(origin);
-  const gate = ctx.gates.config.gateFor(before);
+  const gate = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
@@ -1049,26 +1028,12 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const { placed, config } = applyLayoutOpToFile(
-    editStore(ctx, sid),
-    into,
-    key,
-    op,
-  );
-  // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the config the write's own load proved, and released in the
-  // same click, so its undo brings the placement and its drafts back.
-  // The session state the edit discards — the fact its log line carries.
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
-  for (const key of released) ctx.sessionState.clear(sid, key);
+  const { placed } = applyLayoutOpToFile(editStore(ctx, sid), into, key, op);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} (session=${sid})`,
   );
 };
 
@@ -1346,6 +1311,29 @@ function journaled<C extends DaemonContext>(
   } catch (e) {
     failures.push(e);
   }
+  // [LAW:single-enforcer] The one place a click's turn writes config files is
+  // the one place a layout write releases what it ended, in edit mode or out
+  // of it, whatever wrote it: a layout op, an undo or redo of one, a reset, a
+  // deleted preset, an authored action. Through the click's own journal, so
+  // its undo restores what it released. A refresh of the layers (a file
+  // event, a trust change, a failed load) writes nothing here, so it releases
+  // nothing, and a placement it hid comes back with its state.
+  try {
+    const produced = journal.produced();
+    if (origin !== null && produced !== null) {
+      const ended = endedKeys(scoped.configFor(origin), produced, (key) =>
+        sessionState.get(sid, key),
+      );
+      for (const key of ended) sessionState.clear(sid, key);
+      if (ended.length > 0)
+        ctx.log(
+          "info",
+          `layout write: released=${JSON.stringify(ended)} (session=${sid})`,
+        );
+    }
+  } catch (e) {
+    failures.push(e);
+  }
   let saved: Journal | null = null;
   if (requested.finish === "save" && edit !== undefined && origin !== null) {
     try {
@@ -1372,6 +1360,11 @@ function journaled<C extends DaemonContext>(
     try {
       const writes = journal.writes(sid);
       const mode = writes?.get(EDIT_MODE_KEY);
+      // An edit the click opens holds the chrome the click wrote, so it opens
+      // before the click's writes land in the store's router.
+      const opens = edit === undefined && mode === EDIT_MODE_ARRANGE;
+      if (opens && origin !== null)
+        ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
       let moved = false;
       if (edit === undefined) journal.commit();
       else if (saved !== null) saved.commit();
@@ -1383,9 +1376,7 @@ function journaled<C extends DaemonContext>(
         ) {
           ctx.edits.close(sid);
           ctx.editViewChanged(sid);
-        } else if (edit === undefined && mode === EDIT_MODE_ARRANGE) {
-          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+        } else if (opens) {
           ctx.editViewChanged(sid);
         } else if (moved) {
           ctx.edits.changed(sid);

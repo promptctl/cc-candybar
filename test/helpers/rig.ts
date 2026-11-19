@@ -218,15 +218,7 @@ export function buildRig(init: RigInit = {}): Rig {
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const ctx = testVerbContext(sessionState, init.history, config, init.host);
-  // A fixture can set up a disclosure directly. Use the production view
-  // once a real click opens an edit transaction.
-  const view = {
-    ...ctx.edits.view,
-    get: (sid: SessionId, key: string) =>
-      ctx.edits.draft(sid) === null
-        ? sessionState.get(sid, key)
-        : ctx.edits.view.get(sid, key),
-  };
+  const view = ctx.edits.view;
   const registry = new SourceRegistry(store, "", view, null);
   const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(

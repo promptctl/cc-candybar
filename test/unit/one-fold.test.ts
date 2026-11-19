@@ -10,6 +10,7 @@ import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
+import { menuStateKey } from "../../src/config/menu-keys";
 import {
   parseAndValidate,
   validateConfig,
@@ -55,15 +56,14 @@ describe("no declared name sits under another", () => {
       ] },
     }`);
     expect(Object.keys(built.variables)).toContain(
-      "menus.themeMenu.applyTheme",
+      menuStateKey("themeMenu", "applyTheme", undefined),
     );
     expect(Object.keys(built.variables)).toContain("groups.details");
     expect(nested(built)).toEqual([]);
   });
 
-  test("an accordion key that collapses to a placement id is refused, naming both", () => {
-    expect(() =>
-      overDefault(`{
+  test("an accordion key spelled like a placement id loads beside that placement's own menu", () => {
+    const built = overDefault(`{
         actions: {
           applyTheme: { set: "theme", from: "themes" },
           applyStyle: { set: "style", from: "styles" },
@@ -73,22 +73,26 @@ describe("no declared name sits under another", () => {
           other: { template: '{{ menu "applyStyle" "style" (dict "key" "themeMenu") }}' },
         },
         root: { h: ["themeMenu", "other"] },
-      }`),
-    ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus\.themeMenu"/,
-    );
+      }`);
+    const keys = [
+      menuStateKey("themeMenu", "applyTheme", undefined),
+      menuStateKey("other", "applyStyle", "themeMenu"),
+    ];
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) expect(Object.keys(built.variables)).toContain(key);
+    expect(nested(built)).toEqual([]);
   });
 
-  test("a user segment named like a settings accordion key, holding a menu, is refused", () => {
-    expect(() =>
-      overDefault(`{
-        actions: { applyTheme: { set: "theme", from: "themes" } },
-        segments: { candybar_gearPickers: { template: '${MENU}' } },
-        root: { h: ["candybar_gearPickers"] },
-      }`),
-    ).toThrow(
-      /"menus\.candybar_gearPickers\.applyTheme" is declared under the variable "menus\.candybar_gearPickers"/,
+  test("a user segment named like a settings accordion loads, and its menu is its own", () => {
+    const built = overDefault(`{
+      actions: { applyTheme: { set: "theme", from: "themes" } },
+      segments: { candybar_gearPickers: { template: '${MENU}' } },
+      root: { h: ["candybar_gearPickers"] },
+    }`);
+    expect(Object.keys(built.variables)).toContain(
+      menuStateKey("candybar_gearPickers", "applyTheme", undefined),
     );
+    expect(nested(built)).toEqual([]);
   });
 
   test("a user variable `menus` beside a placed menu is refused", () => {
@@ -100,7 +104,7 @@ describe("no declared name sits under another", () => {
         root: { h: ["themeMenu"] },
       }`),
     ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus"/,
+      /"menus\.\w+" is declared under the variable "menus"/,
     );
   });
 

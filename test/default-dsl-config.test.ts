@@ -59,7 +59,7 @@ import {
 import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/effective-globals";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
-import { POLLED } from "../src/config/settings-menu";
+import { PICKER_KEY, POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
@@ -550,7 +550,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           {
             verb: VERB_SET_STATE,
-            args: [SID, "menus.candybar_pickers", "candybar.apply.theme"],
+            args: [SID, PICKER_KEY, "candybar.apply.theme"],
           },
         ]),
         ctx,
@@ -595,7 +595,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
-          { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
+          { verb: VERB_SET_STATE, args: [SID, PICKER_KEY, "gear"] },
         ]),
         ctx,
       );

@@ -11,7 +11,7 @@
 
 import { textOf } from "../src/render/frame";
 import { listThemePalettes } from "@promptctl/rich-js";
-import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { accordionKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { instantOf } from "../src/utils/instant";
@@ -44,7 +44,7 @@ function menuSeams(
     bar.pick(SETTINGS_ANCHOR, "closed");
     const barRows = render().lines.length;
     bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-    bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
+    bar.pick(accordionKey(SETTINGS_NS, "pickers"), "gear");
     for (const tab of tabs) {
       bar.pick(`${SETTINGS_NS}tab`, tab);
       const { lines: rows } = render();

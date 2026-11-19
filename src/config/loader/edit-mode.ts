@@ -30,6 +30,7 @@ import type {
   RawDslConfig,
   VariableDecl,
 } from "../dsl-types.js";
+import { declarationsAt } from "./refs.js";
 import type { ActionDecl } from "../action.js";
 import {
   DISCLOSURE_CLOSED,
@@ -38,7 +39,8 @@ import {
   disclosureStateVar,
 } from "../disclosure.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
-import { EDIT_NS } from "../reserved-names.js";
+import { EDIT_NS, isChromeKey } from "../reserved-names.js";
+import { findKeyLine } from "./diagnostics.js";
 import { SETTINGS_REF } from "../door.js";
 
 // [LAW:single-enforcer] The SessionState key edit mode's state lives at, and
@@ -59,11 +61,15 @@ export const EDIT_TOGGLE_ACTION = "edit.toggle";
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 export const EDIT_MODE_ARRANGE = "arrange";
 
-// The namespace every placement's unsaved setting value lives under, as a
-// session key and as a variable. No scalar is declared at `edit.draft`, so
-// nothing under it can be shadowed by one — as a preset named `mode` would
-// shadow `edit.mode.…` beside edit mode's own state.
+// The namespace every placement's unsaved setting value is read under as a
+// variable. No scalar is declared at `edit.draft`, so nothing under it can be
+// shadowed by one — as a preset named `mode` would shadow `edit.mode.…` beside
+// edit mode's own state.
 export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+// The namespace the same values are held under as session keys. A draft is a
+// setting, not edit chrome: it outlives the edit until save or cancel decides
+// it, so its key lies outside edit mode's namespace (reserved-names.ts).
+export const PLACEMENT_DRAFT_KEY_NS = "draft.";
 
 // The member that configures the placement `id` in the layout of `preset` —
 // an id is unique only within one preset's tree, so switching presets never
@@ -140,10 +146,42 @@ export function synthesizeEditModeToggle(
   out: Mutable<RawDslConfig>,
 ): void {
   reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
+  chromeKeyCollisions(ctx, out);
   if (!fileWantsEditMode(out)) return;
   const { variables, actions } = editModeArtifacts();
   out.variables = { ...(out.variables ?? {}), ...variables };
   out.actions = { ...(out.actions ?? {}), ...actions };
+}
+
+// [LAW:no-silent-failure] No store key a file writes is edit chrome: chrome
+// lives only inside an edit (reserved-names.ts), so an authored key there
+// would be read nowhere else and written nowhere at all. Checked over what the
+// file declares and what its group sugar has already turned into a `state`
+// variable and a `set`, before this pass adds edit mode's own.
+function chromeKeyCollisions(
+  ctx: ValidateCtx,
+  out: Readonly<RawDslConfig>,
+): void {
+  const keys = [
+    ...[
+      ...declarationsAt({
+        variables: out.variables ?? {},
+        segments: out.segments ?? {},
+      }),
+    ].flatMap(([, decl, at]) =>
+      decl.kind === "state" ? [{ at, key: decl.key }] : [],
+    ),
+    ...Object.entries(out.actions ?? {}).flatMap(([name, decl]) =>
+      "set" in decl ? [{ at: ["actions", name], key: decl.set }] : [],
+    ),
+  ];
+  for (const { at, key } of keys.filter(({ key }) => isChromeKey(key))) {
+    ctx.issues.push({
+      path: at.join("."),
+      message: `the session key "${key}" is edit mode's own (its controls' state lives only while an edit is open) — use a key outside "${EDIT_NS}"`,
+      line: findKeyLine(ctx.source, [...at]),
+    });
+  }
 }
 
 // [LAW:one-source-of-truth] Edit mode's state and its switch, minted the same

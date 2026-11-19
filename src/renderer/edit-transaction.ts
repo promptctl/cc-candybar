@@ -1,5 +1,8 @@
 // A renderer-local edit transaction over the host's last committed snapshot.
 // Closing the transaction releases the draft; only Save sends changes to the host.
+// The edit also holds its own chrome — the open or closed state of edit mode's
+// controls — so chrome dies with the edit by any route, and the persisted
+// session store never holds it.
 
 import { observable, runInAction } from "mobx";
 import {
@@ -22,6 +25,8 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import { isSettingKey } from "../renderer-interface/history-storage.js";
+import { isChromeKey } from "../config/reserved-names.js";
+import type { StateWrite } from "../config/disclosure-nest.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import {
@@ -42,9 +47,21 @@ export interface EditTurn {
   save(committed: Journal, files: ConfigFiles, latest: ConfigSnapshot): void;
 }
 
+// [LAW:single-enforcer] THE classification of a session key an edit writes:
+// edit chrome stays in the edit, a setting's unsaved value is a pick the edit
+// holds until save or cancel decides it, and everything else is the session's.
+type Home = "chrome" | "pick" | "store";
+function homeOf(key: string): Home {
+  return isChromeKey(key) ? "chrome" : isSettingKey(key) ? "pick" : "store";
+}
+
 class EditDraft {
   readonly navigationScope = Symbol();
   private readonly picks = new Map<string, string | null>();
+  // An open edit is arranging: its own switch is the first chrome it holds.
+  private readonly chrome = new Map<string, string>([
+    [EDIT_MODE_KEY, EDIT_MODE_ARRANGE],
+  ]);
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   private latest: ConfigSnapshot;
@@ -59,19 +76,24 @@ class EditDraft {
   ) {
     this.latest = this.snapshot = base;
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
-    // draft. Only the journal's destination changes. Chrome still uses the
-    // normal session store, so opening menus never adds an edit step.
+    // draft. Only the journal's destination changes. Chrome is no setting, so
+    // opening menus never adds an edit step.
+    const put = (sid: SessionId, key: string, value: string | null): void => {
+      if (sid === session) this.put(key, value);
+      else if (value === null) committed.clear(sid, key);
+      else committed.set(sid, key, value);
+    };
     this.history = new SettingsHistory(
       {
         get: (sid, key) =>
           sid === session ? this.read(key) : committed.get(sid, key),
         revision: (sid) => committed.revision(sid),
-        set: (sid, key, value) => this.put(sid, key, value),
+        set: put,
         setBatch: (sid, pairs) =>
           runInAction(() => {
-            for (const { key, value } of pairs) this.put(sid, key, value);
+            for (const { key, value } of pairs) put(sid, key, value);
           }),
-        clear: (sid, key) => this.put(sid, key, null),
+        clear: (sid, key) => put(sid, key, null),
       },
       log,
     );
@@ -114,22 +136,33 @@ class EditDraft {
   }
 
   read(key: string): string | null {
-    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
-    if (this.picks.has(key)) return this.picks.get(key)!;
-    return this.committed.get(this.session, key);
+    switch (homeOf(key)) {
+      case "chrome":
+        return this.chrome.get(key) ?? null;
+      case "pick":
+        if (this.picks.has(key)) return this.picks.get(key)!;
+        return this.committed.get(this.session, key);
+      case "store":
+        return this.committed.get(this.session, key);
+    }
   }
 
-  private put(sid: SessionId, key: string, value: string | null): void {
-    if (sid === this.session) {
-      if (key === EDIT_MODE_KEY) return;
-      if (isSettingKey(key)) {
-        if (this.committed.get(sid, key) === value) this.picks.delete(key);
+  // The edit's own session's write.
+  put(key: string, value: string | null): void {
+    switch (homeOf(key)) {
+      case "chrome":
+        if (value === null) this.chrome.delete(key);
+        else this.chrome.set(key, value);
+        return;
+      case "pick":
+        if (this.committed.get(this.session, key) === value)
+          this.picks.delete(key);
         else this.picks.set(key, value);
         return;
-      }
+      case "store":
+        if (value === null) this.committed.clear(this.session, key);
+        else this.committed.set(this.session, key, value);
     }
-    if (value === null) this.committed.clear(sid, key);
-    else this.committed.set(sid, key, value);
   }
 
   begin(prove: ConfigFiles["prove"]): EditTurn {
@@ -160,8 +193,10 @@ class EditDraft {
       files,
       journal,
       commit: () => {
+        // What the edit holds moved: the session's own store is observed
+        // by its readers already.
         const picksMoved = [...journal.writes(this.session)].some(
-          ([key, value]) => isSettingKey(key) && this.read(key) !== value,
+          ([key, value]) => homeOf(key) !== "store" && this.read(key) !== value,
         );
         journal.commit();
         if (sameFiles(working, this.files)) return picksMoved;
@@ -197,14 +232,19 @@ class EditDraft {
           rewritten.has(file)
             ? contentOfText(rewritten.get(file)!)
             : destination.read(file);
-        for (const [file, text] of rewritten)
-          destination.prove(file, text, read);
+        const loaded = new Map(
+          [...rewritten].map(([file, text]) => [
+            file,
+            destination.prove(file, text, read),
+          ]),
+        );
         for (const [file, text] of rewritten)
           committedJournal.file(
             this.session,
             file,
             requireLayerText(file, destination.read(file)),
             text,
+            loaded.get(file)!,
           );
         // The save click's own writes take precedence over the current draft,
         // including releasing picks it moved into durable layers.
@@ -212,7 +252,7 @@ class EditDraft {
           ...this.picks,
           ...journal.writes(this.session),
         ])) {
-          if (key === EDIT_MODE_KEY) continue;
+          if (homeOf(key) === "chrome") continue;
           if (value === null)
             committedJournal.sessionState.clear(this.session, key);
           else committedJournal.sessionState.set(this.session, key, value);
@@ -244,24 +284,71 @@ export class EditTransactions {
     deep: false,
   });
 
-  constructor(
-    readonly committed: SessionStateRW,
-    private readonly log: DaemonLogger,
-  ) {}
-
-  readonly view: SessionStateRW = {
-    get: (sid, key) => {
-      const draft = this.draft(sid);
-      if (draft !== null) return draft.read(key);
-      // Ignore the edit-mode flag saved by versions with committed savepoints.
-      return key === EDIT_MODE_KEY ? null : this.committed.get(sid, key);
-    },
-    revision: (sid) =>
-      this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
-    set: (sid, key, value) => this.committed.set(sid, key, value),
-    setBatch: (sid, pairs) => this.committed.setBatch(sid, pairs),
-    clear: (sid, key) => this.committed.clear(sid, key),
+  // [LAW:single-enforcer] THE router every session write passes: a chrome key
+  // goes to the session's open edit, and with none open it has no meaning, so
+  // it is dropped and said; every other key goes to the persisted store.
+  private readonly toStore = (
+    sid: SessionId,
+    key: string,
+    value: string | null,
+  ): void => {
+    if (homeOf(key) !== "chrome") {
+      if (value === null) this.store.clear(sid, key);
+      else this.store.set(sid, key, value);
+    } else if (this.draft(sid) === null) {
+      this.log(
+        "info",
+        `edit: dropped ${key} — no edit is open (session=${sid})`,
+      );
+    } else this.toView(sid, key, value);
   };
+
+  // A write to what the session sees: its open edit takes it, picks included.
+  private readonly toView = (
+    sid: SessionId,
+    key: string,
+    value: string | null,
+  ): void => {
+    const draft = this.draft(sid);
+    if (draft === null) return this.toStore(sid, key, value);
+    draft.put(key, value);
+    this.changed(sid);
+  };
+
+  // The persisted store as every writer and the settings history see it:
+  // chrome is never read from it, whatever an older build left there.
+  readonly committed: SessionStateRW;
+  // The session as its bar sees it: its open edit over the store.
+  readonly view: SessionStateRW;
+
+  constructor(
+    private readonly store: SessionStateRW,
+    private readonly log: DaemonLogger,
+  ) {
+    const writes = (write: typeof this.toStore) => ({
+      set: write,
+      setBatch: (sid: SessionId, pairs: readonly StateWrite[]) =>
+        runInAction(() => {
+          for (const { key, value } of pairs) write(sid, key, value);
+        }),
+      clear: (sid: SessionId, key: string) => write(sid, key, null),
+    });
+    this.committed = {
+      get: (sid, key) =>
+        homeOf(key) === "chrome" ? null : this.store.get(sid, key),
+      revision: (sid) => this.store.revision(sid),
+      ...writes(this.toStore),
+    };
+    this.view = {
+      get: (sid, key) => {
+        const draft = this.draft(sid);
+        return draft === null ? this.committed.get(sid, key) : draft.read(key);
+      },
+      revision: (sid) =>
+        this.store.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
+      ...writes(this.toView),
+    };
+  }
 
   draft(sid: SessionId): EditDraft | null {
     return this.entries.get(sid)?.draft ?? null;

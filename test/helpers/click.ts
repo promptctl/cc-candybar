@@ -260,11 +260,18 @@ export function verbContextWith(
 // isolated from the real state dir must never write the daemon's history file
 // (test/helpers/durable-config.ts hands in one under its own temp root).
 export function testVerbContext(
-  sessionState: SessionStateRW,
-  history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
+  store: SessionStateRW,
+  given?: SettingsHistory,
   config?: DslConfig,
   host: Host = HOST,
 ): VerbContext {
+  // Wired as the daemon wires it: every session write passes the edits'
+  // router, so edit chrome reaches only an open edit.
+  const edits = new EditTransactions(store, () => {});
+  const sessionState = edits.committed;
+  // The store's book is the router's: a click finds its session either way.
+  BOOKS.set(sessionState, bookOf(store));
+  const history = given ?? new SettingsHistory(sessionState, () => {});
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const discovered = discoveryNow(host);
@@ -281,7 +288,7 @@ export function testVerbContext(
     locations: locations(host),
     sessionState,
     history,
-    edits: new EditTransactions(sessionState, () => {}),
+    edits,
     editViewChanged: () => {},
     navigation: new NavigationHistory(),
     context: null,

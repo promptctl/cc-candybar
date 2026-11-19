@@ -34,13 +34,14 @@ import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import { effectsOf } from "../../helpers/click";
+import { PICKER_KEY } from "../../../src/config/settings-menu";
 
 // The theme picker on the door's first line, open, naming `theme` beside its swatch
 // (brandon-theme-swatch-8v9r), read off the visible text.
 const showsTheme = (out: Frame, theme: string): boolean =>
   textOf(out).includes(`${theme} ▀▀▀`);
 // Opening the theme picker: the write its label's click makes.
-const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
+const OPEN_THEME_PICKER = [PICKER_KEY, "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
@@ -115,7 +116,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
         effects.some(
           (e) =>
             e.verb === "set-state" &&
-            e.args[1] === "menus.candybar_pickers" &&
+            e.args[1] === PICKER_KEY &&
             e.args[2] === "candybar.apply.theme",
         ),
       );

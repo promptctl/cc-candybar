@@ -20,6 +20,7 @@ import {
 } from "./disclosure.js";
 import {
   menuActionName,
+  menuPageCurrentAction,
   menuPageKey,
   PAGE_HOLDING_CURRENT,
 } from "./menu-keys.js";
@@ -258,7 +259,7 @@ function optionPicker(
   const toggle = menuActionName(listKey, name);
   const open = `${name}.open`;
   const page = menuPageKey(listKey);
-  const currentPage = `${page}.current`;
+  const currentPage = menuPageCurrentAction(listKey);
   const { template, rows } = face({ apply: name, open, page });
   return {
     kind: "picker",

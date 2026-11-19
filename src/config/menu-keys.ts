@@ -13,19 +13,29 @@
 //   • member  = the menu's apply-action name — unique per menu within a segment,
 //               so two menus in ONE segment are distinct.
 //   • stateKey = the SessionState key whose value names the open member. By
-//               DEFAULT each menu owns a UNIQUE key (`menus.<seg>.<apply>`), so
-//               it toggles only itself — menus are INDEPENDENT, and two
-//               placements of one segment are two menus. Passing an
-//               explicit shared key makes sibling menus share one key
-//               (`menus.<key>`); one key holds one open member, so they become
-//               mutually exclusive (an accordion) — exactly group sugar's shared-
-//               key mechanism, selected by a VALUE not a mode
-//               [LAW:dataflow-not-control-flow]. There is no implicit "the row is
-//               the key" position magic: identity depends only on names a reader
-//               can see in the template, never on tree position.
+//               DEFAULT each menu owns a key of its own, named by its placement
+//               and its apply action, so it toggles only itself — menus are
+//               INDEPENDENT, and two placements of one segment are two menus.
+//               Passing an explicit shared key makes sibling menus share one
+//               key; one key holds one open member, so they become mutually
+//               exclusive (an accordion) — exactly group sugar's shared-key
+//               mechanism, selected by a VALUE not a mode
+//               [LAW:dataflow-not-control-flow]. There is no implicit "the row
+//               is the key" position magic: identity depends only on names a
+//               reader can see in the template, never on tree position.
+//
+// [LAW:types-are-the-program] Every key is spelled injectively and prefix-free:
+// `menus.`, a scope, then one dot-free token built from `escapedIdent` (letters
+// and digits only) around a tag letter — `k` for a named accordion, `p` for a
+// placed menu with `_` between its placement and its apply action. No two
+// names share a key, and no key is a dot-path prefix of another, which the
+// store would read as a parent (loader/nesting.ts). An author's menu has the
+// empty scope; a synthesized one has the namespace of the pass that mints it
+// or of the placement that hosts it, which no author token reaches, so a menu
+// edit chrome hosts is edit chrome by its key alone (reserved-names.ts).
 
-import { ident } from "./ident.js";
-import { MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
+import { escapedIdent } from "./ident.js";
+import { MENU_NS, MENU_PAGE_NS, namespaceOf } from "./reserved-names.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -63,26 +73,29 @@ export function menuStateKey(
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : MENU_NS + ident(placementId) + "." + ident(applyName);
+    : `${MENU_NS}${namespaceOf(placementId) ?? ""}p${escapedIdent(placementId)}_${escapedIdent(applyName)}`;
 }
 
-// [LAW:decomposition] The shared arm of that derivation, named so the loader's
-// reserved-key error can quote the key an authored group WOULD derive without
-// inventing a segment and apply name to ask for it (brandon-menus-du8). It is the
-// arm `menuStateKey` itself takes, so there is no second spelling to drift: the
-// `ident()` collapse here is exactly the one the gate reasons about, and the two
-// ranges are disjoint by construction — a shared key holds no dot after the
-// namespace, an independent one holds exactly one.
+// [LAW:one-source-of-truth] THE key of an accordion named `name` in `scope`:
+// an author's shared `{{ menu }}` key in the empty scope, and each synthesized
+// accordion (the settings menu's pickers, a placement's configure lists) in
+// the namespace of the pass that mints it, where no author spelling reaches.
+export function accordionKey(scope: string, name: string): string {
+  return `${MENU_NS}${scope}k${escapedIdent(name)}`;
+}
+
+// The shared arm of a menu's key: an authored accordion key.
 export function sharedMenuStateKey(sharedKey: string): string {
-  return MENU_NS + ident(sharedKey);
+  return accordionKey("", sharedKey);
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its
 // state key between MENU_CLOSED and its member. Named per (stateKey, member) so
 // menus sharing a key contribute distinct cycles on it — the existing same-key
-// validator merge unions their members into one gate.
+// validator merge unions their members into one gate. The member is escaped,
+// so the name is one token after the key and no toggle's name prefixes another.
 export function menuActionName(stateKey: string, member: string): string {
-  return stateKey + "." + member;
+  return `${stateKey}.${escapedIdent(member)}`;
 }
 
 // [LAW:single-enforcer] THE page-cursor key a menu's picker body paginates by —
@@ -95,11 +108,17 @@ export function menuActionName(stateKey: string, member: string): string {
 // every open. [LAW:one-source-of-truth] The synthesized state VARIABLE is
 // named by this same string (the disclosure-var convention), so the renderer
 // reads the live page via this one name. It sits in its own reserved
-// namespace, beside the state key rather than under it: no declared name may
-// nest under another (loader/nesting.ts), and under `menus.` it would nest
-// under a shared key such as `menus.page`.
+// namespace, beside the state key rather than under it, so no cursor is a
+// dot-path prefix of a state key.
 export function menuPageKey(stateKey: string): string {
   return MENU_PAGE_NS + stateKey;
+}
+
+// The action that turns a page cursor to the page holding the option in
+// force: the cursor's name and a suffix no escaped token carries, so it is
+// neither the cursor's own action nor under it.
+export function menuPageCurrentAction(stateKey: string): string {
+  return `${menuPageKey(stateKey)}_current`;
 }
 
 // [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE

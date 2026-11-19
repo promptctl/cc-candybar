@@ -36,7 +36,7 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
-import { sharedMenuStateKey } from "./menu-keys.js";
+import { accordionKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
 import {
@@ -225,9 +225,9 @@ const REDO_ACTION = `${SETTINGS_NS}redo`;
 // one key holds one open member, so opening a theme picker closes the style
 // picker. The settings menu is a narrow panel — two open drop-downs would
 // overflow it — and this is the same shared-key mechanism group sugar uses,
-// selected by a value, not a mode. Spelled as a shared `{{ menu }}` key, so a
-// `{{ menu }}` an author gives the same shared key joins this accordion.
-const PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+// selected by a value, not a mode. Spelled in the menu's own namespace, which
+// no author's `{{ menu }}` key reaches, so no author's menu joins it.
+export const PICKER_KEY = accordionKey(SETTINGS_NS, "pickers");
 
 // ─── Submenus (brandon-theme-swatch-8v9r, brandon-menus-sjhy.5zy) ─────────
 //
@@ -241,9 +241,7 @@ const submenuToggle = (name: SubmenuName): string =>
   `${submenuSeg(name)}.toggle`;
 // The accordion every list and submenu laid in `place` joins.
 const accordionOf = (place: Place): string =>
-  isSubmenu(place)
-    ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`)
-    : PICKER_KEY;
+  isSubmenu(place) ? accordionKey(SETTINGS_NS, `${place}Pickers`) : PICKER_KEY;
 // A submenu is a member of the accordion the control it is laid beside sits on.
 const submenuRef = (name: SubmenuName): DisclosureRef => {
   const key = accordionOf(PLACE[SUBMENUS[name].beside]);
