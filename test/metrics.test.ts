@@ -1,5 +1,6 @@
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { MetricsProvider, metricsOver } from "../src/segments/metrics";
+import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
+import { metricsOver } from "../src/segments/metrics";
 import {
   writeFileSync,
   appendFileSync,
