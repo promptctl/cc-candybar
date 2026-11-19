@@ -23,6 +23,7 @@ import {
 } from "../../src/daemon/foundations/session-id";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import type { WorldState } from "../../src/facts/world-state";
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import { parseFrame, textOf, type Frame } from "../../src/render/frame";
 import { timed } from "../../src/renderer-interface/interface";
 import type {
@@ -56,10 +57,12 @@ import {
 } from "../../src/renderer-interface/wire";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, readingsAt, type Tick } from "../../src/utils/instant";
+import type { LogLine } from "../../src/utils/logger";
 import { ABSENT } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { heldClock } from "../helpers/held-clock";
+import { unexpectedTimingProblem } from "../helpers/renderers";
 import {
   oversizedRendererHistory,
   oversizedSession,
@@ -119,7 +122,7 @@ function rendererLines(send: (bytes: string) => void) {
       }
       const { renderer: core, ...outcome } = built;
       const receive = serveRenderer({
-        renderer: timed(core, () => 0),
+        renderer: timed(core, () => 0, unexpectedTimingProblem),
         send: (line) => send(lineBytes(line)),
         memory: () => {
           throw new Error("replay unexpectedly inspected process memory");
@@ -335,6 +338,56 @@ test("a session's bar draws from the layer text its origin's snapshot carries", 
   expect(configLoads(opened)).toEqual([
     expect.stringContaining(`cause=open state=built files=${USER_FILE} `),
   ]);
+});
+
+test("rotating an in-process renderer disposes its previous view before serving the successor", async () => {
+  const cores: Renderer[] = [];
+  const logged: LogLine[] = [];
+  const link = inProcessRenderer((core) => {
+    cores.push(core);
+    return core;
+  })({ name: MAIN_RENDERER, boot: bootOf, entry: "/nowhere/renderer", node: [] }).start({
+    clock: heldClock(new Date(AT * 1000)),
+    log: (level, line) => logged.push({ level, line }),
+    start: async () => {},
+    ended: () => {},
+  });
+  const open = async (session: string) => {
+    const context = contextOf(session);
+    const { requested: origin, hookData } = context;
+    answered(await handIn(link.renderer, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+    answered(await handIn(link.renderer, {
+      kind: "context", context, worldState: worldStateOf(hookData.session_id),
+    }));
+    answered(await handIn(link.renderer, { kind: "config", origin, config: snapshotOf(CONFIG) }));
+    const output = answered(await handIn(link.renderer, { kind: "request", id: 1 as RequestId, context }));
+    expect(textOf(presentOf(output.effects).frame)).toContain(SAID);
+  };
+  const viewsOf = async (core: Renderer) => {
+    const { reply } = answered(await handIn(core, { kind: "stats" }));
+    if (reply?.kind !== "stats") throw new Error("renderer returned no stats");
+    return reply.stats.renderCache.views;
+  };
+  link.serve();
+  try {
+    await open("before-restart");
+    const previous = cores[0];
+    if (previous === undefined) throw new Error("the initial core did not build");
+    expect(await viewsOf(previous)).toBe(1);
+
+    await link.restart();
+    expect(await viewsOf(previous)).toBe(0);
+    expect(logged).toContainEqual({
+      level: "info", line: "render-cache closed entries=1 deferred=0",
+    });
+    await open("after-restart");
+    expect(await viewsOf(link.renderer)).toBe(1);
+    expect(await viewsOf(previous)).toBe(0);
+  } finally {
+    await handIn(link.renderer, { kind: "close-journal" });
+    await handIn(link.renderer, { kind: "close-views" });
+    await link.close();
+  }
 });
 
 test("a fresh renderer reproduces the captured production-wire replies", async () => {

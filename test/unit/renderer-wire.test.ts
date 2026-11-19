@@ -26,6 +26,7 @@ import {
   CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
+import { unexpectedTimingProblem } from "../helpers/renderers";
 
 // A renderer that answers with a diagnostic. Its turns
 // take no time, so both ends time them alike.
@@ -54,6 +55,7 @@ function talkingRenderer(): TimedRenderer {
       },
     },
     () => 0,
+    unexpectedTimingProblem,
   );
 }
 
@@ -155,6 +157,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
   const renderer = timed(
     { answer: async () => output },
     () => 0,
+    unexpectedTimingProblem,
   );
   const heard: RendererLine[] = [];
   const transport = linesOver(undefined, { renderer, heard });
@@ -188,6 +191,7 @@ function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
       },
     },
     () => 0,
+    unexpectedTimingProblem,
   );
 }
 

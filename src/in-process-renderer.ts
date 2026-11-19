@@ -12,7 +12,9 @@ import {
   type Renderer,
   type TimedRenderer,
 } from "./renderer-interface/interface.js";
+import { readingsAt } from "./utils/instant.js";
 import { writeLogLines } from "./utils/logger.js";
+import { runTeardown, type TeardownStep } from "./utils/teardown.js";
 
 export function inProcessRenderer(
   decorate: (renderer: Renderer) => Renderer = (renderer) => renderer,
@@ -36,8 +38,10 @@ export function inProcessRenderer(
             writeLogLines(log, result.diagnostics);
           if (result.kind === "refused")
             throw new CrossedFailure(result.failure);
-          const core = timed(decorate(result.renderer), () =>
-            clock.monotonic(),
+          const core = timed(
+            decorate(result.renderer),
+            () => clock.monotonic(),
+            (message) => log("warn", message),
           );
           if (capture === undefined) return core;
           return {
@@ -51,6 +55,28 @@ export function inProcessRenderer(
           void start().catch((error: unknown) =>
             log("error", `renderer ${name} restart: ${String(error)}`),
           ),
+        async (previous) => {
+          // [LAW:no-ambient-temporal-coupling] No old turn remains in flight
+          // in the recording slot. Close its local ownership before building
+          // the successor, while the host's existing holds await its START.
+          const steps = (["close-journal", "close-views"] as const).map(
+            (kind): TeardownStep => [
+              `renderer ${name} ${kind}`,
+              async () => {
+                const output = await previous.answer({
+                  kind: "event",
+                  ...readingsAt(clock),
+                  event: { kind },
+                });
+                if (output.diagnostics !== undefined)
+                  writeLogLines(log, output.diagnostics);
+                if (output.kind === "threw")
+                  throw new CrossedFailure(output.failure);
+              },
+            ],
+          );
+          await runTeardown(steps, log);
+        },
       ),
   });
 }
@@ -59,6 +85,7 @@ function localLink(
   name: RendererName,
   build: () => TimedRenderer,
   restore: () => void,
+  retire: (previous: TimedRenderer) => Promise<void>,
 ): RendererLink {
   // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
   // before it fails as no renderer's.
@@ -89,6 +116,9 @@ function localLink(
     },
     arm: () => {},
     restart: async () => {
+      const previous = built;
+      built = null;
+      if (previous !== null) await retire(previous);
       built = build();
       restore();
     },

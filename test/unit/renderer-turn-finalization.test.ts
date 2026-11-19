@@ -106,8 +106,11 @@ function rig(
     },
   });
   const lines: RendererLine[] = [];
+  const logged: LogLine[] = [];
   const receive = serveRenderer({
-    renderer: timed(renderer, fault.rendererClock ?? clock.monotonic),
+    renderer: timed(renderer, fault.rendererClock ?? clock.monotonic, (line) => {
+      logged.push({ level: "warn", line });
+    }),
     send: (line) => {
       const crossed = JSON.parse(JSON.stringify(line)) as RendererLine;
       lines.push(crossed);
@@ -122,7 +125,6 @@ function rig(
   });
   const stored: Array<readonly StoreWrite[]> = [];
   const subscriptions: Subscriptions[] = [];
-  const logged: LogLine[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clock,
@@ -203,7 +205,7 @@ test("a failed body keeps its classification and the writes already drained", as
   ]);
 });
 
-test("a failed end-clock read leaves the completed answer and its diagnostics intact", async () => {
+test("a failed end-clock read logs a transport warning and leaves semantic diagnostics intact", async () => {
   let reads = 0;
   const fixture = rig({
     rendererClock: () => {
@@ -219,12 +221,16 @@ test("a failed end-clock read leaves the completed answer and its diagnostics in
   expect(fixture.stored).toEqual([
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
   ]);
-  expect(fixture.logged).toEqual([
+  const line = fixture.lines[0];
+  expect(line?.kind === "output" && line.output.diagnostics).toEqual([
     { level: "info", line: "menu opened" },
+  ]);
+  expect(fixture.logged).toEqual([
     {
       level: "warn",
       line: "renderer turn timing failed: Error: end clock failed",
     },
+    { level: "info", line: "menu opened" },
   ]);
   expect(await fixture.due()).toMatchObject({ kind: "answered", turnMs: 0 });
   expect(fixture.logged).toHaveLength(2);

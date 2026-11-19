@@ -81,7 +81,9 @@ export function runRenderer(monotonic: () => Monotonic): void {
     const { renderer, diagnostics } = result;
     served = serveRenderer({
       // [LAW:single-enforcer] Each turn is timed in its own process.
-      renderer: timed(renderer, monotonic),
+      renderer: timed(renderer, monotonic, (message) => {
+        process.stderr.write(`${message}\n`);
+      }),
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();

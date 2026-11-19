@@ -88,6 +88,7 @@ export interface TimedRenderer {
 export function timed(
   renderer: Renderer,
   monotonic: () => number,
+  warn: (message: string) => void,
 ): TimedRenderer {
   return {
     answer: async (input) => {
@@ -96,17 +97,12 @@ export function timed(
       try {
         return { ...output, turnMs: Math.round(monotonic() - from) };
       } catch (thrown) {
-        // [LAW:no-silent-failure] Measuring a completed turn must not discard
-        // its effects, writes or diagnostics.
-        const missed: LogLine = {
-          level: "warn",
-          line: `renderer turn timing failed: ${rendererFailureOf(thrown).detail}`,
-        };
-        const diagnostics: [LogLine, ...LogLine[]] =
-          output.diagnostics === undefined
-            ? [missed]
-            : [...output.diagnostics, missed];
-        return { ...output, turnMs: null, diagnostics };
+        // [LAW:effects-at-boundaries] Timing is transport telemetry. Its
+        // failure leaves the completed renderer answer intact for replay.
+        warn(
+          `renderer turn timing failed: ${rendererFailureOf(thrown).detail}`,
+        );
+        return { ...output, turnMs: null };
       }
     },
   };
