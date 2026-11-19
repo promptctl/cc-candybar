@@ -413,7 +413,6 @@ test("a failed start's input does not keep the previous renderer's served config
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
-      writableSettings: () => [],
       recorded: () => {},
       holding: () => () => {},
     },
