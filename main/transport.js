@@ -36825,7 +36825,24 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   URL_FRAME_VERSION
 ]);
 var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
+var ProtocolError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "ProtocolError";
+  }
+};
+var FRAME_HEADER_BYTES = 4;
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function encodeJsonFrame(json2) {
+  const body = import_buffer.Buffer.from(json2, "utf8");
+  if (body.length > MAX_FRAME_BYTES)
+    throw new ProtocolError(
+      `a frame of ${body.length} bytes is past the ${MAX_FRAME_BYTES}-byte cap`
+    );
+  const header = import_buffer.Buffer.alloc(FRAME_HEADER_BYTES);
+  header.writeUInt32BE(body.length, 0);
+  return import_buffer.Buffer.concat([header, body]);
+}
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
   const { kind, bundle, source } = v;
@@ -49176,12 +49193,26 @@ function plainOf2(runs) {
 }
 
 // src/daemon/foundations/render-answers.ts
+function framed(value, encode2, failure2) {
+  try {
+    return { sent: value, frame: encodeJsonFrame(encode2(value)), unsent: null };
+  } catch (e) {
+    const sent = failure2(renderFailed(e));
+    return {
+      sent,
+      frame: encodeJsonFrame(encode2(sent)),
+      unsent: e instanceof Error ? e : new Error(String(e))
+    };
+  }
+}
+var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
 var failedWith = (message2) => ({
   ok: false,
   error: message2,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
+var renderFailed = (err) => failedWith(failureOf(err).message);
 var renderFailure = (failure2) => ({
   ...failure2,
   kind: "threw"
@@ -50260,11 +50291,18 @@ function feedsFact(feeds) {
 }
 
 // src/daemon/reply.ts
-var stay = (resp) => ({
-  resp,
-  exitAfterFlush: null,
-  settled: NOTHING_TO_SETTLE
-});
+function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
+  const { sent, frame: frame2, unsent } = framedResponse(resp);
+  return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
+}
+var stay = (resp) => replyOf(resp);
+function renderRecord(rendered) {
+  const reply = replyOf(rendered.resp, null, rendered.settled);
+  return {
+    reply,
+    outcome: reply.unsent === null ? rendered.outcome : renderFailure(failureOf(reply.unsent))
+  };
+}
 var replied = (reply) => ({ kind: "reply", ...reply });
 var REPLY_KINDS = {
   render: true,
@@ -50311,20 +50349,20 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
         `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
       );
     }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      settled: NOTHING_TO_SETTLE
-    };
+    return replied(
+      replyOf(
+        {
+          ok: false,
+          error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+          code: "VERSION_MISMATCH",
+          daemonV: PROTOCOL_VERSION
+        },
+        // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+        // Exit is sequenced on the response flush, so the client always sees
+        // the VERSION_MISMATCH diagnostic — never a dead socket.
+        req.v > PROTOCOL_VERSION ? 0 : null
+      )
+    );
   }
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
@@ -50349,11 +50387,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     sourceDigest: sourceDigest2
   } = parts;
   if (req.kind === "shutdown") {
-    return {
-      resp: { ok: true, output: "" },
-      exitAfterFlush: 0,
-      settled: NOTHING_TO_SETTLE
-    };
+    return replyOf({ ok: true, output: "" }, 0);
   }
   if (req.kind === "pane-session") {
     const { socket, pane } = req;
@@ -50437,7 +50471,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
-      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      const { reply, outcome } = renderRecord(rendered);
+      if (outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
         req: String(accepted.id),
         timedOut: timedOut() ? "Y" : "N",
@@ -50446,18 +50481,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       });
       const took = elapsedMs(clock, t0);
       stats.recordTook(took);
-      const { level, line } = requestEvent(
-        "render",
-        facts,
-        rendered.outcome,
-        took
-      );
+      const { level, line } = requestEvent("render", facts, outcome, took);
       parts.log(level, line);
-      return {
-        resp: rendered.resp,
-        exitAfterFlush: null,
-        settled: rendered.settled
-      };
+      return reply;
     };
     if (!checked.ok) return recorded2(refusedRender(checked.problems));
     const answered = await answerStatusline(
@@ -50496,8 +50522,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     );
     noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
     try {
-      sighted(checked.req, answered.seen);
-      return recorded2(answered);
+      const reply = recorded2(answered);
+      sighted(checked.req, reply.unsent === null ? answered.seen : "failed");
+      return reply;
     } catch (e) {
       answered.settled(false);
       throw e;

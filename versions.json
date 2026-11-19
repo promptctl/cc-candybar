@@ -2,38 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-808",
-      "ref": "refs/pull/808/merge",
-      "sha": "7a3061f666cc12ce2284a697d8dcaa1ff2146e04",
-      "timestamp": "2026-11-19T09:27:06.451Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d136cccfa79683af69b5dd8e2f57dd9cb53d1988",
+      "timestamp": "2026-11-19T09:34:53.889Z",
       "commits": [
         {
-          "sha": "7a3061f666cc12ce2284a697d8dcaa1ff2146e04",
+          "sha": "d136cccfa79683af69b5dd8e2f57dd9cb53d1988",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:26:14Z",
-          "message": "Merge ad1ccb31caa36e9c86c2325577e654045dbc2572 into 77b0e659d9008283d4e326d77e02510c94fa4492\n"
-        },
-        {
-          "sha": "ad1ccb31caa36e9c86c2325577e654045dbc2572",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:59:07-07:00",
-          "message": "fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)\n"
-        },
-        {
-          "sha": "bba11b6e6d43808dd7998e272313943708e9bb8c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:27:22-07:00",
-          "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
-        },
-        {
-          "sha": "a62bd6c53c64d20c3670ff413a6d196c8e0cc25e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:05:22-07:00",
-          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
+          "timestamp": "2026-11-19T02:33:52-07:00",
+          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i) (#808)\n\n* fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n\n* fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n\n* fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)"
         }
       ]
     },
@@ -63,50 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:35:58-07:00",
           "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "77b0e659d9008283d4e326d77e02510c94fa4492",
-      "timestamp": "2026-11-19T09:18:37.060Z",
-      "commits": [
-        {
-          "sha": "77b0e659d9008283d4e326d77e02510c94fa4492",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:17:07-07:00",
-          "message": "fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80) (#835)\n\n* fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80)\n\nThe session book, session state and settings history keep recency in a Map\nand persist it through a record keyed by session id. A record lists\ncanonical array-index keys (\"7\") first, so an integer-like id jumped to the\noldest end on a round trip and the bound could evict it while newest.\n\nThe session-id parse now refuses exactly the canonical array indices (an\ninteger from 0 to 2^32 - 2 in its canonical spelling), naming the id, at every\ndoor: render, subscribe, click, and each file's load, which drops the entry by\nname. The files keep their keyed form.\n\n* fix(state): every per-session file loads entry by entry through one loader, and its storage takes the ordered sessions (px80)\n\nThe settings history's file loads through the same session-keyed loader as\nthe session book and session state, so a history of the wrong shape drops\nthat session alone, by name, as a refused key does, and the three files say\na corrupt or unreadable file the same way. Each storage's save takes the\nordered sessions, so the host's sessions become a record only at the file.\n\nThe frames stream's stdin parse takes its session id through the session-id\ncheckpoint. The refusal of an array index states the rule: it is never a\nsession id.\n\nThe order tests save through each store's own file and read it back in a\nfresh store, with number-like ids among UUIDs.\n\n* fix(state): a session file's load catches only its JSON, says what it loaded, and drops what a record cannot hold (px80)\n\n- The per-session load catches only the read and the JSON parse: a throw in\n  a value's parse or the logger stays a throw.\n- Each kind's parse returns a typed refusal naming the field that failed,\n  and the dropped-entry line names it.\n- The history parse is pure: it returns the retired keys with what stays,\n  and a history left holding nothing is dropped by name, so it takes none\n  of the bound's places.\n- The session-id parse refuses `__proto__`, which an assignment into a\n  record takes as its prototype; inherited names like `constructor` are\n  ordinary own keys and pass.\n- Every load logs one line: no file, or the sessions it loaded and dropped.\n- The history file keeps its own immediate writer, cited: its step is on\n  disk before the click answers, and its failure is said on the bar.\n- The boot's record order cites the session-id parse it depends on.\n\n* fix(state): a session file copies its snapshot once, inside its storage, and each kind's parse answers as an Asked (px80)\n\n- Each kind's parse returns `Asked<V>`; the local result type is gone.\n- `SessionFile.save` takes its own copy, since the landing's identity check\n  depends on it; the callers' copies are gone, and the history's immediate\n  write needs none. The storage contracts say what each storage does.\n- A lone history the byte bound trims to nothing is removed, not kept.\n- Retired keys are reported once per session, kept or dropped.\n- The JSON object checks use the existing plain-object check.\n- The frames stream's stdin parse claims only the session id and the line\n  as read; the hook data is still forwarded for the daemon to parse.\n- Comments name the record assignment sites and the file's record."
-        }
-      ]
-    },
-    {
-      "version": "pr-837",
-      "ref": "refs/pull/837/merge",
-      "sha": "421152efd44cf7e53255c3c6a9bda59a46db99a0",
-      "timestamp": "2026-11-19T09:18:15.623Z",
-      "commits": [
-        {
-          "sha": "421152efd44cf7e53255c3c6a9bda59a46db99a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:17:04-07:00",
-          "message": "Merge ecfcb1753f90966fefbf335b562eb9345716708f into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
-        },
-        {
-          "sha": "ecfcb1753f90966fefbf335b562eb9345716708f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:15:56-07:00",
-          "message": "test(doctor): the effect-refresh e2e clicks each doctor run after the one before it has reported\n\nA click replaces the session's run still on its way, which is then never\nread, so two clicks a draw apart logged one run or two depending on how soon\nthe first reading landed, which a loaded runner decides; the test then waited\nfor four logged runs that never came.\n"
-        },
-        {
-          "sha": "dd1e77c85c4803f1d229a486301001ba58567a35",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:15:55-07:00",
-          "message": "fix(host): a process's world drops the variables that locate a repository, so a daemon started from a GIT_DIR shell reads each session's own repo (99f8)\n\nThe detached daemon inherits the environment of whichever shell spawned it.\nGIT_DIR, GIT_WORK_TREE, the rest of `git rev-parse --local-env-vars` and\nGH_REPO in that shell pointed every session's git and forge reads at the\nwrong repository, and `cc-candybar doctor` run there drew the same wrong bar.\n\nThe world is now built by removing those names from the process's own\nenvironment before anything launches, so every child (git, gh, the renderer,\na plugin clone) inherits the drop. git names the variables; a fixed list\nstands in when it cannot (the ask fails, names nothing, or an old git echoes\nthe flag back), and that fallback is loud: a daemon log warning, a standing\nwarning on the bar, and a failing `environment` doctor row with the reason.\nProcesses that stand in for a session (the Node client, check, doctor, the\nsite) report the dropped values back as the session's own environment.\nplugin install's local overlay of the same variables is removed, since the\nworld now owns the drop.\n"
         }
       ]
     }
