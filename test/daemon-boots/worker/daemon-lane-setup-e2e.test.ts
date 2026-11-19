@@ -209,6 +209,22 @@ esac
     }, "the configured pane to open on retry");
   });
 
+  test("an enabled session moves its bar to the newly reported pane at the same lane setting", async () => {
+    const sid = "lane-pane-moved";
+    const next = `${sid}-new`;
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    const replacement = path.join(projectDir, `lane-e2e-${next}.split`);
+    await renderIn(sid);
+    await switchLanes(sid, true, "pane");
+    await until(() => existsSync(held), "the original pane to open");
+
+    await render(daemon, sid, projectDir, inTmux(next), args());
+    await until(
+      () => existsSync(replacement) && !existsSync(held),
+      "the replacement pane to open and the previous pane to close",
+    );
+  });
+
   // A click that writes no config file reloads no entry, however many
   // directories render that config. The directories are this test's own, so
   // every load of their entries is here: each opens once, and after that only

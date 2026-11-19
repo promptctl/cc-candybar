@@ -461,6 +461,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     publishFrame,
+    requestChanged: (session, previous) =>
+      declaredBarPanes.reported(session, previous?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {

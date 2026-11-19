@@ -61,6 +61,7 @@ function rig(
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
     publishFrame,
+    requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
       watching.started++;

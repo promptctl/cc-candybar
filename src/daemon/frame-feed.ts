@@ -52,6 +52,11 @@ export interface Subscriber {
 
 export interface FeedDeps<Req> {
   readonly publishFrame: PublishFrame;
+  // Which accepted request changed independently of a renderer's declaration.
+  readonly requestChanged: (
+    session: SessionId,
+    previous: Req | undefined,
+  ) => void;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
@@ -173,10 +178,14 @@ export class FrameFeeds<Req> {
     const before = this.watched.has(sessionId) ? this.shown(sessionId) : null;
     this.requests.delete(sessionId);
     this.requests.set(sessionId, { req, order });
-    for (const oldest of this.requests.keys()) {
+    for (const [oldest, previous] of this.requests) {
       if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.requests.delete(oldest);
+      if (!this.watched.has(oldest)) {
+        this.requests.delete(oldest);
+        this.deps.requestChanged(oldest, previous.req);
+      }
     }
+    this.deps.requestChanged(sessionId, held?.req);
     // A request whose pane is another, on or off a screen, moves the rate its
     // bar is drawn at.
     if (before !== null && before !== this.shown(sessionId)) this.announce();
