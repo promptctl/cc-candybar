@@ -132,6 +132,14 @@ const DEFINITION_KEYS = new Set([
 // The file a plugin folder holds its definition in.
 export const DEFINITION_FILE = "plugin.json5";
 
+// [LAW:single-enforcer] Discovery and the loader reject the same definition
+// names, and discovery opens none of the rejected paths.
+export function pluginDefinitionProblem(file: string): string | null {
+  return path.basename(file) === DEFINITION_FILE
+    ? null
+    : `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+}
+
 // A plugin name prefixes every name it declares, so it is one identifier
 // segment: no dot (it would forge another plugin's namespace), nothing a
 // template path cannot spell.
@@ -285,8 +293,8 @@ export function applyPlugins(
           dropped: [...layer.dropped, { ...definition, reason }],
         };
       };
-      if (path.basename(file) !== DEFINITION_FILE) {
-        const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+      const reason = pluginDefinitionProblem(file);
+      if (reason !== null) {
         // Named by its folder like any drop, so it tombstones its namespace.
         return drop(
           reason,

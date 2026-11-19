@@ -14,6 +14,11 @@ import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
 import { originKey, type RenderOrigin } from "../src/config-hint";
+import { discover, readShared } from "../src/daemon/config-discovery/discover";
+import {
+  diskFiles,
+  type DiscoveryFiles,
+} from "../src/daemon/config-discovery/discovery-files";
 import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
 import {
   WatcherRegistry,
@@ -198,4 +203,96 @@ test("once closed, it follows nothing and lets every watch go", () => {
   expect(counters.watchersClosed).toBe(counters.watchersOpened);
   discovery.follow([origin]);
   expect(discovery.snapshotOf(origin)).toBeNull();
+});
+
+test("a batch reads shared layer, plugin root and definition paths once", () => {
+  const dir = project("shared");
+  const nested = project("shared/nested");
+  const pluginRoot = path.join(dir, ".cc-candybar", "plugins");
+  const pluginDir = path.join(pluginRoot, "widget");
+  const plugin = path.join(pluginDir, "plugin.json5");
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(plugin, '{ segments: { row: { template: "widget" } } }');
+  const alias = path.join(dir, "alias");
+  fs.symlinkSync(pluginDir, alias);
+  const listed = path.join(alias, "plugin.json5");
+  const config = path.join(dir, ".cc-candybar.json5");
+  fs.writeFileSync(config, JSON.stringify({ plugins: [listed, plugin] }));
+  answerRepo(dir);
+  const texts: string[] = [];
+  const roots: string[] = [];
+  const candidates: string[] = [];
+  const files: DiscoveryFiles = {
+    ...diskFiles,
+    presence(file) {
+      candidates.push(file);
+      return diskFiles.presence(file);
+    },
+    text(file) {
+      texts.push(file);
+      return diskFiles.text(file);
+    },
+    folders(folder) {
+      roots.push(folder);
+      return diskFiles.folders(folder);
+    },
+  };
+  const world = { locations: locations(HOST), stateDir: stateDir(HOST) };
+  const shared = readShared(world, files);
+  for (const cwd of [dir, nested]) {
+    const { snapshot } = discover({ projectDir: dir, cwd }, shared);
+    const layer = snapshot.chain.find(({ path: file }) => file === config);
+    expect(layer?.listed[listed]?.definition).toMatchObject({
+      kind: "text",
+      dir: pluginDir,
+    });
+    expect(layer?.listed[plugin]?.definition).toEqual(
+      layer?.listed[listed]?.definition,
+    );
+    expect(snapshot.plugins).toContainEqual(layer?.listed[plugin]);
+  }
+  expect(candidates.filter((file) => file === config)).toHaveLength(1);
+  expect(roots.filter((folder) => folder === pluginRoot)).toHaveLength(1);
+  for (const file of [config, plugin])
+    expect(texts.filter((read) => read === file)).toHaveLength(1);
+  expect(texts).not.toContain(listed);
+
+  // A later batch sees changed bytes without needing to discard an old cache.
+  fs.writeFileSync(config, "{}");
+  const { snapshot } = discover(
+    { projectDir: dir, cwd: dir },
+    readShared(world, files),
+  );
+  expect(
+    snapshot.chain.find(({ path: file }) => file === config)?.listed,
+  ).toEqual({});
+  expect(texts.filter((file) => file === config)).toHaveLength(2);
+});
+
+test("an unchecked extension remains the unreadable layer at its actual path", () => {
+  const home = project("home");
+  const locked = path.join(home, "cc-candybar", "config.json");
+  const world = {
+    locations: { ...locations(HOST), configHome: home },
+    stateDir: stateDir(HOST),
+  };
+  const files = {
+    ...diskFiles,
+    presence: (file: string) =>
+      file === locked
+        ? { path: file, error: "EACCES" }
+        : diskFiles.presence(file),
+  };
+  const { snapshot } = discover({ cwd: root }, readShared(world, files));
+  expect(snapshot.chain).toEqual([
+    {
+      role: "user",
+      path: locked,
+      content: { kind: "unreadable", error: "EACCES" },
+      listed: {},
+    },
+  ]);
+  expect(snapshot.notices).toContain(
+    `Config location could not be checked: ${locked} — EACCES`,
+  );
 });
