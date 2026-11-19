@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-843",
+      "ref": "refs/pull/843/merge",
+      "sha": "d20c596aafba46b288667e4c704f4373f672fa96",
+      "timestamp": "2026-11-19T10:11:32.987Z",
+      "commits": [
+        {
+          "sha": "d20c596aafba46b288667e4c704f4373f672fa96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:41-07:00",
+          "message": "Merge b5e962253d0008d6ae6a5a1e2efc3181d8cd4cef into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "b5e962253d0008d6ae6a5a1e2efc3181d8cd4cef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:08:57-07:00",
+          "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\ngit finds its repository from GIT_DIR, GIT_WORK_TREE and the other names\n`git rev-parse --local-env-vars` prints, ahead of its working directory,\nand gh honours GH_REPO. A daemon, doctor, check or plugin install started\nfrom a git hook, a `rebase --exec` or a vcsh shell read every session's\nbranch, status and PR from that shell's repository.\n\nA launch scope now names what its children do not inherit. The child\nenvironment is the inherited environment, read at each launch, less those\nnames, under each launch's overlay: one place for every launch form. The\nprocess's own environment is untouched, since it is also what the process\nreports as the session's.\n\nThe daemon, doctor, check and plugin install ask git once, as they start,\nand withhold its names and GH_REPO; the relay and every other process ask\nnothing. A git that cannot answer (or an old one that echoes the flag) is a\nfault carrying git's words: the daemon logs it, still starts and draws, and\nstands a warning on every bar through its launcher's facts; the doctor\nfails a new \"repository reads\" row; plugin install exits 1 with the reason.\nPlugin install's own overlay that unset the same names is gone. The Pages\nsite's simulated git answers the ask.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-840",
       "ref": "refs/pull/840/merge",
       "sha": "474bea705499aaa5d05eecd05d5d2bbd87c2d39c",
