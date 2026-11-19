@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d49ee0ce95ddef495c7948fd1526622b162b7b9b",
+      "timestamp": "2026-11-19T10:32:53.710Z",
+      "commits": [
+        {
+          "sha": "d49ee0ce95ddef495c7948fd1526622b162b7b9b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T10:31:46Z",
+          "message": "chore(release): set `package.json` to 1.232.12\n\n## [1.232.12](https://github.com/promptctl/cc-candybar/compare/v1.232.11...v1.232.12) (2026-11-19)\n\n### Bug Fixes\n\n* **settings:** treat display checkboxes as preferences (ibyq.1sb) ([#839](https://github.com/promptctl/cc-candybar/issues/839)) ([5702b0a](https://github.com/promptctl/cc-candybar/commit/5702b0a6f481af905b25fe6469d345b86a5c5bb3))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-850",
       "ref": "refs/pull/850/merge",
       "sha": "3f12ea2bfc18ceae7b27033874f4da76d33a9fd1",
@@ -149,21 +164,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:09:46-07:00",
           "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5702b0a6f481af905b25fe6469d345b86a5c5bb3",
-      "timestamp": "2026-11-19T10:26:00.917Z",
-      "commits": [
-        {
-          "sha": "5702b0a6f481af905b25fe6469d345b86a5c5bb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:25:01-07:00",
-          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb) (#839)\n\n* fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n\n* fix(settings): satisfy pane reconciliation lint\n\n* fix(tmux): reconcile existing panes and retry interrupted splits\n\n* test(daemon): exercise retained feed and shutdown behavior"
         }
       ]
     },
