@@ -23,10 +23,13 @@ import {
   type LayoutNode,
   type ParseDecl,
   type SegmentNode,
+  type DraftSlot,
   type SettingValue,
   type SourceDefault,
+  describeValues,
   parseArm,
   savedSetting,
+  settingSpelling,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -73,7 +76,12 @@ import {
   EFFECT_FLOOR,
   transposedPalette,
 } from "../themes/index.js";
-import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
+import {
+  ANIMATION_SPEEDS,
+  FOLLOW_BAR,
+  notInstalledTheme,
+  notPlacementTheme,
+} from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   bindClock,
@@ -89,9 +97,11 @@ import {
   type ActionRuntime,
 } from "../render/action.js";
 import {
+  placementFold,
   placementSetting,
-  placementValue,
   settingTable,
+  settingTitle,
+  type StalePick,
 } from "../config/setting-table.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -376,12 +386,15 @@ function declareOne(
       break;
 
     // [LAW:one-source-of-truth] A placement setting reads its stored pick
-    // through the setting's one parse, typed as its saved value is, so
+    // through the setting's one fold, typed as its saved value is, so
     // `.settings`, its control and a step all read one value.
     case "setting": {
       const setting = placementSetting(name, decl);
-      registry.declareStored(name, decl.key, typeOf(decl.saved), (raw) =>
-        placementValue(setting, raw),
+      registry.declareStored(
+        name,
+        decl.key,
+        typeOf(decl.saved),
+        (raw) => placementFold(setting, raw).value,
       );
       break;
     }
@@ -1262,12 +1275,34 @@ export type RenderWarning =
     }
   // A setting whose stored pick at `key` its domain no longer holds (a theme
   // not installed, a style the config no longer declares, a value past its
-  // range), so the bar wears its fallback and the pick stays stored.
+  // range), so the bar wears its fallback until the session picks again or
+  // saves.
   | {
       readonly kind: "stale";
       readonly key: string;
       readonly message: string;
     };
+
+// [LAW:one-source-of-truth] THE warning of a stale pick, from its data and
+// the display name of the value the bar wears instead. A theme domain says
+// it in the wording every installed-theme check uses.
+export function staleWarning(
+  { setting, stored }: StalePick,
+  wears: string,
+): RenderWarning {
+  const { domain } = setting;
+  const why =
+    domain.kind === "theme"
+      ? domain.followsBar
+        ? notPlacementTheme(stored)
+        : notInstalledTheme(stored)
+      : `"${stored}" is not ${describeValues(domain.members)}`;
+  return {
+    kind: "stale",
+    key: setting.key,
+    message: `${settingTitle(setting)}: ${why}, so the bar wears "${wears}" until the session picks again or saves`,
+  };
+}
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -1361,6 +1396,26 @@ export function drawDsl(
   const warnings: RenderWarning[] = [];
   const warn = (warning: RenderWarning): void => void warnings.push(warning);
   const segments = new Map<string, readonly RichText[]>();
+  // [LAW:no-silent-failure] A pick a drawn node draws with is folded here,
+  // and a stale one reported once however many drawn nodes carry it.
+  const settings = settingTable(config);
+  const reported = new Set<string>();
+  const drawnPicks = (picks: readonly DraftSlot[]): void => {
+    for (const { key } of picks) {
+      if (reported.has(key)) continue;
+      reported.add(key);
+      const setting = settings.byKey.get(key);
+      // [LAW:no-defensive-null-guards] Edit chrome mints a slot with its
+      // setting variable, so a slot's key is a placement setting's.
+      if (setting?.kind !== "placement") {
+        throw new Error(`draft slot "${key}" holds no placement setting`);
+      }
+      const { value, by } = placementFold(setting, registry.stored(key));
+      if (by.kind === "stale") {
+        warn(staleWarning({ setting, stored: by.raw }, settingSpelling(value)));
+      }
+    }
+  };
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
   // the effects below through the same one (brandon-menus-sjhy.nt2).
@@ -1563,6 +1618,7 @@ export function drawDsl(
           placement,
           message: `segment "${placement}": ${message}`,
         }),
+      drawnPicks,
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
         evaluateOnce(

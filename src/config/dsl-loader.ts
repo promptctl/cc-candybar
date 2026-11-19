@@ -91,7 +91,7 @@ import { insertNotice, placeInserts, type AuthoredTrees } from "./presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
   authoredPlacement,
-  checkKeyOwners,
+  checkSettingKeys,
   unplacedMessage,
   validateCrossReferences,
   validateDeclarations,
@@ -606,6 +606,7 @@ function checkPlugin(
     inherited: [],
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
+  checkSettingKeys(ctx, config, owned);
   validateNoCycles(ctx, config, owned);
   validateNoNesting(ctx, config, { checked: owned, authored: owned });
   if (issues.length > 0) throw new ConfigError(filePath, issues);
@@ -834,7 +835,7 @@ function judgeRenderable(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
-  checkKeyOwners(ctx, withChrome);
+  checkSettingKeys(ctx, withChrome, () => true);
   refuseIfIssues();
   // [LAW:single-enforcer] Authored and synthesized actions share the same
   // layer checkpoint before any reaches the renderer.

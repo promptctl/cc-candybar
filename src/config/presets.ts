@@ -58,7 +58,11 @@ import {
   rootNode,
   type Unplaced,
 } from "./root.js";
-import { effectiveMemberName, type StoredPick } from "../themes/policy.js";
+import {
+  effectiveMemberName,
+  type Folded,
+  type StoredPick,
+} from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -107,7 +111,7 @@ export function effectivePresetName(
   sessionPreset: StoredPick<string>,
   globalsPreset: string | undefined,
   declaredPresets: Readonly<Record<string, PresetDecl>>,
-): string {
+): Folded<string> {
   // [LAW:types-are-the-program] No staged rung, and the absence is enforced
   // rather than assumed: every globals fragment that could stage one — a
   // preset's own `globals`, edit mode's `editGlobals` — has `preset` swapped for

@@ -29,6 +29,7 @@ import type {
   ThemeDefaultField,
 } from "./globals-fields.js";
 import {
+  BAR_THEME,
   FOLLOW_BAR,
   isPlacementThemeName,
   parseSessionInt,
@@ -1075,9 +1076,9 @@ export function inSettingDomain(
 
 // [LAW:one-source-of-truth] A setting value as a SessionState string, and
 // back. A session holds strings, so a pick crosses the click wire in this
-// spelling and the render parses it against the declaration — `undefined` for
-// a string the domain does not hold (a pick made before the declaration
-// changed), which the caller reads as "no pick", as a stale theme name is.
+// spelling and the setting's parse reads it against the declaration — null
+// for a string the domain does not hold (a pick made before the declaration
+// changed), which is a stale pick, as a stale theme name is.
 export function settingSpelling(value: SettingValue): string {
   return String(value);
 }
@@ -1085,10 +1086,10 @@ export function settingSpelling(value: SettingValue): string {
 export function parseSettingSpelling(
   decl: SettingDecl,
   raw: string,
-): SettingValue | undefined {
+): SettingValue | null {
   const { domain } = decl;
   if (typeof domain === "object" && "min" in domain) {
-    return parseSessionInt(raw, domain) ?? undefined;
+    return parseSessionInt(raw, domain);
   }
   const value: SettingValue =
     domain === "bool"
@@ -1098,7 +1099,7 @@ export function parseSettingSpelling(
           ? false
           : raw
       : raw;
-  return inSettingDomain(decl, value) ? value : undefined;
+  return inSettingDomain(decl, value) ? value : null;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or
@@ -1106,15 +1107,16 @@ export function parseSettingSpelling(
 export function describeSettingDomain(decl: SettingDecl): string {
   const { domain } = decl;
   return domain === "theme"
-    ? `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`
+    ? `${BAR_THEME} or an installed theme name`
     : describeValues(domain);
 }
 
+// A closed set of values a setting can hold.
+export type DomainValues = "bool" | SettingRange | readonly string[];
+
 // [LAW:one-source-of-truth] How a closed set of values reads in a message,
 // for a placement's setting and a global one alike.
-export function describeValues(
-  domain: "bool" | SettingRange | readonly string[],
-): string {
+export function describeValues(domain: DomainValues): string {
   if (domain === "bool") return "true or false";
   if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
   return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;

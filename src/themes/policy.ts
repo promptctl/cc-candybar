@@ -19,10 +19,13 @@ import {
   IDENTITY,
   JOINERS,
   EFFECT_CATALOGUE,
+  getThemePalette,
   listThemePalettes,
   type LoopName,
+  type Palette,
   type ThemeKey,
 } from "@promptctl/rich-js";
+import { cappedList } from "../utils/capped-list.js";
 import {
   SHADES,
   TRIAL_SHADE_NAMES,
@@ -39,33 +42,53 @@ export { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES };
 // textual palettes, and a second name put a step in every theme carousel that
 // recoloured nothing (brandon-theme-picker-bgw.exj.dw1) — but the settings
 // menu's own save could write them, so a file or a session may still hold
-// one, and every refusal or report of one names the theme to write instead.
-// A future retirement is one row here.
+// one. The loader refuses it [LAW:no-silent-failure], the bar reports a
+// session's, and each names the theme to write instead. A future retirement
+// is one row here.
 // A Map, not an object literal: an authored name is user data.
 const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ["dark", "textual-dark"],
   ["light", "textual-light"],
 ]);
 
-// [LAW:single-enforcer] THE installed-theme check for a check that needs no
-// palette: the loader, the session gate and a placement's theme ask here. It
-// reads the registry's names, as the palette lookup does
-// (src/themes/palette-resolvers.ts), and asks for no palette. The names are
-// static for the life of the process, so the set is built once.
-let installed: ReadonlySet<string> | undefined;
+// [LAW:single-enforcer] THE installed themes: each registry name with its
+// palette. Whether a name is installed, which palette it is and which names
+// there are all read this one map — the loader, the session gate, a session
+// pick's parse, a placement's theme and every list of themes — so no two of
+// them can disagree. No alias: every name is its palette's own, so a label
+// always names the palette the bar wears.
+// [LAW:no-shared-mutable-globals] Built once and never written again: the
+// registry's themes are fixed for the life of the process.
+let installed: ReadonlyMap<string, Palette> | undefined;
+export function installedThemes(): ReadonlyMap<string, Palette> {
+  installed ??= new Map(
+    listThemePalettes().map((name) => {
+      const palette = getThemePalette(name);
+      // [LAW:no-defensive-null-guards] A name the registry lists and cannot
+      // build is the registry broken, loud at the first theme anything asks.
+      if (palette === null) {
+        throw new Error(
+          `the theme registry lists "${name}" but builds no palette for it`,
+        );
+      }
+      return [name, palette] as const;
+    }),
+  );
+  return installed;
+}
+
 export function isInstalledTheme(name: string): boolean {
-  installed ??= new Set(listThemePalettes());
-  return installed.has(name);
+  return installedThemes().has(name);
 }
 
 // [LAW:one-source-of-truth] THE wording of a name no installed theme answers
 // to, shared by every site that refuses or reports one: the theme to write
-// instead when the name was retired, else the installed themes.
+// instead when the name was retired, else some of the installed ones.
 export function notInstalledTheme(name: string): string {
   const to = RETIRED_THEMES.get(name);
   const hint =
     to === undefined
-      ? ` (installed: ${[...listThemePalettes()].sort().join(", ")})`
+      ? ` (have: ${cappedList([...installedThemes().keys()].sort())})`
       : ` — "${name}" was retired; write "${to}", the same palette`;
   return `"${name}" is not an installed theme${hint}`;
 }
@@ -94,8 +117,12 @@ export const THEME_FLOOR = "textual-dark";
 //
 // [LAW:parse-dont-validate] The pick arrives parsed (`StoredPick`): only a
 // held value decides. A stale one falls through to the config's value as an
-// unset one does, so the bar draws something its domain holds, but it stays a
-// distinct arm so the caller can report it and leave it stored.
+// unset one does, so the bar draws something its domain holds.
+//
+// [LAW:no-silent-failure] The fold answers which rung decided along with the
+// value, and a stale pick that would have decided says so: the bar's report
+// of it, and the save that settles it, read that answer rather than each
+// re-deriving which rung outranks which.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
 // chain documented in src/config/presets.ts — a fragment some transient MODE of
@@ -107,8 +134,8 @@ export const THEME_FLOOR = "textual-dark";
 // a chain with a rung missing from one field is exactly the drift a single
 // resolver exists to prevent.
 //
-// [LAW:dataflow-not-control-flow] Absent ⇒ `undefined`, which the `??` chain
-// skips by the same code path a session that never clicked skips its own rung.
+// [LAW:dataflow-not-control-flow] Absent ⇒ `undefined`, which the fold skips
+// by the same code path a session that never clicked skips its own rung.
 // There is no "is edit mode on" branch anywhere below this line; the mode is
 // carried entirely by whether this argument has a value.
 export function effectiveGlobal<T>(
@@ -116,14 +143,40 @@ export function effectiveGlobal<T>(
   pick: StoredPick<T>,
   configDefault: T | null | undefined,
   floor: T,
-): T {
-  return (
-    staged ??
-    (pick.kind === "held" ? pick.value : null) ??
-    configDefault ??
-    floor
-  );
+): Folded<T> {
+  if (staged !== null && staged !== undefined) {
+    return { value: staged, by: STAGED };
+  }
+  const beneath = configDefault ?? floor;
+  switch (pick.kind) {
+    case "held":
+      return { value: pick.value, by: PICKED };
+    case "stale":
+      return { value: beneath, by: { kind: "stale", raw: pick.raw } };
+    case "unset":
+      return { value: beneath, by: BENEATH };
+  }
 }
+
+// [LAW:types-are-the-program] Which rung decided a folded setting: the staged
+// fragment, the session's pick, the rungs beneath it (the config's value or
+// the floor) — or the rungs beneath because the session's pick, which would
+// have decided, is a spelling its domain does not hold. Only that last one is
+// a stale pick the bar reports, so a pick a staged value outranks is none.
+export type Rung =
+  | { readonly kind: "staged" }
+  | { readonly kind: "picked" }
+  | { readonly kind: "stale"; readonly raw: string }
+  | { readonly kind: "beneath" };
+
+export interface Folded<T> {
+  readonly value: T;
+  readonly by: Rung;
+}
+
+const STAGED: Rung = { kind: "staged" };
+const PICKED: Rung = { kind: "picked" };
+const BENEATH: Rung = { kind: "beneath" };
 
 // [LAW:types-are-the-program] What a session holds for one setting, parsed
 // once against the setting's domain: nothing, a value the domain holds, or a
@@ -136,11 +189,10 @@ export type StoredPick<T> =
   | { readonly kind: "held"; readonly value: T }
   | { readonly kind: "stale"; readonly raw: string };
 
-// [LAW:one-source-of-truth] The installed themes, the registry's names — no
-// alias, so every name is its palette's own and a label always names the
-// palette the bar wears.
+// [LAW:one-source-of-truth] The installed themes' names (`installedThemes`):
+// a check that gates a theme name reuses them, never re-derives them.
 export function listResolvablePaletteNames(): readonly string[] {
-  return listThemePalettes();
+  return [...installedThemes().keys()];
 }
 
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold
@@ -150,6 +202,14 @@ export function listResolvablePaletteNames(): readonly string[] {
 // one. No installed theme is named `bar` (pinned in
 // test/placement-theme.test.ts), so the two can never be confused.
 export const FOLLOW_BAR = "bar";
+
+// [LAW:one-source-of-truth] The one wording of the bar's own theme as a
+// member of a placement's theme domain, and of a name that is neither it nor
+// an installed theme: the loader's refusal, the domain's description and the
+// bar's report of a stale pick all say it so.
+export const BAR_THEME = `"${FOLLOW_BAR}" (the bar's own theme)`;
+export const notPlacementTheme = (name: string): string =>
+  `${notInstalledTheme(name)}, and not ${BAR_THEME}`;
 
 export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
@@ -185,7 +245,7 @@ export function effectiveMemberName(
   configDefault: string | undefined,
   floor: string,
   declared: Readonly<Record<string, unknown>>,
-): string {
+): Folded<string> {
   const member = memberOf(declared);
   return effectiveGlobal(
     stagedName === undefined ? null : member(stagedName),
@@ -197,7 +257,7 @@ export function effectiveMemberName(
 
 // [LAW:one-source-of-truth] The parse of a per-config domain's member: a name
 // the config declares, or nothing.
-export const memberOf =
+const memberOf =
   (declared: Readonly<Record<string, unknown>>) =>
   (raw: string): string | null =>
     Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
@@ -278,7 +338,7 @@ export function resolveSelection<T>(
   globalsValue: string | undefined,
   floor: Decided<T>,
   named: (raw: string) => Decided<T> | null,
-): Selection<T> {
+): Folded<Selection<T>> {
   // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
   // config-default rung, so `effectiveGlobal`'s `??` chain enforces the
   // precedence — there is no "is there an expression?" branch anywhere deciding
@@ -327,15 +387,19 @@ export type DecidedStyle = Decided<ThemeKey>;
 
 // One rung's contribution: the style this name selects, or null when it names no
 // declared style — which is not a pick at all, so the fold moves on.
-// [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
-// `hasOwnProperty` first and then looking the key up would be the same question
-// twice, and the second answer could only ever restate the first.
+// [LAW:polishing-by-subtraction] The own-property lookup IS the membership
+// test, as the loader's is: an inherited name (`constructor`) is no declared
+// style. Asking `hasOwnProperty` first and then looking the key up would be the
+// same question twice, and the second answer could only ever restate the
+// first.
 export function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
-  const value = declaredStyles[name];
-  return value === undefined ? null : { kind: "decided", name, value };
+  const own = Object.getOwnPropertyDescriptor(declaredStyles, name);
+  return own === undefined
+    ? null
+    : { kind: "decided", name, value: own.value as ThemeKey };
 }
 
 // [LAW:single-enforcer] The membership policy for a style NAME, wherever the name
@@ -377,7 +441,7 @@ export function resolveStyleSelection(
   sessionStyle: StoredPick<DecidedStyle>,
   globalsStyle: string | undefined,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
-): StyleSelection {
+): Folded<StyleSelection> {
   return resolveSelection(
     stagedStyle,
     sessionStyle,
@@ -486,7 +550,7 @@ export function resolveEffectSelection(
   stagedEffect: string | undefined,
   sessionEffect: StoredPick<DecidedEffect>,
   globalsEffect: string | undefined,
-): EffectSelection {
+): Folded<EffectSelection> {
   return resolveSelection(
     stagedEffect,
     sessionEffect,
@@ -659,3 +723,9 @@ export function parseSessionInt(
     ? value
     : null;
 }
+
+// The same parse over every integer: a step's delta, and a plain key a
+// stepper moves, which holds no range of its own.
+const EVERY_INTEGER = { min: -Infinity, max: Infinity } as const;
+export const parseInteger = (raw: string): number | null =>
+  parseSessionInt(raw, EVERY_INTEGER);

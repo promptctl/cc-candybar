@@ -434,7 +434,7 @@ export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 // registration; set actions stay literal. [LAW:one-source-of-truth] parse-once,
 // evaluate-many — renderAction only evaluates. `stateKeyToVar` maps a
 // SessionState key → the variable a `set` on it reads back: a setting's
-// `.effective` projection (SESSION_KEY_TO_EFFECTIVE_VAR), else the `state`
+// variable it wears (the config's setting table), else the `state`
 // variable over the key — so a set action reads its current/active value from
 // the SAME value the templates read, whatever the config named the variable.
 // [LAW:single-enforcer] `parse` is the config's ONE helper-aware parse closure

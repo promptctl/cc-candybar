@@ -25,11 +25,9 @@ import {
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
 import {
-  pickOf,
-  placementValue,
+  placementFold,
   settingTable,
   type PlacementSetting,
-  type StalePick,
 } from "../config/setting-table.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import {
@@ -59,6 +57,7 @@ import { type SettingCounts } from "./render-payload.js";
 import {
   presetOf,
   resolveEffectiveGlobals,
+  staleGlobals,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 
@@ -176,17 +175,17 @@ function differing(
 }
 
 // [LAW:one-source-of-truth] The value the session's own layer resolves a
-// setting to, in its SessionState spelling — the layer a step click writes, so
-// the value it steps from while the session holds no pick. It is the same
-// resolution a draft is measured against: under a preset that pins the field
-// it is the preset's value, never top-level globals the preset shadows. Edit
-// mode's staged fragment is chrome over that layer, not part of it.
-export function sessionSettingValue(
+// setting to — the layer a step click writes, so the value it steps from
+// while the session holds no pick it can hold. It is the same resolution a
+// draft is measured against: under a preset that pins the field it is the
+// preset's value, never top-level globals the preset shadows. Edit mode's
+// staged fragment is chrome over that layer, not part of it.
+export function sessionSetting(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
   name: SettingName,
-): string | null {
-  return spelled(sessionGlobals(config, sessionPick), name);
+): EffectiveGlobals[SettingName] {
+  return sessionGlobals(config, sessionPick)[name];
 }
 
 // Every setting the session renders differently from the config file. The
@@ -261,42 +260,58 @@ export interface PlacementDraft {
   readonly value: SettingValue;
 }
 
-// Every placement setting the session holds a pick for that differs from the
-// value the file gives that placement, in the preset the session renders — a
-// pick in another preset is one the render ignores, so it is no draft. A stale
-// pick is no draft either: the render shows the file's value for it.
+// The placement settings of the preset the session renders, each folded over
+// its pick — a pick in another preset is one the render ignores.
+function sessionPlacements(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+) {
+  const { preset } = sessionGlobals(config, sessionPick);
+  return settingTable(config)
+    .placements.filter((s) => s.preset === preset)
+    .map((s) => ({ setting: s, fold: placementFold(s, sessionPick(s.key)) }));
+}
+
+// Every placement setting the session's pick decides that differs from the
+// value the file gives that placement, in the preset the session renders. A
+// stale pick is no draft: the render shows the file's value for it.
 export function placementDrafts(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): readonly PlacementDraft[] {
-  const { preset } = sessionGlobals(config, sessionPick);
-  return settingTable(config).placements.flatMap((s) => {
-    const pick = pickOf(s, sessionPick(s.key));
-    return s.preset !== preset ||
-      pick.kind !== "held" ||
-      settingSpelling(pick.value) === settingSpelling(s.saved)
-      ? []
-      : [{ preset, id: s.id, setting: s.name, key: s.key, value: pick.value }];
-  });
+  return sessionPlacements(config, sessionPick).flatMap(
+    ({ setting: s, fold }) =>
+      fold.by.kind !== "picked" ||
+      settingSpelling(fold.value) === settingSpelling(s.saved)
+        ? []
+        : [
+            {
+              preset: s.preset,
+              id: s.id,
+              setting: s.name,
+              key: s.key,
+              value: fold.value,
+            },
+          ],
+  );
 }
 
-// Every stale pick of the session that decides what it renders: each global
-// setting `effective` reports (it alone knows which a staged value outranks),
-// and each placement setting of the preset the session renders. The draw
-// keeps the placements it drew.
-export function stalePicks(
+// [LAW:one-source-of-truth] The session's stale picks a save settles, by
+// each setting's fold: a stale pick decided nothing, so the bar draws the
+// file's value there, and once the file holds the bar the session drew the
+// pick is settled with the rest. Kept, it would override what was saved the
+// moment its domain returned.
+export function settledStale(
   config: DslConfig,
-  effective: EffectiveGlobals,
   sessionPick: (key: string) => string | null,
-): readonly StalePick[] {
+): readonly string[] {
   return [
-    ...effective.stale,
-    ...settingTable(config).placements.flatMap((setting): StalePick[] => {
-      const pick = pickOf(setting, sessionPick(setting.key));
-      return setting.preset === effective.preset && pick.kind === "stale"
-        ? [{ setting, stored: pick.raw }]
-        : [];
-    }),
+    ...staleGlobals(config, sessionGlobals(config, sessionPick)).map(
+      (p) => p.setting.key,
+    ),
+    ...sessionPlacements(config, sessionPick)
+      .filter(({ fold }) => fold.by.kind === "stale")
+      .map(({ setting }) => setting.key),
   ];
 }
 
@@ -324,7 +339,7 @@ export function placementPickProblems(
     const values = Object.fromEntries(
       own.map((s) => [
         s.name,
-        placementValue(s, written.get(s.key) ?? sessionPick(s.key)),
+        placementFold(s, written.get(s.key) ?? sessionPick(s.key)).value,
       ]),
     );
     return settingOrderProblems(decls, values).map(

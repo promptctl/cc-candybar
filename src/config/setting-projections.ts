@@ -99,12 +99,6 @@ export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
   ]),
 );
 
-// registerDslConfig seeds its key → read-back map from this, and no `state`
-// variable may take one of these keys: an unpicked session has no pick, yet the
-// bar still wears a theme (brandon-theme-picker-bgw.exj).
-export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
-  new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));
-
 // [LAW:types-are-the-program] A record total over SETTINGS, one value per
 // setting: the one place the totality `Object.fromEntries` cannot see is
 // asserted, so every caller's record is checked as total by construction.
@@ -115,8 +109,3 @@ export function perSetting<T>(
     SETTING_NAMES.map((name) => [name, value(name)]),
   ) as Record<SettingName, T>;
 }
-
-// The setting whose SessionState key a step click names.
-export const SESSION_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
-  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name]),
-);

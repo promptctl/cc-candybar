@@ -45,24 +45,26 @@ import {
   removedGlobalPointer,
   settingControlDomain,
 } from "./globals.js";
+import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import {
-  CONFIG_ONLY_KEYS,
-  SESSION_KEY_TO_SETTING,
-  SETTINGS,
-  type SettingName,
-} from "../setting-projections.js";
-import { settingTable, settingTitle } from "../setting-table.js";
+  settingTable,
+  settingTitle,
+  type ConfigSetting,
+} from "../setting-table.js";
 import {
+  controlDeclOf,
   controlDomainAdmits,
   describeControlDomain,
+  type ControlDomain,
 } from "../setting-control.js";
+import { cappedList } from "../../utils/capped-list.js";
 import {
   EXPRESSION_SLOTS,
   isExpression,
-  FOLLOW_BAR,
   isInstalledTheme,
   isStyleEraEndcaps,
   notInstalledTheme,
+  notPlacementTheme,
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
@@ -786,7 +788,7 @@ function checkPlacementSettings(
         : inSettingDomain(decl, value)
           ? undefined
           : decl.domain === "theme" && typeof value === "string"
-            ? `sets "${setting}" to ${JSON.stringify(value)}, but ${notInstalledTheme(value)}, and not "${FOLLOW_BAR}" (the bar's own theme)`
+            ? `sets "${setting}" to ${JSON.stringify(value)}, but ${notPlacementTheme(value)}`
             : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
     if (problem !== undefined) {
       ctx.issues.push({
@@ -1168,11 +1170,10 @@ function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,
   a: SetAction,
-  setting: SettingName,
+  domain: ControlDomain,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): void {
   const key = a.set;
-  const domain = settingControlDomain(SETTINGS[setting].configKey);
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   // A stepper writes every integer between its ends, which only a range
   // domain holds by construction; its ends stand for it there and nowhere else.
@@ -1229,10 +1230,7 @@ function checkSettingWrites(
     const values = outside
       .filter((w) => w.field === field)
       .map((w) => JSON.stringify(w.value));
-    const shown =
-      values.length <= REPORTED_VALUES
-        ? values.join(", ")
-        : `${values.slice(0, REPORTED_VALUES).join(", ")} and ${values.length - REPORTED_VALUES} more`;
+    const shown = cappedList(values);
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
@@ -1241,8 +1239,6 @@ function checkSettingWrites(
     });
   }
 }
-
-const REPORTED_VALUES = 3;
 
 type SetAction = Extract<ActionDecl, { readonly set: string }>;
 
@@ -1281,15 +1277,37 @@ function setWrites(
 // config, a plugin's own for a plugin joining a layer that was checked.
 export type Subject = (name: string) => boolean;
 
-// [LAW:single-enforcer] One owner per session key: a setting's key — a global
-// setting's or a placement's — belongs to the setting, which parses what it
-// holds against its domain. A `state` variable over it would read the stored
-// spelling raw, so the bar and the variable could name two values. Judged on
-// the config edit chrome finished, where every placement setting has its key
-// and a plugin's keys already sit under its namespace.
-export function checkKeyOwners(ctx: ValidateCtx, cfg: DslConfig): void {
+// The domain a setting's control ranges, which a `set` on its key may write.
+function controlOf(setting: ConfigSetting): ControlDomain {
+  return setting.kind === "global"
+    ? settingControlDomain(SETTINGS[setting.name].configKey)
+    : controlDeclOf(setting.decl).domain;
+}
+
+// [LAW:single-enforcer] A setting's key belongs to the setting — a global
+// setting's or a placement's — which parses what it holds against its domain.
+// Judged on the config edit chrome finished, where every placement setting has
+// its key and a plugin's keys already sit under its namespace, so a key is
+// known as a setting's here whichever kind of setting it is.
+//
+// One owner per key: a `state` variable over it would read the stored
+// spelling raw, so the bar and the variable could name two values. And a
+// `set` on it writes only what the setting's domain holds.
+export function checkSettingKeys(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  subject: Subject,
+): void {
   const { byKey } = settingTable(cfg);
-  for (const [, v, at] of declarationsAt(cfg)) {
+  const optionDomains = configOptionDomains(cfg);
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    if (!("set" in a)) continue;
+    const setting = byKey.get(a.set);
+    if (setting === undefined) continue;
+    checkSettingWrites(ctx, name, a, controlOf(setting), optionDomains);
+  }
+  for (const [name, v, at] of declarationsAt(cfg)) {
+    if (!subject(name)) continue;
     if (v.kind !== "state") continue;
     const setting = byKey.get(v.key);
     if (setting === undefined) continue;
@@ -1360,10 +1378,6 @@ export function validateDeclarations(
         message: `actions.${name} sets "${a.set}", which has no session pick — globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", … } instead`,
         line: findKeyLine(ctx.source, ["actions", name, "set"]),
       });
-    }
-    const setting = SESSION_KEY_TO_SETTING.get(a.set);
-    if (setting !== undefined) {
-      checkSettingWrites(ctx, name, a, setting, optionDomains);
     }
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged

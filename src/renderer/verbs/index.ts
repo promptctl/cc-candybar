@@ -33,7 +33,8 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeyShows, configKeySeed, STEP_INT_RE } from "./key-seeds";
+import { stateKeyShows, configKeySeed } from "./key-seeds";
+import { parseInteger } from "../../themes/policy";
 import {
   disclosureNest,
   NO_NEST,
@@ -81,7 +82,6 @@ import {
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
-import { holdsStale } from "../../config/setting-table";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
 import {
   configureMember,
@@ -93,6 +93,7 @@ import {
   placementDrafts,
   placementPickProblems,
   presetSnapshot,
+  settledStale,
   type PlacementDraft,
   resetLayers,
   settingDrafts,
@@ -415,12 +416,12 @@ const stepState: VerbHandler = (args, ctx) => {
       "step-state: <key> is required (shape: <sessionId>/<key>/<by>)",
     );
   }
-  if (!STEP_INT_RE.test(byRaw)) {
+  const by = parseInteger(byRaw);
+  if (by === null) {
     throw new BadVerbArgs(
       `step-state: delta must be an integer, got "${byRaw}"`,
     );
   }
-  const by = parseInt(byRaw, 10);
   const config = sessionConfig(ctx);
   const gate = ctx.gates.state.gateFor(config);
   // [LAW:no-silent-failure] A key the session's config declares no range for
@@ -486,15 +487,15 @@ function stepFrom(
   verb: string,
   key: string,
   params: RangeParams,
-  shows: string | null,
+  shows: unknown,
 ): number {
   if (shows === null) return params.min;
-  if (!STEP_INT_RE.test(shows)) {
+  if (typeof shows !== "number") {
     throw new BadVerbArgs(
       `${verb}: "${key}" shows ${JSON.stringify(shows)}, not an integer to step`,
     );
   }
-  return clampTo(params, parseInt(shows, 10));
+  return clampTo(params, shows);
 }
 
 // ─── The durable store: which file, and the history over it ─────────────────
@@ -699,12 +700,12 @@ const stepConfig: VerbHandler = (args, ctx) => {
       "step-config: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)",
     );
   }
-  if (!STEP_INT_RE.test(byRaw)) {
+  const by = parseInteger(byRaw);
+  if (by === null) {
     throw new BadVerbArgs(
       `step-config: delta must be an integer, got "${byRaw}"`,
     );
   }
-  const by = parseInt(byRaw, 10);
   const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const gate = ctx.gates.config.gateFor(config);
@@ -755,25 +756,12 @@ const stepConfig: VerbHandler = (args, ctx) => {
 // draws the old file without them, and a write refused here or by the host
 // keeps every draft. Released, the session follows the file again — a later
 // hand edit, another session's save, a reset — instead of pinning over it.
+// A save settles every pick it releases, a stale one included (settledStale):
+// the file now holds the bar the session drew, so no pick is left to override
+// it later.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
-// [LAW:single-enforcer] THE release of a save's picks: each of `keys` is
-// cleared from the session, except a stale pick — no value a save could
-// write, so it stays stored and holds again the moment its domain does.
-function releasePicks(
-  ctx: ClickContext,
-  config: DslConfig,
-  keys: readonly string[],
-): void {
-  const sid = ctx.session;
-  for (const key of keys) {
-    if (!holdsStale(config, key, ctx.sessionState.get(sid, key))) {
-      ctx.sessionState.clear(sid, key);
-    }
-  }
-}
-
 const save: VerbHandler = (args, ctx) => {
   const sid = ctx.session;
   const { role } = configArgs("save", args);
@@ -799,10 +787,13 @@ const save: VerbHandler = (args, ctx) => {
   gatePlacements("save", gate, placements);
   const into = heldLayer(ctx, origin, role);
   writeDrafts(editStore(ctx, sid), into, pairs, placements);
-  releasePicks(ctx, config, [
+  for (const key of [
     ...drafts.map((d) => d.sessionKey),
     ...placements.map((p) => p.key),
-  ]);
+    ...settledStale(config, pick),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.finishEdit("save");
   ctx.log(
     "info",
@@ -844,9 +835,8 @@ const savePreset: VerbHandler = (args, ctx) => {
   const { role } = configArgs("save-preset", args);
   const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
-  const snapshot = presetSnapshot(config, (key) =>
-    ctx.sessionState.get(sid, key),
-  );
+  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const snapshot = presetSnapshot(config, pick);
   const gate = ctx.gates.state.gateFor(config);
   const picks = snapshot.picks.map((d): readonly [keyof Globals, string] => {
     const result = gate.validate(d.sessionKey, d.value);
@@ -863,10 +853,13 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
-  releasePicks(ctx, config, [
+  for (const key of [
     ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
     ...snapshot.placements.map((p) => p.key),
-  ]);
+    ...settledStale(config, pick),
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.log(
     "info",
@@ -910,13 +903,10 @@ const saveThemeDefault: VerbHandler = (args, ctx) => {
   const drafted = new Set(
     settingDrafts(written, pick).map((d) => d.sessionKey),
   );
-  releasePicks(
-    ctx,
-    written,
-    THEME_DEFAULT_FIELDS.map((f) => SETTINGS[f].sessionKey).filter(
-      (key) => !drafted.has(key),
-    ),
-  );
+  const released = THEME_DEFAULT_FIELDS.map(
+    (f) => SETTINGS[f].sessionKey,
+  ).filter((key) => !drafted.has(key));
+  for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${into.path} (session=${sid})`,

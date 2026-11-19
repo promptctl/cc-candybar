@@ -1,8 +1,9 @@
 // Palette construction over rich-js. cc-candybar moves theme NAMES and
 // ThemeKey axes (data); rich-js owns every color value operation. A theme
-// name's base palette is rich-js's registry lookup, which memoizes it; the one
-// memo kept here is a (palette, ThemeKey) -> transposed palette. They compose
-// — the per-render base palette feeds the per-render style transposition.
+// name's base palette is the installed themes' (src/themes/policy.ts); the
+// one memo kept here is a (palette, ThemeKey) -> transposed palette. They
+// compose — the per-render base palette feeds the per-render style
+// transposition.
 //
 // [LAW:no-shared-mutable-globals] Single owner: this module. The memo is of a
 // pure rich-js function, keyed by immutable inputs (the palette object + the
@@ -13,36 +14,37 @@
 // process, not once per RenderCache entry or per render. Read/written only
 // through the function below.
 
-import { transposePalette, getThemePalette } from "@promptctl/rich-js";
+import { transposePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
 import {
   FOLLOW_BAR,
+  installedThemes,
   notInstalledTheme,
   resolveSelection,
   ruleFloorMessage,
   THEME_FLOOR,
   type Decided,
+  type Folded,
   type Selection,
   type StoredPick,
 } from "./policy.js";
 
 /**
- * The Palette for a theme name; rich-js memoizes each.
+ * The Palette for a theme name the loader or the session gate found
+ * installed.
  *
- * [LAW:single-enforcer] The one place a theme name becomes a Palette —
- * the per-render base palette and every placement's pinned `theme` both flow
- * through here. Every name reaching it was found installed — by the loader,
- * the session gate, or a placement's theme setting — so a name that does not
- * resolve is registry drift. [LAW:no-defensive-null-guards] the throw is the loud failure
- * for that broken invariant, not a fallback.
+ * [LAW:single-enforcer] The one place a vetted theme name becomes a Palette —
+ * the floor and every placement's pinned `theme` flow through here — read
+ * from the installed themes, which vetted it. [LAW:no-defensive-null-guards]
+ * A name that is not among them was never vetted, and the throw is the loud
+ * failure for that broken invariant, not a fallback.
  */
 export function paletteForThemeName(name: string): Palette {
-  const palette = getThemePalette(name);
-  if (palette === null) {
+  const palette = installedThemes().get(name);
+  if (palette === undefined) {
     throw new Error(
-      `Palette "${name}" did not resolve in the theme registry — a name ` +
-        `judged installed and the registry are inconsistent`,
+      `theme "${name}" reached the render unvetted — ${notInstalledTheme(name)}`,
     );
   }
   return palette;
@@ -102,12 +104,12 @@ export type DecidedTheme = Decided<Palette>;
 // nothing installed — which is not a pick at all, so the fold moves on.
 //
 // [LAW:polishing-by-subtraction] The lookup IS the membership test: the
-// registry answers null for exactly the names it does not hold, so asking
-// whether the name is installed first would be the same question twice — and
-// the second answer could only ever restate the first.
+// installed themes hold no palette for exactly the names that are not
+// installed, so asking whether the name is installed first would be the same
+// question twice — and the second answer could only ever restate the first.
 export function namedTheme(name: string): DecidedTheme | null {
-  const value = getThemePalette(name);
-  return value === null ? null : { kind: "decided", name, value };
+  const value = installedThemes().get(name);
+  return value === undefined ? null : { kind: "decided", name, value };
 }
 
 // [LAW:single-enforcer] The membership policy for a theme NAME, wherever the
@@ -150,7 +152,7 @@ export function resolveThemeSelection(
   stagedPalette: string | undefined,
   sessionTheme: StoredPick<DecidedTheme>,
   globalsPalette: string | undefined,
-): ThemeSelection {
+): Folded<ThemeSelection> {
   return resolveSelection(
     stagedPalette,
     sessionTheme,

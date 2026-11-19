@@ -13,7 +13,7 @@ import {
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
-import { SETTINGS, SETTING_NAMES } from "./setting-projections.js";
+import { perSetting, SETTING_NAMES } from "./setting-projections.js";
 import {
   pickOf,
   settingTable,
@@ -26,6 +26,8 @@ import {
   resolveEffectSelection,
   type EffectSelection,
   effectiveGlobal,
+  type Folded,
+  type Rung,
   type StoredPick,
 } from "../themes/policy.js";
 import {
@@ -86,10 +88,26 @@ export type EffectiveGlobals = ValuedGlobals & {
   // bundled", so naming a floor here would be a second copy of a constant
   // that lives in rich-js.
   readonly separator: string | undefined;
-  // Each setting whose stored pick would have decided the bar and that its
-  // domain no longer holds.
-  readonly stale: readonly StalePick[];
+  // [LAW:one-source-of-truth] Which rung decided each setting, as its fold
+  // answered: the one answer the bar's report of a stale pick and a save's
+  // release of one both read.
+  readonly decidedBy: { readonly [N in SettingName]: Rung };
 };
+
+// Each global setting whose stored pick would have decided the bar and that
+// its domain no longer holds.
+export function staleGlobals(
+  config: DslConfig,
+  effective: EffectiveGlobals,
+): StalePick[] {
+  const { global } = settingTable(config);
+  return SETTING_NAMES.flatMap((name): StalePick[] => {
+    const by = effective.decidedBy[name];
+    return by.kind === "stale"
+      ? [{ setting: global[name], stored: by.raw }]
+      : [];
+  });
+}
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
 // effective configuration, however that configuration was authored.
@@ -115,7 +133,7 @@ function resolveValued<K extends ValuedField>(
   staged: Partial<Globals>,
   pick: StoredPick<ValuedGlobals[K]>,
   globals: Globals,
-): ValuedGlobals[K] {
+): Folded<ValuedGlobals[K]> {
   return effectiveGlobal(
     staged[field] as ValuedGlobals[K] | undefined,
     pick,
@@ -124,44 +142,48 @@ function resolveValued<K extends ValuedField>(
   );
 }
 
-// Each global setting's stored pick, parsed once by the config's table.
-type GlobalPicks = { readonly [N in SettingName]: StoredPick<GlobalValue<N>> };
+// [LAW:types-are-the-program] Each valued field's stored pick, and each
+// selection's: a session field's and a selection's parsed once by the
+// config's table, a config-only field's unset, since no session picks it.
+type Picks = { readonly [F in ValuedField]: StoredPick<ValuedGlobals[F]> } & {
+  readonly [N in SettingName]: StoredPick<GlobalValue<N>>;
+};
 
-function globalPicks(
+const UNSET: StoredPick<never> = { kind: "unset" };
+
+function picksOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
-): GlobalPicks {
+): Picks {
   const { global } = settingTable(config);
-  return Object.fromEntries(
-    SETTING_NAMES.map((name) => [
+  // [LAW:types-are-the-program] exception: `Object.fromEntries` cannot see
+  // that the keys are every valued field and every setting name, each paired
+  // with its own setting's parse; the two lists it reads are those keys.
+  return Object.fromEntries([
+    ...VALUED_FIELDS.map((field) => [field, UNSET]),
+    ...SETTING_NAMES.map((name) => [
       name,
       pickOf<unknown>(global[name], sessionPick(global[name].key)),
     ]),
-  ) as GlobalPicks;
+  ]) as Picks;
 }
 
-// A valued field's pick: a config-only field has no pick rung.
-const UNSET: StoredPick<never> = { kind: "unset" };
-const valuedPickOf = <K extends ValuedField>(
-  picks: GlobalPicks,
-  field: K,
-): StoredPick<ValuedGlobals[K]> =>
-  (picks as Partial<Record<ValuedField, StoredPick<ValuedGlobals[K]>>>)[
-    field
-  ] ?? UNSET;
+// The active preset a session's picks resolve to.
+function presetFold(config: DslConfig, picks: Picks): Folded<string> {
+  return effectivePresetName(
+    picks.preset,
+    config.globals.preset,
+    config.presets,
+  );
+}
 
 // [LAW:one-source-of-truth] The active preset a session's picks resolve to —
-// the first rung of the resolution below.
+// the first rung of the resolution below, by its one fold.
 export function presetOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): string {
-  const { preset } = settingTable(config).global;
-  return effectivePresetName(
-    pickOf(preset, sessionPick(preset.key)),
-    config.globals.preset,
-    config.presets,
-  );
+  return presetFold(config, picksOf(config, sessionPick)).value;
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -172,10 +194,13 @@ export function resolveEffectiveGlobals(
   sessionPick: (key: string) => string | null,
   presetCustomized: (preset: string) => boolean,
 ): EffectiveGlobals {
+  // [LAW:one-source-of-truth] Every pick is read under the key the settings
+  // write it under, and parsed once, here.
+  const picks = picksOf(config, sessionPick);
   // The preset resolves FIRST: every field below reads globals, and which
   // globals is exactly what the preset decides.
-  const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset);
+  const preset = presetFold(config, picks);
+  const declared = presetGlobals(config, preset.value);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as
   // PRESET_FLOOR's is. Every field below is resolved by the same expression
@@ -186,10 +211,6 @@ export function resolveEffectiveGlobals(
   // The theme resolves before the look, because the look's config-default
   // rung is the THEME's default folded under the declared globals
   // (src/config/theme-defaults.ts): which theme decides which fragment.
-  // [LAW:one-source-of-truth] Every pick is read under the key the settings
-  // write it under, and parsed once, here: the value below and the report of a
-  // stale one are the same parse.
-  const picks = globalPicks(config, sessionPick);
   const theme = resolveThemeSelection(
     staged.palette,
     picks.theme,
@@ -197,36 +218,43 @@ export function resolveEffectiveGlobals(
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme, config.themeDefaults),
+    themeDefaultsOf(theme.value, config.themeDefaults),
   );
-  // [LAW:no-silent-failure] A stale pick is reported only where it would have
-  // decided: a staged value outranks the session's pick, so it hides the miss.
-  const { global } = settingTable(config);
-  const stale = SETTING_NAMES.flatMap((name): StalePick[] => {
-    const pick = picks[name];
-    return pick.kind === "stale" &&
-      staged[SETTINGS[name].configKey] === undefined
-      ? [{ setting: global[name], stored: pick.raw }]
-      : [];
-  });
+  const valued = VALUED_FIELDS.map(
+    (field) =>
+      [field, resolveValued(field, staged, picks[field], globals)] as const,
+  );
+  const style = resolveStyleSelection(
+    staged.style,
+    picks.style,
+    globals.style,
+    config.styles,
+  );
+  const effect = resolveEffectSelection(
+    staged.effect,
+    picks.effect,
+    globals.effect,
+  );
+  const folds: Readonly<Record<string, Folded<unknown>>> = {
+    ...Object.fromEntries(valued),
+    theme,
+    style,
+    effect,
+    preset,
+  };
   return {
     ...(Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, valuedPickOf(picks, field), globals),
-      ]),
+      valued.map(([field, fold]) => [field, fold.value]),
     ) as ValuedGlobals),
-    preset,
-    presetCustomized: presetCustomized(preset),
-    theme,
-    style: resolveStyleSelection(
-      staged.style,
-      picks.style,
-      globals.style,
-      config.styles,
-    ),
-    effect: resolveEffectSelection(staged.effect, picks.effect, globals.effect),
-    stale,
+    preset: preset.value,
+    presetCustomized: presetCustomized(preset.value),
+    theme: theme.value,
+    style: style.value,
+    effect: effect.value,
+    // [LAW:no-silent-failure] Each setting's own fold says whether its pick
+    // was stale where it would have decided; a staged value outranking it is
+    // a rung of that same fold, not a rule restated here.
+    decidedBy: perSetting((name) => folds[name]!.by),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
     // config` — the same `??`, minus the rungs it does not have.
     separator: staged.default_separator ?? globals.default_separator,

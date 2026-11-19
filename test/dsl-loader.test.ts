@@ -792,6 +792,19 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
     },
   );
 
+  // A placement's setting has its key only once edit chrome mints it, and a
+  // `set` on that key is checked against its domain as a global setting's is.
+  test("a set on a placement setting's key writes only what its domain holds", () => {
+    const key = placementDraftKey("default", "s", "n");
+    const source = (to: string) =>
+      `{ actions: { nudge: { set: "${key}", to: "${to}" } }, segments: { s: { template: "x", settings: { n: { label: "N", domain: { min: 1, max: 5 }, default: 2 } } } }, root: { h: ["s"] } }`;
+    expectIssue(source("9"), {
+      path: "actions.nudge.to",
+      message: `actions.nudge.to: "9" is outside the ${key} domain — a click would write it and nothing would change; ${key} takes an integer from 1 to 5`,
+    });
+    expect(() => parseAndValidate(FILE, source("4"))).not.toThrow();
+  });
+
   test("a specific message about a key REPLACES the generic one", () => {
     // The retired top-level `regex:` names its replacement. One typo earns one
     // error: the unknown-key fallback stays silent about a key a field spec has

@@ -806,9 +806,9 @@ describe("paletteForThemeName", () => {
     expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
 
-  test("an unresolvable name throws loudly (registry drift, not a fallback)", () => {
+  test("a name no check vetted throws loudly (not a fallback)", () => {
     expect(() => paletteForThemeName("not-a-real-theme")).toThrow(
-      /did not resolve in the theme registry/,
+      /reached the render unvetted/,
     );
   });
 });

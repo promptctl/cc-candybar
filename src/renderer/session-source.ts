@@ -22,6 +22,7 @@ import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   type EffectiveGlobals,
   resolveEffectiveGlobals,
+  staleGlobals,
 } from "../config/effective-globals.js";
 import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
@@ -42,7 +43,7 @@ import {
 } from "./render-payload.js";
 import type { SessionStateReader } from "../renderer-interface/session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
-import { settingCounts, stalePicks } from "./setting-drafts.js";
+import { settingCounts } from "./setting-drafts.js";
 import type { StalePick } from "../config/setting-table.js";
 import { layerFlags } from "../config/layer-role.js";
 
@@ -53,8 +54,9 @@ import { layerFlags } from "../config/layer-role.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
-  // Each stored pick of the session the bar does not wear, where it would
-  // have decided.
+  // Each stored global pick of the session the bar does not wear, where it
+  // would have decided. A placement's is the walk's to report: only it knows
+  // which placements a frame draws.
   readonly stale: () => readonly StalePick[];
   // The session's world state (src/facts/world-state.ts), as the host last
   // handed it in.
@@ -127,7 +129,7 @@ export function sessionSource(
       }),
     );
     const stale = store.derive("session.stale", "computed", () =>
-      stalePicks(state.config, effective.read(), pick),
+      staleGlobals(state.config, effective.read()),
     );
     const document = (): WorldState => deps.worldStates.of(sessionId);
     // [LAW:dataflow-not-control-flow] The payload is derived on every read:

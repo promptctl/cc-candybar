@@ -917,25 +917,37 @@ export class SourceRegistry {
 
   // [LAW:one-type-per-behavior] A stored value read through `read`: a plain
   // `state` variable reads it as stored, a placement's setting through its
-  // setting's one parse (src/config/dsl-types.ts `placementValue`).
+  // setting's one fold (src/config/setting-table.ts).
   declareStored(
     name: string,
     key: string,
     type: VarType,
     read: (stored: string | null) => VarValue,
   ): void {
+    this.requireSessionState(`declareStored("${name}")`);
+    this.store.defineComputed(name, type, () => read(this.stored(key)));
+  }
+
+  // The stored spelling at `key` in the view's checked session — the one
+  // read a stored variable makes, and a draw asking which rung a placement's
+  // pick is.
+  // [LAW:parse-dont-validate] The view's checked session, the same one the
+  // payload hands `session.id`.
+  stored(key: string): string | null {
+    return this.requireSessionState(`stored("${key}")`).get(
+      this.session(),
+      key,
+    );
+  }
+
+  private requireSessionState(caller: string): SessionStateReader {
     if (!this.sessionState) {
       throw new Error(
-        `declareState("${name}"): SourceRegistry was constructed without a SessionState — ` +
+        `${caller}: SourceRegistry was constructed without a SessionState — ` +
           `state-kind variables require a SessionState (the daemon provides one; tests must supply one)`,
       );
     }
-    const sessionState = this.sessionState;
-    // [LAW:parse-dont-validate] The view's checked session, the same one the
-    // payload hands `session.id`.
-    this.store.defineComputed(name, type, () =>
-      read(sessionState.get(this.session(), key)),
-    );
+    return this.sessionState;
   }
 
   // [LAW:one-source-of-truth] The revision of the session state this render's

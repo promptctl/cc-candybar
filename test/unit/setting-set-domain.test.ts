@@ -7,7 +7,7 @@
 import { parseAndValidate } from "../helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import { SESSION_KEY_TO_SETTING } from "../../src/config/setting-projections";
+import { globalSettings } from "../../src/config/setting-table";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -136,7 +136,9 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     );
     const listed = /A `set` on a setting's key \(([^)]*)\)/.exec(doc)![1]!;
     expect([...listed.matchAll(/`([^`]+)`/g)].map((m) => m[1]).sort()).toEqual(
-      [...SESSION_KEY_TO_SETTING.keys()].sort(),
+      Object.values(globalSettings(DEFAULT_DSL_CONFIG))
+        .map((s) => s.key)
+        .sort(),
     );
   });
 

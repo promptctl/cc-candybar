@@ -27,6 +27,7 @@ import type { ColorRgba, Palette, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ContainerNode,
+  DraftSlot,
   LayoutNode,
   Direction,
   Placement,
@@ -83,6 +84,9 @@ export interface CompiledSegmentNode {
   // the default — so the render reads a finished object, never a fallback.
   readonly id: string;
   readonly settings: PlacementSettings;
+  // The placement settings whose picks this node draws with
+  // (SegmentNode.drafts).
+  readonly picks: readonly DraftSlot[];
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
@@ -270,6 +274,10 @@ export interface NodeRenderCtx {
   // one line of the message, and this reports the whole of it as the draw's
   // `segment` warning in the bar's diagnostics.
   readonly brokenPlacement: (placementId: string, message: string) => void;
+  // [LAW:no-silent-failure] A node this walk draws, so the picks it draws
+  // with decide it: each stale one is reported as the draw's `stale` warning.
+  // A node the walk hides decides nothing, and is never asked.
+  readonly drawnPicks: (picks: readonly DraftSlot[]) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only names a
   // placement and gets back its parts as the view keeps them
@@ -709,6 +717,7 @@ const segmentType: NodeType<"segment"> = {
       name: node.name,
       id: placementId(node),
       settings: cctx.placementSettings(node),
+      picks: Object.values(node.drafts ?? {}),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...(node.opens !== undefined && {
@@ -779,6 +788,7 @@ function drawSegment(
       return brokenSegment(node, scope, ctx, gate.message);
     }
     if (gate.kind === "hidden") return [];
+    ctx.drawnPicks(node.picks);
     // The gate of the body it hangs: one that fails is the placement's
     // failure; one not answered yet leaves the placement waiting on it, with
     // nothing hung under it. Under a gate not answered yet, one that fails is

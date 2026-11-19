@@ -97,7 +97,8 @@ it, a variable over it is a load error, and its value reads back as
 bar wears, even when the session's stored pick has left the setting's domain
 (an uninstalled theme, a style your config no longer declares): the bar draws
 the next value down, a ⚠ beside the settings door names the pick, and the pick
-stays stored, so it comes back when its theme or style does. A `persist` action reads its current
+stays stored, so it comes back when its theme or style does — until a save,
+which settles it with the rest of the session's picks. A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,

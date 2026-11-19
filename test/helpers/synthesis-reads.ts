@@ -16,17 +16,15 @@ import {
   refResolves,
   templateScopeOf,
 } from "../../src/config/loader/refs.js";
-import {
-  CONFIG_KEY_TO_EFFECTIVE_VAR,
-  SESSION_KEY_TO_EFFECTIVE_VAR,
-} from "../../src/config/setting-projections.js";
+import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../../src/config/setting-projections.js";
+import { settingTable } from "../../src/config/setting-table.js";
 
 // Every variable `config` reads that the synthesis minted over `before`, and
 // every node of the preset trees, author nodes included. Two kinds of read:
 // the dotted refs of every template (segment fields, node `when`s and the
 // lead/trail drawn in a segment node's cell, template variables, copy/open
-// actions); and the `.effective` projection a `set` or `persist` on a setting
-// reads its current value back through (CONFIG_KEY_TO_EFFECTIVE_VAR).
+// actions); and the variable a `set` or `persist` on a setting reads its
+// current value back through (the setting table, CONFIG_KEY_TO_EFFECTIVE_VAR).
 export function synthesisReads(
   config: DslConfig,
   before: DslConfig,
@@ -78,7 +76,7 @@ export function synthesisReads(
     // [LAW:one-source-of-truth] Every arm's text, as the one walker lists it.
     for (const [, source] of actionTemplates(a)) add(source);
     const setBack =
-      "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : undefined;
+      "set" in a ? settingTable(config).byKey.get(a.set)?.wears : undefined;
     const persistBack =
       "persist" in a ? CONFIG_KEY_TO_EFFECTIVE_VAR.get(a.persist) : undefined;
     if (setBack !== undefined) reads.add(setBack);

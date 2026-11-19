@@ -27,7 +27,7 @@ import {
 } from "./render-cache";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { partsOf } from "../dsl/parts.js";
-import { drawDsl, type RenderWarning } from "../dsl/render.js";
+import { drawDsl, staleWarning, type RenderWarning } from "../dsl/render.js";
 import { standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
@@ -38,7 +38,6 @@ import {
   instantFacts,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
-import { staleMessage, type StalePick } from "../config/setting-table.js";
 import { toString as varToString } from "../var-system/types.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
@@ -641,18 +640,14 @@ export function drawRender(
   } = width === payload.term.cols
     ? draw()
     : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
-  // [LAW:no-silent-failure] Each stale pick beside what the walk could not
-  // honour, naming what the bar wears instead: read from the variable the
-  // setting's own control reads, after the walk that read it. A placement
-  // this frame did not draw decides nothing, as a global setting a staged
-  // value outranks decides nothing.
+  // [LAW:no-silent-failure] Each stale global pick beside what the walk
+  // could not honour (a placement's among them), naming what the bar wears
+  // instead: read from the variable the setting's own control reads, after
+  // the walk that read it.
   const drawnWarnings: readonly RenderWarning[] = [
     ...walked,
     ...view.source
       .stale()
-      .filter(
-        ({ setting }) => setting.kind === "global" || segments.has(setting.id),
-      )
       .map((pick) =>
         staleWarning(pick, varToString(view.store.read(pick.setting.wears))),
       ),
@@ -834,13 +829,6 @@ const faultOf = (
   message: string,
   subject?: string,
 ): Fault<FaultKind> => ({ level, kind, subject, message });
-
-// A stale pick's warning: the key it is held at, and its one sentence.
-const staleWarning = (pick: StalePick, wears: string): RenderWarning => ({
-  kind: "stale",
-  key: pick.setting.key,
-  message: staleMessage(pick, wears),
-});
 
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {

@@ -7,7 +7,13 @@
 // theme nothing installs stands in for a retired one, and a domain coming back
 // is shown with a style the config declares again, through the same parse.
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -190,7 +196,7 @@ const linksAsDrawn = (frame: Frame): string[] =>
 
 // A stale pick's message as the viewer shows it, under its level's glyph.
 const stale = (setting: string, why: string, wears: string): string =>
-  `⚠ ${setting}: ${why}, so the bar wears "${wears}" (the pick stays stored)`;
+  `⚠ ${setting}: ${why}, so the bar wears "${wears}" until the session picks again or saves`;
 
 describe("a stored setting its domain no longer holds", () => {
   test.each([
@@ -336,16 +342,34 @@ describe("a stored setting its domain no longer holds", () => {
     expect(textOf(after)).toContain("N=3");
   });
 
+  // A save is the session deciding what the bar draws, so it settles the
+  // stale pick with the rest: once the saved file declares the pick's domain
+  // again, the bar still draws what was saved, and says nothing.
   test.each([["save"], ["save-preset"], ["save-theme-default"]])(
-    "a %s keeps the stale pick stored",
+    "a %s settles the stale pick",
     async (verb) => {
       // A held pick beside the stale one, so the save has something to write.
       const bar = staleBar({ [STALE]: { style: "vapor", padding: "3" } });
       await bar.draw();
       await bar.clickWhere(writes(verb));
-      expect(await bar.messages()).toEqual([
-        stale(`setting "style"`, STALE_STYLE, "washed"),
-      ]);
+      // The saved file, declaring the style again and marking the probe so
+      // a frame drawn from it can be told apart.
+      const saved = readFileSync(bar.configPath, "utf8");
+      const declared = saved
+        .replace(/(["']?washed["']?\s*:\s*\{)/, "vapor: { hueShift: 40 }, $1")
+        .replace("T={{", "R T={{");
+      expect(declared).toContain("vapor: { hueShift: 40 }");
+      expect(declared).toContain("R T={{");
+      writeFileSync(bar.configPath, declared);
+      const frame = await renderUntil(
+        bar.daemon,
+        STALE,
+        bar.projectDir,
+        (f) => textOf(f).includes("R T="),
+        "the bar drawn by the file that declares the style again",
+      );
+      expect(textOf(frame)).toContain("S=washed");
+      expect(await bar.messages()).toEqual([]);
     },
   );
 

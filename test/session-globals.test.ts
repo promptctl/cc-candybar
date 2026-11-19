@@ -340,7 +340,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
         stylePick("deleted-look", STYLES),
         "vivid",
         STYLES,
-      ),
+      ).value,
     ).toMatchObject({ kind: "decided", name: "vivid" });
     expect(
       resolveStyleSelection(
@@ -348,7 +348,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
         stylePick("deleted-look", STYLES),
         undefined,
         STYLES,
-      ),
+      ).value,
     ).toMatchObject({ kind: "decided", name: "none" });
   });
 
@@ -358,14 +358,14 @@ describe("a stale session pick falls to the config default, not the floor", () =
         memberPick("deleted-preset", PRESETS),
         "compact",
         PRESETS,
-      ),
+      ).value,
     ).toBe("compact");
     expect(
       effectivePresetName(
         memberPick("deleted-preset", PRESETS),
         undefined,
         PRESETS,
-      ),
+      ).value,
     ).toBe("default");
   });
 
@@ -378,10 +378,11 @@ describe("a stale session pick falls to the config default, not the floor", () =
         stylePick("deleted-look", STYLES),
         "also-deleted",
         STYLES,
-      ),
+      ).value,
     ).toMatchObject({ kind: "decided", name: "none" });
     expect(
-      effectivePresetName(memberPick(null, PRESETS), "also-deleted", PRESETS),
+      effectivePresetName(memberPick(null, PRESETS), "also-deleted", PRESETS)
+        .value,
     ).toBe("default");
   });
 });

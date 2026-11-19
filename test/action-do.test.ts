@@ -117,7 +117,9 @@ describe("do: several declared actions, one click", () => {
       ),
     );
     const actions = linkUrls(rt.render()).map(effectsOf);
-    const combined = actions.find((steps) => steps.some(({ verb }) => verb === "save"));
+    const combined = actions.find((steps) =>
+      steps.some(({ verb }) => verb === "save"),
+    );
     expect(combined).toEqual(
       layer === "ask"
         ? [
@@ -170,13 +172,41 @@ describe("do: load errors", () => {
   };
 
   test.each([
-    ["one member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a'] },`, "do must list at least two action names"],
-    ["an unknown member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a', 'nope'] },`, 'actions.d do: references unknown action "nope"'],
-    ["a nested do", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`, '"ab" is itself a do action'],
-    ["a member listed twice", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`, '"a" is listed twice'],
-    ["a template-bound follower", `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`, '"t" takes its value from the template'],
-    ["a follower that asks for a save layer", `a: { set: 'panel', to: 'closed' }, keep: { save: true, layer: 'ask' }, d: { do: ['a', 'keep'] },`, '"keep" takes its value from the template'],
-    ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown key "to" on a do action'],
+    [
+      "one member",
+      `a: { set: 'panel', to: 'closed' }, d: { do: ['a'] },`,
+      "do must list at least two action names",
+    ],
+    [
+      "an unknown member",
+      `a: { set: 'panel', to: 'closed' }, d: { do: ['a', 'nope'] },`,
+      'actions.d do: references unknown action "nope"',
+    ],
+    [
+      "a nested do",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`,
+      '"ab" is itself a do action',
+    ],
+    [
+      "a member listed twice",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`,
+      '"a" is listed twice',
+    ],
+    [
+      "a template-bound follower",
+      `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`,
+      '"t" takes its value from the template',
+    ],
+    [
+      "a follower that asks for a save layer",
+      `a: { set: 'panel', to: 'closed' }, keep: { save: true, layer: 'ask' }, d: { do: ['a', 'keep'] },`,
+      '"keep" takes its value from the template',
+    ],
+    [
+      "a sibling key",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`,
+      'Unknown key "to" on a do action',
+    ],
   ])("%s", (_label, actions, message) => {
     expect(loadError(actions)).toContain(message);
   });

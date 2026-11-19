@@ -5,8 +5,9 @@
 //
 // [LAW:one-source-of-truth] A setting has one identity here. The fold, the
 // render, the step, the saves, the compile's read-back and the loader's key
-// check all read this table, so a stored spelling is parsed one way wherever
-// it is read, and a key a setting owns is known as one by every reader.
+// and `set` checks all read this table, so a stored spelling is parsed one way
+// wherever it is read, and a key a setting owns is known as one by every
+// reader.
 
 import {
   VALUED_FIELDS,
@@ -17,9 +18,9 @@ import {
 } from "./globals-fields.js";
 import { SETTINGS, SETTING_NAMES } from "./setting-projections.js";
 import {
-  describeValues,
   parseSettingSpelling,
   settingVarDecls,
+  type DomainValues,
   type DslConfig,
   type SettingDecl,
   type SettingValue,
@@ -29,22 +30,20 @@ import { presetNames } from "./presets.js";
 import { namedTheme, type DecidedTheme } from "../themes/palette-resolvers.js";
 import {
   EFFECT_NAMES,
-  FOLLOW_BAR,
-  memberOf,
+  effectiveGlobal,
   namedEffect,
   namedStyle,
-  notInstalledTheme,
   type DecidedEffect,
   type DecidedStyle,
+  type Folded,
   type StoredPick,
 } from "../themes/policy.js";
 
-// What a setting can hold, as a report of a spelling outside it says it: the
-// installed themes (a placement's also follows the bar), or a closed set of
-// values in words.
+// What a setting can hold, as data: the installed themes (a placement's also
+// follows the bar), or a closed set of values.
 export type SettingDomain =
   | { readonly kind: "theme"; readonly followsBar: boolean }
-  | { readonly kind: "values"; readonly phrase: string };
+  | { readonly kind: "values"; readonly members: DomainValues };
 
 interface SettingBase<T> {
   // The SessionState key a pick is stored under.
@@ -58,19 +57,19 @@ interface SettingBase<T> {
   readonly parse: (raw: string) => T | null;
 }
 
-// What a global setting holds once parsed: a selection's decided name, a
-// preset's name, a valued field's value.
-export type GlobalValue<N extends SettingName> = N extends "theme"
-  ? DecidedTheme
-  : N extends "style"
-    ? DecidedStyle
-    : N extends "effect"
-      ? DecidedEffect
-      : N extends "preset"
-        ? string
-        : N extends SessionField
-          ? ValuedGlobals[N]
-          : never;
+// [LAW:types-are-the-program] What each global setting holds once parsed: a
+// session setting its field's value, a selection its decided name. Indexed by
+// every setting name (`GlobalValue`), so a setting this does not name — a new
+// selection row — is a compile error there, not a value no parse produces.
+export type GlobalValues = {
+  readonly [F in SessionField]: ValuedGlobals[F];
+} & {
+  readonly theme: DecidedTheme;
+  readonly style: DecidedStyle;
+  readonly effect: DecidedEffect;
+  readonly preset: string;
+};
+export type GlobalValue<N extends SettingName> = GlobalValues[N];
 
 export interface GlobalSetting<
   N extends SettingName = SettingName,
@@ -113,18 +112,25 @@ export function pickOf<T>(
   return value === null ? { kind: "stale", raw } : { kind: "held", value };
 }
 
-// What a placement setting holds for the stored spelling `raw`: a pick its
-// domain holds, else its saved value.
-export function placementValue(
+// [LAW:one-type-per-behavior] A placement setting's fold: the global fold
+// with no staged rung and its saved value beneath, so a placement answers
+// which rung decided as a global setting does.
+export function placementFold(
   setting: PlacementSetting,
   raw: string | null,
-): SettingValue {
-  const pick = pickOf(setting, raw);
-  return pick.kind === "held" ? pick.value : setting.saved;
+): Folded<SettingValue> {
+  return effectiveGlobal(
+    undefined,
+    pickOf(setting, raw),
+    setting.saved,
+    setting.saved,
+  );
 }
 
-const values = (members: Parameters<typeof describeValues>[0]) =>
-  ({ kind: "values", phrase: describeValues(members) }) as const;
+const values = (members: DomainValues): SettingDomain => ({
+  kind: "values",
+  members,
+});
 
 // The global settings of a config whose own domains are `styles` and
 // `presets`.
@@ -159,16 +165,17 @@ export function globalSettings(
       ),
     ];
   });
+  // [LAW:one-source-of-truth] The floor preset is always a member
+  // (`presetNames`), so the parse and the domain read one list.
+  const presets = presetNames(domains.presets);
   return {
     theme: global("theme", { kind: "theme", followsBar: false }, namedTheme),
     style: global("style", values(Object.keys(domains.styles)), (raw) =>
       namedStyle(raw, domains.styles),
     ),
     effect: global("effect", values(EFFECT_NAMES), namedEffect),
-    preset: global(
-      "preset",
-      values(presetNames(domains.presets)),
-      memberOf(domains.presets),
+    preset: global("preset", values(presets), (raw) =>
+      presets.includes(raw) ? raw : null,
     ),
     ...Object.fromEntries(valued.map((s) => [s.name, s])),
   } as GlobalSettings;
@@ -190,7 +197,7 @@ export function placementSetting(
         ? { kind: "theme", followsBar: true }
         : values(decl.decl.domain),
     wears: variable,
-    parse: (raw) => parseSettingSpelling(decl.decl, raw) ?? null,
+    parse: (raw) => parseSettingSpelling(decl.decl, raw),
     decl: decl.decl,
     saved: decl.saved,
   };
@@ -198,6 +205,10 @@ export function placementSetting(
 
 // [LAW:one-source-of-truth] A config's table, derived once per config object:
 // a fact of the config alone.
+// [LAW:no-shared-mutable-globals] Keyed by config objects, which no pass
+// changes once built: each synthesis returns a new config (edit chrome
+// mints the placement settings into a new one), so a table built before it
+// is that earlier config's, and can never miss what a later pass adds.
 const TABLES = new WeakMap<DslConfig, SettingTable>();
 export function settingTable(config: DslConfig): SettingTable {
   const known = TABLES.get(config);
@@ -221,18 +232,8 @@ export function settingTable(config: DslConfig): SettingTable {
   return table;
 }
 
-// Whether the session's stored spelling at `key` is a stale pick of a
-// setting: one a save leaves stored, so it holds again when its domain does.
-export function holdsStale(
-  config: DslConfig,
-  key: string,
-  raw: string | null,
-): boolean {
-  const setting = settingTable(config).byKey.get(key);
-  return setting !== undefined && pickOf(setting, raw).kind === "stale";
-}
-
-// A setting's stored spelling its domain no longer holds.
+// A setting's stored spelling its domain no longer holds, where that pick
+// would have decided.
 export interface StalePick {
   readonly setting: ConfigSetting;
   readonly stored: string;
@@ -243,18 +244,4 @@ export function settingTitle(setting: ConfigSetting): string {
   return setting.kind === "global"
     ? `setting "${setting.name}"`
     : `placement "${setting.id}" setting "${setting.name}"`;
-}
-
-// [LAW:one-source-of-truth] THE sentence of a stale pick, from its data and
-// the display name of the value the bar wears instead. A theme domain says it
-// in the wording every installed-theme check uses.
-export function staleMessage({ setting, stored }: StalePick, wears: string) {
-  const { domain } = setting;
-  const why =
-    domain.kind === "theme"
-      ? domain.followsBar
-        ? `${notInstalledTheme(stored)}, and not "${FOLLOW_BAR}" (the bar's own theme)`
-        : notInstalledTheme(stored)
-      : `"${stored}" is not ${domain.phrase}`;
-  return `${settingTitle(setting)}: ${why}, so the bar wears "${wears}" (the pick stays stored)`;
 }
