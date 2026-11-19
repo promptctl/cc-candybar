@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-907",
+      "ref": "refs/pull/907/merge",
+      "sha": "681d80e108381d50cbd0beafe4a76ebd593da2e9",
+      "timestamp": "2026-11-19T20:31:19.300Z",
+      "commits": [
+        {
+          "sha": "681d80e108381d50cbd0beafe4a76ebd593da2e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:30:12-07:00",
+          "message": "Merge adcf2a15ab32c3ca8cbdafa0306400a81f7f749d into f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81\n"
+        },
+        {
+          "sha": "adcf2a15ab32c3ca8cbdafa0306400a81f7f749d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:20:09-07:00",
+          "message": "fix(config): report actual rediscovery outcomes\n"
+        },
+        {
+          "sha": "1543d0e645df8e23cec9b72430d3cf58d2782116",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:24:45-07:00",
+          "message": "refactor(config): derive action layers from one grammar\n"
+        }
+      ]
+    },
+    {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
       "sha": "810236ce3f2c2a50f87d214ba4c1f8fe8a7d3058",
