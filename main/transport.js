@@ -70205,6 +70205,7 @@ function renderCacheBudget(memoryLimitBytes2) {
   );
 }
 var MAX_ENTRIES = 256;
+var MAX_UNPINNED_FAILURES = 256;
 function configPaths(snapshot) {
   return snapshot.chain.flatMap(
     ({ path: path31, content }) => content.kind === "text" ? [path31] : []
@@ -70473,11 +70474,11 @@ function openView(state, cwd2, facts, {
   configAccess = () => ({ kind: "available", roles: state.writable })
 }, currentRequest) {
   const sessionId2 = facts.hookData.session_id;
-  const registry = state.registry.view();
-  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
+  const registry = state.registry.view();
   let source;
   try {
+    declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
     source = sourceOf({
       sessionId: sessionId2,
       state,
@@ -70485,11 +70486,11 @@ function openView(state, cwd2, facts, {
       requested: request2.read,
       configAccess
     });
+    bindView(state.compiled, registry.variableStore, registry, source);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
     () => [
       source.payload(),
@@ -70577,10 +70578,8 @@ var RenderCache = class {
   // long as the feed is open. The collector asks the feeds themselves whether
   // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
-  // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
+  // [LAW:no-silent-failure] A frame sees the opening's error while the view
+  // is absent. An open feed keeps the entry eligible for a config retry.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -70750,11 +70749,12 @@ var RenderCache = class {
   // view now so pushed frames and click validation see the same draft.
   refreshEditedView(sessionId2) {
     const view = this.views.get(sessionId2);
-    if (view === void 0) return;
-    const { origin } = this.leaseOf(view).entry;
-    const requested = view.facts();
+    const previous2 = view !== void 0 ? { entry: this.leaseOf(view).entry, requestOf: view.facts } : this.pinnedFailure(sessionId2);
+    if (previous2 === void 0) return;
+    const { origin } = previous2.entry;
+    const requested = previous2.requestOf(sessionId2);
     const entry = this.getOrCreate(origin, sessionId2);
-    if (this.views.get(sessionId2)?.state !== entry.state)
+    if (entry !== previous2.entry)
       this.viewOf(entry, entry.state, requested, "reload");
     if (this.deps.editSnapshot?.(origin, sessionId2) == null)
       this.dropDraft(sessionId2);
@@ -70803,6 +70803,19 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
+  pinnedFailure(sessionId2) {
+    return this.pins.has(sessionId2) ? this.openFailures.get(sessionId2) : void 0;
+  }
+  // [LAW:carrying-cost] Open feeds own their failures. Inactive errors keep
+  // only the latest bounded set, including after the last feed unpins.
+  trimOpenFailures() {
+    if (this.openFailures.size <= MAX_UNPINNED_FAILURES) return;
+    const idle = [...this.openFailures.keys()].filter(
+      (sid) => !this.pins.has(sid)
+    );
+    for (const sid of idle.slice(0, -MAX_UNPINNED_FAILURES))
+      this.openFailures.delete(sid);
+  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
   // session, so it follows the view wherever a request or a reload moves it.
@@ -70814,7 +70827,10 @@ var RenderCache = class {
       released = true;
       const left = (this.pins.get(sessionId2) ?? 0) - 1;
       if (left > 0) this.pins.set(sessionId2, left);
-      else this.pins.delete(sessionId2);
+      else {
+        this.pins.delete(sessionId2);
+        this.trimOpenFailures();
+      }
     };
   }
   // The session's view of `state`: the one it has, or a new one replacing it.
@@ -70843,9 +70859,9 @@ var RenderCache = class {
   opened(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
     const { cwd: cwd2 } = entry.origin;
+    const { currentRequest } = this.deps;
     let view;
     try {
-      const { currentRequest } = this.deps;
       view = openView(
         state,
         cwd2,
@@ -70859,7 +70875,13 @@ var RenderCache = class {
         currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
       );
     } catch (error) {
-      this.openFailures.set(sessionId2, { error });
+      this.openFailures.delete(sessionId2);
+      this.openFailures.set(sessionId2, {
+        entry,
+        requestOf: currentRequest ?? (() => facts),
+        error
+      });
+      this.trimOpenFailures();
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -71002,6 +71024,8 @@ var RenderCache = class {
   // serving it, and its state is retired.
   drop(key, entry, reason) {
     this.entries.delete(key);
+    for (const [session, failure2] of this.openFailures)
+      if (failure2.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
   }
   get stats() {
@@ -71037,8 +71061,8 @@ var RenderCache = class {
     const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId2) => {
-        const view = this.views.get(sessionId2);
-        return view === void 0 ? [] : [view.state];
+        const state = this.views.get(sessionId2)?.state ?? this.openFailures.get(sessionId2)?.entry.state;
+        return state === void 0 ? [] : [state];
       })
     );
     for (const [key, evicted] of this.entries) {
@@ -71087,21 +71111,25 @@ var RenderCache = class {
   retire(state, reason, successor) {
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
-      if (successor !== null) {
-        try {
-          this.opened(successor.entry, successor.state, view.facts(), "reload");
-        } catch (e) {
-          this.log(
-            "error",
-            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`
-          );
-        }
-      }
+      if (successor !== null)
+        this.reopen(successor, view.sessionId, view.facts);
       this.retireView(view, reason);
     }
     const hold2 = this.holdOf(state);
     hold2.retired = { reason, held: hold2.holders };
     this.reclaim(state, hold2);
+  }
+  // [LAW:single-enforcer] A reload opens a successor once. A failed opening
+  // remains visible to its feed and leaves the other sessions recoverable.
+  reopen(entry, session, requestOf) {
+    try {
+      this.opened(entry, entry.state, requestOf(session), "reload");
+    } catch (error) {
+      this.log(
+        "error",
+        `session view reopen failed sid=${JSON.stringify(session)}: ${String(error)}`
+      );
+    }
   }
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
@@ -71136,7 +71164,13 @@ var RenderCache = class {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   reloadInto(entry, { snapshot, digest: digest2 }, cause) {
-    const sessions = this.sessionsOn(entry);
+    const retry = [...this.openFailures].filter(
+      ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
+    );
+    const sessions = [
+      ...this.sessionsOn(entry),
+      ...retry.map(([session]) => session)
+    ];
     const served = entry.state;
     const loaded = this.load(entry.origin, snapshot, served);
     entry.snapshot = snapshot;
@@ -71152,8 +71186,10 @@ var RenderCache = class {
       this.serve(loaded.state);
     }
     this.holdFolders(entry.state);
-    if (loaded.kind === "built")
-      this.retire(served, "reload", { entry, state: loaded.state });
+    if (loaded.kind === "built") this.retire(served, "reload", entry);
+    if (loaded.state !== null)
+      for (const [session, failure2] of retry)
+        this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }

@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "da639d74bdb0798ffa62eec23cd0beee4614be6f",
+      "timestamp": "2026-11-19T17:48:22.634Z",
+      "commits": [
+        {
+          "sha": "da639d74bdb0798ffa62eec23cd0beee4614be6f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:47:16-07:00",
+          "message": "fix(renderer): recover pinned pane views on config delivery (#891)"
+        }
+      ]
+    },
+    {
       "version": "pr-892",
       "ref": "refs/pull/892/merge",
       "sha": "a54bf11251390cdba395dab4b0e629a269b66f4e",
@@ -42,43 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:40:36-07:00",
           "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-891",
-      "ref": "refs/pull/891/merge",
-      "sha": "d018c8a4d36ec883ab2f86666c26e776444c55e8",
-      "timestamp": "2026-11-19T17:39:48.767Z",
-      "commits": [
-        {
-          "sha": "d018c8a4d36ec883ab2f86666c26e776444c55e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:38:53Z",
-          "message": "Merge 6c2bda729cb331991130b3b91a4656f8f4831f17 into 1b747e5500b197edd1e1a626e5634c0f35723f44\n"
-        },
-        {
-          "sha": "6c2bda729cb331991130b3b91a4656f8f4831f17",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:06:46-07:00",
-          "message": "fix(renderer): recover pinned pane views on config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1b747e5500b197edd1e1a626e5634c0f35723f44",
-      "timestamp": "2026-11-19T17:38:57.172Z",
-      "commits": [
-        {
-          "sha": "1b747e5500b197edd1e1a626e5634c0f35723f44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:37:50-07:00",
-          "message": "refactor(config): use one project decision for layers and plugins (#890)\n\nrefactor(config): derive project layers and plugins from one decision"
         }
       ]
     },
