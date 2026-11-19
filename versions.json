@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-868",
+      "ref": "refs/pull/868/merge",
+      "sha": "119f9ce1040d2da7ffdeaca1f2ee40a755d80b26",
+      "timestamp": "2026-11-19T13:39:53.401Z",
+      "commits": [
+        {
+          "sha": "119f9ce1040d2da7ffdeaca1f2ee40a755d80b26",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:38:44Z",
+          "message": "Merge 52b2132ca9d785eab93b4efde38cc1ec3486002d into 415c57dbe8f21640a4165b7c3e984bbff858ad50\n"
+        },
+        {
+          "sha": "52b2132ca9d785eab93b4efde38cc1ec3486002d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:29:09-07:00",
+          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "415c57dbe8f21640a4165b7c3e984bbff858ad50",
@@ -144,28 +166,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:18:15-07:00",
           "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-868",
-      "ref": "refs/pull/868/merge",
-      "sha": "8514a677566401ec31ad93a023fd71ff93913d44",
-      "timestamp": "2026-11-19T13:17:50.549Z",
-      "commits": [
-        {
-          "sha": "8514a677566401ec31ad93a023fd71ff93913d44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:16:46Z",
-          "message": "Merge b314644280349099472488c27881e4227587e318 into 00c851de7fe99a7e286a1d9a0b9a61e03b7b6ac3\n"
-        },
-        {
-          "sha": "b314644280349099472488c27881e4227587e318",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:29:09-07:00",
-          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
         }
       ]
     }

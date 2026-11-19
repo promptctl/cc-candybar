@@ -39870,10 +39870,10 @@ function anchored(timeline, host, time, rate) {
 }
 function played(animation, { origin, time, rate }) {
   const mapped = (host) => time + rate * (host - origin);
-  const forward = rate > 0;
-  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
-  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
-  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
+  const forward2 = rate > 0;
+  const ahead = forward2 ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
+  const behind = forward2 ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
+  const past = forward2 ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
     const sum2 = origin + (edge - time) / rate;
     return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
@@ -41250,14 +41250,14 @@ var CellJoiner = class {
         const hasLeft = left !== null && (!reads.seam.left || leftBg !== void 0);
         const hasRight = right !== null && (!reads.seam.right || rightBg !== void 0);
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
-        const tails = hasLeft && (!reads.tail || leftBg !== void 0);
+        const tails2 = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
         const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
           const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
           return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
-          if (leads || tails)
+          if (leads || tails2)
             yield* styled(leads ? "lead" : "tail");
           return;
         }
@@ -49486,7 +49486,7 @@ var msOf = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts, inspectDraw) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
   const req = located(arrived2, locate);
   const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
@@ -49542,8 +49542,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       unlessClosing({
         kind: "request",
         id: id2,
-        context: req,
-        ...inspectDraw === true ? { inspect: true } : {}
+        context: req
       })
     );
   } finally {
@@ -49605,7 +49604,6 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
-    ...presented.inspection === void 0 ? {} : { inspection: presented.inspection },
     settled: (took) => done(presented, took ? null : "the client did not take the answer")
   };
 }
@@ -50156,14 +50154,42 @@ var Limiter = class {
   }
 };
 
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
 // src/utils/transcript-fs.ts
 function statStamp(filePath2) {
   if (!filePath2) return "";
   try {
-    return stampOf(statSync(filePath2));
+    const stat3 = statSync(filePath2, { bigint: true });
+    return stat3.isFile() ? transcriptVersion(stat3) : "";
   } catch {
     return "";
   }
+}
+function transcriptVersion(stat3) {
+  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
 }
 function stampOf(st) {
   return `${st.mtimeMs}:${st.size}`;
@@ -50202,24 +50228,84 @@ async function readAppended(path31, prior, until2) {
     });
   });
 }
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
+var Observations = class {
+  pending = new SingleFlight();
+  recent = /* @__PURE__ */ new Map();
+  async read(path31, range, read2) {
+    const stamp2 = statStamp(path31);
+    if (stamp2 === "") return observedValue(await read2());
+    const key = `${stamp2}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== void 0) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed, originalPath } = await this.pending.run(key, async () => {
+      const observed2 = await read2();
+      if (observed2.kind === "ok" && observed2.value.stamp === stamp2 && observed2.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed2.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed: observed2, originalPath: path31 };
+    });
+    return observedValue(
+      originalPath === path31 || observed.kind === "ok" && observed.value.stamp === stamp2 ? observed : await read2()
+    );
   }
+};
+function observedValue(found2) {
+  return found2.kind === "ok" ? ok(found2.value.value) : found2;
+}
+var forward = new Observations();
+var tails = new Observations();
+function readAppendedText(path31, prior, until2) {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
+  return forward.read(path31, range, async () => {
+    var _stack = [];
+    try {
+      const read2 = await readAppended(path31, prior, until2);
+      if (read2.kind !== "ok") return read2;
+      const lent = __using(_stack, read2.value);
+      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
+      const bytes = lines2.length;
+      return ok({
+        stamp: info.stamp,
+        bytes,
+        value: { ...info, bytes, text: lines2.toString("utf8") }
+      });
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  });
+}
+function readTailText(path31, maxBytes) {
+  return tails.read(path31, String(maxBytes), async () => {
+    const read2 = await readTail(path31, maxBytes);
+    if (read2.kind !== "ok") return read2;
+    const { stamp: stamp2, fromStart, buf } = read2.value;
+    return ok({
+      stamp: stamp2,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart }
+    });
+  });
 }
 async function readWholeLines(path31, prior, until2, window2) {
   let fh = null;
   try {
-    fh = await open(path31, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
+    fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path31}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp2 = transcriptVersion(st);
     const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
     const start = reset || prior === void 0 ? 0 : prior.offset;
     const end = reset || until2 === void 0 ? size : Math.min(size, until2);
@@ -50294,12 +50380,16 @@ async function readTail(path31, maxBytes) {
   return gate.run(async () => {
     let fh = null;
     try {
-      fh = await open(path31, "r");
-      const { size } = await fh.stat();
+      fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat3 = await fh.stat({ bigint: true });
+      if (!stat3.isFile())
+        return failed(`readTail ${path31}: not a regular file`, "read");
+      const size = Number(stat3.size);
       const start = Math.max(0, size - maxBytes);
       return ok({
         buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
+        fromStart: start === 0,
+        stamp: transcriptVersion(stat3)
       });
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT;
@@ -52417,18 +52507,14 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
         paths2.push(filePath2);
         continue;
       }
-      const read2 = await readAppended(filePath2, void 0, void 0);
+      const read2 = await readAppendedText(filePath2, void 0, void 0);
       if (read2.kind !== "ok") {
         debug(`Failed to check agent file ${filePath2}`);
         continue;
       }
       longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
+      const { text: text4 } = read2.value;
+      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
       if (line.kind === "object" && line.value.sessionId === sessionId2) {
         paths2.push(filePath2);
       }
@@ -52551,7 +52637,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
   let value = prior?.value ?? empty2;
   let end;
   for (; ; ) {
-    const read2 = await readAppended(
+    const read2 = await readAppendedText(
       filePath2,
       cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
       end?.size
@@ -52563,11 +52649,8 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next2 = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
+    const next2 = window2.start + window2.bytes;
+    value = await step4(value, parseJsonlLines(window2.text));
     cursor = {
       offset: next2,
       stamp: end.stamp,
@@ -52576,30 +52659,6 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
 }
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
 
 // src/var-system/store.ts
 init_globals();
@@ -53700,8 +53759,8 @@ var SessionUsageStore = class {
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath2 = (0, import_node_path16.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(stat2(filePath2, { bigint: true }));
+          if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
           if (!id2.ok) {
             this.log(
@@ -53713,7 +53772,7 @@ var SessionUsageStore = class {
           candidates.push({
             sessionId: id2.id,
             path: filePath2,
-            stamp: stampOf(st)
+            stamp: transcriptVersion(st)
           });
         }
       }
@@ -55632,18 +55691,17 @@ async function cacheExpiresAt(transcriptPath) {
 }
 async function findLastCacheActivityTs(transcriptPath) {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
+    const tail = await readTailText(transcriptPath, maxBytes);
     if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    const ts = scanLastCacheTs(tail.value.text, tail.value.fromStart);
     if (ts != null) return ok(ts);
     if (tail.value.fromStart) return ABSENT;
   }
   return ABSENT;
 }
-function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text4 = buf.toString("utf8");
+function scanLastCacheTs(text4, fromStart) {
   const lines2 = text4.split("\n");
-  const start = bufStartsAtFileBeginning ? 0 : 1;
+  const start = fromStart ? 0 : 1;
   for (let i2 = lines2.length - 1; i2 >= start; i2--) {
     const line = lines2[i2];
     if (!line || !CACHE_HIT_RE.test(line)) continue;
@@ -66138,7 +66196,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.2";
+var PACKAGE_VERSION = "1.234.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -71423,8 +71481,7 @@ var SourceRegistry = class _SourceRegistry {
   runSources() {
     return this.runSourcesNow.get();
   }
-  // The run each source names, by variable name: what a request waits on and
-  // what names `check`'s stragglers.
+  // The named runs declared by this registry, including aliases for a shared run.
   namedRuns() {
     return this.namedNow.get();
   }
@@ -73892,15 +73949,6 @@ Subcommands:
                            menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
-                           every preset) with no daemon. With no path, checks
-                           the same layers the daemon would load from here.
-                           Use --config-only PATH to check in isolation. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
   schema                   Print the JSON Schema for the config file shape
                            (.cc-candybar.json5). Point an editor's $schema at it
                            for autocomplete + structural validation.
@@ -78012,7 +78060,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const root = compiled.roots.get(preset);
     if (root === void 0) {
       throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+        `Preset "${preset}" has no compiled layout \u2014 the config compiler builds one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
       );
     }
     const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
@@ -81516,8 +81564,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
   //
   // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
   // 80/120/200 columns against a RICH payload in
-  // test/default-dsl-config.test.ts (over the readings of `check`'s faked
-  // session) — curated by actually rendering each arrangement, not by reading
+  // test/default-dsl-config.test.ts — curated by actually rendering each arrangement, not by reading
   // the segment names off the page.
   // Each bundled theme's default look — data in its own file
   // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
@@ -82714,7 +82761,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
     throw e;
   }
 }
-function drawRender(parts, setup, drawing2, feeds, inspect2) {
+function drawRender(parts, setup, drawing2, feeds) {
   const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
@@ -82959,13 +83006,6 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
     eventsShown,
     copies,
     lanes,
-    inspection: inspect2 === true ? {
-      preset: effective.preset,
-      faults,
-      unreadSources: sources.pending.flatMap(
-        ({ name, why: why2 }) => why2 === "unread" ? [name] : []
-      )
-    } : void 0,
     kept: {
       session: sessionId2,
       by: drawing2.by,
@@ -83015,7 +83055,7 @@ function subjectOf(w) {
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
-function answerRequest(parts, req, presentation, facts, inspect2) {
+function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
     const { time, feeds } = parts;
@@ -83027,12 +83067,11 @@ function answerRequest(parts, req, presentation, facts, inspect2) {
       facts,
       presentation
     ));
-    const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } = drawRender(
+    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
       parts,
       setup,
       ANSWERING,
-      feeds.feedsOf(sessionId2, time.tick),
-      inspect2
+      feeds.feedsOf(sessionId2, time.tick)
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(presentation.client ?? null) === "statusline";
@@ -83043,7 +83082,6 @@ function answerRequest(parts, req, presentation, facts, inspect2) {
     });
     return {
       frame: frame2,
-      inspection,
       delivery: {
         session: sessionId2,
         by: ANSWERING.by,
@@ -86626,6 +86664,397 @@ function sessionSource(deps) {
 // src/renderer/render-cache.ts
 init_globals();
 
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
+  }
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min3, max3, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min3 = Math.min(...ranges.map((r) => r.min));
+    const max3 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min3 || n > max3;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min3, max: max3 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
+  }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config) {
+      const held = gates.get(config);
+      if (held?.epoch === epoch) return held.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
+      gates.set(config, { epoch, gate: gate2 });
+      return gate2;
+    }
+  };
+}
+
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
+}
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return [
+    ...clearableContributions(config),
+    ...Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config) {
+  return mergeContributions(actionContributions(config), "config");
+}
+
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return dropBaselineAllowLists(
+    Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config) {
+  return mergeContributions(actionContributions2(config));
+}
+
+// src/daemon/foundations/gates.ts
+function deriveActionGates(gates, config) {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
+}
+function createGates(held = { state: [], config: [] }) {
+  const state = makeStateKeyspace();
+  const config = makeConfigKeyspace();
+  for (const { key, allowed } of held.state) state.register(key, allowed);
+  for (const { key, allowed } of held.config) config.register(key, allowed);
+  return { state, config };
+}
+
 // src/config/unused.ts
 init_globals();
 function* variablesOf(cfg) {
@@ -86900,8 +87329,7 @@ function buildRenderState(load, deps) {
     const probe2 = registry.view();
     warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
-    deps.gates.state.gateFor(config);
-    deps.gates.config.gateFor(config);
+    deriveActionGates(deps.gates, config);
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
@@ -88031,12 +88459,11 @@ function mainRenderer(parts, pushed, drained) {
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
-        const { frame: frame2, delivery, inspection } = answerRequest(
+        const { frame: frame2, delivery } = answerRequest(
           parts,
           current,
           event.context.hints,
-          record2,
-          event.inspect
+          record2
         );
         const id2 = parts.mint();
         deliveries.set(id2, delivery);
@@ -88046,8 +88473,7 @@ function mainRenderer(parts, pushed, drained) {
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
-          frame: frame2,
-          ...inspection === void 0 ? {} : { inspection }
+          frame: frame2
         });
         return;
       }
@@ -89736,393 +90162,6 @@ function createDaemon(inputs) {
     return { settled: launcher.settled() };
   }
   return { launcher, close, serve };
-}
-
-// src/daemon/foundations/gates.ts
-init_globals();
-
-// src/daemon/foundations/config-validators.ts
-init_globals();
-
-// src/daemon/foundations/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min3, max3, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min3 = Math.min(...ranges.map((r) => r.min));
-    const max3 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min3 || n > max3;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min3, max: max3 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config) {
-      const held = gates.get(config);
-      if (held?.epoch === epoch) return held.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
-      gates.set(config, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/foundations/config-validators.ts
-function makeConfigKeyspace() {
-  return createKeyspace({}, "config", deriveConfigActionValidators);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function clearableContributions(config) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return [
-    ...clearableContributions(config),
-    ...Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config) {
-  return mergeContributions(actionContributions(config), "config");
-}
-
-// src/daemon/foundations/state-validators.ts
-init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme
-};
-function makeStateKeyspace() {
-  return createKeyspace(BASELINE, "state", deriveActionValidators);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
-function actionContributions2(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config) {
-  return mergeContributions(actionContributions2(config));
-}
-
-// src/daemon/foundations/gates.ts
-function createGates(held = { state: [], config: [] }) {
-  const state = makeStateKeyspace();
-  const config = makeConfigKeyspace();
-  for (const { key, allowed } of held.state) state.register(key, allowed);
-  for (const { key, allowed } of held.config) config.register(key, allowed);
-  return { state, config };
 }
 
 // src/daemon/log.ts
