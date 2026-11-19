@@ -55,12 +55,11 @@ export const EDIT_MODE_HELP = [
 export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
   band: [
     "animates the bar in the band above the prompt, through a Claude Code mod",
-    "on: installs the candybar-band mod from this checkout and types /reload-plugins",
+    "requires the candybar-band mod to be installed and loaded in Claude Code",
   ],
   statusline: [
     "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "on: exits this Claude Code and starts it again under that launcher, on this session",
-    "or start one yourself: cc-candybar --help prints the line to type",
+    "launch Claude Code with the command printed by cc-candybar --help",
   ],
   pane: [
     "animates the bar in a tmux pane under this session's",

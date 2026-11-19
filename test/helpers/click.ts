@@ -59,18 +59,9 @@ import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { instantOf } from "../../src/utils/instant";
-import {
-  laneSwitches,
-  resolveEffectiveGlobals,
-} from "../../src/config/effective-globals";
-import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
-
-const NO_LANES = Object.fromEntries(
-  LANE_NAMES.map((lane) => [lane, false]),
-) as LaneSwitches;
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
 // beside the rig's session state, which a click reads its own session's from
@@ -392,25 +383,6 @@ export function testVerbContext(
       throw new Error("sourcesFor: this test handed in no sources");
     },
     links: TEST_SIGNER,
-    // A click of a session that has rendered measures its lane switches over
-    // that same config, as the daemon's does; a test that handed in none
-    // switches no lane on. No lane owner runs here: a test that reads what a
-    // click set up hands in its own `clicked`. A session here rendered in a
-    // tmux pane, so the tmux status line is its to switch.
-    lanes: {
-      of: (_origin, sid) =>
-        config === undefined
-          ? NO_LANES
-          : laneSwitches(
-              resolveEffectiveGlobals(
-                config,
-                (key) => sessionState.get(sid, key),
-                () => false,
-              ),
-              true,
-            ),
-      clicked: () => {},
-    },
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,
   });
