@@ -9,7 +9,11 @@ import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
-import { CrossedFailure, DaemonClosing } from "./foundations/verb-error.js";
+import {
+  BadVerbArgs,
+  CrossedFailure,
+  DaemonClosing,
+} from "./foundations/verb-error.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -58,10 +62,23 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { mainRendererOf } from "../renderer/main.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
-import type { RendererName } from "./foundations/renderer-name.js";
-import type { RendererPort } from "./renderer-process.js";
+import {
+  rendererNameOf,
+  type RendererName,
+} from "./foundations/renderer-name.js";
+import type { SessionId } from "./foundations/session-id.js";
+import type {
+  RequestId,
+  Subscriptions,
+  Viewers,
+} from "../renderer-interface/interface.js";
+import type { RendererLink, RendererPort } from "./renderer-process.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
-import { plainEnvironment } from "./foundations/session-env.js";
+import {
+  plainEnvironment,
+  variableOf,
+  type SessionEnvironment,
+} from "./foundations/session-env.js";
 import {
   answeredBy,
   joinedEvent,
@@ -122,6 +139,8 @@ export interface DaemonAdapters {
   // [LAW:one-type-per-behavior] Where the renderer runs: in this process, or
   // in a process of its own (src/daemon/renderer-process.ts).
   readonly renderer: RendererPort;
+  // A worktree bundle's executable entry at the host's filesystem boundary.
+  readonly rendererEntryOf?: (reported: string) => string;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
 }
@@ -132,6 +151,8 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly bundle: RunningBundle;
   // The renderer it serves, whose profile its stores are.
   readonly rendererName: RendererName;
+  // The running entry can differ from the bundle's module path under a loader.
+  readonly rendererEntry?: string;
   // [LAW:one-source-of-truth] What the process knows of its machine: its
   // environment, home and temporary directory. The daemon reads them from here
   // alone, and its launcher's children inherit the same environment.
@@ -303,40 +324,30 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
-  // [LAW:single-enforcer] The renderer's stored state, held here: every
-  // renderer is built from what it holds then, and every turn's stored writes
-  // move it.
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
-  const preparedRenderer = inputs.renderer({
-    name: inputs.rendererName,
-    build: (reaches) =>
-      mainRendererOf(
-        {
-          stored: stores.current(),
-          linkSigner,
-          locations: locs,
-          home: host.home,
-          gates,
-          memoryLimitBytes,
-        },
-        reaches,
+  // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
+  // provider installs a timer. A failing profile or renderer factory leaves
+  // the daemon unbuilt and nothing to close.
+  const primaryPrepared = prepareRenderer(
+    inputs.rendererName,
+    bundle.path,
+    inputs.rendererEntry ?? bundle.path,
+  );
+  const renderers = new Map<RendererName, RendererRuntime>();
+  // [LAW:one-source-of-truth] A session's accepted render request selects
+  // the renderer that receives its subsequent world state and viewer inputs.
+  const routes = new Map<
+    SessionId,
+    { readonly name: RendererName; readonly order: RequestId }
+  >();
+  const nameOf = (session: SessionId): RendererName =>
+    routes.get(session)?.name ?? inputs.rendererName;
+  const viewersOf = (name: RendererName, viewers: Viewers): Viewers =>
+    Object.fromEntries(
+      Object.entries(viewers).filter(
+        ([session]) => nameOf(session as SessionId) === name,
       ),
-    // The key crosses in base64, so the boot crosses as a line.
-    boot: () => {
-      const key = inputs.linkKey();
-      return {
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes,
-        linkKey:
-          key.kind === "ok"
-            ? { kind: "ok", value: key.value.toString("base64") }
-            : key,
-      };
-    },
-    node: bundle.node,
-  });
+    );
   // [LAW:effects-at-boundaries] Only the daemon that won the socket arms its limits.
   const limits = makeLimits({
     ...inputs.limits({
@@ -349,7 +360,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => (serving() ? link.process() : null),
+    renderer: () => (serving() ? primary.link.process() : null),
   });
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
@@ -436,11 +447,23 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
-    deliver: (make) =>
-      parts.renderer.deliver(
-        () => ({ kind: "event", event: { kind: "viewers", viewers: make() } }),
-        [],
-      ),
+    deliver: async (make) => {
+      const sent = await Promise.all(
+        [...renderers.values()].map(({ renderer }) =>
+          renderer.deliver(
+            () => ({
+              kind: "event",
+              event: {
+                kind: "viewers",
+                viewers: viewersOf(renderer.name, make()),
+              },
+            }),
+            [],
+          ),
+        ),
+      );
+      return sent.find((turn) => turn.kind === "threw") ?? { kind: "answered" };
+    },
     log,
   });
   // Which watched sessions' panes are on a screen, asked of their tmux servers
@@ -493,8 +516,18 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
-    deliver: (event) =>
-      parts.renderer.deliver(() => ({ kind: "event", event }), []),
+    deliver: (event) => {
+      const session =
+        event.kind === "retire" ? event.session : event.worldState.session;
+      const route = routes.get(session);
+      const renderer = (renderers.get(nameOf(session)) ?? primary).renderer;
+      return renderer
+        .deliver(() => ({ kind: "event", event }), [])
+        .finally(() => {
+          if (event.kind === "retire" && routes.get(session) === route)
+            routes.delete(session);
+        });
+    },
     log,
   });
 
@@ -518,58 +551,257 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       release: (id) => managedStorage.release(id),
     },
   };
-  const link = preparedRenderer.start({
-    reaches,
-    log,
-    clock,
-    // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session gets the context of its latest stamp,
-    // all in the one `start` turn, so
-    // its output names every session it serves; and who watches each, so its
-    // feeds open. All through the host's one path to the renderer, each turn
-    // recorded there.
-    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
-    // every input after it finds its sessions handed in.
-    start: async () => {
-      // [LAW:no-ambient-temporal-coupling] A start belongs to a serving
-      // daemon. Its renderer host exists by the time that phase is published.
-      if (!serving()) return;
-      const started = await parts.renderer.start(() => {
-        const viewers = frameFeeds.viewers();
-        frameFeeds.handedIn(viewers);
-        return {
-          kind: "event",
-          event: {
-            kind: "start",
-            viewers,
-            sessions: collector.liveSessions(),
-          },
-        };
-      }, [["why", "renderer-start"]]);
-      // A start that failed may have opened none of its feeds: the next
-      // announcement hands the viewers in again.
-      if (started.kind === "threw") {
-        frameFeeds.handedIn(null);
-        throw new CrossedFailure(started.failure);
-      }
-    },
-    ended: (event) => {
-      rendererEnded = event;
-      restateFaults();
-    },
-  });
-  // [LAW:single-enforcer] What discovery found at each origin the renderer
-  // names, and the watches that say when it moved: each origin it moved gets
-  // its `config` turn. Made once the renderer is, whose making can throw, so
-  // a build that throws leaves no watch open.
-  const configRenderers = new Map<RendererName, RendererHost>();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths.state,
     watchers: watcherRegistry,
     log,
-    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins),
+    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
   });
+
+  interface RendererRuntime {
+    readonly reported: string;
+    readonly entry: string;
+    readonly stores: HeldStores;
+    readonly link: RendererLink;
+    readonly renderer: RendererHost;
+  }
+  const declared = new Map<
+    RendererName,
+    Pick<Subscriptions, "sources" | "lanes">
+  >();
+  const aggregate = (): void => {
+    const sources: Record<SessionId, Subscriptions["sources"][SessionId]> = {};
+    const lanes: Record<SessionId, Subscriptions["lanes"][SessionId]> = {};
+    // [LAW:one-source-of-truth] A whole declaration only replaces its own
+    // renderer's part. Shared providers see the current owner's demands.
+    for (const [name, subscription] of declared) {
+      for (const [id, values] of Object.entries(subscription.sources))
+        if (nameOf(id as SessionId) === name) sources[id as SessionId] = values;
+      for (const [id, values] of Object.entries(subscription.lanes))
+        if (nameOf(id as SessionId) === name) lanes[id as SessionId] = values;
+    }
+    collector.subscribed({ sources });
+    frameFeeds.switched(lanes);
+    declaredBarPanes.declare(lanes);
+  };
+
+  function prepareRenderer(
+    name: RendererName,
+    reported: string,
+    entry: string,
+  ) {
+    const stores = new HeldStores(inputs.profile(name, log));
+    const prepared = inputs.renderer({
+      name,
+      entry,
+      build: (hostReaches) =>
+        mainRendererOf(
+          {
+            stored: stores.current(),
+            linkSigner,
+            locations: locs,
+            home: host.home,
+            gates,
+            memoryLimitBytes,
+          },
+          hostReaches,
+        ),
+      boot: () => {
+        const key = inputs.linkKey();
+        return {
+          stored: stores.current(),
+          host: { ...host, env: plainEnvironment(host.env) },
+          memoryLimitBytes,
+          linkKey:
+            key.kind === "ok"
+              ? { kind: "ok", value: key.value.toString("base64") }
+              : key,
+        };
+      },
+      node: bundle.node,
+    });
+    return { name, reported, entry, stores, prepared };
+  }
+
+  const connectRenderer = ({
+    name,
+    reported,
+    entry,
+    stores,
+    prepared,
+  }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
+    const link = prepared.start({
+      reaches,
+      log,
+      clock,
+      // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
+      // mailbox and only rebuilds the sessions currently routed to it.
+      start: async () => {
+        if (!serving()) return;
+        const started = await renderer.start(() => {
+          const viewers = frameFeeds.viewers();
+          if (renderers.size === 1) frameFeeds.handedIn(viewers);
+          return {
+            kind: "event",
+            event: {
+              kind: "start",
+              viewers: viewersOf(name, viewers),
+              sessions: collector
+                .liveSessions()
+                .filter(
+                  ({ worldState }) => nameOf(worldState.session) === name,
+                ),
+            },
+          };
+        }, [["why", "renderer-start"]]);
+        if (started.kind === "threw") {
+          frameFeeds.handedIn(null);
+          throw new CrossedFailure(started.failure);
+        }
+        // A start reaches only one renderer. A missed delivery to another
+        // renderer stays owed until it has received the aggregate announcement.
+        if (renderers.size > 1) frameFeeds.announce();
+      },
+      ended: (event) => {
+        rendererEnded = event;
+        restateFaults();
+      },
+    });
+    const renderer = rendererHost(
+      name,
+      clock,
+      link.renderer,
+      log,
+      {
+        subscribed: (subscriptions) => {
+          declared.set(name, {
+            sources: subscriptions.sources,
+            lanes: subscriptions.lanes,
+          });
+          aggregate();
+        },
+        frames: (frames) =>
+          frameFeeds.took(
+            frames.filter(({ session }) => nameOf(session) === name),
+          ),
+        stored: (writes) => stores.take(writes),
+        holding: (session) => collector.holding(session),
+        recorded: () => {},
+      },
+      {
+        perform: (act) => acts.perform(act),
+        stateDir: paths.state,
+        configs: configDiscovery.forRenderer(name),
+        closing: cancelling,
+        unheard: (text) => {
+          actFailed = joinedEvent(actFailed, text, instant());
+          restateFaults();
+        },
+      },
+    );
+    return { reported, entry, stores, link, renderer };
+  };
+
+  const primary = connectRenderer(primaryPrepared);
+  renderers.set(inputs.rendererName, primary);
+
+  // [LAW:effects-at-boundaries] Resolve and validate a worktree bundle here,
+  // once on its admission. Ordinary statusline ticks only find the binding.
+  const canonicalEntry = (name: RendererName, bundlePath: string): string => {
+    try {
+      if (inputs.rendererEntryOf === undefined)
+        throw new Error("this host has no process entry resolver");
+      return inputs.rendererEntryOf(bundlePath);
+    } catch (error) {
+      throw new BadVerbArgs(
+        `renderer ${name} bundle ${JSON.stringify(bundlePath)}: ${String(error)}`,
+      );
+    }
+  };
+
+  const rendererFor = (
+    request: CheckedRenderRequest,
+    environment: SessionEnvironment,
+    order: RequestId,
+  ): RendererHost => {
+    const session = request.hookData.session_id;
+    const route = routes.get(session);
+    const asked =
+      environment.kind === "ok"
+        ? variableOf(environment.value, "CC_CANDYBAR_NAME")
+        : null;
+    const client = request.hints.client;
+    // A frames client can forward Claude Code's input itself. An explicit
+    // name selects a renderer as on any statusline request; an unnamed
+    // frames client continues drawing the session it is following.
+    let name =
+      client?.kind === "frames" && route !== undefined
+        ? route.name
+        : inputs.rendererName;
+    if (asked?.kind === "ok") {
+      try {
+        name = rendererNameOf(asked.value);
+      } catch (error) {
+        throw new BadVerbArgs(`CC_CANDYBAR_NAME: ${String(error)}`);
+      }
+    }
+    if (route !== undefined && route.name !== name && route.order > order)
+      throw new BadVerbArgs(
+        `session ${session} has already moved to renderer ${route.name}`,
+      );
+
+    let target = renderers.get(name);
+    const binding = asked?.kind === "ok" ? client?.bundle : undefined;
+    if (target === undefined) {
+      if (binding === undefined)
+        throw new BadVerbArgs(
+          `renderer ${name} needs a statusline client's bundle`,
+        );
+      target = connectRenderer(
+        prepareRenderer(name, binding, canonicalEntry(name, binding)),
+      );
+      target.stores.load();
+      target.link.serve();
+      renderers.set(name, target);
+      if (phase.kind === "armed") target.link.arm();
+    } else if (
+      binding !== undefined &&
+      binding !== target.reported &&
+      binding !== target.entry &&
+      canonicalEntry(name, binding) !== canonicalEntry(name, target.entry)
+    ) {
+      throw new BadVerbArgs(
+        `renderer ${name} is bound to ${JSON.stringify(target.entry)}`,
+      );
+    }
+
+    if (route === undefined || order >= route.order) {
+      routes.set(session, { name, order });
+      if (route !== undefined && route.name !== name) {
+        const former = renderers.get(route.name);
+        if (former !== undefined)
+          void former.renderer
+            .deliver(
+              () => ({
+                kind: "event",
+                event: { kind: "retire", session },
+              }),
+              [["why", "renderer-moved"]],
+            )
+            .catch((error: unknown) => {
+              log(
+                "error",
+                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
+              );
+            });
+        frameFeeds.handedIn(null);
+        frameFeeds.announce();
+      }
+    }
+    return target.renderer;
+  };
+
   const parts: DaemonParts = {
     closing: cancelWork.signal,
     home: host.home,
@@ -593,38 +825,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     frameFeeds,
     limits,
     collector,
-    renderer: rendererHost(
-      inputs.rendererName,
-      clock,
-      link.renderer,
-      log,
-      {
-        subscribed: (subscriptions) => {
-          collector.subscribed(subscriptions);
-          frameFeeds.switched(subscriptions.lanes);
-          declaredBarPanes.declare(subscriptions.lanes);
-        },
-        frames: (frames) => frameFeeds.took(frames),
-        stored: (writes) => stores.take(writes),
-        holding: (session) => collector.holding(session),
-        // The daemon waits on no turn's note.
-        recorded: () => {},
-      },
-      {
-        perform: (act) => acts.perform(act),
-        stateDir: paths.state,
-        configs: configDiscovery.forRenderer(inputs.rendererName),
-        closing: cancelling,
-        // [LAW:no-silent-failure] Joined to the last while it is owed, by the
-        // one rule for events that follow each other.
-        unheard: (text) => {
-          actFailed = joinedEvent(actFailed, text, instant());
-          restateFaults();
-        },
-      },
-    ),
+    renderer: primary.renderer,
+    rendererFor,
   };
-  configRenderers.set(parts.renderer.name, parts.renderer);
 
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // found when they resume: every followed origin is discovered again, and
@@ -696,7 +899,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
       limits.arm();
-      link.arm();
+      for (const { link } of renderers.values()) link.arm();
     },
   };
   phase = { kind: "built" };
@@ -707,10 +910,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const starting: DaemonPhase = { kind: "starting" };
     phase = starting;
     try {
-      stores.load();
+      primary.stores.load();
       sessionBook.load();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
-      link.serve();
+      primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       phase = { kind: "serving" };
       return served;
@@ -738,8 +941,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   ): Promise<DaemonClose> {
     // The renderer's steps of the teardown, each awaited where it
     // stands: the renderer takes them in the order they are sent.
-    const rendererStep = (kind: "close-journal" | "close-views") => () =>
-      wasServing ? parts.renderer.ask({ kind }) : undefined;
+    const rendererSteps = (
+      kind: "close-journal" | "close-views",
+    ): TeardownStep[] =>
+      wasServing
+        ? [...renderers.values()].map(({ renderer }) => [
+            `${renderer.name} ${kind}`,
+            () => renderer.ask({ kind }),
+          ])
+        : [];
     // The stores still flush after a close failed (runTeardown).
     const teardown: readonly TeardownStep[] = [
       // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
@@ -747,11 +957,21 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
       // from here, so no turn the renderer holds for later runs into the
       // close's.
-      ["renderer wake close", () => parts.renderer.closeWake()],
-      ["renderer close begins", () => link.beginClose()],
+      [
+        "renderer wakes close",
+        () => {
+          for (const { renderer } of renderers.values()) renderer.closeWake();
+        },
+      ],
+      [
+        "renderer close begins",
+        () => {
+          for (const { link } of renderers.values()) link.beginClose();
+        },
+      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
-      ["renderer journal close", rendererStep("close-journal")],
+      ...rendererSteps("close-journal"),
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.
@@ -770,7 +990,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // Before the views close: a `config` made after it finds its origin
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
-      ["renderer views close", rendererStep("close-views")],
+      ...rendererSteps("close-views"),
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close
@@ -780,9 +1000,19 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ["stores close", () => stores.close()],
+      ...[...renderers.values()].map(
+        ({ renderer, stores }): TeardownStep => [
+          `${renderer.name} stores close`,
+          () => stores.close(),
+        ],
+      ),
       ["sessionBook close", () => sessionBook.close()],
-      ["renderer process close", () => link.close()],
+      ...[...renderers.values()].map(
+        ({ renderer, link }): TeardownStep => [
+          `${renderer.name} renderer close`,
+          () => link.close(),
+        ],
+      ),
     ];
     await runTeardown(teardown, log);
     phase = { kind: "closed", done };

@@ -20,11 +20,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { spawnTestDaemon } from "./spawn-test-daemon";
-import {
-  sendDaemonRequest,
-  type ExitResult,
-} from "./daemon-wire";
+import { spawnTestDaemon, type DaemonEntry } from "./spawn-test-daemon";
+import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
 import { logPath } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 
@@ -151,6 +148,7 @@ export interface RunningDaemon {
 // binds, never a caller-supplied guess.
 export async function spawnDaemonWithEnv(
   env: NodeJS.ProcessEnv,
+  entry?: DaemonEntry,
 ): Promise<RunningDaemon> {
   const sockPath = env.CC_CANDYBAR_SOCKET;
   if (!sockPath) {
@@ -159,7 +157,11 @@ export async function spawnDaemonWithEnv(
         "prepareIsolatedDaemonEnv to build env)",
     );
   }
-  const { child, signalDaemon, stop, stderrTail } = await spawnTestDaemon(env);
+  const { child, signalDaemon, stop, stderrTail } = await spawnTestDaemon(
+    env,
+    undefined,
+    entry,
+  );
 
   const readiness = await awaitReadiness(child, sockPath);
   if (readiness.phase !== "serving") {

@@ -49,6 +49,11 @@ export function productionAdapters(
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
+    rendererEntryOf: (reported) => {
+      const entry = fs.realpathSync.native(reported);
+      if (!fs.statSync(entry).isFile()) throw new Error("not a file");
+      return entry;
+    },
     stat: fs.statSync,
   };
 }
