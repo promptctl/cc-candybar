@@ -26,7 +26,7 @@ import {
   readdir as gatedReaddir,
   stat as gatedStat,
   statStamp,
-  stampOf,
+  transcriptVersion,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { parseSessionId, type SessionId } from "../foundations/session-id";
@@ -969,8 +969,8 @@ export class SessionUsageStore {
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath = join(dir, file);
-          const st = await unlessGone(gatedStat(filePath));
-          if (st === undefined || st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(gatedStat(filePath, { bigint: true }));
+          if (st === undefined || Number(st.mtimeMs) < cutoff) continue;
           // [LAW:parse-dont-validate] A transcript's name is the session id it
           // holds; a name the checkpoint refuses is reported and not read.
           const id = parseSessionId(file.slice(0, -".jsonl".length));
@@ -984,7 +984,7 @@ export class SessionUsageStore {
           candidates.push({
             sessionId: id.id,
             path: filePath,
-            stamp: stampOf(st),
+            stamp: transcriptVersion(st),
           });
         }
       }

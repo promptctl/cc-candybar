@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { textOf } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
+import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { frameRequest, hookData, renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
@@ -19,6 +20,21 @@ import {
 } from "../../helpers/spawn-isolated-daemon";
 
 const WORKTREE_MODEL = "Worktree renderer";
+
+function cacheEntry(id: string, timestamp: string): string {
+  return (
+    JSON.stringify({
+      type: "assistant",
+      uuid: id,
+      timestamp,
+      message: {
+        role: "assistant",
+        content: [],
+        usage: { cache_read_input_tokens: 10 },
+      },
+    }) + "\n"
+  );
+}
 
 // The release bundle's own renderer, with one deliberately different piece
 // of display code. It still exercises the production process and boot wire,
@@ -86,6 +102,7 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-named-fixture-")),
   );
   let daemon: RunningDaemon | undefined;
+  const stopFeeds: (() => void)[] = [];
   try {
     const data = path.join(root, "data");
     const plugin = path.join(data, "cc-candybar", "plugins", "shared");
@@ -106,7 +123,7 @@ test("two named renderer processes draw separately and share config, transcript 
       definition,
       `{
       variables: {
-        marker: { kind: "file", path: ${JSON.stringify(source)}, cache: { ttl: "60s" } },
+        marker: { kind: "file", path: ${JSON.stringify(source)}, cache: { watch_file: ${JSON.stringify(source)} } },
       },
       segments: { marker: { template: "{{ .plugins.shared.marker }}" } },
     }`,
@@ -115,19 +132,21 @@ test("two named renderer processes draw separately and share config, transcript 
       config,
       `{
       globals: { experimentalStatusline: true },
-      variables: { modelName: { kind: "input", path: "model.display_name" } },
-      segments: { model: { template: "{{ .modelName }}" } },
-      root: { h: ["model", "plugins.shared.marker"] },
+      variables: {
+        modelName: { kind: "input", path: "model.display_name" },
+        expiry: { kind: "input", path: "cache.expiresAt" },
+      },
+      segments: {
+        model: { template: "{{ .modelName }}" },
+        expiry: { template: "{{ if .expiry }}expiry={{ .expiry }}{{ end }}" },
+      },
+      root: { h: ["model", "plugins.shared.marker", "expiry"] },
     }`,
     );
     for (const transcript of [firstTranscript, secondTranscript])
       fs.writeFileSync(
         transcript,
-        JSON.stringify({
-          type: "user",
-          uuid: "one",
-          message: { role: "user", content: "transcript data" },
-        }) + "\n",
+        cacheEntry("initial", "2026-11-19T12:00:00.000Z"),
       );
     worktreeBundle(alternate);
     const shared = [config, definition, source];
@@ -156,12 +175,13 @@ test("two named renderer processes draw separately and share config, transcript 
     const request = (
       session: string,
       named?: { name: string; bundle: string },
+      transcript = transcriptOf(session),
     ) =>
       frameRequest(isolated.sockPath, {
         ...renderBody(session, root, {}, args),
         hookData: {
           ...hookData(session, root),
-          transcript_path: transcriptOf(session),
+          transcript_path: transcript,
         },
         ...(named !== undefined && {
           env: { ...TEST_ENV, CC_CANDYBAR_NAME: named.name },
@@ -170,10 +190,15 @@ test("two named renderer processes draw separately and share config, transcript 
       });
 
     let primary = "";
+    const expectedExpiry = (hour: string) =>
+      `expiry=${Date.parse(`2026-11-19T${hour}:00:00.000Z`) / 1000}`;
     await until(
       async () => {
         primary = textOf(await request("main-session"));
-        return primary.includes("one-shared-plugin-read");
+        return (
+          primary.includes("one-shared-plugin-read") &&
+          primary.includes(expectedExpiry("13"))
+        );
       },
       () => `primary plugin source was read, last frame: ${primary}`,
       8000,
@@ -249,6 +274,83 @@ test("two named renderer processes draw separately and share config, transcript 
       new Set([daemon.child.pid]),
     );
 
+    // A different Claude session, served by the worktree, names the same
+    // transcript as the main process. Both consume the host's cache at the
+    // current file version and again after an append.
+    expect(textOf(await request("main-session"))).toContain("Opus 4.7");
+    let alias = "";
+    await until(
+      async () => {
+        alias = textOf(
+          await request("alias-session", selected, firstTranscript),
+        );
+        return alias.includes(expectedExpiry("13"));
+      },
+      () => `the worktree showed no expiry for the shared transcript: ${alias}`,
+      8000,
+    );
+    expect(alias).toContain(WORKTREE_MODEL);
+    const beforeAppend = count(readsOf(reads), firstTranscript);
+    expect(beforeAppend).toBe(count(both, firstTranscript));
+    fs.appendFileSync(
+      firstTranscript,
+      cacheEntry("updated", "2026-11-19T14:00:00.000Z"),
+    );
+    await until(
+      async () => {
+        const [standard, alternative] = await Promise.all([
+          request("main-session"),
+          request("alias-session", selected, firstTranscript),
+        ]);
+        return [standard, alternative].every((frame) =>
+          textOf(frame).includes(expectedExpiry("15")),
+        );
+      },
+      () => "both renderers to observe the appended transcript entry",
+      10_000,
+    );
+    expect(count(readsOf(reads), firstTranscript)).toBe(beforeAppend + 2);
+
+    const follow = (session: string) => {
+      const frames: string[] = [];
+      const stream = openFrameStream(
+        isolated.sockPath,
+        session,
+        "statusline",
+        (frame) => {
+          if (frame.ok && "output" in frame && typeof frame.output === "string")
+            frames.push(frame.output);
+        },
+        () => {},
+      );
+      stopFeeds.push(() => stream.close());
+      return frames;
+    };
+    const standard = follow("main-session");
+    const alternative = follow("secondary-session");
+    const delivered = (contents: string) =>
+      standard.some(
+        (frame) => frame.includes("Opus 4.7") && frame.includes(contents),
+      ) &&
+      alternative.some(
+        (frame) => frame.includes(WORKTREE_MODEL) && frame.includes(contents),
+      );
+    const updatedSource = "one-shared-plugin-refresh";
+    await until(
+      () => delivered("one-shared-plugin-read"),
+      "both pushed frames",
+    );
+    const priorReads = count(readsOf(reads), source);
+    fs.writeFileSync(source, `${updatedSource}\n`);
+    // Both draw from the same file refresh, without another statusline
+    // request re-admitting either renderer's subscriptions.
+    await until(
+      () => delivered(updatedSource),
+      "both pushed frames to observe one source invalidation",
+      10_000,
+    );
+    expect(count(readsOf(reads), source)).toBe(priorReads + 1);
+
     const conflict = await sendDaemonRequest(
       isolated.sockPath,
       {
@@ -289,31 +391,26 @@ test("two named renderer processes draw separately and share config, transcript 
       daemon.child.pid,
     );
 
-    expect(textOf(await request("main-session"))).toContain("Opus 4.7");
     const worktreePid = Number(
       children.find((match) => match[1] === "worktree")?.[2],
     );
     if (!Number.isSafeInteger(worktreePid) || worktreePid < 1)
       throw new Error("expected the worktree renderer's live child pid");
     process.kill(worktreePid, "SIGKILL");
-    let afterEnd = "";
+    const afterEnd = "main-feed-survives-worktree-end";
+    fs.writeFileSync(source, `${afterEnd}\n`);
     await until(
-      async () => {
-        afterEnd = textOf(await request("main-session"));
-        return (
-          afterEnd.includes("Opus 4.7") &&
-          afterEnd.includes("one-shared-plugin-read") &&
-          /renderer worktree\[2\] started pid=/.test(readLog())
-        );
-      },
       () =>
-        `the primary did not keep drawing during worktree recovery: ${afterEnd}`,
+        standard.some((frame) => frame.includes(afterEnd)) &&
+        /renderer worktree\[2\] started pid=/.test(readLog()),
+      "the primary feed stays live during worktree recovery",
       8000,
     );
     expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(
       1,
     );
   } finally {
+    for (const stop of stopFeeds) stop();
     await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
