@@ -1,3 +1,9 @@
+## [1.235.4](https://github.com/promptctl/cc-candybar/compare/v1.235.3...v1.235.4) (2026-11-19)
+
+### Bug Fixes
+
+* **click:** report desktop launch failures ([#879](https://github.com/promptctl/cc-candybar/issues/879)) ([11ce0f4](https://github.com/promptctl/cc-candybar/commit/11ce0f48bd2e5d1ed177c07770dc3fdfd4ad8b52))
+
 ## [1.235.3](https://github.com/promptctl/cc-candybar/compare/v1.235.2...v1.235.3) (2026-11-19)
 
 ### Bug Fixes
