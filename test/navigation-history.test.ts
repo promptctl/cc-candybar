@@ -4,15 +4,18 @@
 // itself a step.
 
 import { SessionState } from "../src/renderer/session-state";
-import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
+import { BadVerbArgs } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   encodeSegments,
+  effectsUrl,
+  VERB_COPY,
   VERB_SET_STATE,
   VERB_BACK,
   VERB_UNDO,
 } from "../src/click/wire";
 import {
+  clickUrl,
   recordRender,
   testVerbContext,
   verbContextWith,
@@ -21,6 +24,7 @@ import {
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
+import { disclosureNest } from "../src/config/disclosure-nest";
 import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -28,6 +32,7 @@ const S1 = sessionIdOf("s1");
 
 const MENU = "nav-test.menu";
 const TAB = "nav-test.tab";
+const PAGE = "nav-test.page";
 // A confirm's key, by the suffix every confirmStep gives it.
 const ARMED = "nav-test.clear.armed";
 
@@ -38,6 +43,7 @@ const configWithTabs = (...tabs: string[]): DslConfig => ({
   actions: {
     menu: { set: MENU, cycle: ["closed", "open"] },
     tab: { set: TAB, cycle: tabs },
+    page: { set: PAGE, int: true },
     arm: { set: ARMED, cycle: ["armed", "disarmed"] },
   },
 });
@@ -62,10 +68,15 @@ function setup() {
     await CLICK_VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
   return {
     sessionState,
+    ctx,
     // What the bar's ◁ counts: measured against the gate of the config the
     // session renders now.
     depth: (): number =>
-      ctx.navigation.depth(S1, sessionState, ctx.gates.state.gateFor(config)),
+      ctx.navigation.depth(S1, sessionState, {
+        gate: ctx.gates.state.gateFor(config),
+        nest: () => disclosureNest(config),
+        edit: null,
+      }),
     // The session's config reloads as `next`.
     reload: (next: DslConfig): void => {
       config = next;
@@ -106,6 +117,16 @@ describe("back", () => {
     dispose();
   });
 
+  test("Back preserves a control an independent transition has changed", async () => {
+    const { sessionState, set, back, dispose } = setup();
+    await set(MENU, "open");
+    sessionState.set(S1, PAGE, "3");
+    await back();
+    expect(sessionState.get(S1, MENU)).toBeNull();
+    expect(sessionState.get(S1, PAGE)).toBe("3");
+    dispose();
+  });
+
   test("a value the key's gate no longer admits is never restored", async () => {
     const { sessionState, depth, reload, set, back, dispose } = setup();
     await set(TAB, "a");
@@ -123,11 +144,16 @@ describe("back", () => {
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
     const store = new SessionState();
     const history = new NavigationHistory();
-    const journal = history.begin(store);
-    journal.sessionState.set(S1, MENU, "open");
-    journal.sessionState.set(S1, MENU, "closed");
-    journal.commit();
-    history.back(S1, store, stateGate(EMPTY_DEFAULT));
+    const config = configWithTabs("a", "b");
+    const context = { gate: stateGate(config), nest: () => disclosureNest(config), edit: null };
+    const choose = store.setBatch.bind(store);
+    const visit = history.begin(store, choose);
+    visit.choose(S1, [{ key: MENU, value: "open" }], () => context);
+    visit.choose(S1, [{ key: MENU, value: "closed" }], () => context);
+    visit.commit();
+    const back = history.begin(store, choose);
+    back.back(S1, context);
+    back.commit();
     expect(store.get(S1, MENU)).toBeNull();
   });
 
@@ -177,6 +203,26 @@ describe("back", () => {
     expect(sessionState.get(S1, "theme")).toBe("gruvbox");
     await undo();
     expect(sessionState.get(S1, "theme")).toBeNull();
+    dispose();
+  });
+
+  test("Back restores a page cursor without repeating the click's command", async () => {
+    const { sessionState, ctx, set, back, dispose } = setup();
+    await set(MENU, "open", TAB, "a", PAGE, "1");
+    await clickUrl(
+      effectsUrl([
+        { verb: VERB_SET_STATE, args: [S1, PAGE, "2"] },
+        { verb: VERB_COPY, args: ["an ordinary copy"] },
+      ]),
+      ctx,
+    );
+    expect(ctx.effects).toHaveLength(1);
+    expect(sessionState.get(S1, PAGE)).toBe("2");
+    await back();
+    expect(ctx.effects).toHaveLength(1);
+    expect(sessionState.get(S1, PAGE)).toBe("1");
+    expect(sessionState.get(S1, MENU)).toBe("open");
+    expect(sessionState.get(S1, TAB)).toBe("a");
     dispose();
   });
 

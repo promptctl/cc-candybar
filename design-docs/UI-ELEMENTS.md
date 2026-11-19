@@ -87,7 +87,7 @@ What a click does depends on the action's kind:
 | Persist | `{ persist: k, to \| from \| cycle \| min, max, by }` | the same four writes as `set`, into the config file instead of the session |
 | Save | `{ save: true }` | writes every session draft to the config file |
 | Reset | `{ reset: field }` | removes the setting from the session and from every config-file layer |
-| Undo / redo / back / rewind | `{ undo: true }` … | step the edit draft or the committed settings history. `back` steps the navigation history, and `rewind` discards the edit draft |
+| Undo / redo / back / rewind | `{ undo: true }` … | step the edit draft or the committed settings history. `back` restores the previous reachable menu view, and `rewind` discards the edit draft |
 | Preset | `{ preset: "save" }` / `{ preset: "delete", name }` | writes or removes a preset in the config file |
 | Layout op | `{ persist: root, removeSegment }` / `insertSegment` / `insertSegmentFrom` | rewrites a preset's `root` in the config file |
 | Copy | `{ copy: template }` | copies the evaluated text |
@@ -374,7 +374,7 @@ Same at 80 and 200 columns. The menu is two lines, then the open tab's body.
 | Region | Click |
 |---|---|
 | `🍫` / `✖` | session `candybar.menu` ← `open` / `closed`. Closing also disarms every confirm, closes any open ring, and returns the tab to `session`, so the menu reopens at its top |
-| `◁` | `back`: undoes the last navigating click (what was open, which tab). Drawn muted and inert while there is nothing to go back to |
+| `◁` | `back` restores the previous available menu view, including its selected tab and page. Drawn muted and inert while there is nothing to go back to |
 
 - **Glyph:** `globals.menuGlyph` (default `🍫`). An author may place the `candybar.menu` segment elsewhere, but never under a `when` or inside a disclosure body: the menu is visible under every condition.
 

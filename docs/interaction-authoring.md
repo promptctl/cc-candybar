@@ -97,7 +97,8 @@ declares exactly one value source:
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment and, for `shade`, `variation` or `style`, in every theme's default) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
-| `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
+| `{ back: true }` | restore the previous available menu view for this session. Closed edit transactions, removed menus, and changed settings stay as they are |
+| `{ rewind: true }` | discard the current edit draft and leave edit mode. This is edit mode's `↩ cancel` |
 | `{ save: true, layer }` | write every setting this session renders differently from your config to the layer `layer` names, in one edit, and drop those picks from the session. `layer` defaults to `"user"`; `"ask"` has each link bind the layer as its value — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |

@@ -67,6 +67,7 @@ import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
 import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
+import { disclosureNest } from "../config/disclosure-nest.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
@@ -546,11 +547,11 @@ export function mainRendererOf(
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(
-            sessionId,
-            sessionState,
-            gates.state.gateFor(config),
-          ),
+          navigationHistory.depth(sessionId, sessionState, {
+            gate: gates.state.gateFor(config),
+            nest: () => disclosureNest(config),
+            edit: edits.draft(sessionId)?.navigationScope ?? null,
+          }),
       }),
     },
     {
