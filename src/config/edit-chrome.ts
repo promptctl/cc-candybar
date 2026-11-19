@@ -65,7 +65,6 @@ import {
   menuActionName,
   menuMember,
   menuPageKey,
-  sharedMenuStateKey,
   menuStateKey,
 } from "./menu-keys.js";
 import {
@@ -357,22 +356,13 @@ function configureParts(
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
-  // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold],
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member,
-  };
+  // The accordion this placement's lists share: edit chrome's own name, which
+  // no `{{ menu }}` key spells, and a template path (`p` and `d`, as below).
+  // [LAW:single-enforcer] Closing configure folds it (disclosure-nest.ts), and
+  // the placement ending releases it (edit-transaction.ts), so each visit
+  // starts with every list closed.
+  const listKey = `${EDIT_NS}list.p${ctx.presetIdent}.d${placement}`;
+  ctx.artifacts.actions[enter] = { set: EDIT_CONFIGURE_KEY, to: member };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
@@ -968,10 +958,11 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   );
   // The view toggle rides the same trailing cell as the `(?)`, minted once for
   // the same reason: one key, so switching presets keeps the view you chose.
-  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
-    EDIT_LIVE_KEY,
-    DISCLOSURE_CLOSED,
-  );
+  // It is edit chrome, so it sits inside edit mode and an edit opens on names.
+  artifacts.variables[EDIT_LIVE_KEY] = {
+    ...disclosureStateVar(EDIT_LIVE_KEY, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF],
+  };
   artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
     EDIT_LIVE_KEY,
     EDIT_LIVE_REF.member,

@@ -138,7 +138,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         daemon,
         urlWriting(
           await bar(),
-          "menus.candybar_pickers",
+          "menus.candybarZ00002epickers",
           "candybar.apply.preset",
         ),
       );

@@ -24,7 +24,7 @@
 //               the key" position magic: identity depends only on names a reader
 //               can see in the template, never on tree position.
 
-import { ident } from "./ident.js";
+import { escapedIdent } from "./ident.js";
 import { MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
 import {
   DEFAULT_DISTRIBUTION,
@@ -56,6 +56,10 @@ export function menuMember(applyName: string): string {
 // the key all siblings passing the same string agree on, so one open member
 // wins (accordion). The shared form ignores the placement on purpose — that is
 // how menus in DIFFERENT placements become mutually exclusive.
+// [LAW:types-are-the-program] Every name is spelled injectively
+// (`escapedIdent`), so two names never share a key: `clock-2` and `clock_2`
+// are two menus, and a placement named like another owner's names spells
+// none of that owner's keys.
 export function menuStateKey(
   placementId: string,
   applyName: string,
@@ -63,18 +67,17 @@ export function menuStateKey(
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : MENU_NS + ident(placementId) + "." + ident(applyName);
+    : MENU_NS + escapedIdent(placementId) + "." + escapedIdent(applyName);
 }
 
 // [LAW:decomposition] The shared arm of that derivation, named so the loader's
 // reserved-key error can quote the key an authored group WOULD derive without
 // inventing a segment and apply name to ask for it (brandon-menus-du8). It is the
-// arm `menuStateKey` itself takes, so there is no second spelling to drift: the
-// `ident()` collapse here is exactly the one the gate reasons about, and the two
-// ranges are disjoint by construction — a shared key holds no dot after the
-// namespace, an independent one holds exactly one.
+// arm `menuStateKey` itself takes, so there is no second spelling to drift. The
+// two ranges are disjoint by construction: an escaped name holds no dot, so a
+// shared key holds none after the namespace and an independent one exactly one.
 export function sharedMenuStateKey(sharedKey: string): string {
-  return MENU_NS + ident(sharedKey);
+  return MENU_NS + escapedIdent(sharedKey);
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its

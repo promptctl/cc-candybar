@@ -40,7 +40,7 @@ import { effectsOf } from "../../helpers/click";
 const showsTheme = (out: Frame, theme: string): boolean =>
   textOf(out).includes(`${theme} ▀▀▀`);
 // Opening the theme picker: the write its label's click makes.
-const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
+const OPEN_THEME_PICKER = ["menus.candybarZ00002epickers", "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
@@ -115,7 +115,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
         effects.some(
           (e) =>
             e.verb === "set-state" &&
-            e.args[1] === "menus.candybar_pickers" &&
+            e.args[1] === "menus.candybarZ00002epickers" &&
             e.args[2] === "candybar.apply.theme",
         ),
       );

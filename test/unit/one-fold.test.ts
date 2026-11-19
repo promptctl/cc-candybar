@@ -79,16 +79,18 @@ describe("no declared name sits under another", () => {
     );
   });
 
-  test("a user segment named like a settings accordion key, holding a menu, is refused", () => {
-    expect(() =>
-      overDefault(`{
-        actions: { applyTheme: { set: "theme", from: "themes" } },
-        segments: { candybar_gearPickers: { template: '${MENU}' } },
-        root: { h: ["candybar_gearPickers"] },
-      }`),
-    ).toThrow(
-      /"menus\.candybar_gearPickers\.applyTheme" is declared under the variable "menus\.candybar_gearPickers"/,
+  // A name is spelled apart from every other, so a placement can't spell the
+  // key a settings accordion holds: its menu is its own.
+  test("a user segment named like a settings accordion key holds a menu of its own", () => {
+    const built = overDefault(`{
+      actions: { applyTheme: { set: "theme", from: "themes" } },
+      segments: { candybar_gearPickers: { template: '${MENU}' } },
+      root: { h: ["candybar_gearPickers"] },
+    }`);
+    expect(Object.keys(built.variables)).toContain(
+      "menus.candybarZ00005fgearPickers.applyTheme",
     );
+    expect(nested(built)).toEqual([]);
   });
 
   test("a user variable `menus` beside a placed menu is refused", () => {

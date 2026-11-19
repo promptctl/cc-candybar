@@ -322,7 +322,13 @@ export function mainRenderer(
           () =>
             runEach(
               parts.edits
-                .configured(event.origin, event.config)
+                .configured(
+                  event.origin,
+                  event.config,
+                  (sid) =>
+                    parts.renderCache.getOrCreate(event.origin, sid).state
+                      .config,
+                )
                 .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
             ),
           ...sessions.map((session) => () => openSession(parts, session)),
@@ -671,7 +677,9 @@ export function mainRendererOf(
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, {
+          // Read through the session's view, as a click's ◁ back reads it,
+          // so an open edit's chrome is counted where it is held.
+          navigationHistory.depth(sessionId, edits.view, {
             gate: gates.state.gateFor(config),
             nest: () => disclosureNest(config),
             edit: edits.draft(sessionId)?.navigationScope ?? null,

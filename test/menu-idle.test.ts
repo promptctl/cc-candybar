@@ -3,6 +3,8 @@
 // period as the renderer keeps it on its ticks, the close it makes — a click's
 // own journaled write — and the flash on the rendered bar.
 
+import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { linkUrls } from "./helpers/frame";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
@@ -160,7 +162,7 @@ describe("the idle period: a close is due a timeout after it began, while a menu
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
+const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -268,7 +270,9 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     );
   });
 
-  test("a toggle that hangs no menu is a view preference, and is left as it is", async () => {
+  // ☐ live is the open edit's own: the timer closes the door, and the edit
+  // the door held takes the toggle with it.
+  test("a toggle that hangs no menu is no menu the timer closes", async () => {
     const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
@@ -280,8 +284,11 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       rt.ctx,
       rt.ctx.effects,
     );
-    expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
+    expect(rt.logged).toContain(
+      `menu-idle: closed=${SETTINGS_ANCHOR} idle=30.0s timeout=30s (session=${SID})`,
+    );
+    expect(rt.held(EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(EDIT_LIVE_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
   test("a group open by default is closed, and stays closed", async () => {

@@ -1,10 +1,10 @@
-import { escapedIdent, ident } from "../../src/config/ident";
+import { escapedIdent } from "../../src/config/ident";
 
-// The escape is what keeps edit chrome's names apart, so it is held here as
+// The escape is what keeps synthesized names apart, so it is held here as
 // the properties every name built from it relies on.
 describe("escapedIdent", () => {
-  // Pairs a lossy or careless escape would merge: punctuation that `ident`
-  // folds together, and a literal escape marker beside an escaped character.
+  // Pairs a lossy or careless escape would merge: punctuation a collapse to
+  // `_` folds together, and a literal escape marker beside an escaped character.
   const NAMES = [
     "git-2",
     "git_2",
@@ -24,12 +24,8 @@ describe("escapedIdent", () => {
     expect(new Set(NAMES.map(escapedIdent)).size).toBe(NAMES.length);
   });
 
-  test("the spelling is letters and digits alone, which ident keeps whole", () => {
-    for (const name of NAMES) {
-      const spelled = escapedIdent(name);
-      expect(spelled).toMatch(/^[A-Za-z0-9]+$/);
-      expect(ident(spelled)).toBe(spelled);
-    }
+  test("the spelling is letters and digits alone", () => {
+    for (const name of NAMES) expect(escapedIdent(name)).toMatch(/^[A-Za-z0-9]+$/);
   });
 
   test("a name of plain letters and digits other than the marker reads as written", () => {

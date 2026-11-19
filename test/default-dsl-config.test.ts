@@ -553,7 +553,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           {
             verb: VERB_SET_STATE,
-            args: [SID, "menus.candybar_pickers", "candybar.apply.theme"],
+            args: [SID, "menus.candybarZ00002epickers", "candybar.apply.theme"],
           },
         ]),
         ctx,
@@ -598,7 +598,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
-          { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
+          { verb: VERB_SET_STATE, args: [SID, "menus.candybarZ00002epickers", "gear"] },
         ]),
         ctx,
       );

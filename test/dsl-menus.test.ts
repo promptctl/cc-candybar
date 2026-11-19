@@ -60,7 +60,7 @@ import {
   type Address,
 } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuPageKey, menuStateKey } from "../src/config/menu-keys";
 
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
@@ -276,10 +276,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
-  test("two menus whose names normalize to the same state key are rejected (lossy ident)", () => {
-    // segment "s" with apply actions "a-b" and "a_b" both normalize to
-    // menus.s.a_b; without the collision guard they would silently share open
-    // state (an unintended accordion). It must be a loud load error.
+  test("two menus whose names differ only in punctuation keep apart state keys", () => {
+    // Each name is spelled apart from every other, so "a-b" and "a_b" never
+    // share open state (an unintended accordion).
     const src = `{
       globals: {},
       actions: {
@@ -289,15 +288,12 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
-    try {
-      parseAndValidate("<test>", src, ALLOWED);
-      throw new Error("expected ConfigError");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(
-        /normalize to the same state key/,
-      );
-    }
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const dash = menuStateKey("s", "a-b", undefined);
+    const under = menuStateKey("s", "a_b", undefined);
+    expect(dash).not.toBe(under);
+    expect(config.variables[dash]).toBeDefined();
+    expect(config.variables[under]).toBeDefined();
   });
 
   test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {

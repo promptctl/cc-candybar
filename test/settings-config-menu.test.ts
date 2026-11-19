@@ -16,6 +16,8 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { drawPayload } from "./helpers/draw-payload";
 import { locs } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -318,7 +320,7 @@ async function showThemePicker(r: {
   if (url === undefined) throw new Error("no link opens the theme picker");
   await r.click(url);
 }
-const PICKERS_KEY = "menus.candybar_pickers";
+const PICKERS_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 
 // ─── 1. The save marker ──────────────────────────────────────────────────────
 
@@ -454,7 +456,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
   test("every control writes the session key; the only durable links are the ↺ resets", async () => {
     // Open the theme ring so its option cells render too.
-    const themeMenu = writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+    const themeMenu = writesTo(r.render(), PICKERS_KEY).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
     );
     await r.click(themeMenu!);
@@ -613,7 +615,7 @@ describe("save under a preset that pins the setting", () => {
   ): Promise<string> => {
     await showTab(r, "look");
     await r.click(
-      writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+      writesTo(r.render(), PICKERS_KEY).find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.endcaps"),
       )!,
     );
@@ -661,7 +663,7 @@ describe("save under a preset that pins the setting", () => {
     try {
       await r.click(writesTo(r.render(), "candybar.menu")[0]!);
       await r.click(
-        writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+        writesTo(r.render(), PICKERS_KEY).find((u) =>
           effectsOf(u).some((e) => e.args[2] === "candybar.apply.preset"),
         )!,
       );
@@ -1034,7 +1036,7 @@ describe("a pick leaves the picker open", () => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
     await r.click(
-      writesTo(r.render(), "menus.candybar_pickers").find((u) =>
+      writesTo(r.render(), PICKERS_KEY).find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
       )!,
     );

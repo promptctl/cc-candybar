@@ -85,6 +85,11 @@ export interface Clicked {
 export interface Bar {
   /** The config file the daemon reads and every durable click writes. */
   readonly configPath: string;
+  /**
+   * Copy the config file to a new path, which every render after it names:
+   * the session's config moves.
+   */
+  moveConfig(): void;
   render(): Promise<Frame>;
   /** Report a new terminal size; every render after it is drawn at that size. */
   resize(size: TerminalSize): void;
@@ -95,6 +100,10 @@ export interface Bar {
   click(text: string, nth?: number): Promise<Clicked>;
   /** Click the link of the last render that carries `url`, then render again. */
   follow(url: string): Promise<Clicked>;
+  /** The daemon's state directory, where it stores its sessions. */
+  readonly stateDir: string;
+  /** Stop the daemon and start another over the same files and session. */
+  restart(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -141,21 +150,22 @@ export async function startBar(
     daemonEnv.removeTmpDirs();
     fs.rmSync(scratch, { recursive: true, force: true });
   };
-  const configPath = path.join(scratch, "config.json5");
+  let configPath = path.join(scratch, "config.json5");
   const claudeConfigDir = path.join(scratch, "claude");
   let daemon: BarDaemon;
+  const env = {
+    ...daemonEnv.env,
+    // An empty Claude Code config dir, so the daemon reads none of the host's
+    // Claude Code settings or transcripts.
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+  };
   try {
     fs.writeFileSync(
       configPath,
       opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
     );
     fs.mkdirSync(claudeConfigDir);
-    daemon = await startDaemon({
-      ...daemonEnv.env,
-      // An empty Claude Code config dir, so the daemon reads none of the host's
-      // Claude Code settings or transcripts.
-      CLAUDE_CONFIG_DIR: claudeConfigDir,
-    });
+    daemon = await startDaemon(env);
   } catch (e) {
     removeDirs();
     throw e;
@@ -230,13 +240,25 @@ export async function startBar(
   };
 
   return {
-    configPath,
+    get configPath() {
+      return configPath;
+    },
+    moveConfig: () => {
+      const moved = path.join(scratch, `moved-${path.basename(configPath)}`);
+      fs.copyFileSync(configPath, moved);
+      configPath = moved;
+    },
     render,
     resize: (next) => {
       size = next;
     },
     click,
     follow,
+    stateDir: daemonEnv.stateDir,
+    restart: async () => {
+      await daemon.stop();
+      daemon = await startDaemon(env);
+    },
     stop: async () => {
       await daemon.stop();
       removeDirs();

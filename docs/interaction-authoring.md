@@ -2306,7 +2306,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A `{{ menu }}` accordion key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
+The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. Every key is spelled apart from every other, so `candybar-pickers` and `candybar_pickers` are two keys of their own, and only a key under a reserved namespace as written is refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
 
 ```json5 check:fail
 {
@@ -2315,7 +2315,7 @@ The bundled settings menu's four config pickers share the accordion key `candyba
   },
   segments: {
     themePicker: {
-      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar-pickers") }}',
+      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar.pickers") }}',
     },
   },
   root: { rows: { identity: { h: ["directory", "themePicker"] } } },
@@ -2323,7 +2323,7 @@ The bundled settings menu's four config pickers share the accordion key `candyba
 ```
 
 ```error
-segment "themePicker" has a {{ menu }} whose accordion key "candybar-pickers" lands in the reserved "candybar." namespace — a key is collapsed to an identifier ("candybar-pickers" becomes "menus.candybar_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
+segment "themePicker" has a {{ menu }} whose accordion key "candybar.pickers" lands in the reserved "candybar." namespace — it becomes "menus.candybarZ00002epickers", so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit

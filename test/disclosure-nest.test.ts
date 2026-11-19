@@ -3,6 +3,8 @@
 // cmt-b97df8ef), each clicking the links the bar renders through the verbs the
 // daemon runs, then reopening the parent to find the child closed.
 
+import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { SETTINGS_NS } from "../src/config/reserved-names";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -23,8 +25,8 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
-const GEAR_PICKERS = "menus.candybar_gearPickers";
+const PICKERS = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+const GEAR_PICKERS = sharedMenuStateKey(`${SETTINGS_NS}gearPickers`);
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -62,7 +64,7 @@ function nestBar(src: string) {
   };
   // What the session reads: a cleared key holds its state variable's default.
   const held = (key: string): string =>
-    sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
+    ctx.edits.view.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, sessionState, render, clickWriting, held, logged, ctx };
 }
 

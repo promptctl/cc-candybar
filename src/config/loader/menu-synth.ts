@@ -183,11 +183,10 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
     return issue(`with invalid options — ${(e as Error).message}`);
   }
   // [LAW:no-silent-failure] An accordion key is the one authored name that never
-  // becomes a declaration, so `reservedNamespaceCollisions` cannot see it — and
-  // `menuStateKey` collapses it through `ident()`, which is where a reserved
-  // namespace leaks: every spelling of `candybar.pickers` collapses to the state
-  // key the settings menu's picker accordion mints, and a shared key joining an
-  // accordion is the mechanism BY DESIGN, so the join was silent (brandon-menus-du8).
+  // becomes a declaration, so `reservedNamespaceCollisions` cannot see it, and
+  // `candybar.pickers` derives the state key the settings menu's picker
+  // accordion mints. A shared key joining an accordion is the mechanism BY
+  // DESIGN, so the join would be silent (brandon-menus-du8).
   // Gated here, at load, because this pass sees exactly the AUTHORED menus: the
   // settings menu synthesizes its own artifacts in `validateRenderable`, after this
   // pass has run, so its own reserved key is never asked to pass its own gate.
@@ -199,8 +198,7 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
     if (reserved !== undefined) {
       return issue(
         `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace — ` +
-          `a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes ` +
-          `"${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the ` +
+          `it becomes "${sharedMenuStateKey(sharedKey)}", so it would share one open-state key with the ` +
           `synthesized accordion that owns that namespace instead of grouping only your own menus. ` +
           `Name the group without the reserved prefix`,
       );
@@ -432,19 +430,9 @@ export function synthesizePlacementMenus(
   // function of the identity alone, so the union over trees is the same
   // declaration however many trees mint it.
   for (const preset of presetNames(config.presets)) {
-    // [LAW:types-are-the-program] A synthesized key is `ident()`-normalized
-    // so it carries no separators; that normalization is lossy (`a-b` and
-    // `a_b` collapse), so two DISTINCT declarations could map to one key and
-    // silently share state (an unintended accordion). Track the raw "owner"
-    // each synthesized name (state key AND its derived page key) legitimately
-    // belongs to — a shared key is owned by its raw key string (every sibling
-    // agrees); an independent menu by its raw (placement, apply). A second
-    // owner on the same name is a collision, rejected so it is unrepresentable
-    // [LAW:no-silent-failure] rather than corrupting grouping. Registering the
-    // page key too closes the cross-shape aliasing corner (e.g. an apply
-    // action named "page" in placement "s" vs the page cursor of a shared
-    // key "s").
-    const ownerBySynthKey = new Map<string, string>();
+    // [LAW:types-are-the-program] A synthesized key spells its names
+    // injectively (menu-keys.ts), so two distinct declarations never derive
+    // one key: only a claim on one identity can collide.
     // Two menus claiming one identity (same key + same member) cannot be
     // addressed distinctly: for independent menus that is the literal same
     // `{{ menu }}` twice in a segment; for shared-key menus it is two menus
@@ -470,23 +458,6 @@ export function synthesizePlacementMenus(
         const member = menuMember(apply);
         const stateKey = menuStateKey(id, apply, options.key);
         const pageKey = menuPageKey(stateKey);
-        const owner =
-          options.key !== undefined
-            ? `key ${options.key}`
-            : `ind ${id} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
-          const prior = ownerBySynthKey.get(k);
-          return prior !== undefined && prior !== owner;
-        });
-        if (clashKey !== undefined) {
-          issue(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
         const identity = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity);

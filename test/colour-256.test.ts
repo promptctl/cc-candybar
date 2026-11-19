@@ -158,10 +158,10 @@ async function forEachStage(
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
     "preset picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
+      opener(r, "menus.candybarZ00002epickers", (v) => v.endsWith("preset")),
     "look tab": (r) => opener(r, "candybar.tab", (v) => v === "look"),
     "theme picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("theme")),
+      opener(r, "menus.candybarZ00002epickers", (v) => v.endsWith("theme")),
     "layout tab": (r) => opener(r, "candybar.tab", (v) => v === "layout"),
     "config tab": (r) => opener(r, "candybar.tab", (v) => v === "config"),
   };

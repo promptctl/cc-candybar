@@ -207,7 +207,9 @@ describe("the global settings menu is reachable from a user config", () => {
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1]?.startsWith("menus.candybar_") && e.args[2] !== DISCLOSURE_CLOSED,
+        (e) =>
+          e.args[1]?.startsWith(sharedMenuStateKey(SETTINGS_NS)) &&
+          e.args[2] !== DISCLOSURE_CLOSED,
       ),
     );
     expect(pickerUrl).toBeDefined();
@@ -647,13 +649,12 @@ describe("the menu in a config that declares no variables", () => {
 
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
 
-// [LAW:behavior-not-structure] brandon-menus-du8. The settings menu's four config
-// pickers share the accordion key `candybar.pickers`, and a shared key joining an
-// accordion is the mechanism BY DESIGN — so a user menu that derives the same key
-// joined that accordion, and opening the user's menu closed the settings picker
-// with no error naming the cause. The pin is the BEHAVIOUR, over every spelling
-// `ident()` collapses to the same identifier, not the one spelling the reviewer's
-// proposed `isReservedName(key)` check would have caught.
+// [LAW:behavior-not-structure] The settings menu's four config pickers share the
+// accordion key `candybar.pickers`, and a shared key joining an accordion is the
+// mechanism BY DESIGN — so a user menu that derived the same key would join that
+// accordion, and opening the user's menu would close the settings picker with no
+// error naming the cause. A key is spelled apart from every other, so only the
+// reserved spelling itself can reach it, and that one is refused.
 describe("a user menu cannot join a synthesized accordion", () => {
   // A real declared action, so the only thing a case can fail on is the key.
   const withKey = (key: string): string => `{
@@ -664,26 +665,19 @@ describe("a user menu cannot join a synthesized accordion", () => {
     root: { h: ['hello'] },
   }`;
 
-  // The three spellings `ident()` collapses to `candybar_pickers` — the key the
-  // settings menu's picker accordion mints. Only the first starts with the
-  // authored prefix `"candybar."`, which is why a check on the authored spelling
-  // closes one case of three and the collapse has to be compared instead.
-  for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
-    test(`the key "${key}" is a load error naming the reserved namespace`, () => {
-      try {
-        parseAndValidate("<user>", withKey(key), ALLOWED);
-        throw new Error(`expected a ConfigError for key "${key}"`);
-      } catch (err) {
-        expect(err).toBeInstanceOf(ConfigError);
-        const message = (err as ConfigError).message;
-        expect(message).toContain(SETTINGS_NS);
-        // It names the derived key, so the author sees WHY their spelling is the
-        // reserved one — the collapse is the part they cannot see.
-        expect(message).toContain("menus.candybar_pickers");
-        expect(message).toContain("hello");
-      }
-    });
-  }
+  test(`the key "candybar.pickers" is a load error naming the reserved namespace`, () => {
+    try {
+      parseAndValidate("<user>", withKey("candybar.pickers"), ALLOWED);
+      throw new Error(`expected a ConfigError for key "candybar.pickers"`);
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      const message = (err as ConfigError).message;
+      expect(message).toContain(SETTINGS_NS);
+      // It names the derived key, so the author sees the state it would share.
+      expect(message).toContain(sharedMenuStateKey(`${SETTINGS_NS}pickers`));
+      expect(message).toContain("hello");
+    }
+  });
 
   // Every namespace on the one reserved list, not just the one that mints an
   // accordion today: a later pass minting one under `groups.`/`edit.`/`menus.`
@@ -697,9 +691,15 @@ describe("a user menu cannot join a synthesized accordion", () => {
   }
 
   // The rule is about the NAMESPACE, not about the word: the reserved prefixes
-  // all carry a dot, so a bare name that merely looks like one is an ordinary
-  // accordion key and keeps working.
-  for (const key of ["settings", "pickers", "mysettings"]) {
+  // all carry a dot, so a name that merely looks like one is an ordinary
+  // accordion key and keeps working, under a state key of its own.
+  for (const key of [
+    "settings",
+    "pickers",
+    "mysettings",
+    "candybar-pickers",
+    "candybar_pickers",
+  ]) {
     test(`the ordinary key "${key}" still loads and owns its own state key`, () => {
       const config = parseAndValidate("<user>", withKey(key), ALLOWED);
       const stateKey = sharedMenuStateKey(key);
@@ -710,18 +710,8 @@ describe("a user menu cannot join a synthesized accordion", () => {
     });
   }
 
-  test("the collision the gate exists for is real, as a value", () => {
-    // Independent of the gate: these three spellings derive ONE state key, and it
-    // is the settings pickers' key. If someone ever "simplifies" ident() so this
-    // stops holding, the gate above becomes theatre and this test says so.
-    const settingsPickers = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-    for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
-      expect(sharedMenuStateKey(key)).toBe(settingsPickers);
-    }
-  });
-
   test("a shared key and an independent key can never be the same key", () => {
-    // The other half of why only the reserved case needed a gate: ident() emits
+    // The other half of why only the reserved case needed a gate: the escape emits
     // no dot, so a shared key holds none after the namespace and an independent
     // one holds exactly one. The two ranges are disjoint for ALL inputs, which is
     // why an authored independent menu needs no reservation of its own.
