@@ -40,6 +40,10 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
+import { performChanges } from "../src/daemon/effect-interpreter";
+import { diffChanges } from "../src/config/config-changes";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import type { ConfigChange, EffectId } from "../src/renderer-interface/interface";
 
 let root: string;
 let cleanups: Array<() => void>;
@@ -583,20 +587,28 @@ test("config and plugin discovery refuse a FIFO with no writer", () => {
   ]);
 });
 
-function countingText(reads: string[]): typeof withRegularTextFile {
+function countingText(
+  reads: string[],
+  opens?: string[],
+): typeof withRegularTextFile {
   return (file, use) =>
-    withRegularTextFile(file, (opened) =>
-      use({
+    withRegularTextFile(file, (opened) => {
+      opens?.push(file);
+      return use({
         ...opened,
         text: () => {
           reads.push(file);
           return opened.text();
         },
-      }),
-    );
+      });
+    });
 }
 
-function physicalDiscovery(dataHome: string, reads: string[] = []) {
+function physicalDiscovery(
+  dataHome: string,
+  reads: string[],
+  opens?: string[],
+) {
   const watchers = new WatcherRegistry({
     clock: heldClock(new Date()),
     logger: () => {},
@@ -605,7 +617,7 @@ function physicalDiscovery(dataHome: string, reads: string[] = []) {
     locations: { ...locations(HOST), dataHome, dataDirs: [] },
     stateDir: stateDir(HOST),
     watchers,
-    openText: countingText(reads),
+    openText: countingText(reads, opens),
     log: () => {},
     moved: () => {},
   });
@@ -615,6 +627,70 @@ function physicalDiscovery(dataHome: string, reads: string[] = []) {
   );
   return service;
 }
+
+const changePadding = (text: string) =>
+  text.replace("padding: 1", "padding: 2");
+const paddingEdit = (origin: RenderOrigin, text: string): ConfigChange => ({
+  kind: "change",
+  id: 1 as EffectId,
+  session: sessionIdOf("config-edit"),
+  target: { kind: "layer", origin, role: "user" },
+  changes: diffChanges(text, changePadding(text)),
+});
+
+test.each([
+  { revision: "unchanged", edited: false, newReads: 0 },
+  { revision: "externally edited", edited: true, newReads: 1 },
+])(
+  "a config write rechecks an $revision revision before both consumers reload",
+  ({ edited, newReads }) => {
+    const initial = '{ globals: { padding: 1, separator: " " } }';
+    const { origin, file } = named("shared-write", initial);
+    const reads: string[] = [];
+    const opens: string[] = [];
+    const service = physicalDiscovery(project("empty-data"), reads, opens);
+    const first = service.forRenderer(MAIN_RENDERER);
+    const second = service.forRenderer(rendererNameOf("worktree"));
+    first.follow([origin]);
+    second.follow([origin]);
+    expect(opens).toEqual([file]);
+    expect(reads).toEqual([file]);
+
+    const current = edited ? initial.replace('" "', '" | "') : initial;
+    if (edited) fs.writeFileSync(file, current);
+    const landed = performChanges([paddingEdit(origin, initial)], null, second);
+    expect(landed).toEqual({ kind: "ok", files: [file] });
+    expect(opens).toEqual([file, file]);
+    expect(reads).toHaveLength(1 + newReads);
+    if (landed.kind !== "ok") throw new Error(landed.reason);
+
+    expect(second.landed(landed.files, false)).toEqual([origin]);
+    expect(opens).toEqual([file, file, file]);
+    expect(reads).toHaveLength(2 + newReads);
+    for (const consumer of [first, second])
+      expect(textOfLayer(consumer, origin, file)).toBe(changePadding(current));
+  },
+);
+
+test("a held layer replaced by a directory cannot be overwritten by an edit", () => {
+  const initial = '{ globals: { padding: 1 } }';
+  const { origin, file } = named("directory-after-discovery", initial);
+  const reads: string[] = [];
+  const service = physicalDiscovery(project("empty-data"), reads);
+  const renderer = service.forRenderer(MAIN_RENDERER);
+  renderer.follow([origin]);
+  fs.unlinkSync(file);
+  fs.mkdirSync(file);
+
+  expect(
+    performChanges([paddingEdit(origin, initial)], null, renderer),
+  ).toEqual({
+    kind: "failed",
+    reason: `config read failed: ${file}: not a file`,
+  });
+  expect(reads).toEqual([file]);
+  expect(fs.statSync(file).isDirectory()).toBe(true);
+});
 
 // [LAW:behavior-not-structure] Distinct origins open in separate turns. Count
 // the real payload read, rather than its descriptor check or snapshot lookup.

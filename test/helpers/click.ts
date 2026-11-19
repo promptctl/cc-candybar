@@ -22,8 +22,9 @@ import {
 import {
   performChanges,
   type ApproveRepo,
-  type LayerPlaces,
+  type ConfigWriteFiles,
 } from "../../src/daemon/effect-interpreter";
+import { readTextIfPresent } from "../../src/utils/regular-text";
 import {
   discover,
   readShared,
@@ -154,7 +155,7 @@ export const bookedContext = (
 // asked, which is what a host holds once its watches have all been heard. A
 // test of a click over a snapshot the disk has moved past drives a render
 // cache instead (test/helpers/config-host.ts).
-export function discoveryNow(host: Host): LayerPlaces & {
+export function discoveryNow(host: Host): ConfigWriteFiles & {
   readonly snapshotOf: (origin: RenderOrigin) => ConfigSnapshot;
 } {
   const snapshotOf = (origin: RenderOrigin): ConfigSnapshot =>
@@ -170,6 +171,7 @@ export function discoveryNow(host: Host): LayerPlaces & {
     path: (origin, role) =>
       snapshotOf(origin).chain.find((l) => l.role === role)?.path ?? null,
     repoDir: (origin) => snapshotOf(origin).repo?.dir ?? null,
+    readText: readTextIfPresent,
   };
 }
 
@@ -189,7 +191,7 @@ class LandingAtOnce extends ConfigWrites {
   constructor(
     mint: () => EffectId,
     private readonly stateDir: string,
-    private readonly places: LayerPlaces,
+    private readonly places: ConfigWriteFiles,
   ) {
     super(mint);
   }

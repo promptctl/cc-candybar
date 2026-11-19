@@ -33,6 +33,7 @@ import type {
   RendererOutput,
 } from "../src/renderer-interface/interface";
 import { systemTimekeeper, type Monotonic } from "../src/time";
+import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
@@ -109,6 +110,7 @@ function hostOver(
     // one an earlier output named.
     path: (_origin, role) => (role === "user" ? file : null),
     repoDir: () => null,
+    readText: readTextIfPresent,
   };
   const host = rendererHost(
     bound?.name ?? MAIN_RENDERER,

@@ -83,6 +83,9 @@ export const NO_CONFIGS: HostWorld["configs"] = {
   landed: () => [],
   path: () => undefined,
   repoDir: () => undefined,
+  readText: (file) => {
+    throw new Error(`this rig reads no config (${file})`);
+  },
 };
 
 // The world of a rig whose renderer asks no act: one it is handed fails by

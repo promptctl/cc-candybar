@@ -21,7 +21,10 @@ import {
 } from "./discover.js";
 import { diskFiles, textFrom, type DiscoveryFiles } from "./discovery-files.js";
 import { ConfigText } from "./config-text.js";
-import type { withRegularTextFile } from "../../utils/regular-text.js";
+import {
+  readTextIfPresent,
+  type withRegularTextFile,
+} from "../../utils/regular-text.js";
 import type { FileObservations } from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { repoConfigsPath } from "./repo-configs.js";
@@ -63,6 +66,7 @@ export interface RendererConfigs {
   snapshotOf(origin: RenderOrigin): ConfigSnapshot | null;
   path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
   repoDir(origin: RenderOrigin): string | null | undefined;
+  readText(file: string): string | null;
   landed(files: readonly string[], answered: boolean): readonly RenderOrigin[];
 }
 
@@ -132,6 +136,10 @@ export class ConfigDiscovery {
           ? undefined
           : (snapshot.repo?.dir ?? null);
       },
+      // [LAW:one-source-of-truth] Writes reobserve the destination using the
+      // same descriptor cache as discovery. The held snapshots only name it.
+      readText: (file) =>
+        readTextIfPresent(file, (at) => this.texts.read(at).text),
       landed: (files, answered) => this.landed(renderer, files, answered),
     };
   }

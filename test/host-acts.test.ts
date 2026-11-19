@@ -28,6 +28,7 @@ import { NO_CONFIGS } from "./helpers/renderers";
 import { authorizeRun } from "../src/daemon/foundations/run-authorization";
 import { VERB_RUN, type RunEvidence } from "../src/click/wire";
 import { TEST_SIGNER } from "./helpers/link-signer";
+import { readTextIfPresent } from "../src/utils/regular-text";
 
 const S = sessionIdOf("s");
 // No wake is declared, so no timer is set.
@@ -121,7 +122,12 @@ function hostOver(
     },
     stateDir: path.join(dir, "state"),
     // The origin's one layer is the test's file.
-    configs: { ...NO_CONFIGS, path: () => file, repoDir: () => null },
+    configs: {
+      ...NO_CONFIGS,
+      path: () => file,
+      repoDir: () => null,
+      readText: readTextIfPresent,
+    },
     closing: () => false,
     unheard: (text) => void unheard.push(text),
     ...over,

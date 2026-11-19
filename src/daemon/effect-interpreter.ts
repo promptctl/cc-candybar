@@ -26,11 +26,7 @@ import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
-import {
-  readConfigText,
-  resolvedTarget,
-  writeAtomic,
-} from "../utils/atomic-write.js";
+import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
 
 const writeText = (file: string, text: string | null): void =>
   text === null
@@ -66,7 +62,10 @@ export interface TrustBook {
 // [LAW:single-enforcer] Where a change naming an origin's layer lands, and
 // which repository an answer may be given for: config discovery's, so a
 // renderer names a role and never a path.
-export type LayerPlaces = Pick<RendererConfigs, "path" | "repoDir">;
+export type ConfigWriteFiles = Pick<
+  RendererConfigs,
+  "path" | "repoDir" | "readText"
+>;
 
 export type ConfigLanding =
   | { readonly kind: "ok"; readonly files: readonly string[] }
@@ -80,11 +79,11 @@ const refused = (reason: string): ConfigLanding => ({
 // The file a change's target names, or why it names none.
 function landsIn(
   target: ChangeTarget,
-  layers: LayerPlaces,
+  files: ConfigWriteFiles,
 ):
   | { readonly kind: "at"; readonly file: string }
   | { readonly kind: "refused"; readonly reason: string } {
-  const file = layers.path(target.origin, target.role);
+  const file = files.path(target.origin, target.role);
   if (file === undefined)
     return {
       kind: "refused",
@@ -106,7 +105,7 @@ const originText = (origin: RenderOrigin): string =>
 export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
-  layers: LayerPlaces,
+  files: ConfigWriteFiles,
 ): ConfigLanding {
   const rewrites = new Map<string, Rewrite>();
   // The files a local layer's change lands in: the ones git never shows.
@@ -115,7 +114,7 @@ export function performChanges(
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
   for (const { origin, dir } of book?.answers ?? []) {
-    const asked = layers.repoDir(origin);
+    const asked = files.repoDir(origin);
     if (asked === undefined)
       return refused(
         `the answer for ${dir} names an origin config discovery does not follow (${originText(origin)})`,
@@ -127,7 +126,7 @@ export function performChanges(
   }
   try {
     for (const { target, changes: list } of changes) {
-      const named = landsIn(target, layers);
+      const named = landsIn(target, files);
       if (named.kind === "refused") return refused(named.reason);
       // Keyed by the file a write lands in, so two paths to one file are one
       // rewrite of it.
@@ -136,7 +135,7 @@ export function performChanges(
       // A file an earlier change of the turn named, as that change left it,
       // an absent one included.
       const prior = rewrites.get(file);
-      const was = prior === undefined ? readConfigText(file) : prior.was;
+      const was = prior === undefined ? files.readText(file) : prior.was;
       const applied = applyChanges(
         prior === undefined ? was : prior.will,
         list,
@@ -153,7 +152,7 @@ export function performChanges(
     // same write as the file, or neither is written.
     for (const { file, was, will } of [...rewrites.values()]) {
       if (was !== null || will === null || !local.has(file)) continue;
-      const excluded = excludeRewrite(file, rewrites);
+      const excluded = excludeRewrite(file, rewrites, files.readText);
       if (excluded.kind === "failed")
         return {
           kind: "failed",
@@ -173,7 +172,7 @@ export function performChanges(
       answered = planned.value.said;
       if (text !== null) {
         const at = resolvedTarget(file);
-        rewrites.set(at, { file: at, was: readConfigText(at), will: text });
+        rewrites.set(at, { file: at, was: files.readText(at), will: text });
       }
     }
   } catch (e) {
@@ -197,6 +196,7 @@ export function performChanges(
 function excludeRewrite(
   file: string,
   rewrites: ReadonlyMap<string, Rewrite>,
+  readText: ConfigWriteFiles["readText"],
 ): Outcome<Rewrite> {
   const root = gitRootOf(path.dirname(file));
   if (root === undefined) return ABSENT;
@@ -204,7 +204,7 @@ function excludeRewrite(
   if (at.kind !== "ok") return at.kind === "absent" ? ABSENT : at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
-  const was = prior === undefined ? readConfigText(exclude) : prior.was;
+  const was = prior === undefined ? readText(exclude) : prior.was;
   const text = prior === undefined ? (was ?? "") : (prior.will ?? "");
   // The path as a gitignore pattern names it: glob characters in a directory
   // name are escaped, so the entry matches this file and only it.
