@@ -170,7 +170,7 @@ async function drawn(text: string) {
   const t = renderer(new Map());
   const context = contextOf("s1");
   const origin: RenderOrigin = context.requested;
-  answered(await handIn(t.r, { kind: "start", viewers: {}, sessions: [] }));
+  answered(await handIn(t.r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   const named = answered(
     await handIn(t.r, {
       kind: "context",
@@ -236,7 +236,7 @@ test("a click on a session with no live context waits for the config of the orig
   const session = sessionIdOf("idle-one");
   const origin = contextOf("idle-one").requested;
   const { r } = renderer(new Map());
-  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [] }));
+  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   const palette = [...listResolvablePaletteNames()][0]!;
   const parked = answered(
     await handIn(r, {

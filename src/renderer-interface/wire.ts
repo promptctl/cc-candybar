@@ -288,7 +288,13 @@ export function rendererOverLines(deps: {
       configs !== subscriptions.configs ||
       managedFolders !== subscriptions.managedFolders
     )
-      subscriptions = { sources, lanes, configs, managedFolders, configSelections };
+      subscriptions = {
+        sources,
+        lanes,
+        configs,
+        managedFolders,
+        configSelections,
+      };
     return subscriptions;
   };
   const received = (output: WireAnswer): Answer | null => {

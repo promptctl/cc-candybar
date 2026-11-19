@@ -250,10 +250,7 @@ export function mainRenderer(
     switch (event.kind) {
       case "start": {
         const configs = new Map(
-          (event.configs ?? []).map((offer) => [
-            originKey(offer.origin),
-            offer,
-          ]),
+          event.configs.map((offer) => [originKey(offer.origin), offer]),
         );
         // [LAW:no-ambient-temporal-coupling] A replacement opens its views
         // against the offered facts in the first turn. An older selected

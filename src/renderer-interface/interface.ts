@@ -158,7 +158,7 @@ export type Event =
       readonly sessions: readonly SessionConfig[];
       // The host's current shared snapshots, once per origin. Retained
       // origins can outlive their last session and reopen their cached state.
-      readonly configs?: ReadonlyArray<{
+      readonly configs: ReadonlyArray<{
         readonly origin: RenderOrigin;
         readonly config: ConfigSnapshot;
         // A committed cache entry: reconstruct from this previously selected

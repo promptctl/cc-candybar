@@ -106,13 +106,16 @@ const finalizationFields = (
 // What a caller makes as its input's slot comes up: the event, or why there
 // is none to send, which is the turn's failure. The host stamps it with the
 // slot's readings.
-interface MadeEvent {
+type StartEvent = Extract<Event, { kind: "start" }>;
+type BeforeDiscovery = Exclude<Event, StartEvent> | Omit<StartEvent, "configs">;
+
+interface MadeEvent<E = Event> {
   readonly kind: "event";
-  readonly event: Event;
+  readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
 }
-export type Made = MadeEvent | Failure;
+export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
 // directory, what config discovery found at each origin it follows, whether
@@ -259,7 +262,7 @@ export function rendererHost(
   // [LAW:one-source-of-truth] Restoring a generation uses the same discovery
   // holds as an ordinary config turn. It still follows preceding origins
   // until the replacement answers with its own complete declaration.
-  const prepareStart = (event: Extract<Event, { kind: "start" }>): Event => {
+  const prepareStart = (event: Omit<StartEvent, "configs">): StartEvent => {
     const wanted = new Map((origins ?? []).map((o) => [originKey(o), o]));
     for (const { context } of event.sessions)
       wanted.set(originKey(context.requested), context.requested);
@@ -362,7 +365,7 @@ export function rendererHost(
     if (input.event.kind === "start") {
       startFailure = turn.kind === "threw" ? turn.failure : null;
       if (startFailure === null)
-        for (const { origin, config } of input.event.configs ?? [])
+        for (const { origin, config } of input.event.configs)
           configs.set(originKey(origin), { kind: "received", config });
     }
     recordTaken("turn record", () => collector.recorded(turn.record));
@@ -570,16 +573,6 @@ export function rendererHost(
     if (adoptDemand)
       recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    if (
-      adoptDemand &&
-      (declared?.sources !== subscriptions.sources ||
-        declared?.managedFolders !== subscriptions.managedFolders ||
-        declared?.lanes !== subscriptions.lanes) &&
-      recordTaken("subscriptions", () =>
-        collector.subscribed(subscriptions),
-      ) !== null
-    )
-      declared = subscriptions;
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(({ frame }) =>
@@ -634,19 +627,27 @@ export function rendererHost(
         world.configs.follow(subscriptions.configs);
         followFailure = null;
       }
+      if (followFailure !== null)
+        return { kind: "failed", failure: followFailure };
       const entries = subscriptions.configSelections;
+      if (selected !== entries) {
+        world.configs.selected(entries, (origin) => {
+          const delivered = configs.get(originKey(origin));
+          return delivered?.kind === "received" ? delivered.config : undefined;
+        });
+        selected = entries;
+      }
+      // Plugin sources and folders can only refer to origins the host now
+      // follows. Publish demand after resolving the selected observations.
       if (
-        selected !== entries &&
-        recordTaken("config selections", () =>
-          world.configs.selected(entries, (origin) => {
-            const delivered = configs.get(originKey(origin));
-            return delivered?.kind === "received"
-              ? delivered.config
-              : undefined;
-          }),
+        (declared?.sources !== subscriptions.sources ||
+          declared?.managedFolders !== subscriptions.managedFolders ||
+          declared?.lanes !== subscriptions.lanes) &&
+        recordTaken("subscriptions", () =>
+          collector.subscribed(subscriptions),
         ) !== null
       )
-        selected = entries;
+        declared = subscriptions;
       return { kind: "following", named };
     } catch (thrown) {
       for (const origin of named) markUnreceived(origin);
@@ -667,7 +668,7 @@ export function rendererHost(
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made => {
+  const configMade = (origin: RenderOrigin) => (): Made<Event> => {
     const config = world.configs.snapshotOf(origin);
     return config === null
       ? {
@@ -683,7 +684,7 @@ export function rendererHost(
     origin: RenderOrigin,
     why: string,
   ): Promise<ConfigTurn> => {
-    let made: Made;
+    let made: Made<Event>;
     try {
       made = configMade(origin)();
     } catch (thrown) {
@@ -851,14 +852,17 @@ export function rendererHost(
     return inMailbox(async (queuedMs, holds) => {
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
-        let made: Made;
+        let made: Made<Event>;
         let starting = at === "first";
         try {
-          made = make();
-          if (made.kind === "event" && made.event.kind === "start") {
-            starting = true;
-            made = { ...made, event: prepareStart(made.event) };
-          }
+          const captured = make();
+          if (captured.kind === "event") {
+            const { event } = captured;
+            if (event.kind === "start") {
+              starting = true;
+              made = { ...captured, event: prepareStart(event) };
+            } else made = { ...captured, event };
+          } else made = captured;
         } catch (thrown) {
           made = failureOf(thrown);
         }

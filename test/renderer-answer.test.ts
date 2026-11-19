@@ -519,7 +519,7 @@ describe("a statusline request", () => {
 
   // A restarted renderer: the host releases whatever its first output does
   // not name, a tmux status row included.
-  test("of each live session is configured by a start's one turn and the config it names, whose output names them all", async () => {
+  test("starts two live sessions from the same offered config in one turn", async () => {
     const t = renderer();
     const { r, rig } = t;
     const mine = checked();
@@ -528,12 +528,16 @@ describe("a statusline request", () => {
       ...mine,
       hookData: { ...mine.hookData, session_id: other },
     };
+    rig.cache.configs.follow(mine.requested);
+    const config = rig.cache.configs.discovery.snapshotOf(mine.requested);
+    if (config === null) throw new Error("missing shared start config");
     const output = await r.answer({
       kind: "event",
       ...READ,
       event: {
         kind: "start",
         viewers: {},
+        configs: [{ origin: mine.requested, config }],
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context, TEST_ENVIRONMENT),
@@ -541,11 +545,8 @@ describe("a statusline request", () => {
       },
     });
     expect(output.kind).toBe("answered");
-    // Both wait for the one origin they share.
     expect(output.subscriptions.configs).toEqual([mine.requested]);
-    const configured = await configsNamed(t, output);
-    expect(configured.kind).toBe("answered");
-    expect(Object.keys(configured.subscriptions.sources).sort()).toEqual(
+    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
       [SESSION, other].sort(),
     );
   });

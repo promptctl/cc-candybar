@@ -155,7 +155,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   const r = rendererOf();
   const context = contextOf("s1");
   const session = context.hookData.session_id;
-  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [] }));
+  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   answered(
     await handIn(r, {
       kind: "context",
