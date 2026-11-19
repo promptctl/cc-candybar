@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "37d262840eafee4764958df49f0086054dabe007",
+      "timestamp": "2026-11-19T14:26:04.875Z",
+      "commits": [
+        {
+          "sha": "37d262840eafee4764958df49f0086054dabe007",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T14:25:04Z",
+          "message": "chore(release): set `package.json` to 1.234.2\n\n## [1.234.2](https://github.com/promptctl/cc-candybar/compare/v1.234.1...v1.234.2) (2026-11-19)\n\n### Performance Improvements\n\n* **config:** share regular file bytes across discovery batches (ibyq.ysf) ([#873](https://github.com/promptctl/cc-candybar/issues/873)) ([3a30e23](https://github.com/promptctl/cc-candybar/commit/3a30e23db763050eca5ec970685f4d4872978e3e))\n* **host:** share checkout filesystem observations (x96a.uqq) ([#870](https://github.com/promptctl/cc-candybar/issues/870)) ([4521bf6](https://github.com/promptctl/cc-candybar/commit/4521bf6f3ff8442f1ade1eb3785e9b245dd454e6))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-872",
       "ref": "refs/pull/872/merge",
       "sha": "8e703fdfc7a277107b813851ce1bf782525bdaf2",
@@ -127,21 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "3a30e23db763050eca5ec970685f4d4872978e3e",
-      "timestamp": "2026-11-19T14:17:36.455Z",
-      "commits": [
-        {
-          "sha": "3a30e23db763050eca5ec970685f4d4872978e3e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:16:36-07:00",
-          "message": "perf(config): share regular file bytes across discovery batches (ibyq.ysf) (#873)"
         }
       ]
     },
