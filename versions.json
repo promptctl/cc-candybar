@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d",
+      "timestamp": "2026-11-19T15:57:24.121Z",
+      "commits": [
+        {
+          "sha": "7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:56:10-07:00",
+          "message": "fix(renderer): keep one presentation record for delivered frames (#878)\n\n* fix(renderer): commit request frame memory on delivery\n\n* fix(renderer): settle pushed frame memory on actual subscriber delivery\n\n* fix(renderer): retain delivered diagnostics and give each message one copy key\n\n* refactor(renderer): own each accepted draw in one presentation record\n\n* test(daemon): verify named feed publication retains its delivery receipt\n\n* test(renderer): confirm frame delivery before comparing diagnostics\n\n* test(renderer): distinguish late receipts with a changing frame clock\n\n* fix(renderer): inspect the newest accepted layout in the active view\n\n* test(plugin): sweep again when a frame receipt holds the session"
+        }
+      ]
+    },
+    {
       "version": "pr-882",
       "ref": "refs/pull/882/merge",
       "sha": "bb51d9a48f4b656850d18928381e96ed3ee6d5e4",
@@ -53,84 +68,6 @@
       ]
     },
     {
-      "version": "pr-878",
-      "ref": "refs/pull/878/merge",
-      "sha": "54156f4bf805854e71dc6b684e13071f1e461525",
-      "timestamp": "2026-11-19T15:51:48.049Z",
-      "commits": [
-        {
-          "sha": "54156f4bf805854e71dc6b684e13071f1e461525",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:50:53Z",
-          "message": "Merge ff5b26fff50a3b8b1c96afcb3ccdbeea219c0c0c into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
-        },
-        {
-          "sha": "ff5b26fff50a3b8b1c96afcb3ccdbeea219c0c0c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:50:36-07:00",
-          "message": "test(plugin): sweep again when a frame receipt holds the session\n"
-        },
-        {
-          "sha": "bd8cebab55341cbe109363b5e14859d36074951d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:35:11-07:00",
-          "message": "fix(renderer): inspect the newest accepted layout in the active view\n"
-        },
-        {
-          "sha": "90b4aa3ba5a23e313947b3390aa05f94aa46ee77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:32:49-07:00",
-          "message": "test(renderer): distinguish late receipts with a changing frame clock\n"
-        },
-        {
-          "sha": "b45e209fcbf4bc5ee30807d342bf9e65f72d2956",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:25:45-07:00",
-          "message": "test(renderer): confirm frame delivery before comparing diagnostics\n"
-        },
-        {
-          "sha": "7fe8257204a0a87e4aaa671f086cbbb7b09082e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:19:05-07:00",
-          "message": "test(daemon): verify named feed publication retains its delivery receipt\n"
-        },
-        {
-          "sha": "38c33617de2ef3e5c7d238e39db5ed19fe60e427",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:15:29-07:00",
-          "message": "refactor(renderer): own each accepted draw in one presentation record\n"
-        },
-        {
-          "sha": "a3bb93c5dbd739f4c70dd62466db8671ddbeaa48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:59:19-07:00",
-          "message": "fix(renderer): retain delivered diagnostics and give each message one copy key\n"
-        },
-        {
-          "sha": "132708670082acb793e67e9e6cb6b38dbb0b0a7a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:34:55-07:00",
-          "message": "fix(renderer): settle pushed frame memory on actual subscriber delivery\n"
-        },
-        {
-          "sha": "33dcfdeeb4324eee2e50382799fe8a1ad99fd219",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:00:18-07:00",
-          "message": "fix(renderer): commit request frame memory on delivery\n"
-        }
-      ]
-    },
-    {
       "version": "pr-877",
       "ref": "refs/pull/877/merge",
       "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
@@ -149,21 +86,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:52:22-07:00",
           "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "72652bd631655794e7e9adc79fe7ffbddceb93f3",
-      "timestamp": "2026-11-19T15:41:30.452Z",
-      "commits": [
-        {
-          "sha": "72652bd631655794e7e9adc79fe7ffbddceb93f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:40:15-07:00",
-          "message": "refactor(renderer): boot from host-resolved locations (#883)\n\n* refactor(renderer): boot from host-resolved locations\n\n* refactor(renderer): construct both transports from one checked boot"
         }
       ]
     },
