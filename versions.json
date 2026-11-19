@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-808",
+      "ref": "refs/pull/808/merge",
+      "sha": "7a3061f666cc12ce2284a697d8dcaa1ff2146e04",
+      "timestamp": "2026-11-19T09:27:06.451Z",
+      "commits": [
+        {
+          "sha": "7a3061f666cc12ce2284a697d8dcaa1ff2146e04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:26:14Z",
+          "message": "Merge ad1ccb31caa36e9c86c2325577e654045dbc2572 into 77b0e659d9008283d4e326d77e02510c94fa4492\n"
+        },
+        {
+          "sha": "ad1ccb31caa36e9c86c2325577e654045dbc2572",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:59:07-07:00",
+          "message": "fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)\n"
+        },
+        {
+          "sha": "bba11b6e6d43808dd7998e272313943708e9bb8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:27:22-07:00",
+          "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
+        },
+        {
+          "sha": "a62bd6c53c64d20c3670ff413a6d196c8e0cc25e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:05:22-07:00",
+          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-836",
       "ref": "refs/pull/836/merge",
       "sha": "ff0a5ce4867c7b8cc29d2c14dc899d68d9110611",
@@ -71,42 +107,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:15:55-07:00",
           "message": "fix(host): a process's world drops the variables that locate a repository, so a daemon started from a GIT_DIR shell reads each session's own repo (99f8)\n\nThe detached daemon inherits the environment of whichever shell spawned it.\nGIT_DIR, GIT_WORK_TREE, the rest of `git rev-parse --local-env-vars` and\nGH_REPO in that shell pointed every session's git and forge reads at the\nwrong repository, and `cc-candybar doctor` run there drew the same wrong bar.\n\nThe world is now built by removing those names from the process's own\nenvironment before anything launches, so every child (git, gh, the renderer,\na plugin clone) inherits the drop. git names the variables; a fixed list\nstands in when it cannot (the ask fails, names nothing, or an old git echoes\nthe flag back), and that fallback is loud: a daemon log warning, a standing\nwarning on the bar, and a failing `environment` doctor row with the reason.\nProcesses that stand in for a session (the Node client, check, doctor, the\nsite) report the dropped values back as the session's own environment.\nplugin install's local overlay of the same variables is removed, since the\nworld now owns the drop.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-808",
-      "ref": "refs/pull/808/merge",
-      "sha": "565297bc5ad531e20862f40bb57808d69d854770",
-      "timestamp": "2026-11-19T09:18:00.597Z",
-      "commits": [
-        {
-          "sha": "565297bc5ad531e20862f40bb57808d69d854770",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:16:53Z",
-          "message": "Merge d287ba46902cc183ae5c36df1af09c2f22063cae into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
-        },
-        {
-          "sha": "d287ba46902cc183ae5c36df1af09c2f22063cae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:59:07-07:00",
-          "message": "fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)\n"
-        },
-        {
-          "sha": "4230c030567bc4984a44cfe140506a32a8c62816",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:27:22-07:00",
-          "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
-        },
-        {
-          "sha": "2b8664c907600009261eb1f0209a09e164321c24",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:05:22-07:00",
-          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
         }
       ]
     }
