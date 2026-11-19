@@ -86,6 +86,8 @@ Each source has exactly one owner that schedules its reads, whichever plugin dec
 
 File declarations for the same path share a filesystem read when they are ready together. Each declaration keeps its own refresh policy and interpretation of the file.
 
+Config discovery shares definition reads across all origins in a discovery batch, including definitions already read from an installed or repository plugin folder. Each reference keeps its own name, scope and path for diagnostics.
+
 ## Names
 
 A plugin's names live under `.plugins.<plugin>.`. A bundled plugin's live at the top level, so when one of the bar's own sources moves into a bundled plugin, `.git.branch` and `.session.cost` still mean what they meant and no user config changes.

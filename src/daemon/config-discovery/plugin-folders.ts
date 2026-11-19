@@ -74,12 +74,14 @@ export function listFolders(
       .readdirSync(root, { withFileTypes: true })
       .filter((e) => !e.name.startsWith("."))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    const isFolder = (e: fs.Dirent): boolean =>
-      e.isDirectory() || isDirectoryLink(root, e);
-    return {
-      folders: entries.filter(isFolder).map((e) => e.name),
-      files: entries.filter((e) => !isFolder(e)).map((e) => e.name),
-    };
+    const folders: string[] = [];
+    const files: string[] = [];
+    for (const entry of entries) {
+      const list =
+        entry.isDirectory() || isDirectoryLink(root, entry) ? folders : files;
+      list.push(entry.name);
+    }
+    return { folders, files };
   } catch (e) {
     return (e as NodeJS.ErrnoException).code === "ENOENT"
       ? { folders: [], files: [] }
