@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-835",
+      "ref": "refs/pull/835/merge",
+      "sha": "577b02b364458727ff0e1bf5e438dda6f377b35a",
+      "timestamp": "2026-11-19T09:09:07.140Z",
+      "commits": [
+        {
+          "sha": "577b02b364458727ff0e1bf5e438dda6f377b35a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:07:51Z",
+          "message": "Merge bbbb4b8fc08b42e45157a24bab727501a79c728d into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
+        },
+        {
+          "sha": "bbbb4b8fc08b42e45157a24bab727501a79c728d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:06:51-07:00",
+          "message": "fix(state): a session file copies its snapshot once, inside its storage, and each kind's parse answers as an Asked (px80)\n\n- Each kind's parse returns `Asked<V>`; the local result type is gone.\n- `SessionFile.save` takes its own copy, since the landing's identity check\n  depends on it; the callers' copies are gone, and the history's immediate\n  write needs none. The storage contracts say what each storage does.\n- A lone history the byte bound trims to nothing is removed, not kept.\n- Retired keys are reported once per session, kept or dropped.\n- The JSON object checks use the existing plain-object check.\n- The frames stream's stdin parse claims only the session id and the line\n  as read; the hook data is still forwarded for the daemon to parse.\n- Comments name the record assignment sites and the file's record.\n"
+        },
+        {
+          "sha": "9ab8b355a271fdfe2fe948cc6c1ff51ebd8ad82c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:56:46-07:00",
+          "message": "fix(state): a session file's load catches only its JSON, says what it loaded, and drops what a record cannot hold (px80)\n\n- The per-session load catches only the read and the JSON parse: a throw in\n  a value's parse or the logger stays a throw.\n- Each kind's parse returns a typed refusal naming the field that failed,\n  and the dropped-entry line names it.\n- The history parse is pure: it returns the retired keys with what stays,\n  and a history left holding nothing is dropped by name, so it takes none\n  of the bound's places.\n- The session-id parse refuses `__proto__`, which an assignment into a\n  record takes as its prototype; inherited names like `constructor` are\n  ordinary own keys and pass.\n- Every load logs one line: no file, or the sessions it loaded and dropped.\n- The history file keeps its own immediate writer, cited: its step is on\n  disk before the click answers, and its failure is said on the bar.\n- The boot's record order cites the session-id parse it depends on.\n"
+        },
+        {
+          "sha": "3ef6abedefa953e372624ef47ae2002c1bfb927e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:45:09-07:00",
+          "message": "fix(state): every per-session file loads entry by entry through one loader, and its storage takes the ordered sessions (px80)\n\nThe settings history's file loads through the same session-keyed loader as\nthe session book and session state, so a history of the wrong shape drops\nthat session alone, by name, as a refused key does, and the three files say\na corrupt or unreadable file the same way. Each storage's save takes the\nordered sessions, so the host's sessions become a record only at the file.\n\nThe frames stream's stdin parse takes its session id through the session-id\ncheckpoint. The refusal of an array index states the rule: it is never a\nsession id.\n\nThe order tests save through each store's own file and read it back in a\nfresh store, with number-like ids among UUIDs.\n"
+        },
+        {
+          "sha": "4bb5819ac8d82d0a4ebfc53a31db0b72e722e884",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:34:45-07:00",
+          "message": "fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80)\n\nThe session book, session state and settings history keep recency in a Map\nand persist it through a record keyed by session id. A record lists\ncanonical array-index keys (\"7\") first, so an integer-like id jumped to the\noldest end on a round trip and the bound could evict it while newest.\n\nThe session-id parse now refuses exactly the canonical array indices (an\ninteger from 0 to 2^32 - 2 in its canonical spelling), naming the id, at every\ndoor: render, subscribe, click, and each file's load, which drops the entry by\nname. The files keep their keyed form.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "bce49db124dbd51c05ee04e46cf3eada9116e8d2",
@@ -49,42 +92,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-18T23:36:26Z",
           "message": "chore(release): set `package.json` to 1.232.10\n\n## [1.232.10](https://github.com/promptctl/cc-candybar/compare/v1.232.9...v1.232.10) (2026-11-18)\n\n### Bug Fixes\n\n* **daemon:** a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq) ([#832](https://github.com/promptctl/cc-candybar/issues/832)) ([cd50aea](https://github.com/promptctl/cc-candybar/commit/cd50aea5c94fd0ade68b7e1781ec29d6b93ca2e0))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-835",
-      "ref": "refs/pull/835/merge",
-      "sha": "435a636bbbea07a8e13727dd1a1c35d64d6376bc",
-      "timestamp": "2026-11-18T22:58:03.968Z",
-      "commits": [
-        {
-          "sha": "435a636bbbea07a8e13727dd1a1c35d64d6376bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:56:58Z",
-          "message": "Merge 5ac97a5b29dc39d34f8cacf04ef183bee12e43ea into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "5ac97a5b29dc39d34f8cacf04ef183bee12e43ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:56:46-07:00",
-          "message": "fix(state): a session file's load catches only its JSON, says what it loaded, and drops what a record cannot hold (px80)\n\n- The per-session load catches only the read and the JSON parse: a throw in\n  a value's parse or the logger stays a throw.\n- Each kind's parse returns a typed refusal naming the field that failed,\n  and the dropped-entry line names it.\n- The history parse is pure: it returns the retired keys with what stays,\n  and a history left holding nothing is dropped by name, so it takes none\n  of the bound's places.\n- The session-id parse refuses `__proto__`, which an assignment into a\n  record takes as its prototype; inherited names like `constructor` are\n  ordinary own keys and pass.\n- Every load logs one line: no file, or the sessions it loaded and dropped.\n- The history file keeps its own immediate writer, cited: its step is on\n  disk before the click answers, and its failure is said on the bar.\n- The boot's record order cites the session-id parse it depends on.\n"
-        },
-        {
-          "sha": "ab7c345218f779039b8a67e4bf16c96c73ff6da9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:45:09-07:00",
-          "message": "fix(state): every per-session file loads entry by entry through one loader, and its storage takes the ordered sessions (px80)\n\nThe settings history's file loads through the same session-keyed loader as\nthe session book and session state, so a history of the wrong shape drops\nthat session alone, by name, as a refused key does, and the three files say\na corrupt or unreadable file the same way. Each storage's save takes the\nordered sessions, so the host's sessions become a record only at the file.\n\nThe frames stream's stdin parse takes its session id through the session-id\ncheckpoint. The refusal of an array index states the rule: it is never a\nsession id.\n\nThe order tests save through each store's own file and read it back in a\nfresh store, with number-like ids among UUIDs.\n"
-        },
-        {
-          "sha": "e0137e0aa3a918725a519882d9c3d7cf1035372f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:34:45-07:00",
-          "message": "fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80)\n\nThe session book, session state and settings history keep recency in a Map\nand persist it through a record keyed by session id. A record lists\ncanonical array-index keys (\"7\") first, so an integer-like id jumped to the\noldest end on a round trip and the bound could evict it while newest.\n\nThe session-id parse now refuses exactly the canonical array indices (an\ninteger from 0 to 2^32 - 2 in its canonical spelling), naming the id, at every\ndoor: render, subscribe, click, and each file's load, which drops the entry by\nname. The files keep their keyed form.\n"
         }
       ]
     },
