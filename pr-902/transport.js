@@ -71317,10 +71317,6 @@ function launchFailure(label2, result) {
 function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
 function isMissingCommand(result) {
   return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
 }
@@ -71421,12 +71417,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (isMissingCommand(result)) return ABSENT2;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT2;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
+  return failed(launchFailure(label2, result), "read");
 }
 function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -78119,6 +78110,41 @@ function linkTarget(file) {
 }
 var MAX_LINK_HOPS = 40;
 
+// src/repository-cli.ts
+init_globals();
+var FORGE_CLI = {
+  github: { cli: "gh", repoEnv: "GH_REPO" },
+  gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
+};
+var GIT_LOCAL_ENV = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR"
+];
+var REPOSITORY_SCOPED_ENV = [
+  ...GIT_LOCAL_ENV,
+  ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
+];
+function withoutRepositoryScopedEnv(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
+    )
+  );
+}
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -78147,7 +78173,9 @@ function checkRateLimit(lastStartAt, category, now2) {
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 function childEnv(scope, opts) {
-  const env2 = { ...opts.environment ?? scope.inherited };
+  const env2 = {
+    ...opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -78258,6 +78286,7 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -84700,9 +84729,9 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the ascent reads the
+  // filesystem, never the daemon's environment, which describes whichever
+  // shell spawned the daemon rather than the session being rendered.
   //
   findGitRoot(workingDir) {
     return gitRootOf(workingDir);
@@ -85070,7 +85099,7 @@ var GitService = class {
       return classifyForgePr(
         "gh pr view",
         await this.execForgeAsync(
-          FORGE_CLI.github,
+          FORGE_CLI.github.cli,
           ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5e3 }
         ),
@@ -85082,7 +85111,7 @@ var GitService = class {
       return classifyForgePr(
         "glab mr view",
         await this.execForgeAsync(
-          FORGE_CLI.gitlab,
+          FORGE_CLI.gitlab.cli,
           ["mr", "view", "--output", "json"],
           {
             cwd: workingDir,
