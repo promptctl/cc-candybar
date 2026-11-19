@@ -324,7 +324,10 @@ export class FrameFeeds<Req> {
       let encoded: EncodedFeed;
       let drawn = frame.kind === "drawn";
       try {
-        encoded = encodeFeed(frame, this.deps.publishFrame, { renderer, session });
+        encoded = encodeFeed(frame, this.deps.publishFrame, {
+          renderer,
+          session,
+        });
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.

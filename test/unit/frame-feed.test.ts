@@ -25,7 +25,10 @@ import type {
   PushedFrame,
   Viewers,
 } from "../../src/renderer-interface/interface";
-import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+} from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
 
@@ -40,7 +43,9 @@ interface Req {
 
 // Feeds over a renderer the case answers: every delivery waits in `owed`
 // until the case lets its slot come (`slot`), and reads the viewers then.
-function rig(publishFrame = publishingFrames(TEST_SIGNER)) {
+function rig(
+  publishFrame: FeedDeps<Req>["publishFrame"] = publishingFrames(TEST_SIGNER),
+) {
   const hidden = new Set<string>();
   const handed: Viewers[] = [];
   const owed: Array<{
@@ -65,8 +70,8 @@ function rig(publishFrame = publishingFrames(TEST_SIGNER)) {
   };
   const feeds = new FrameFeeds<Req>(deps);
   const settled: [PushedFrame, boolean][] = [];
-  const took = (frames: readonly PushedFrame[]) =>
-    feeds.took(MAIN_RENDERER, frames, (pushed, delivered) =>
+  const took = (frames: readonly PushedFrame[], renderer = MAIN_RENDERER) =>
+    feeds.took(renderer, frames, (pushed, delivered) =>
       settled.push([pushed, delivered]),
     );
   // The next delivery's slot comes: it reads the viewers and the turn ends
@@ -383,6 +388,24 @@ describe("a subscriber", () => {
 });
 
 describe("feed delivery", () => {
+  test("the confirmed bytes are published for the renderer and session that drew them", () => {
+    const publish = publishingFrames(TEST_SIGNER);
+    const routes: Parameters<FeedDeps<Req>["publishFrame"]>[1][] = [];
+    const { feeds, took, settled } = rig((bar, source) => {
+      routes.push(source);
+      return publish(bar, source);
+    });
+    const worktree = rendererNameOf("worktree");
+    const pane = deferredSubscriber("pane");
+    feeds.subscribe(S, pane.sub);
+    const pushed = frame(S, "alternate", null);
+    took([pushed], worktree);
+    expect(routes).toEqual([{ renderer: worktree, session: S }]);
+    expect(settled).toEqual([]);
+    pane.finish(true);
+    expect(settled).toEqual([[pushed, true]]);
+  });
+
   test("one fast subscriber settles the candidate without waiting for a slower one", () => {
     const { feeds, took, settled } = rig();
     const pane = deferredSubscriber("pane");
