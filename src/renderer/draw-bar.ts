@@ -11,7 +11,6 @@ import {
 import { updateNotice } from "../daemon/foundations/update-offer.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
-import { type RenderOrigin } from "../config-hint";
 import {
   refusedHints,
   refusedArgsError,
@@ -42,11 +41,7 @@ import type { RichText } from "@promptctl/rich-js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
-import {
-  laneSwitches,
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
-} from "../config/effective-globals.js";
+import { laneSwitches } from "../config/effective-globals.js";
 import {
   type PassageFrame,
   type EffectSessions,
@@ -215,25 +210,6 @@ export function renderFrame(
       failure: { level, line: `frame ${line}` },
     };
   }
-}
-
-// [LAW:one-source-of-truth] A session's globals over the render state it
-// draws with: the one resolution a render draws by and the lane gate reads.
-// `.preset.customized` reads THIS state's authoredRoots — the set computed
-// from the SAME raw parse that produced state.config, on the same reload —
-// never a fresh file read that could race a concurrent write and disagree with
-// the tree that actually rendered.
-function sessionGlobals(
-  parts: RendererParts,
-  sessionId: SessionId,
-  state: DslRenderState,
-): EffectiveGlobals {
-  const { sessionState } = parts;
-  return resolveEffectiveGlobals(
-    state.config,
-    (key) => sessionState.get(sessionId, key),
-    (preset) => state.authoredRoots.has(preset),
-  );
 }
 
 // The lanes the session's settings switch on now, as its view draws them, or

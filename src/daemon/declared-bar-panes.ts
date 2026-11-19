@@ -30,10 +30,9 @@ export class DeclaredBarPanes {
     const next = new Map<string, Demand>();
     // A pane can begin another session while the old view is still held.
     // Its newest request selects the effective setting for the pane.
-    for (const [session, switches] of Object.entries(lanes) as [
-      SessionId,
-      LaneSwitches,
-    ][]) {
+    for (const [session, switches] of Object.entries(lanes) as Array<
+      [SessionId, LaneSwitches]
+    >) {
       const reported = this.paneOf(session);
       if (reported === undefined) continue;
       const key = paneKey(reported.pane);
