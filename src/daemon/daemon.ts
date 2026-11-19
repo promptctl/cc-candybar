@@ -679,11 +679,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           });
           aggregate();
         },
-        frames: (frames) =>
-          frameFeeds.took(
-            name,
-            frames.filter(({ session }) => nameOf(session) === name),
-          ),
+        frames: (frames, settled) => {
+          const routed = frames.filter((frame) => {
+            if (nameOf(frame.session) === name) return true;
+            settled(frame, false);
+            return false;
+          });
+          frameFeeds.took(name, routed, settled);
+        },
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
         recorded: () => {},

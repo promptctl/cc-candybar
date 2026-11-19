@@ -19,6 +19,7 @@ import {
 import { UNFOLLOWED, type Lane, type LaneFeeds } from "../../src/config/lanes";
 import type { Frame } from "../../src/render/frame";
 import type {
+  EffectId,
   PushedFrame,
   SessionViewers,
   Viewers,
@@ -56,6 +57,10 @@ const watched = (
 // whether the session has a view at all. The wall runs `skew` seconds ahead
 // of the ticks.
 function rig() {
+  let receipts = 0;
+  const prepare = (): never => {
+    throw new Error("this scheduling fixture has no delivery to prepare");
+  };
   const script = {
     changeIn: Infinity,
     bar: "r",
@@ -93,6 +98,7 @@ function rig() {
           script.failure === null
             ? {
                 kind: "drawn",
+                receipt: ++receipts as EffectId,
                 bar: draw(script.bar, at + script.changeIn),
                 handoff: draw(script.handoff),
               }
@@ -117,7 +123,7 @@ function rig() {
   // A turn at tick `t`: the frames due drawn.
   const turn = (t: number) => {
     const frames: PushedFrame[] = [];
-    feeds.drawDue(readings(t), frames);
+    feeds.drawDue(readings(t), frames, prepare);
     return frames;
   };
   // Each turn the renderer is woken for, from `from` until `until`: the
@@ -133,7 +139,7 @@ function rig() {
     }
     return at;
   };
-  return { feeds, script, draws, pins, logged, turn, run, readings };
+  return { feeds, script, draws, pins, logged, turn, run, readings, prepare };
 }
 
 const view =
@@ -170,7 +176,9 @@ describe("a feed's life", () => {
     view({ [S]: watched(), [T]: watched() })(r.feeds);
     r.script.throwsFor = S;
     const frames: PushedFrame[] = [];
-    expect(() => r.feeds.drawDue(r.readings(0), frames)).toThrow("s broke");
+    expect(() => r.feeds.drawDue(r.readings(0), frames, r.prepare)).toThrow(
+      "s broke",
+    );
     expect(frames.map((f) => f.session)).toEqual([T]);
     // The feed that threw is due again a still period on, never at once.
     expect(r.feeds.next()).toBe(PERIODS.still / 1000);
@@ -183,7 +191,12 @@ describe("a feed's life", () => {
     expect(frames).toEqual([
       {
         session: S,
-        frame: { kind: "drawn", bar: draw("r"), handoff: draw("s") },
+        frame: {
+          kind: "drawn",
+          receipt: 1,
+          bar: draw("r"),
+          handoff: draw("s"),
+        },
       },
     ]);
     expect(r.draws[0]!.following.sort()).toEqual(["pane", "statusline"]);

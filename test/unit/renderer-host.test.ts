@@ -15,6 +15,7 @@ import {
 import {
   rendererOf,
   type AdapterOutput,
+  type EffectId,
   type PushedFrame,
   type RendererOutput,
   type Subscriptions,
@@ -293,6 +294,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     session: sessionIdOf("s"),
     frame: {
       kind: "drawn",
+      receipt: 1 as EffectId,
       bar: {
         depth: "none",
         rows: [{ kind: "diagnostic", runs: [{ text: "the bar" }] }],
@@ -340,6 +342,54 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       /^renderer main's subscriptions could not be taken: .*the collector broke/,
     ),
   ]);
+});
+
+test("a delayed presentation receipt belongs to the worker that drew the frame", async () => {
+  const session = sessionIdOf("pane");
+  const receipt = 1 as EffectId;
+  const pushed: PushedFrame = {
+    session,
+    frame: {
+      kind: "drawn", receipt,
+      bar: { depth: "none", rows: [], nextChange: null, motion: "still", pending: [] },
+      handoff: null,
+    },
+  };
+  const writes: Array<(ok: boolean) => void> = [];
+  const confirmed: number[] = [];
+  let worker = 0;
+  const host = rendererHost(MAIN_RENDERER, clockAt({ wall: 0, mono: 0 }),
+    held(rendererOf({
+      event: async ({ event }) => {
+        if (event.kind === "start") worker++;
+        if (event.kind === "due") return { ...answered(), frames: [pushed] };
+        if (event.kind === "effect-done") {
+          expect(event.of).toBe(receipt);
+          confirmed.push(worker);
+        }
+        return answered();
+      },
+      adapter: async () => { throw new Error("no push here"); },
+    })),
+    () => {},
+    {
+      subscribed: () => {}, stored: () => {}, recorded: () => {},
+      holding: () => () => {},
+      frames: (frames, settle) => {
+        for (const frame of frames) writes.push(ok => settle(frame, ok));
+      },
+    },
+    NO_ACTS,
+  );
+  for (let n = 0; n < 2; n++) {
+    await host.start(() => ({ kind: "event", event: { kind: "start", viewers: {}, sessions: [] } }), []);
+    await host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  }
+  expect(writes).toHaveLength(2);
+  writes[0]!(true);
+  writes[1]!(true);
+  await host.answer(() => ({ kind: "event", event: { kind: "viewers", viewers: {} } }));
+  expect(confirmed).toEqual([2]);
 });
 
 test("a failed record and a rejected act leave the answer and both effect acknowledgements intact", async () => {
@@ -739,6 +789,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
             session,
             frame: {
               kind: "drawn",
+              receipt: 1 as EffectId,
               bar: {
                 depth: "none",
                 rows: [{ kind: "bar", runs: [{ text: "frame" }] }],

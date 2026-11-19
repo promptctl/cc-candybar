@@ -9,6 +9,7 @@
 // taken — and reads what subscribers were sent and what the renderer was
 // handed.
 
+import { Writable } from "node:stream";
 import {
   FrameFeeds,
   type FeedDeps,
@@ -20,11 +21,13 @@ import { TEST_SIGNER } from "../helpers/link-signer";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
 import type { WireFrame } from "../../src/render/frame";
 import type {
+  EffectId,
   PushedFrame,
   Viewers,
 } from "../../src/renderer-interface/interface";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { newestWins } from "../../src/utils/newest-wins";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -37,7 +40,7 @@ interface Req {
 
 // Feeds over a renderer the case answers: every delivery waits in `owed`
 // until the case lets its slot come (`slot`), and reads the viewers then.
-function rig() {
+function rig(publishFrame = publishingFrames(TEST_SIGNER)) {
   const hidden = new Set<string>();
   const handed: Viewers[] = [];
   const owed: Array<{
@@ -48,7 +51,7 @@ function rig() {
   const logged: string[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
-    publishFrame: publishingFrames(TEST_SIGNER),
+    publishFrame,
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
       watching.started++;
@@ -61,6 +64,11 @@ function rig() {
     log: (level, line) => void logged.push(`${level} ${line}`),
   };
   const feeds = new FrameFeeds<Req>(deps);
+  const settled: [PushedFrame, boolean][] = [];
+  const took = (frames: readonly PushedFrame[]) =>
+    feeds.took(MAIN_RENDERER, frames, (pushed, delivered) =>
+      settled.push([pushed, delivered]),
+    );
   // The next delivery's slot comes: it reads the viewers and the turn ends
   // as `kind`.
   const slot = async (kind = "answered") => {
@@ -79,22 +87,53 @@ function rig() {
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { feeds, hidden, handed, owed, logged, watching, slot, rejected };
+  return {
+    feeds,
+    hidden,
+    handed,
+    owed,
+    logged,
+    watching,
+    slot,
+    rejected,
+    took,
+    settled,
+  };
 }
 
 // A subscriber on `lane`, recording the answers it was sent and its refusal.
-function subscriber(lane: Lane, drawing = true) {
+type WriterDone = Parameters<Subscriber["frame"]>[1];
+
+function subscriber(
+  lane: Lane,
+  drawing = true,
+  write = (done: WriterDone) => done(true),
+) {
   const sent: string[] = [];
   const refusals: Refusal[] = [];
   const sub: Subscriber = {
     lane,
-    frame: (json) => {
+    frame: (json, done) => {
       sent.push(json);
+      write(done);
     },
     refused: (resp) => void refusals.push(resp),
     drawing: () => drawing,
   };
   return { sub, sent, refusals };
+}
+
+function deferredSubscriber(lane: Lane) {
+  const writes: WriterDone[] = [];
+  const view = subscriber(lane, true, (done) => writes.push(done));
+  return {
+    ...view,
+    finish(delivered: boolean) {
+      const done = writes.shift();
+      if (done === undefined) throw new Error("no offered frame to finish");
+      done(delivered);
+    },
+  };
 }
 
 const body = (text: string): WireFrame => ({
@@ -112,10 +151,12 @@ const frame = (
   session = S,
   bar = "r",
   handoff: string | null = "s",
+  receipt = 1,
 ): PushedFrame => ({
   session,
   frame: {
     kind: "drawn",
+    receipt: receipt as EffectId,
     bar: body(bar),
     handoff: handoff === null ? null : body(handoff),
   },
@@ -243,8 +284,8 @@ describe("a subscriber", () => {
     const line = subscriber("statusline");
     r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
-    r.feeds.took(MAIN_RENDERER, [frame(S, "r1", "s1")]);
-    r.feeds.took(MAIN_RENDERER, [frame(S, "r2", "s1")]);
+    r.took([frame(S, "r1", "s1")]);
+    r.took([frame(S, "r2", "s1")]);
     expect(pane.sent).toEqual([ansiAnswer("r1"), ansiAnswer("r2")]);
     expect(line.sent).toEqual([ansiAnswer("s1")]);
     expect(r.feeds.getStats()).toMatchObject({
@@ -255,18 +296,24 @@ describe("a subscriber", () => {
   });
 
   test("both lanes receive identical terminal bytes without a handoff and repeat frames are deduplicated", () => {
-    const { feeds } = rig();
+    const { feeds, took } = rig();
     const pane = subscriber("pane");
     const statusline = subscriber("statusline");
     feeds.subscribe(S, pane.sub);
     feeds.subscribe(S, statusline.sub);
     const bar = body("answer");
-    feeds.took(MAIN_RENDERER, [{ session: S, frame: { kind: "drawn", bar, handoff: null } }]);
-    feeds.took(MAIN_RENDERER, [
+    took([
+      {
+        session: S,
+        frame: { kind: "drawn", receipt: 1 as EffectId, bar, handoff: null },
+      },
+    ]);
+    took([
       {
         session: S,
         frame: {
           kind: "drawn",
+          receipt: 2 as EffectId,
           bar: { ...bar, nextChange: 45 },
           handoff: null,
         },
@@ -277,7 +324,7 @@ describe("a subscriber", () => {
   });
 
   test("a failed draw uses the same refusal bytes in both lanes", () => {
-    const { feeds } = rig();
+    const { feeds, took, settled } = rig();
     const pane = subscriber("pane");
     const statusline = subscriber("statusline");
     feeds.subscribe(S, pane.sub);
@@ -286,7 +333,7 @@ describe("a subscriber", () => {
       session: S,
       frame: { kind: "failed", message: "draw broke" },
     };
-    feeds.took(MAIN_RENDERER, [failure, failure]);
+    took([failure, failure]);
     expect(pane.sent).toHaveLength(1);
     expect(statusline.sent).toEqual(pane.sent);
     expect(JSON.parse(pane.sent[0]!)).toMatchObject({
@@ -294,12 +341,16 @@ describe("a subscriber", () => {
       code: "RENDER_FAILED",
       error: "draw broke",
     });
+    expect(settled).toEqual([
+      [failure, false],
+      [failure, false],
+    ]);
   });
 
   test("joining later is handed the bar as it stands, at once", () => {
     const r = rig();
     r.feeds.subscribe(S, subscriber("pane").sub);
-    r.feeds.took(MAIN_RENDERER, [frame(S, "r1", "s1")]);
+    r.took([frame(S, "r1", "s1")]);
     const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
     expect(late.sent).toEqual([ansiAnswer("r1")]);
@@ -310,9 +361,11 @@ describe("a subscriber", () => {
     const { sub, sent } = subscriber("pane");
     const leave = r.feeds.subscribe(S, sub);
     leave();
-    r.feeds.took(MAIN_RENDERER, [frame(S)]);
+    const pushed = frame(S);
+    r.took([pushed]);
     expect(sent).toEqual([]);
     expect(r.feeds.isWatched(S)).toBe(false);
+    expect(r.settled).toEqual([[pushed, false]]);
   });
 
   test("the feeds watch from the first subscriber to the last leaving, which is logged with what it was sent", () => {
@@ -320,12 +373,199 @@ describe("a subscriber", () => {
     const leaveS = r.feeds.subscribe(S, subscriber("pane").sub);
     const leaveT = r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.watching).toEqual({ started: 1, stopped: 0 });
-    r.feeds.took(MAIN_RENDERER, [frame(S)]);
+    r.took([frame(S)]);
     leaveS();
     expect(r.watching.stopped).toBe(0);
     leaveT();
     expect(r.watching).toEqual({ started: 1, stopped: 1 });
     expect(r.logged).toContain(`info feed sid="${S}" unwatched pushed=1`);
+  });
+});
+
+describe("feed delivery", () => {
+  test("one fast subscriber settles the candidate without waiting for a slower one", () => {
+    const { feeds, took, settled } = rig();
+    const pane = deferredSubscriber("pane");
+    const statusline = subscriber("statusline");
+    feeds.subscribe(S, pane.sub);
+    feeds.subscribe(S, statusline.sub);
+    const pushed = frame();
+
+    took([pushed]);
+    expect(pane.sent).toEqual([ansiAnswer("r")]);
+    expect(statusline.sent).toEqual([ansiAnswer("s")]);
+    expect(settled).toEqual([[pushed, true]]);
+    pane.finish(false);
+    expect(settled).toEqual([[pushed, true]]);
+  });
+
+  test("transport backpressure declines the replaced draw and confirms only the bytes written", () => {
+    const { feeds, took, settled } = rig();
+    const written: string[] = [];
+    const completions: (() => void)[] = [];
+    const out = new Writable({
+      highWaterMark: 1,
+      write(bytes: Buffer, _encoding, complete) {
+        written.push(bytes.toString());
+        completions.push(complete);
+      },
+    });
+    feeds.subscribe(S, { ...subscriber("pane").sub, frame: newestWins(out) });
+    const first = frame(S, "first", null, 1);
+    const second = frame(S, "second", null, 2);
+    const third = frame(S, "third", null, 3);
+
+    took([first, second, third]);
+    expect(written).toEqual([ansiAnswer("first")]);
+    expect(settled).toEqual([[second, false]]);
+    completions.shift()!();
+    expect(settled).toEqual([
+      [second, false],
+      [first, true],
+    ]);
+    completions.shift()!();
+    expect(written).toEqual([ansiAnswer("first"), ansiAnswer("third")]);
+    expect(settled).toEqual([
+      [second, false],
+      [first, true],
+      [third, true],
+    ]);
+  });
+
+  test("the newest identical candidate waits for the offered write and later matches are already presented", () => {
+    const { feeds, took, settled } = rig();
+    const pane = deferredSubscriber("pane");
+    feeds.subscribe(S, pane.sub);
+    const first = frame(S, "same", null, 1);
+    const second = frame(S, "same", null, 2);
+    const third = frame(S, "same", null, 3);
+    const fourth = frame(S, "same", null, 4);
+
+    took([first]);
+    expect(settled).toEqual([]);
+    took([second, third]);
+    expect(pane.sent).toEqual([ansiAnswer("same")]);
+    expect(settled).toEqual([
+      [first, false],
+      [second, false],
+    ]);
+    pane.finish(true);
+    took([fourth]);
+    expect(pane.sent).toEqual([ansiAnswer("same")]);
+    expect(settled).toEqual([
+      [first, false],
+      [second, false],
+      [third, true],
+      [fourth, true],
+    ]);
+  });
+
+  test("an identical candidate is retried after a failed write", () => {
+    const { feeds, took, settled } = rig();
+    const pane = deferredSubscriber("pane");
+    feeds.subscribe(S, pane.sub);
+    const first = frame(S, "retry", null, 1);
+    const second = frame(S, "retry", null, 2);
+    took([first]);
+    pane.finish(false);
+    took([second]);
+    expect(pane.sent).toEqual([ansiAnswer("retry"), ansiAnswer("retry")]);
+    expect(settled).toEqual([[first, false]]);
+    pane.finish(true);
+    expect(settled).toEqual([
+      [first, false],
+      [second, true],
+    ]);
+  });
+
+  test("a return to confirmed bytes still writes behind a different outstanding frame", () => {
+    const { feeds, took, settled } = rig();
+    const pane = deferredSubscriber("pane");
+    feeds.subscribe(S, pane.sub);
+    const initial = frame(S, "initial", null, 1);
+    const different = frame(S, "changed", null, 2);
+    const returned = frame(S, "initial", null, 3);
+    took([initial]);
+    pane.finish(true);
+    took([different, returned]);
+    expect(pane.sent).toEqual([
+      ansiAnswer("initial"),
+      ansiAnswer("changed"),
+      ansiAnswer("initial"),
+    ]);
+    expect(settled).toEqual([[initial, true]]);
+    pane.finish(true);
+    pane.finish(true);
+    expect(settled).toEqual([
+      [initial, true],
+      [different, true],
+      [returned, true],
+    ]);
+  });
+
+  test("unsubscribe and close settle only when all outstanding subscribers decline", () => {
+    const { feeds, took, settled } = rig();
+    const pane = deferredSubscriber("pane");
+    const statusline = deferredSubscriber("statusline");
+    const leave = feeds.subscribe(S, pane.sub);
+    feeds.subscribe(S, statusline.sub);
+    const pushed = frame();
+    took([pushed]);
+
+    leave();
+    pane.finish(true);
+    expect(settled).toEqual([]);
+    feeds.close();
+    statusline.finish(true);
+    expect(settled).toEqual([[pushed, false]]);
+  });
+
+  test("a subscriber that throws cannot block another subscriber's delivery", () => {
+    const { feeds, took, settled, logged } = rig();
+    const pane = subscriber("pane", true, () => {
+      throw new Error("broken subscriber");
+    });
+    const statusline = subscriber("statusline");
+    feeds.subscribe(S, pane.sub);
+    feeds.subscribe(S, statusline.sub);
+    const pushed = frame();
+
+    took([pushed]);
+    expect(statusline.sent).toEqual([ansiAnswer("s")]);
+    expect(settled).toEqual([[pushed, true]]);
+    expect(logged).toContainEqual(
+      expect.stringContaining("send failed: Error: broken subscriber"),
+    );
+  });
+
+  test("encoding failure sends refusal bytes and declines the draw while the next session still presents", () => {
+    const publish = publishingFrames(TEST_SIGNER);
+    let encodingFirst = true;
+    const { feeds, took, settled, logged } = rig((body) => {
+      if (encodingFirst) {
+        encodingFirst = false;
+        throw new Error("encoding broke");
+      }
+      return publish(body);
+    });
+    const first = subscriber("pane");
+    const second = subscriber("pane");
+    feeds.subscribe(S, first.sub);
+    feeds.subscribe(T, second.sub);
+    const failed = frame(S, "bad", null);
+    const drawn = frame(T, "good", null);
+
+    took([failed, drawn]);
+    expect(JSON.parse(first.sent[0]!)).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+    });
+    expect(second.sent).toEqual([ansiAnswer("good")]);
+    expect(settled).toEqual([
+      [failed, false],
+      [drawn, true],
+    ]);
+    expect(logged).toContainEqual(expect.stringContaining("encoding broke"));
   });
 });
 
@@ -358,7 +598,7 @@ describe("a subscription's lane", () => {
     expect(pane.refusals).toHaveLength(1);
     expect(line.refusals).toHaveLength(0);
     // The other lane streams on.
-    r.feeds.took(MAIN_RENDERER, [frame(S)]);
+    r.took([frame(S)]);
     expect(pane.sent).toEqual([]);
     expect(line.sent).toEqual([ansiAnswer("s")]);
   });

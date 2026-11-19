@@ -15,6 +15,7 @@ import {
   type ClientHints,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
+import type { EffectId } from "../renderer-interface/interface";
 import { repoQuestions } from "../config/repo-question";
 import {
   writableRoles,
@@ -143,6 +144,7 @@ export function renderFrame(
   // of late, as the feed knows them.
   following: ReadonlySet<Lane>,
   feeds: LaneFeeds,
+  prepare: PrepareDelivery,
 ): FeedDraw | null {
   const facts: RequestFacts = [];
   try {
@@ -162,10 +164,7 @@ export function renderFrame(
       handedOffTo(lanes, following),
     );
     const handoff = statusline === bar ? null : statusline;
-    // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
-    // as it is handed to the feed: a frame whose bytes match the last shows
-    // the same links, and a feed's close retires what the feed drew.
-    deliver(parts, {
+    const receipt = prepare({
       kept,
       surfaceFrames: setup.view.frames,
       copies,
@@ -173,7 +172,7 @@ export function renderFrame(
       eventsShown: [],
     });
     return {
-      frame: { kind: "drawn", bar, handoff },
+      frame: { kind: "drawn", receipt, bar, handoff },
       evaluated,
       cellBreaks,
       failure: null,
@@ -1022,6 +1021,8 @@ export interface Delivery {
   readonly clickShown: ClickErrorRecord | null;
   readonly eventsShown: readonly HeldEvent[];
 }
+
+export type PrepareDelivery = (delivery: Delivery) => EffectId;
 
 // [LAW:single-enforcer] The one record of a delivery. An answer carrying the
 // click error or a daemon-wide held event that reaches its client is the one

@@ -3,7 +3,8 @@
 // the statusline, carrying the request it answers and the frame drawn, and the
 // present's `effect-done` is what records what the frame showed. A world state
 // the host hands in is what its session's view draws from, a retire closes the
-// view, and every output says what the open views need read.
+// view, and every output says what the open views need read. A due feed frame
+// also has a receipt whose `effect-done` records only an accepted delivery.
 //
 // [LAW:behavior-not-structure] The renderer is built over the daemon's own
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
@@ -40,8 +41,10 @@ import {
   drawRender,
   renderFrame,
   setUpRender,
+  type Delivery,
   type RendererParts,
 } from "../src/renderer/draw-bar";
+import { FEED_PERIODS, Feeds } from "../src/renderer/feeds";
 import { renderWidth } from "../src/renderer/render-payload";
 import { parseFrame, textOf } from "../src/render/frame";
 import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
@@ -128,8 +131,16 @@ function renderer(
       worldStates: rig.served.worldStates,
       verbs,
     }),
+    feeds: new Feeds({
+      draw: (session, fps, readings, following, lanes, prepare) =>
+        renderFrame(parts, session, fps, readings, following, lanes, prepare),
+      pin: (session) => rig.cache.pin(session),
+      log: (level, message) => logged.push(`${level} ${message}`),
+      periods: FEED_PERIODS,
+    }),
     eventAnswered: (event) => pipesAnswered.push(event),
   };
+  cleanups.push(() => parts.feeds.closeAll(READ.tick));
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
   const record = rig.cache.delivered.bind(rig.cache);
@@ -259,7 +270,11 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
+const done = (
+  r: Renderer,
+  { session, id: of }: Pick<Effect, "session" | "id">,
+  ok: boolean,
+) =>
   r.answer({
     kind: "event",
     ...READ,
@@ -289,6 +304,34 @@ const presentOf = (effects: readonly Effect[]): Present => {
     throw new Error("the turn presented nothing");
   return present;
 };
+
+const followFeed = (r: Renderer) =>
+  handIn(r, {
+    kind: "viewers",
+    viewers: {
+      [SESSION]: {
+        lanes: { statusline: { subscribers: 1, drawing: true } },
+        shown: true,
+        joined: 1,
+      },
+    },
+  });
+
+async function dueFrame(r: Renderer, elapsed = 0) {
+  const { frames } = answered(
+    await r.answer({
+      kind: "event",
+      at: (READ.at + elapsed) as Instant,
+      tick: (READ.tick + elapsed) as Tick,
+      event: { kind: "due" },
+    }),
+  );
+  expect(frames).toHaveLength(1);
+  const pushed = frames[0];
+  if (pushed?.frame.kind !== "drawn") throw new Error("the feed drew no bar");
+  expect(pushed.session).toBe(SESSION);
+  return pushed.frame;
+}
 
 describe("a statusline request", () => {
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
@@ -494,6 +537,9 @@ describe("a feed's frame", () => {
       READ,
       new Set(["pane"]),
       UNFOLLOWED_FEEDS,
+      () => {
+        throw new Error("a failed draw requested a receipt");
+      },
     )!;
     expect(frame.frame).toEqual({
       kind: "failed",
@@ -502,24 +548,21 @@ describe("a feed's frame", () => {
     expect(frame.failure).not.toBeNull();
   });
 
-  test("records what it showed as it is drawn, under the feed, apart from the request's", async () => {
-    const { r, parts, recorded, rig } = renderer();
-    answered(await request({ r, rig }));
+  test("a due frame records its shown copies only after its receipt is accepted", async () => {
+    const t = renderer();
+    const { r, recorded, rig } = t;
+    await configure(t, checked());
     const by: string[] = [];
     const record = rig.cache.delivered.bind(rig.cache);
     rig.cache.delivered = (sessionId, drawer, copies) => {
       by.push(drawer);
       record(sessionId, drawer, copies);
     };
-    const frame = renderFrame(
-      parts,
-      SESSION,
-      MOVING_FPS,
-      READ,
-      new Set(),
-      UNFOLLOWED_FEEDS,
-    );
-    expect(frame?.failure).toBeNull();
+    answered(await followFeed(r));
+    const frame = await dueFrame(r);
+    expect(recorded).toEqual([]);
+    expect(viewOf(rig)?.frames.get("feed")).toBeUndefined();
+    answered(await done(r, { session: SESSION, id: frame.receipt }, true));
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
     expect(by).toEqual(["feed"]);
   });
@@ -533,35 +576,82 @@ describe("a feed's frame", () => {
     const view = viewOf(rig)!;
     const answeredRecord = view.frames.get("request");
     expect(answeredRecord).toBeDefined();
-    renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
+    answered(await followFeed(r));
+    const frame = await dueFrame(r);
+    expect(view.frames.get("feed")).toBeUndefined();
+    answered(await done(r, { session: SESSION, id: frame.receipt }, true));
     expect(view.frames.get("request")).toBe(answeredRecord);
-    expect(view.frames.get("feed")).toBeDefined();
-    expect(view.frames.get("feed")).not.toBe(answeredRecord);
+    const feedRecord = view.frames.get("feed");
+    expect(feedRecord).toBeDefined();
+    expect(feedRecord).not.toBe(answeredRecord);
+    const nextRequest = presentOf(answered(await request({ r, rig })).effects);
+    answered(await done(r, nextRequest, true));
+    expect(view.frames.get("feed")).toBe(feedRecord);
     expect(parts.effectSessions.getStats().sessions).toBe(1);
   });
 
-  test("draws unsigned clickable addresses for the host to publish", async () => {
-    const { r, parts, rig } = renderer();
-    answered(await request({ r, rig }));
-    const view = viewOf(rig)!;
-    const frame = renderFrame(
-      parts,
-      SESSION,
-      MOVING_FPS,
-      READ,
-      new Set(),
-      UNFOLLOWED_FEEDS,
+  test("a dropped frame preserves the last accepted layout, cells and copies", async () => {
+    const t = renderer();
+    const context = checked();
+    fs.writeFileSync(
+      path.join(dir, "config.json5"),
+      JSON.stringify({
+        variables: {
+          modelName: {
+            kind: "input",
+            path: "model.display_name",
+            type: "string",
+          },
+        },
+        segments: {
+          base: { template: "BASE" },
+          added: { template: "ADDED", when: '{{ eq .modelName "expanded" }}' },
+        },
+        root: { h: ["base", "added"] },
+      }),
     );
-    expect(frame?.failure).toBeNull();
-    if (frame?.frame.kind !== "drawn") throw new Error("the feed drew no bar");
-    const links = linksOf(frame.frame.bar).filter(({ url }) => isBarLink(url));
+    await configure(t, context);
+    answered(await followFeed(t.r));
+    const first = await dueFrame(t.r);
+    expect(textOf(parseFrame(first.bar))).not.toContain("ADDED");
+    answered(await done(t.r, { session: SESSION, id: first.receipt }, true));
+    const view = viewOf(t.rig)!;
+    const prior = view.frames.get("feed");
+    expect(prior).toBeDefined();
+    const deliveries = t.recorded.length;
+
+    await configure(t, {
+      ...context,
+      hookData: {
+        ...context.hookData,
+        model: { id: "fixture", display_name: "expanded" },
+      },
+    });
+    const next = await dueFrame(t.r, 2);
+    expect(textOf(parseFrame(next.bar))).toContain("ADDED");
+    expect(viewOf(t.rig)).toBe(view);
+    expect(view.frames.get("feed")).toBe(prior);
+    answered(await done(t.r, { session: SESSION, id: next.receipt }, false));
+    expect(view.frames.get("feed")).toBe(prior);
+    expect(view.frames.get("feed")?.segments).toBe(prior?.segments);
+    expect(t.recorded).toHaveLength(deliveries);
+  });
+
+  test("draws unsigned clickable addresses for the host to publish", async () => {
+    const t = renderer();
+    await configure(t, checked());
+    answered(await followFeed(t.r));
+    const frame = await dueFrame(t.r);
+    const links = linksOf(parseFrame(frame.bar)).filter(({ url }) =>
+      isBarLink(url),
+    );
     expect(links.length).toBeGreaterThan(0);
     for (const { url } of links)
       expect(TEST_SIGNER.openLink(url)).toMatchObject({
         kind: "failed",
         reason: expect.stringContaining("no signature"),
       });
-    expect(view.frames.get("feed")).toBeDefined();
+    answered(await done(t.r, { session: SESSION, id: frame.receipt }, false));
   });
 
   // A feed that opens again draws its first frame, fading nothing in from
@@ -571,7 +661,9 @@ describe("a feed's frame", () => {
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
     const view = viewOf(rig)!;
-    renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
+    answered(await followFeed(r));
+    const frame = await dueFrame(r);
+    answered(await done(r, { session: SESSION, id: frame.receipt }, true));
     expect(view.frames.get("feed")).toBeDefined();
     parts.renderCache.stopDrawing(SESSION, "feed");
     expect(view.frames.get("feed")).toBeUndefined();
@@ -583,6 +675,7 @@ describe("a feed's frame", () => {
   test("moves nothing its feed wakes for: neither the view's data nor the session's state", async () => {
     const { r, parts, changed, rig } = renderer();
     answered(await request({ r, rig }));
+    const candidates: Delivery[] = [];
     const draw = (at: Instant) =>
       renderFrame(
         parts,
@@ -591,11 +684,17 @@ describe("a feed's frame", () => {
         { at, tick: 0 as Tick },
         new Set(),
         UNFOLLOWED_FEEDS,
+        (candidate) => {
+          candidates.push(candidate);
+          return parts.mint();
+        },
       );
     const changedBefore = changed.length;
     const revision = rig.sessionState.latestRevision();
     expect(draw(AT)?.failure).toBeNull();
     expect(draw((AT + 1) as Instant)?.failure).toBeNull();
+    expect(candidates).toHaveLength(2);
+    expect(viewOf(rig)?.frames.get("feed")).toBeUndefined();
     expect(changed.slice(changedBefore)).toEqual([]);
     expect(rig.sessionState.latestRevision()).toBe(revision);
   });
@@ -1264,16 +1363,10 @@ test("overlapping requests draw the latest pane with each client's width, then a
     value: { session: "on %2" },
   });
   expect(view.source.payload().term.cols).toBe(renderWidth(wide.hints));
-  const feed = renderFrame(
-    t.parts,
-    SESSION,
-    MOVING_FPS,
-    READ,
-    new Set(),
-    UNFOLLOWED_FEEDS,
-  );
-  if (feed?.frame.kind !== "drawn") throw new Error("the feed did not draw");
-  expect(textOf(feed.frame.bar)).toContain(label(wide));
+  answered(await followFeed(t.r));
+  const feed = await dueFrame(t.r);
+  expect(textOf(parseFrame(feed.bar))).toContain(label(wide));
+  answered(await done(t.r, { session: SESSION, id: feed.receipt }, true));
 
   const again = await ask(wide, 3, collector);
   expect(textOf(expectFrame(again.resp))).toContain(label(wide));

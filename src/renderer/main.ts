@@ -136,6 +136,11 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, Delivery>();
+  const prepare = (delivery: Delivery): EffectId => {
+    const id = parts.mint();
+    deliveries.set(id, delivery);
+    return id;
+  };
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
@@ -345,11 +350,9 @@ export function mainRenderer(
           event.context.hints,
           record,
         );
-        const id = parts.mint();
-        deliveries.set(id, delivery);
         effects.push({
           kind: "present",
-          id,
+          id: prepare(delivery),
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
@@ -424,7 +427,8 @@ export function mainRenderer(
         runEach([
           () => time.runDue(),
           () => closeIdleMenus(parts, effects, busy),
-          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames),
+          () =>
+            feeds.drawDue({ at: time.at, tick: time.tick }, frames, prepare),
         ]);
         return;
       }
@@ -693,8 +697,16 @@ export function mainRendererOf(
     };
   };
   const feeds: Feeds = new Feeds({
-    draw: (sessionId, fps, readings, following, laneFeeds) =>
-      renderFrame(parts, sessionId, fps, readings, following, laneFeeds),
+    draw: (sessionId, fps, readings, following, laneFeeds, prepare) =>
+      renderFrame(
+        parts,
+        sessionId,
+        fps,
+        readings,
+        following,
+        laneFeeds,
+        prepare,
+      ),
     pin,
     log,
     periods: FEED_PERIODS,
