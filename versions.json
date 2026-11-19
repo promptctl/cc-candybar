@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-879",
+      "ref": "refs/pull/879/merge",
+      "sha": "23174d7178d1842937e19509a9ed67ef281920aa",
+      "timestamp": "2026-11-19T17:06:11.297Z",
+      "commits": [
+        {
+          "sha": "23174d7178d1842937e19509a9ed67ef281920aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:05:06Z",
+          "message": "Merge ea807237aec58cc8122f546f4abadb53ab7d73d3 into ef77b4b6f458a5db5b45685b221e90cda134e782\n"
+        },
+        {
+          "sha": "ea807237aec58cc8122f546f4abadb53ab7d73d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:01:48-07:00",
+          "message": "fix(click): report desktop launch failures (ibyq.3pb)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ef77b4b6f458a5db5b45685b221e90cda134e782",
@@ -35,28 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T09:22:01-07:00",
           "message": "refactor(renderer): keep one origin and config layer projection\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-879",
-      "ref": "refs/pull/879/merge",
-      "sha": "24a99fce9c7428199a15d60626331177298739f2",
-      "timestamp": "2026-11-19T16:59:35.620Z",
-      "commits": [
-        {
-          "sha": "24a99fce9c7428199a15d60626331177298739f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:58:06Z",
-          "message": "Merge 07395cee46201d0f3df0e72e1b90d03ec4c14564 into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
-        },
-        {
-          "sha": "07395cee46201d0f3df0e72e1b90d03ec4c14564",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:01:48-07:00",
-          "message": "fix(click): report desktop launch failures (ibyq.3pb)\n"
         }
       ]
     },
