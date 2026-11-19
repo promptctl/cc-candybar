@@ -118,14 +118,18 @@ function configureBar(src: string, preset?: string) {
     host: durable.host,
   });
   const { config } = rig;
-  const render = (): Frame =>
+  const drawn = () =>
     rig.draw({
       opts: { width: 200 },
       selection:
         preset === undefined
           ? undefined
           : selectionFor(config, {}, picked({ preset })),
-    }).frame;
+    });
+  const render = (): Frame => drawn().frame;
+  // The settings the frame warns of as holding a pick they cannot hold.
+  const staleSettings = (): string[] =>
+    drawn().warnings.flatMap((w) => (w.kind === "stale" ? [w.setting] : []));
   // The config a click reads, re-read from the file on a reload — as the
   // daemon's render cache does.
   let current = config;
@@ -157,7 +161,16 @@ function configureBar(src: string, preset?: string) {
     sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
     await click(urlWriting(render(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
   };
-  return { config, sessionState, render, click, urlWriting, enter, ctx };
+  return {
+    config,
+    sessionState,
+    render,
+    staleSettings,
+    click,
+    urlWriting,
+    enter,
+    ctx,
+  };
 }
 
 // A placement's segment: `vcs2` is the second placement of `vcs`.
@@ -742,6 +755,31 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     expect(durable.text()).toBe(src);
     expect(rt.ctx.edits.view.get(SID, keyB)).toBe("1");
     expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "depth"))).toBe("3");
+  });
+
+  // A placement's pick is an edit's own, so a stale one exists only inside an
+  // open edit (a domain that shrank under a draft); nothing on disk holds one.
+  test("a stale draft draws what lies beneath it under one ⚠, and a step moves from what the bar shows", async () => {
+    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
+    durable.write(src);
+    const rt = configureBar(src);
+    arrange(rt.ctx, SID);
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
+    const depth = draftKey("vcs2", "depth");
+    rt.ctx.sessionState.set(SID, depth, "9");
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "form"), "wide");
+    // A placement of another preset decides nothing for this frame.
+    rt.ctx.sessionState.set(
+      SID,
+      placementDraftKey({ preset: "b", id: "vcs2", segment: "vcs" }, "depth"),
+      "9",
+    );
+    const bar = textOf(rt.render());
+    expect(bar).toContain("d-long-2");
+    expect(rt.staleSettings()).toHaveLength(2);
+    await rt.click(rt.urlWriting(rt.render(), depth, "1"));
+    expect(textOf(rt.render())).toContain("d-long-3");
+    expect(rt.staleSettings()).toHaveLength(1);
   });
 
   test("configure mode names its preset: another preset's placement of the id stays closed", () => {

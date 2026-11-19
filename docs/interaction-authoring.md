@@ -604,11 +604,6 @@ control for "just this terminal" beside one for "everywhere":
     // Every session, durably.
     wrapEverywhere: { persist: "autoWrap", cycle: ["true", "false"] },
   },
-  variables: {
-    // The `set: "padding"` stepper seeds an unset key from THIS declaration's
-    // integer default, so the first ◀/▶ click steps from 1 rather than from 0.
-    sessionPadding: { kind: "state", key: "padding", default: "1" },
-  },
   segments: {
     layoutControls: {
       template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}  {{ action "wrapEverywhere" "pin wrap: on" "pin wrap: off" }}',
@@ -659,15 +654,12 @@ one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass
 {
-  variables: {
-    activePreset: { kind: 'state', key: 'preset', default: 'default' },
-  },
   actions: {
     applyPreset: { set: 'preset', from: 'presets' },
   },
   segments: {
     presetControl: {
-      template: '▦ {{ .activePreset }} {{ menu "applyPreset" "▸" "▾" }}',
+      template: '▦ {{ .preset.effective }} {{ menu "applyPreset" "▸" "▾" }}',
     },
   },
   presets: {

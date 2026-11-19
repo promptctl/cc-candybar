@@ -155,7 +155,7 @@ test("a click that repairs a broken user file is not refused under a project lay
 
 test("save-as-preset never mints a name a project layer declares", () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
-  const name = writePreset(
+  const { name } = writePreset(
     EDITS_IN_PLACE,
     projectLayer(),
     "default",
@@ -196,7 +196,7 @@ describe("a write to a layer above the user's", () => {
       userFile,
       `{ segments: { mine: { template: "USERSEG" } }, presets: { own: { root: { h: ["mine"] } } } }`,
     );
-    const name = writePreset(
+    const { name } = writePreset(
       EDITS_IN_PLACE,
       projectLayer("local"),
       "own",
@@ -219,7 +219,7 @@ describe("a write to a layer above the user's", () => {
         {},
         [],
         [],
-      ),
+      ).name,
     ).toBe("custom-2");
   });
 
@@ -313,7 +313,7 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(EDITS_IN_PLACE, projectLayer(), "default", {}, [], []),
+    writePreset(EDITS_IN_PLACE, projectLayer(), "default", {}, [], []).name,
   ).toBe("custom-2");
 });
 

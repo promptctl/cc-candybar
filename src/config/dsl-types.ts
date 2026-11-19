@@ -32,6 +32,7 @@ import type {
 import {
   FOLLOW_BAR,
   isPlacementThemeName,
+  oneOf,
   parseSessionInt,
   PLACEMENT_EFFECTS,
 } from "../themes/policy.js";
@@ -137,9 +138,9 @@ export interface SegmentNode {
   readonly trail?: string;
   // Where this placement's unsaved setting values live (brandon-segment-
   // settings-i4n.g64): setting name → the session key configure mode's
-  // controls write and the `state` variable that reads it. The placement's
-  // templates read `.settings` through these, so a pick shows the moment it
-  // is made and `💾 save` writes it into the placement.
+  // controls write and the `setting` variable holding its fold. The
+  // placement's templates read `.settings` through these, so a pick shows the
+  // moment it is made and `💾 save` writes it into the placement.
   // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
   readonly drafts?: Readonly<Record<string, DraftSlot>>;
   // The layer that placed this cell through its `insert` list rather than
@@ -168,14 +169,24 @@ export interface InsertCell {
   readonly by: InsertedBy;
 }
 
-// One setting's unsaved value: the session key it is held at, and the `state`
-// variable a template reads it through — minted together, so a reader of the
-// key never looks the variable up to find it.
-export interface DraftSlot {
+// [LAW:types-are-the-program] One placement's setting as a session may pick
+// it: the preset and placement it belongs to, the setting and its
+// declaration, the session key a pick is held at, and the value the file
+// gives the placement — what lies beneath a pick. Minted together by edit
+// chrome, so a reader of the key never looks the declaration up.
+export interface PlacementSlot {
+  readonly preset: string;
   // The placement whose value it is. A name label carries its placement's
   // `theme` slot too, so the node holding a slot is not always its owner.
   readonly id: string;
+  readonly setting: string;
+  readonly decl: SettingDecl;
   readonly key: string;
+  readonly beneath: SettingValue;
+}
+
+// The slot, and the `setting` variable a template reads it through.
+export interface DraftSlot extends PlacementSlot {
   readonly variable: string;
 }
 
@@ -560,7 +571,19 @@ export type Globals = GlobalsOf<GlobalFieldRows>;
 export type VariableDecl =
   | AuthoredVariableDecl
   | DroppedVarDecl
-  | SourceVarDecl;
+  | SourceVarDecl
+  | SettingVarDecl;
+
+// [LAW:types-are-the-program] A placement's setting as its templates read it:
+// the fold of the session's pick over the placement's value
+// (src/config/setting-table.ts), spelled as a pick is. Unlike a `state`
+// variable it declares a domain, so a pick outside it reads as the value the
+// bar wears. Synthesized by edit chrome, never authored — the variable loader
+// accepts no `kind: "setting"`.
+export interface SettingVarDecl {
+  readonly kind: "setting";
+  readonly slot: PlacementSlot;
+}
 
 // [LAW:types-are-the-program] Authored type may be omitted. Registration
 // consumes the resolved type for an input or template in either scope.
@@ -1079,24 +1102,6 @@ export function parseSettingSpelling(
   return inSettingDomain(decl, value) ? value : undefined;
 }
 
-// [LAW:single-enforcer] What one setting of a placement holds: the session's
-// pick through the setting's draft slot (SegmentNode.drafts) when the
-// declaration admits it, else the placement's own value, else the
-// declaration's default. `pick` reads a slot — the render through its draft
-// variable, the doctor through the session's state — so the bar and the
-// doctor cannot disagree about what a placement wears.
-export function placementSetting(
-  node: SegmentNode,
-  name: string,
-  decl: SettingDecl,
-  pick: (draft: DraftSlot) => string | null,
-): SettingValue {
-  const saved = node.settings?.[name] ?? decl.default;
-  const draft = node.drafts?.[name];
-  const raw = draft === undefined ? null : pick(draft);
-  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
-}
-
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or
 // `an integer from 0 to 9`.
 export function describeSettingDomain(decl: SettingDecl): string {
@@ -1106,7 +1111,7 @@ export function describeSettingDomain(decl: SettingDecl): string {
     return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
   }
   if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
-  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
+  return oneOf(domain);
 }
 
 // [LAW:types-are-the-program] What a FILE may say about a segment: a complete

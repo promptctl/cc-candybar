@@ -13,17 +13,18 @@
 // so the button's count and the click's write cannot describe different sets.
 
 import {
-  parseSettingSpelling,
   settingOrderProblems,
   settingSpelling,
-  settingsOf,
-  walkNodes,
   type DslConfig,
   type Globals,
   type RawDslConfig,
-  type SettingDecl,
   type SettingValue,
 } from "../config/dsl-types.js";
+import {
+  placementFold,
+  settingTable,
+  type PlacementRow,
+} from "../config/setting-table.js";
 import {
   THEME_DEFAULT_FIELDS,
   type ThemeDefaultField,
@@ -37,12 +38,7 @@ import {
   themeDefaultKey,
   type ConfigPath,
 } from "../config/loader/persist-target.js";
-import {
-  presetByName,
-  presetGlobals,
-  presetNames,
-  presetRoot,
-} from "../config/presets.js";
+import { presetByName, presetGlobals, presetNames } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -238,7 +234,7 @@ export function durableLanding(
 ): DurableLanding {
   // [LAW:one-source-of-truth] The preset the session renders, as the render
   // resolves it.
-  const preset = presetOf(config, sessionPick);
+  const preset = presetOf(config, sessionPick).value;
   const target = parsePersistTarget(key);
   return {
     key:
@@ -263,26 +259,20 @@ export interface PlacementDraft {
   readonly value: SettingValue;
 }
 
-// Every placement setting the session holds a pick for that differs from the
-// value the file gives that placement, in one preset's layout. A pick the
-// declaration no longer admits parses to nothing, and is no draft: the render
-// shows the file's value for it.
+// Every placement setting the session renders differently from the value the
+// file gives that placement, in one preset's layout. A stale pick is no draft:
+// the fold draws the file's value for it.
 export function placementDraftsIn(
   config: DslConfig,
   preset: string,
   sessionPick: (key: string) => string | null,
 ): readonly PlacementDraft[] {
-  return slotsOf(config, preset).flatMap(
-    ({ id, setting, key, decl, saved }) => {
-      const pick = sessionPick(key);
-      const value =
-        pick === null ? undefined : parseSettingSpelling(decl, pick);
-      return value === undefined ||
-        settingSpelling(value) === settingSpelling(saved)
-        ? []
-        : [{ preset, id, setting, key, value }];
-    },
-  );
+  return slotsOf(config, preset).flatMap((row) => {
+    const { value } = placementFold(row, sessionPick(row.key));
+    return settingSpelling(value) === settingSpelling(row.beneath)
+      ? []
+      : [{ preset, id: row.id, setting: row.setting, key: row.key, value }];
+  });
 }
 
 // [LAW:no-silent-failure] A save writes every placement draft the edit holds,
@@ -318,12 +308,10 @@ export function placementPickProblems(
       const own = slots.filter((s) => s.id === id);
       const decls = Object.fromEntries(own.map((s) => [s.setting, s.decl]));
       const values = Object.fromEntries(
-        own.map((s) => {
-          const pick = written.get(s.key) ?? sessionPick(s.key);
-          const value =
-            pick === null ? undefined : parseSettingSpelling(s.decl, pick);
-          return [s.setting, value ?? s.saved];
-        }),
+        own.map((s) => [
+          s.setting,
+          placementFold(s, written.get(s.key) ?? sessionPick(s.key)).value,
+        ]),
       );
       return settingOrderProblems(decls, values).map(
         ({ message }) => `placement "${id}": ${message}`,
@@ -332,44 +320,9 @@ export function placementPickProblems(
   });
 }
 
-// Every draft slot in one preset's layout, with what the file gives it. A
-// fact of the config alone, which never changes under a config object — so
-// it is read once per (config, preset), and a render's count reads only the
-// session. [LAW:one-source-of-truth] Derived from the compiled tree, never
-// stored beside it: the memo is keyed by the config it was derived from.
-interface DraftSlotFact {
-  readonly id: string;
-  readonly setting: string;
-  readonly key: string;
-  readonly decl: SettingDecl;
-  readonly saved: SettingValue;
-}
-const SLOTS = new WeakMap<DslConfig, Map<string, readonly DraftSlotFact[]>>();
-function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
-  const byPreset = SLOTS.get(config) ?? new Map();
-  SLOTS.set(config, byPreset);
-  const known = byPreset.get(preset);
-  if (known !== undefined) return known;
-  // One fact per slot: a name label reads its placement's `theme` slot, so a
-  // slot can be held by two nodes, which resolve it identically.
-  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
-    (node) =>
-      node.kind !== "segment" || node.drafts === undefined
-        ? []
-        : Object.entries(node.drafts).map(([setting, { id, key }]) => {
-            const decl = settingsOf(config.segments[node.name]!)[setting]!;
-            return {
-              id,
-              setting,
-              key,
-              decl,
-              saved: node.settings?.[setting] ?? decl.default,
-            };
-          }),
-  );
-  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
-  byPreset.set(preset, slots);
-  return slots;
+// The placement settings of one preset's layout (src/config/setting-table.ts).
+function slotsOf(config: DslConfig, preset: string): readonly PlacementRow[] {
+  return settingTable(config).placements.filter((p) => p.preset === preset);
 }
 
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders, as

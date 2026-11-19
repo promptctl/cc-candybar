@@ -100,6 +100,7 @@ import {
 import { declarationsAt, templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import { validateNoNesting } from "./loader/nesting.js";
+import { refuseSettingKeyOwners } from "./loader/setting-keys.js";
 import {
   applyPlugins,
   listedPlugins,
@@ -866,6 +867,7 @@ function judgeRenderable(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
+  refuseSettingKeyOwners(ctx, withChrome);
   refuseIfIssues();
   // [LAW:single-enforcer] Authored and synthesized actions share the same
   // layer checkpoint before any reaches the renderer.

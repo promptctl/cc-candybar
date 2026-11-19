@@ -32,8 +32,6 @@ const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   styles: { none: {}, ${PICKED_STYLE}: { chromaScale: 1.6, lightnessShift: 0.08 } },
   variables: {
-    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
-    look: { kind: 'state', key: 'style', default: 'none' },
     pct: { kind: 'input', path: 'pct', type: 'number', default: 0 },
     stop: { kind: 'input', path: 'stop', default: 'panel' },
   },

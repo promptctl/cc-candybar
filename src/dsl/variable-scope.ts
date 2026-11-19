@@ -5,7 +5,7 @@
 // variable's kind, never authored:
 //
 // - a session's own values — its `input`s (the request's facts), its `state`
-//   reads — are the view's;
+//   and `setting` reads — are the view's;
 // - a source whose reading arrives in the session's world state — a plugin's
 //   `source`, a `shell` or `file` run, an `env` variable of the session's
 //   environment — is the view's: a directory has no
@@ -26,6 +26,7 @@ export type VarScope = "directory" | "view";
 const KIND_SCOPE: Readonly<Record<VariableDecl["kind"], VarScope>> = {
   input: "view",
   state: "view",
+  setting: "view",
   template: "view",
   time: "view",
   source: "view",

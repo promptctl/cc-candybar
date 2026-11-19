@@ -39,26 +39,16 @@ import {
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
-import {
-  listGlobalsFieldNames,
-  removedGlobalPointer,
-  settingControlDomain,
-} from "./globals.js";
-import {
-  CONFIG_ONLY_KEYS,
-  SESSION_KEY_TO_SETTING,
-  SETTINGS,
-  type SettingName,
-} from "../setting-projections.js";
-import {
-  controlDomainAdmits,
-  describeControlDomain,
-} from "../setting-control.js";
+import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
+import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
+import { describeControlDomain } from "../setting-control.js";
+import { settingTable, type SettingRow } from "../setting-table.js";
 import {
   EXPRESSION_SLOTS,
   isExpression,
   isStyleEraEndcaps,
   retiredThemeNote,
+  oneOf,
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
@@ -1155,15 +1145,17 @@ function checkHelperIssue(
 // (brandon-config-dovk). Every value such a set can write is known at load, so
 // each is checked against the domain the setting's menu control is generated
 // from, and reported at the field that states it.
+// [LAW:one-source-of-truth] Admitted is the setting's own parse
+// (src/config/setting-table.ts), the one a pick is read through.
 function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,
   a: SetAction,
-  setting: SettingName,
+  row: SettingRow,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): void {
   const key = a.set;
-  const domain = settingControlDomain(SETTINGS[setting].configKey);
+  const { domain } = row;
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   // A stepper writes every integer between its ends, which only a range
   // domain holds by construction; its ends stand for it there and nowhere else.
@@ -1184,9 +1176,7 @@ function checkSettingWrites(
     });
     return;
   }
-  const outside = writes.filter(
-    (w) => !controlDomainAdmits(domain, w.value, optionDomains),
-  );
+  const outside = writes.filter((w) => row.parse(w.value) === null);
   if (outside.length === 0) return;
   // An action drawing from the endcaps domain, or writing nothing but the
   // endcaps `style` held before the rename, under `style` is the old name for
@@ -1331,9 +1321,9 @@ export function validateDeclarations(
         line: findKeyLine(ctx.source, ["actions", name, "set"]),
       });
     }
-    const setting = SESSION_KEY_TO_SETTING.get(a.set);
-    if (setting !== undefined) {
-      checkSettingWrites(ctx, name, a, setting, optionDomains);
+    const row = settingTable(cfg).rows.get(a.set);
+    if (row !== undefined) {
+      checkSettingWrites(ctx, name, a, row, optionDomains);
     }
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged
@@ -1455,7 +1445,7 @@ export function validateDeclarations(
     ) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort(), "themes")})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;

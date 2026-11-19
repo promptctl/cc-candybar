@@ -26,7 +26,6 @@ import {
   mapOpens,
   placementId,
   placementIdentityOf,
-  settingSpelling,
   settingsOf,
   IMPLIED_SETTINGS,
   walkNodes,
@@ -39,6 +38,7 @@ import {
   type SegmentDecl,
   type SegmentNode,
   type DraftSlot,
+  type PlacementSlot,
   type SettingDecl,
   type VariableDecl,
 } from "./dsl-types.js";
@@ -386,12 +386,18 @@ function configureParts(
     // state variable is: a template field path, which the identity's lettered
     // parts keep legal (placement-identity.ts).
     const variable = key;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
+    const slot: PlacementSlot = {
+      preset: ctx.preset,
+      id,
+      setting: name,
+      decl,
       key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default),
+      beneath: node.settings?.[name] ?? decl.default,
     };
-    drafts[name] = { id, key, variable };
+    // [LAW:one-source-of-truth] The variable holds the setting's fold, so the
+    // placement, its control's mark and its step all read one value.
+    ctx.artifacts.variables[variable] = { kind: "setting", slot };
+    drafts[name] = { ...slot, variable };
     const segName = `${prefix}.setting.${placement}.${name}`;
     // [LAW:one-type-per-behavior] The settings menu's generator; the lists of
     // one placement's pickers share one accordion.
