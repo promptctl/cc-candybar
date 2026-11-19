@@ -4,15 +4,22 @@
     {
       "version": "pr-910",
       "ref": "refs/pull/910/merge",
-      "sha": "8b3cab0b3d2ef5a632ddd7b3956241d88eb99e06",
-      "timestamp": "2026-11-19T22:30:58.352Z",
+      "sha": "e169bc4bb4aeb1cea38e4cac61fe409ca3c188c5",
+      "timestamp": "2026-11-19T22:34:59.433Z",
       "commits": [
         {
-          "sha": "8b3cab0b3d2ef5a632ddd7b3956241d88eb99e06",
+          "sha": "e169bc4bb4aeb1cea38e4cac61fe409ca3c188c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:30:00-07:00",
-          "message": "Merge 464feebef6f9f223795016d2bdb9cb0801ff2fe8 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
+          "timestamp": "2026-11-19T22:33:54Z",
+          "message": "Merge eb0dbc214f12cb4fa07c9cf89a431d28743c4967 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
+        },
+        {
+          "sha": "eb0dbc214f12cb4fa07c9cf89a431d28743c4967",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:32:42-07:00",
+          "message": "fix(host): settle displayed events only when an occurrence changes\n"
         },
         {
           "sha": "464feebef6f9f223795016d2bdb9cb0801ff2fe8",

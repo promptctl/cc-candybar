@@ -72527,10 +72527,9 @@ function drawRender(parts, setup, drawing2, feeds) {
     daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
     daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
   ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [...launchEvents, ...held].map(({ kind, event }) => ({
-    kind,
-    event
-  }));
+  const eventsShown = [...launchEvents, ...held].flatMap(
+    ({ kind, event }) => event.answered ? [] : [{ kind, event }]
+  );
   const standing2 = [
     ...daemon2.fileEvents,
     ...launched,
@@ -77655,8 +77654,9 @@ function pipeEvent(state, kind, category) {
 }
 function answeredPipeEvent(state, event) {
   const last2 = state.pipeEvent;
-  if (last2 === null || !answeredBy(last2, event)) return;
+  if (last2 === null || !answeredBy(last2, event)) return false;
   state.pipeEvent = { ...last2, answered: true };
+  return true;
 }
 function standing(state) {
   const event = state.pipeEvent;
@@ -87935,14 +87935,13 @@ var failedFeed = (refusal) => {
   const encoded = { json: JSON.stringify(refusal) };
   return { resp: encoded, statusline: encoded };
 };
-function sameAnswer(a, b) {
-  if (a.json !== b.json) return false;
-  const seen = a.displayedEvents ?? [];
-  const offered = b.displayedEvents ?? [];
-  return seen.length === offered.length && seen.every(({ kind, event }, index) => {
-    const other = offered[index];
-    return other?.kind === kind && sameOccurrence(event, other.event);
-  });
+function covers(prior, offered) {
+  if (prior.json !== offered.json) return false;
+  return offered.displayedEvents === void 0 || offered.displayedEvents.every(
+    ({ kind, event }) => prior.displayedEvents?.some(
+      (seen) => seen.kind === kind && sameOccurrence(seen.event, event)
+    ) ?? false
+  );
 }
 function settleWrite(write, delivered) {
   const done = write.done;
@@ -88271,13 +88270,13 @@ var FrameFeeds = class {
     const answer2 = answerOf2(encoded, sub2.lane);
     let latest;
     for (const write2 of follower.writes) latest = write2;
-    if (latest !== void 0 && sameAnswer(latest.answer, answer2)) {
+    if (latest !== void 0 && covers(latest.answer, answer2)) {
       const superseded = latest.done;
       latest.done = done;
       superseded?.(false);
       return;
     }
-    if (latest === void 0 && follower.confirmed !== null && sameAnswer(follower.confirmed, answer2)) {
+    if (latest === void 0 && follower.confirmed !== null && covers(follower.confirmed, answer2)) {
       done?.(true);
       return;
     }
@@ -88286,12 +88285,10 @@ var FrameFeeds = class {
     this.pushed++;
     watched.pushed++;
     const finished = (delivered) => {
+      if (delivered && answer2.displayedEvents !== void 0)
+        this.deps.acknowledgeDisplayed(answer2.displayedEvents);
       if (!follower.writes.delete(write)) return;
-      if (delivered) {
-        follower.confirmed = answer2;
-        if (answer2.displayedEvents !== void 0)
-          this.deps.acknowledgeDisplayed(answer2.displayedEvents);
-      }
+      if (delivered) follower.confirmed = answer2;
       settleWrite(write, delivered);
     };
     try {
@@ -91239,22 +91236,27 @@ function createDaemon(inputs) {
     }
   });
   const acknowledgeDisplayed = (shown) => {
+    let changed = false;
     for (const { kind, event } of shown) {
       switch (kind) {
         case "launch-pipes":
-          launcher.answeredPipeEvent(event);
+          if (launcher.answeredPipeEvent(event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event))
+          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
             rendererEnded = { ...rendererEnded, answered: true };
+            changed = true;
+          }
           break;
         case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event))
+          if (actFailed !== null && answeredBy(actFailed, event)) {
             actFailed = { ...actFailed, answered: true };
+            changed = true;
+          }
           break;
       }
     }
-    restateFaults();
+    if (changed) restateFaults();
   };
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
