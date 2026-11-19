@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-860",
+      "ref": "refs/pull/860/merge",
+      "sha": "5e7ba332c3cbf9c18564edfea0980c42db6da9f4",
+      "timestamp": "2026-11-19T11:52:54.031Z",
+      "commits": [
+        {
+          "sha": "5e7ba332c3cbf9c18564edfea0980c42db6da9f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:51:52-07:00",
+          "message": "Merge d9e3062e817489f0b593dd2cfdff862c0b4c206c into 302fc64ce5feb571dec1d018b9b3b3bf45535802\n"
+        },
+        {
+          "sha": "d9e3062e817489f0b593dd2cfdff862c0b4c206c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:42:52-07:00",
+          "message": "refactor(render): carry disclosure clicks as drawn targets (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-859",
       "ref": "refs/pull/859/merge",
       "sha": "095554bc0d6f7c1231afeaf4da5c20bdd7863921",
@@ -39,28 +61,6 @@
       ]
     },
     {
-      "version": "pr-858",
-      "ref": "refs/pull/858/merge",
-      "sha": "c023d50395bf3be742b50dfaa5827fc58f99ed78",
-      "timestamp": "2026-11-19T11:45:36.885Z",
-      "commits": [
-        {
-          "sha": "c023d50395bf3be742b50dfaa5827fc58f99ed78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:44:31-07:00",
-          "message": "Merge 8398481e1d4b7667a6832133da9563b7b56bee58 into f2035fdda3d7aced7e27f485137b01e28691e13f\n"
-        },
-        {
-          "sha": "8398481e1d4b7667a6832133da9563b7b56bee58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:44:12-07:00",
-          "message": "fix(themes): a stored theme pick naming nothing installed is reported beside the theme the bar wore\n\nA session's theme pick loaded from the profile can name a palette this\nbuild does not ship (a retired name such as 'dark', a renamed or removed\ntheme). The fold read that pick through the same null arm as no pick, so\nthe bar wore the config's theme and nothing said why.\n\nThe pick is now parsed into its own type, which tells an uninstalled\npick from no pick. The fold still moves past it, and the render reports\nit in the palette slot's report, naming the pick and the theme the bar\nwore. The pick stays stored, so a build that ships it again draws it.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-857",
       "ref": "refs/pull/857/merge",
       "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
@@ -79,86 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T04:35:29-07:00",
           "message": "fix(daemon): launches withhold the spawning shell's repository variables, asked of git once after admission\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-855",
-      "ref": "refs/pull/855/merge",
-      "sha": "7932b5fd07fd375320515c7262c96f50e6c2ac4e",
-      "timestamp": "2026-11-19T11:03:24.369Z",
-      "commits": [
-        {
-          "sha": "7932b5fd07fd375320515c7262c96f50e6c2ac4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:02:17-07:00",
-          "message": "Merge afa093c1e080872aa399f0dd08e769156dcd8f0f into 19a035d767753cfdb962f8696891d8c5f54c8c6f\n"
-        },
-        {
-          "sha": "afa093c1e080872aa399f0dd08e769156dcd8f0f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:01:36-07:00",
-          "message": "refactor(check): use typed render inspection (ibyq.62x)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-853",
-      "ref": "refs/pull/853/merge",
-      "sha": "cd908d972901fdbd670c4f35410ad58a88528b8d",
-      "timestamp": "2026-11-19T10:52:20.020Z",
-      "commits": [
-        {
-          "sha": "cd908d972901fdbd670c4f35410ad58a88528b8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:51:20-07:00",
-          "message": "Merge 6facef33f8daaf204f8747cc43d15a8533084c14 into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
-        },
-        {
-          "sha": "6facef33f8daaf204f8747cc43d15a8533084c14",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:45:50-07:00",
-          "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-850",
-      "ref": "refs/pull/850/merge",
-      "sha": "53956f47501be3addae8d0fc4a220953d4aeeb93",
-      "timestamp": "2026-11-19T10:48:24.807Z",
-      "commits": [
-        {
-          "sha": "53956f47501be3addae8d0fc4a220953d4aeeb93",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:47:18Z",
-          "message": "Merge b68a964c35f8c6900dd53785162bb633ea09c633 into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
-        },
-        {
-          "sha": "b68a964c35f8c6900dd53785162bb633ea09c633",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:40:26-07:00",
-          "message": "refactor(config): share origin watches across renderer names (ibyq.5lt)\n"
-        },
-        {
-          "sha": "a4215b5c35f12fe55532cd286dd228a093ed46a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:32:41-07:00",
-          "message": "fix(config): share reads through file symlinks (ibyq.i9x)\n"
-        },
-        {
-          "sha": "e56a941f91b0811fc646ab2b566ba4382ee5b03b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:29:09-07:00",
-          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n"
         }
       ]
     }
