@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-849",
+      "ref": "refs/pull/849/merge",
+      "sha": "941e40debbccde844619866747990ef86b3e8aef",
+      "timestamp": "2026-11-19T10:34:09.128Z",
+      "commits": [
+        {
+          "sha": "941e40debbccde844619866747990ef86b3e8aef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:32:32Z",
+          "message": "Merge 476fea1348124b92e7b33ec63d20631c101bb6af into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
+        },
+        {
+          "sha": "476fea1348124b92e7b33ec63d20631c101bb6af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:32:27-07:00",
+          "message": "test: verify picker contrast with the retained segment catalogue\n"
+        },
+        {
+          "sha": "04cefed527773ddf5ded939db0cc6d71ac9e2c96",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:26:04-07:00",
+          "message": "fix(integration): use the retained statusline in daemon checks\n"
+        },
+        {
+          "sha": "21682ea96318fbd82dbf6a566077487b9e11d2db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:14:19-07:00",
+          "message": "refactor: remove the old Doctor implementation (ibyq.dzq)\n"
+        },
+        {
+          "sha": "8f5124e25babde658d1f8ee257a9ee8ce2a927a8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:00-07:00",
+          "message": "fix(client): make native reconnect consume the passive outcome\n"
+        },
+        {
+          "sha": "2792801c6c4b8a8519972ea33cb9a3f30614dbdb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:16-07:00",
+          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
+        },
+        {
+          "sha": "0b6ebe96981173edd9eba4c962a16fe225ea01d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:20:10-07:00",
+          "message": "refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n"
+        },
+        {
+          "sha": "a804f608ee5591bd0ed46490095dcb933ca3ea3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:42-07:00",
+          "message": "fix(config): exclude retired update settings from writable targets\n"
+        },
+        {
+          "sha": "4d6fa46504fea1a5b1d99ab47bd95d83ed73f5fa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:02-07:00",
+          "message": "refactor: remove in-bar update offers and workers\n"
+        }
+      ]
+    },
+    {
       "version": "pr-850",
       "ref": "refs/pull/850/merge",
       "sha": "9a678c864fe4cbbd4872f87299998757a6a95df3",
@@ -71,70 +142,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:54:51-07:00",
           "message": "fix(test): each doctor click in the e2e waits for the run before it to report (boii)\n\nA doctor click while the session's run still waits for its reading starts\nno run, so two clicks one draw apart logged one or two runs depending on how\nfast the host read the machine. The effect-refresh case now draws its row\nback after each click before clicking again, and the URL-handler case waits\nfor its run's row instead of reading the first draw. Under a 1.5 s delay on\nthe host's reading, the old effect-refresh case logs three runs and fails;\nboth cases pass.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-849",
-      "ref": "refs/pull/849/merge",
-      "sha": "400c0edb188bc60889b924f8854854f0fa8139b6",
-      "timestamp": "2026-11-19T10:30:02.164Z",
-      "commits": [
-        {
-          "sha": "400c0edb188bc60889b924f8854854f0fa8139b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:28:43-07:00",
-          "message": "Merge 04cefed527773ddf5ded939db0cc6d71ac9e2c96 into 5702b0a6f481af905b25fe6469d345b86a5c5bb3\n"
-        },
-        {
-          "sha": "04cefed527773ddf5ded939db0cc6d71ac9e2c96",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:26:04-07:00",
-          "message": "fix(integration): use the retained statusline in daemon checks\n"
-        },
-        {
-          "sha": "21682ea96318fbd82dbf6a566077487b9e11d2db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:14:19-07:00",
-          "message": "refactor: remove the old Doctor implementation (ibyq.dzq)\n"
-        },
-        {
-          "sha": "8f5124e25babde658d1f8ee257a9ee8ce2a927a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:00-07:00",
-          "message": "fix(client): make native reconnect consume the passive outcome\n"
-        },
-        {
-          "sha": "2792801c6c4b8a8519972ea33cb9a3f30614dbdb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:16-07:00",
-          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
-        },
-        {
-          "sha": "0b6ebe96981173edd9eba4c962a16fe225ea01d1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:20:10-07:00",
-          "message": "refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n"
-        },
-        {
-          "sha": "a804f608ee5591bd0ed46490095dcb933ca3ea3b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:42-07:00",
-          "message": "fix(config): exclude retired update settings from writable targets\n"
-        },
-        {
-          "sha": "4d6fa46504fea1a5b1d99ab47bd95d83ed73f5fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:02-07:00",
-          "message": "refactor: remove in-bar update offers and workers\n"
         }
       ]
     },
