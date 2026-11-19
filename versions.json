@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-885",
+      "ref": "refs/pull/885/merge",
+      "sha": "176b3c4d2e5c376ca3f745ec5ed9eafa71ca0667",
+      "timestamp": "2026-11-19T15:52:01.880Z",
+      "commits": [
+        {
+          "sha": "176b3c4d2e5c376ca3f745ec5ed9eafa71ca0667",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:51:02Z",
+          "message": "Merge 95973e5e2ac3e12a65384dcf5659879a3a4bb6b0 into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+        },
+        {
+          "sha": "95973e5e2ac3e12a65384dcf5659879a3a4bb6b0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:24:34-07:00",
+          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-878",
       "ref": "refs/pull/878/merge",
       "sha": "54156f4bf805854e71dc6b684e13071f1e461525",
@@ -184,28 +206,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-885",
-      "ref": "refs/pull/885/merge",
-      "sha": "88a7989b03abd58b5f8bd7553cb631e0c32b5223",
-      "timestamp": "2026-11-19T15:27:48.047Z",
-      "commits": [
-        {
-          "sha": "88a7989b03abd58b5f8bd7553cb631e0c32b5223",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:26:34-07:00",
-          "message": "Merge 642971ba8cfb0cdbb4e75289e530edec63d989c9 into 53453112ae58ddddcd39dca83f2f94c90b7165df\n"
-        },
-        {
-          "sha": "642971ba8cfb0cdbb4e75289e530edec63d989c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:24:34-07:00",
-          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
         }
       ]
     },
