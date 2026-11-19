@@ -27,7 +27,7 @@ import {
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import type { ClientHint } from "../client-hint.js";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
-import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
+import { standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
   prFactOf,
@@ -95,11 +95,7 @@ import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { signingFrames, type LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
-import {
-  failedWith,
-  renderFailure,
-  RENDER_ANSWERS,
-} from "../daemon/foundations/render-answers";
+import { renderFailure } from "../daemon/foundations/render-answers";
 
 // The renderer's parts: its own state, and what it reaches in the host
 // (`AdapterToHost`, src/renderer-interface/adapter.ts), each by the methods it
@@ -127,9 +123,8 @@ export interface RendererState {
 export type RendererParts = RendererState & AdapterToHost;
 
 // One frame of a subscribed session, drawn from its latest request at this
-// instant, by the render a request gets. The response is what that request
-// would draw, in the bytes its lanes read whatever encoding it asked its own
-// answer in, and the bar moves when its effects say it does.
+// instant, by the render a request gets. The host presents the bar or its
+// statusline handoff, and the bar moves when its effects say it does.
 // [LAW:parse-dont-validate] The request the session's view is declared with
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.
@@ -165,19 +160,13 @@ export function renderFrame(
     // what the statusline shows alike, each link once.
     const signed = signingFrames(parts.linkSigner);
     const bar = signed(drawn.body);
-    const answer = RENDER_ANSWERS.ansi(bar);
     const statusline = statuslineOf(
       sessionId,
       setup.state.writable,
       drawn,
       handedOffTo(lanes, following),
     );
-    const resp = JSON.stringify(answer);
-    // Mostly the bar itself, and one frame encodes once.
-    const statuslineResp =
-      statusline === drawn.body
-        ? resp
-        : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+    const handoff = statusline === drawn.body ? null : signed(statusline);
     // Kept once nothing of the turn is left to throw: a frame that fails
     // part-way leaves the last frame's memory standing.
     keepDraw(parts, setup, kept);
@@ -192,8 +181,7 @@ export function renderFrame(
       eventsShown: [],
     });
     return {
-      bar,
-      answers: { resp, statusline: statuslineResp },
+      frame: { kind: "drawn", bar, handoff },
       evaluated,
       cellBreaks,
       failure: null,
@@ -201,11 +189,8 @@ export function renderFrame(
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
-    const answer = failedWith(outcome.message);
-    const failed = JSON.stringify(answer);
     return {
-      bar: renderFailedFrame(answer.error),
-      answers: { resp: failed, statusline: failed },
+      frame: { kind: "failed", message: outcome.message },
       evaluated: 0,
       cellBreaks: 0,
       failure: { level, line: `frame ${line}` },

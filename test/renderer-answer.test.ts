@@ -39,7 +39,6 @@ import {
   setUpRender,
   type RendererParts,
 } from "../src/renderer/draw-bar";
-import { renderFailedFrame } from "../src/render/frame";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
@@ -448,9 +447,7 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
-  // [LAW:no-silent-failure] A feed's render that threw reaches a lane as a
-  // Frame saying so, with no failure branch in the lane.
-  test("whose render threw is the failure's Frame, a still bar in the error glyph's words, and its answers say so", () => {
+  test("whose render threw names the failure for the host to publish", () => {
     const parts = {
       renderCache: {
         holdView: () => null,
@@ -465,12 +462,9 @@ describe("a feed's frame", () => {
       new Set(["pane"]),
       UNFOLLOWED_FEEDS,
     )!;
-    expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
-    expect(frame.bar.nextChange).toBe(Infinity);
-    expect(JSON.parse(frame.answers.resp)).toMatchObject({
-      ok: false,
-      code: "RENDER_FAILED",
-      error: "the view would not open",
+    expect(frame.frame).toEqual({
+      kind: "failed",
+      message: "the view would not open",
     });
     expect(frame.failure).not.toBeNull();
   });

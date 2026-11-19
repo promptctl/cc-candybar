@@ -15,6 +15,7 @@ import {
 import {
   rendererOf,
   type AdapterOutput,
+  type PushedFrame,
   type RendererOutput,
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
@@ -287,7 +288,21 @@ test("an input carries the clock's two readings as its slot comes, never as it w
 
 test("a taker that throws fails no turn that answered: it is said on every bar, and the frames are still taken", async () => {
   const unheard: string[] = [];
-  const frames: number[] = [];
+  const frames: PushedFrame[] = [];
+  const pushed: PushedFrame = {
+    session: sessionIdOf("s"),
+    frame: {
+      kind: "drawn",
+      bar: {
+        depth: "none",
+        rows: [{ kind: "diagnostic", runs: [{ text: "the bar" }] }],
+        nextChange: null,
+        motion: "still",
+        pending: [],
+      },
+      handoff: null,
+    },
+  };
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
@@ -295,13 +310,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       rendererOf({
         event: async () => ({
           ...answered(),
-          frames: [
-            {
-              session: "s" as never,
-              bar: { rows: [] } as never,
-              answers: { resp: "r", statusline: "s" },
-            },
-          ],
+          frames: [pushed],
         }),
         adapter: async () => {
           throw new Error("no push here");
@@ -313,7 +322,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       subscribed: () => {
         throw new Error("the collector broke");
       },
-      frames: (taken) => void frames.push(taken.length),
+      frames: (taken) => void frames.push(...taken),
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
@@ -325,7 +334,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     event: { kind: "due" },
   }));
   expect(turn.kind).toBe("answered");
-  expect(frames).toEqual([1]);
+  expect(frames).toEqual([pushed]);
   expect(unheard).toEqual([
     expect.stringMatching(
       /^renderer main's subscriptions could not be taken: .*the collector broke/,
@@ -349,8 +358,18 @@ test("a failed record and a rejected act leave the answer and both effect acknow
             effects:
               event.kind === "due"
                 ? [
-                    { kind: "copy", id: 1 as never, session: null, text: "first" },
-                    { kind: "copy", id: 2 as never, session: null, text: "second" },
+                    {
+                      kind: "copy",
+                      id: 1 as never,
+                      session: null,
+                      text: "first",
+                    },
+                    {
+                      kind: "copy",
+                      id: 2 as never,
+                      session: null,
+                      text: "second",
+                    },
                   ]
                 : [],
           };
@@ -396,20 +415,26 @@ test("a failed record and a rejected act leave the answer and both effect acknow
 });
 
 test("a failed start's input does not keep the previous renderer's served config", async () => {
-  const origin = { projectDir: "/p", cwd: "/p", target: { source: "search" as const } };
+  const origin = {
+    projectDir: "/p",
+    cwd: "/p",
+    target: { source: "search" as const },
+  };
   const read: string[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
-    held(rendererOf({
-      event: async () => ({
-        ...answered(),
-        subscriptions: { ...NONE, configs: [origin] },
+    held(
+      rendererOf({
+        event: async () => ({
+          ...answered(),
+          subscriptions: { ...NONE, configs: [origin] },
+        }),
+        adapter: async () => {
+          throw new Error("no push here");
+        },
       }),
-      adapter: async () => {
-        throw new Error("no push here");
-      },
-    })),
+    ),
     () => {},
     {
       subscribed: () => {},

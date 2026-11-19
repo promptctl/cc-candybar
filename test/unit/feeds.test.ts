@@ -19,7 +19,6 @@ import {
 import { UNFOLLOWED, type Lane, type LaneFeeds } from "../../src/config/lanes";
 import type { Frame } from "../../src/render/frame";
 import type {
-  Answers,
   PushedFrame,
   SessionViewers,
   Viewers,
@@ -31,6 +30,14 @@ const S = "s" as SessionId;
 const T = "t" as SessionId;
 const PERIODS: FeedPeriods = { moving: 100, still: 1000 };
 const tick = (s: number) => s as Tick;
+
+const draw = (text: string, nextChange = Infinity): Frame => ({
+  depth: "none",
+  rows: [{ kind: "diagnostic", runs: [{ text }] }],
+  nextChange,
+  motion: "still",
+  pending: [],
+});
 
 // A session watched on `lanes`, each with one subscriber drawing it.
 const watched = (
@@ -45,13 +52,14 @@ const watched = (
 });
 
 // Feeds over a draw the case scripts: the bar's next change, on the wall,
-// from the instant it is drawn for (Infinity: a still bar), its answers, and
+// from the instant it is drawn for (Infinity: a still bar), its text, and
 // whether the session has a view at all. The wall runs `skew` seconds ahead
 // of the ticks.
 function rig() {
   const script = {
     changeIn: Infinity,
-    answers: { resp: "r", statusline: "s" } as Answers,
+    bar: "r",
+    handoff: "s",
     view: true,
     failure: null as FeedDraw["failure"],
     skew: 1000,
@@ -81,8 +89,14 @@ function rig() {
       if (session === script.throwsFor) throw new Error(`${session} broke`);
       if (!script.view) return null;
       return {
-        bar: { nextChange: at + script.changeIn } as unknown as Frame,
-        answers: script.answers,
+        frame:
+          script.failure === null
+            ? {
+                kind: "drawn",
+                bar: draw(script.bar, at + script.changeIn),
+                handoff: draw(script.handoff),
+              }
+            : { kind: "failed", message: script.failure.line },
         evaluated: 3,
         cellBreaks: 1,
         failure: script.failure,
@@ -162,12 +176,15 @@ describe("a feed's life", () => {
     expect(r.feeds.next()).toBe(PERIODS.still / 1000);
   });
 
-  test("a frame is drawn with the lanes that follow the session, and its answers handed on as the session's frame", () => {
+  test("a frame is drawn with the lanes that follow the session and handed on with its structured presentations", () => {
     const r = rig();
     view({ [S]: watched(true, ["pane", "statusline"]) })(r.feeds);
     const frames = r.turn(0);
     expect(frames).toEqual([
-      { session: S, answers: r.script.answers },
+      {
+        session: S,
+        frame: { kind: "drawn", bar: draw("r"), handoff: draw("s") },
+      },
     ]);
     expect(r.draws[0]!.following.sort()).toEqual(["pane", "statusline"]);
     expect(r.feeds.drawn()).toBe(1);
@@ -362,6 +379,14 @@ describe("feedsOf: what each lane was sent of late", () => {
     expect(r.feeds.feedsOf(S, tick(0)).pane).toEqual(UNFOLLOWED);
   });
 
+  test("a change to timing alone does not count as a changed presentation", () => {
+    const r = rig();
+    r.script.changeIn = 0.001;
+    view({ [S]: watched() })(r.feeds);
+    expect(r.run(0, 2).length).toBeGreaterThan(18);
+    expect(r.feeds.feedsOf(S, tick(2)).pane.fps).toBe(0);
+  });
+
   test("counts a lane's subscribers and the frames whose answer changed for it in the last second", () => {
     const r = rig();
     r.script.changeIn = 0.001;
@@ -370,7 +395,7 @@ describe("feedsOf: what each lane was sent of late", () => {
     let next = r.feeds.next();
     while (next !== null && next <= 2) {
       // The pane's answer moves every frame; the statusline's never.
-      r.script.answers = { resp: `r${n++}`, statusline: "s" };
+      r.script.bar = `r${n++}`;
       r.turn(next);
       next = r.feeds.next();
     }
@@ -380,7 +405,6 @@ describe("feedsOf: what each lane was sent of late", () => {
     expect(Math.min(feeds.pane.fps, feeds.statusline.fps)).toBe(0);
     expect(feeds.pane.subscribers).toBe(1);
     expect(feeds.pane.shown).toBe(true);
-
   });
 
   test("a lane's count starts again when its last subscriber leaves", () => {
