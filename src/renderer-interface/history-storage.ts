@@ -57,6 +57,14 @@ export interface Savepoint {
   readonly below: readonly Step[];
 }
 
+// [LAW:one-source-of-truth] A history with nothing to undo, redo or cancel,
+// which no store keeps: it would hold a session's place in the bound for
+// nothing.
+export const holdsNothing = (history: SessionHistory): boolean =>
+  history.past.length === 0 &&
+  history.future.length === 0 &&
+  history.savepoint === undefined;
+
 export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
 
 // What a storage loads: each session's history, keyed by a session id the
@@ -67,7 +75,9 @@ export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
 // binds a file, or keeps nothing.
 export interface HistoryStorage {
   load(): LoadedHistory;
-  save(state: HistoryState): void;
+  // The histories as they stand, oldest first, written before it returns, in
+  // that order.
+  save(state: ReadonlyMap<SessionId, SessionHistory>): void;
 }
 
 // [LAW:one-source-of-truth] The session keys a settings control writes: a

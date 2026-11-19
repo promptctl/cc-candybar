@@ -4,21 +4,26 @@ import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { asError, publishByRenameAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
+import type { Asked } from "../utils/outcome";
+import { isPlainObject } from "../config/loader/validate-core";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
 // log lines say, each session's value as the file keeps it, and as a load
-// parses it back, null for one of the wrong shape.
+// parses it back, or why not, read after "its value".
 export interface SessionFileKind<V> {
   readonly name: string;
   readonly record: (value: V) => unknown;
-  readonly parse: (value: unknown) => V | null;
+  readonly parse: (value: unknown) => Asked<V>;
 }
 
 // [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
 // file, or nowhere. Its owner holds them, and persistence is the storage's.
 export interface SessionFileStorage<V> {
   load(): ReadonlyMap<SessionId, V>;
-  save(snapshot: Readonly<Record<SessionId, V>>): void;
+  // The sessions as they stand, oldest first. The storage keeps its own copy
+  // until the write behind lands, so the owner may go on changing its map;
+  // the file keeps their order.
+  save(snapshot: ReadonlyMap<SessionId, V>): void;
   flush(): Promise<void>;
 }
 
@@ -37,17 +42,84 @@ export type SessionPicks = Readonly<Record<string, string>>;
 export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
-  parse: (kv) =>
-    kv !== null &&
-    typeof kv === "object" &&
-    !Array.isArray(kv) &&
-    Object.values(kv).every((leaf) => typeof leaf === "string")
-      ? (kv as SessionPicks)
-      : null,
+  parse: (kv) => {
+    if (!isPlainObject(kv))
+      return { kind: "failed", reason: "is not an object" };
+    const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
+    return bad === undefined
+      ? { kind: "ok", value: kv as SessionPicks }
+      : {
+          kind: "failed",
+          reason: `has a ${JSON.stringify(bad)} that is not a string`,
+        };
+  },
 };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
+// [LAW:single-enforcer] The load of every per-session file, keyed by session
+// id: each key crosses the session-id checkpoint and each value the kind's
+// parse, and an entry either refuses is named and dropped alone.
+// [LAW:no-silent-failure] Corrupt/missing file → empty state is the
+// *defined* recovery, not a hidden fallback to different data: an empty
+// store re-rolls random picks exactly as a first-ever boot would. Only the
+// read and the JSON parse are caught: a throw past them is a bug, and stays one.
+// [LAW:nothing-unseen] Every load says what it found: no file, a file it
+// could not use, or how many sessions it loaded and dropped.
+export function loadSessionFile<V>(
+  kind: Pick<SessionFileKind<V>, "name" | "parse">,
+  filePath: string,
+  logger: DaemonLogger,
+): Map<SessionId, V> {
+  const loaded = new Map<SessionId, V>();
+  let text: string;
+  try {
+    text = fs.readFileSync(filePath, "utf8");
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT")
+      logger("info", `${kind.name} load: no file, starting empty`);
+    else logger("warn", `${kind.name} read failed (${code}); starting empty`);
+    return loaded;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
+    return loaded;
+  }
+  if (!isPlainObject(parsed)) {
+    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
+    return loaded;
+  }
+  // [LAW:no-silent-failure] A key the session id checkpoint refuses, or a
+  // value its kind refuses, is reported and dropped, and the sessions beside
+  // it load whole: the store never hydrates from a half-written or
+  // hand-edited entry.
+  let dropped = 0;
+  const keyed = sessionKeyed(parsed, (key, problem) => {
+    dropped += 1;
+    logger(
+      "warn",
+      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+    );
+  });
+  for (const [id, value] of keyed) {
+    const entry = kind.parse(value);
+    if (entry.kind === "ok") loaded.set(id, entry.value);
+    else {
+      dropped += 1;
+      logger(
+        "warn",
+        `${kind.name} load: dropped session ${JSON.stringify(id)}: its value ${entry.reason}`,
+      );
+    }
+  }
+  logger(
+    "info",
+    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`,
+  );
+  return loaded;
+}
 
 // What one write came to, its error kept whole. Nothing pending is landed:
 // an earlier write landed it.
@@ -64,7 +136,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   private clearTimer: (() => void) | null = null;
   // [LAW:one-source-of-truth] State not yet written: cleared only once its
   // write lands, so a disk that refuses leaves it for the next write.
-  private pending: Readonly<Record<SessionId, V>> | null = null;
+  private pending: ReadonlyMap<SessionId, V> | null = null;
   // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
   // chain, so writes land in the order they began and none overtakes
   // another: older state still on its way never lands over newer.
@@ -84,67 +156,16 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     private readonly logger: DaemonLogger = quietLogger,
   ) {}
 
-  // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
-  // *defined* recovery, not a hidden fallback to different data: an empty
-  // store re-rolls random picks exactly as a first-ever boot would.
   load(): ReadonlyMap<SessionId, V> {
-    const loaded = new Map<SessionId, V>();
-    let raw: string;
-    try {
-      raw = fs.readFileSync(this.filePath, "utf8");
-    } catch (e) {
-      // [LAW:no-silent-failure] A missing file is the expected first-boot
-      // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
-      // anomaly worth surfacing before recovering to empty.
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") {
-        this.logger(
-          "warn",
-          `${this.kind.name} read failed (${code}); starting empty`,
-        );
-      }
-      return loaded;
-    }
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (isRecord(parsed)) {
-        // [LAW:no-silent-failure] A key the session id checkpoint refuses, or
-        // a value of the wrong shape, is reported and dropped, and the
-        // sessions beside it load whole: the store never hydrates from a
-        // half-written or hand-edited entry.
-        const keyed = sessionKeyed(parsed, (key, problem) =>
-          this.logger(
-            "warn",
-            `${this.kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-          ),
-        );
-        for (const [id, value] of keyed) {
-          const held = this.kind.parse(value);
-          if (held !== null) loaded.set(id, held);
-          else
-            this.logger(
-              "warn",
-              `${this.kind.name} load: dropped session ${JSON.stringify(id)}: its value has the wrong shape`,
-            );
-        }
-        return loaded;
-      }
-      this.logger(
-        "warn",
-        `${this.kind.name} load: unexpected shape, starting empty`,
-      );
-      return loaded;
-    } catch {
-      this.logger(
-        "warn",
-        `${this.kind.name} load: corrupt JSON, starting empty`,
-      );
-      return loaded;
-    }
+    return loadSessionFile(this.kind, this.filePath, this.logger);
   }
 
-  save(snapshot: Readonly<Record<SessionId, V>>): void {
-    this.pending = snapshot;
+  save(snapshot: ReadonlyMap<SessionId, V>): void {
+    // [LAW:no-ambient-temporal-coupling] A copy of its own: the landing
+    // clears what is pending only if it is the copy that write began with,
+    // and an owner's map that moved while the write was on its way is a new
+    // copy, so it stays pending.
+    this.pending = new Map(snapshot);
     this.schedule();
   }
 
@@ -182,13 +203,12 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     return this.waiting;
   }
 
-  private body(snapshot: Readonly<Record<SessionId, V>>): string {
+  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
+  // order the owner holds them.
+  private body(snapshot: ReadonlyMap<SessionId, V>): string {
     return JSON.stringify(
       Object.fromEntries(
-        Object.entries(snapshot).map(([id, value]) => [
-          id,
-          this.kind.record(value as V),
-        ]),
+        [...snapshot].map(([id, value]) => [id, this.kind.record(value)]),
       ),
     );
   }
@@ -244,13 +264,13 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   // it took, and how much of that it held the daemon's one thread.
   private saved(
     body: string,
-    snapshot: Readonly<Record<SessionId, V>>,
+    snapshot: ReadonlyMap<SessionId, V>,
     started: Monotonic,
     heldMs: number,
   ): void {
     this.logger(
       "info",
-      `${this.kind.name} saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+      `${this.kind.name} saved bytes=${Buffer.byteLength(body)} sessions=${snapshot.size} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
     );
   }
 }

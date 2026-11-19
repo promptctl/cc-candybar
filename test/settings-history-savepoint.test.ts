@@ -283,6 +283,16 @@ describe("the savepoint under the history's bounds", () => {
     expect(logs.join("\n")).toMatch(/cancel is no longer available/);
   });
 
+  test("a lone step over the byte bound leaves no history behind, and the host is told it is gone", () => {
+    const history = new SettingsHistory(new SessionState(), () => {});
+    const big = history.begin(files);
+    big.sessionState.set(SID, "theme", "x".repeat(9 * 1024 * 1024));
+    big.commit();
+    expect(history.drain()).toEqual([
+      { store: "settings-history", key: SID, value: null },
+    ]);
+  });
+
   test("a forgotten file that empties a step below the savepoint moves it down with the stack", () => {
     const { history, sessionState, pick, toggle, theme } = rig();
     fs.writeFileSync(other, "o0");
@@ -351,18 +361,28 @@ describe("the savepoint survives a restart", () => {
     expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a savepoint of the wrong shape is a wrong-shaped file, dropped whole", () => {
+  test("a savepoint of the wrong shape drops its session alone, by name", () => {
     const historyFile = path.join(dir, "history.json");
+    const kept = {
+      past: [[{ kind: "session", key: "theme", before: null, after: "nord" }]],
+      future: [],
+    };
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
+      JSON.stringify({
+        [SID]: { past: [], future: [], savepoint: 3 },
+        other: kept,
+      }),
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) =>
       logs.push(m),
     );
-    expect(Object.fromEntries(storage.load())).toEqual({});
-    expect(logs.join("\n")).toMatch(/unexpected shape/);
+    expect(Object.fromEntries(storage.load())).toEqual({ other: kept });
+    expect(logs).toEqual([
+      `settings-history load: dropped session "${SID}": its value has a 'savepoint' that is not a savepoint`,
+      "settings-history loaded sessions=1 dropped=1",
+    ]);
   });
 
   test("changes to a key that is no longer a setting leave alone, named in the log", () => {
@@ -415,7 +435,8 @@ describe("the savepoint survives a restart", () => {
       other: { past: [[file]], future: [] },
     });
     expect(logs).toEqual([
-      'settings-history load: dropped the changes to "look", "progression", no longer a setting',
+      "settings-history loaded sessions=2 dropped=0",
+      `settings-history load: session "${SID}" dropped the changes to "look", "progression", no longer a setting`,
     ]);
   });
 

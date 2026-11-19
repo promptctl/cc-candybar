@@ -53,6 +53,13 @@ export class HeldStores {
   }
 
   // What a renderer built now is built from.
+  // [LAW:locality-or-seam] The boot crosses to the renderer as JSON, so each
+  // store goes as a record, and the renderer reads recency off its key order.
+  // That order holds only because the session-id parse refuses an id that a
+  // record would reorder (an array index), and `__proto__`, which the
+  // records the renderer's lanes (renderer/main.ts) and the frame feed's
+  // viewers (frame-feed.ts) are filled by assignment would take as their
+  // prototype.
   current(): StoredState {
     return {
       sessions: Object.fromEntries(this.sessions),
@@ -88,13 +95,9 @@ export class HeldStores {
           break;
       }
     if (sessions && !this.closed)
-      steps.push(() =>
-        this.storage.session.save(Object.fromEntries(this.sessions)),
-      );
+      steps.push(() => this.storage.session.save(this.sessions));
     if (history && !this.closed)
-      steps.push(() =>
-        this.storage.history.save(Object.fromEntries(this.history)),
-      );
+      steps.push(() => this.storage.history.save(this.history));
     runEach(steps);
   }
 

@@ -41,6 +41,7 @@ import {
   type Step,
   type SessionHistory,
   type Savepoint,
+  holdsNothing,
   isSettingKey,
 } from "../renderer-interface/history-storage";
 import {
@@ -430,13 +431,7 @@ export class SettingsHistory {
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
     next.delete(sessionId);
-    if (
-      history.past.length > 0 ||
-      history.future.length > 0 ||
-      history.savepoint !== undefined
-    ) {
-      next.set(sessionId, history);
-    }
+    if (!holdsNothing(history)) next.set(sessionId, history);
     // A history that moved to the end is told even when it holds what it
     // held, so the host's order is this one's.
     this.moved.delete(sessionId);
@@ -463,7 +458,11 @@ export class SettingsHistory {
       const [oldest, h] = next.entries().next().value!;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
-        next.set(oldest, withoutOldestStep(h));
+        // [LAW:one-source-of-truth] A history trimmed to nothing leaves, as
+        // one that steps to nothing does.
+        const trimmed = withoutOldestStep(h);
+        if (holdsNothing(trimmed)) next.delete(oldest);
+        else next.set(oldest, trimmed);
       } else {
         // [LAW:no-silent-failure] Edit mode's net change alone is over the
         // bound: the savepoint goes, and with it cancel, said here.

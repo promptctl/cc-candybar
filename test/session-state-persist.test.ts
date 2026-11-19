@@ -29,7 +29,6 @@ const S2 = sessionIdOf("s2");
 const A_2 = sessionIdOf("a");
 const B = sessionIdOf("b");
 const C = sessionIdOf("c");
-const __PROTO__ = sessionIdOf("__proto__");
 
 describe("the session state's file", () => {
   let dir: string;
@@ -97,7 +96,7 @@ describe("the session state's file", () => {
   it("each flush logs the bytes and sessions it wrote and how long it took", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
-    session.save({ [S1]: { theme: "dracula" } });
+    session.save(new Map([[S1, { theme: "dracula" }]]));
     await session.flush();
     const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
     expect(logged.at(-1)).toMatch(
@@ -135,9 +134,9 @@ describe("the session state's file", () => {
   // called, and the file still lands whole, owner-only.
   it("a debounced save lands on disk by itself and says so", async () => {
     const logged: string[] = [];
-    storage((_level, line) => logged.push(line)).save({
-      [S1]: { theme: "nord" },
-    });
+    storage((_level, line) => logged.push(line)).save(
+      new Map([[S1, { theme: "nord" }]]),
+    );
     await settled(() =>
       logged.some((l) => l.startsWith("session-state saved")),
     );
@@ -166,9 +165,9 @@ describe("the session state's file", () => {
       });
     let flushed: Promise<void>;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save(new Map([[S1, { theme: "old" }]]));
       await settled(() => spy.mock.calls.length === 1);
-      session.save({ [S1]: { theme: "new" } });
+      session.save(new Map([[S1, { theme: "new" }]]));
       flushed = session.flush();
       release();
       await flushed;
@@ -183,6 +182,37 @@ describe("the session state's file", () => {
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
+  // [LAW:no-ambient-temporal-coupling] The host goes on moving its own map
+  // while a write is on its way, so a pick made then is pending still when
+  // that write lands, and the close writes it.
+  it("a pick made while a write is on its way is not lost", async () => {
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementationOnce(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    try {
+      const daemon = daemonOver(storage());
+      daemon.turn((s) => s.set(S1, "theme", "nord"));
+      await settled(() => spy.mock.calls.length === 1);
+      daemon.turn((s) => s.set(S2, "theme", "dracula"));
+      release();
+      await daemon.stores.close();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(onDisk()).toEqual({
+      s1: { theme: "nord" },
+      s2: { theme: "dracula" },
+    });
+  });
+
   // A flush the disk refuses drops nothing: it rejects with the reason, the
   // snapshot stays pending, and the next flush lands it.
   it("a flush the disk refuses rejects and leaves its snapshot for the next flush", async () => {
@@ -194,7 +224,7 @@ describe("the session state's file", () => {
         Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
       );
     try {
-      session.save({ [S1]: { theme: "nord" } });
+      session.save(new Map([[S1, { theme: "nord" }]]));
       await expect(session.flush()).rejects.toThrow(
         expect.objectContaining({ code: "ENOSPC" }),
       );
@@ -227,14 +257,14 @@ describe("the session state's file", () => {
     let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
       null;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save(new Map([[S1, { theme: "old" }]]));
       await until(() => renameSpy.mock.calls.length === 1, "the held rename");
       writeSpy = jest
         .spyOn(fs.promises, "writeFile")
         .mockRejectedValueOnce(
           Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
         );
-      session.save({ [S1]: { theme: "new" } });
+      session.save(new Map([[S1, { theme: "new" }]]));
       const flushed = session.flush();
       release();
       await expect(flushed).rejects.toThrow(/ENOSPC/);
@@ -270,7 +300,7 @@ describe("the session state's file", () => {
       0,
       (_level, line) => logged.push(line),
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     await expect(session.flush()).rejects.toThrow("not encodable");
     encodable = true;
     await session.flush();
@@ -291,7 +321,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
       (_level, line) => logged.push(line),
-    ).save({ [S1]: { theme: "nord" } });
+    ).save(new Map([[S1, { theme: "nord" }]]));
     await settled(() => logged.some((l) => l.includes("save failed")));
     await throughout(
       () => logged.filter((l) => l.includes("save failed")).length === 1,
@@ -348,8 +378,8 @@ describe("the session state's file", () => {
         systemTimekeeper,
         500,
       );
-      session.save({ [S1]: { theme: "nord" } });
-      session.save({ [S1]: { theme: "nord", style: "muted" } });
+      session.save(new Map([[S1, { theme: "nord" }]]));
+      session.save(new Map([[S1, { theme: "nord", style: "muted" }]]));
       jest.advanceTimersByTime(499);
       expect(existsSync(file)).toBe(false);
 
@@ -451,7 +481,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     // The write fails; the snapshot must NOT be dropped.
     await expect(session.flush()).rejects.toThrow(/EEXIST/);
     expect(existsSync(badPath)).toBe(false);
@@ -464,19 +494,63 @@ describe("the session state's file", () => {
 
   it("writes the state file with owner-only (no group/other) permissions", async () => {
     const session = storage();
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     await session.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });
 
-  it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", async () => {
-    const first = daemonOver(storage());
-    first.turn((s) => s.set(__PROTO__, "theme", "evil"));
-    await first.stores.close();
-    // Object.prototype untouched — no pollution.
+  // [LAW:behavior-not-structure] No save writes a `__proto__` key, so this
+  // file is written by hand.
+  it("a __proto__ key is dropped by name and pollutes nothing", async () => {
+    writeFileSync(
+      file,
+      '{"__proto__": {"theme": "evil"}, "s1": {"theme": "nord"}}',
+    );
+    const logged: string[] = [];
+    const loaded = storage((_level, line) => logged.push(line)).load();
+    expect([...loaded]).toEqual([[S1, { theme: "nord" }]]);
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
-    // The malicious key survives as ordinary stored data.
-    const reborn = await restarted();
-    expect(reborn.get(__PROTO__, "theme")).toBe("evil");
+    expect(logged).toContainEqual(
+      'session-state load: dropped session key "__proto__": session id is "__proto__", which is never a session id',
+    );
+  });
+
+  // [LAW:nothing-unseen] Every load says what it found, so a missing file
+  // and a full one are told apart.
+  it("each load says whether there was a file, and what it loaded and dropped", () => {
+    const logged: string[] = [];
+    const log = (_level: string, line: string): void => void logged.push(line);
+    storage(log).load();
+    writeFileSync(
+      file,
+      JSON.stringify({ s1: { theme: "nord" }, s2: { theme: 42 } }),
+    );
+    storage(log).load();
+    expect(logged).toEqual([
+      "session-state load: no file, starting empty",
+      'session-state load: dropped session "s2": its value has a "theme" that is not a string',
+      "session-state loaded sessions=1 dropped=1",
+    ]);
+  });
+
+  // [LAW:no-silent-failure] Only the file's JSON is read as corrupt: a throw
+  // past it is a bug, and reaches the caller.
+  it("a throw past the JSON parse is thrown, never read as a corrupt file", () => {
+    writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
+    const logged: string[] = [];
+    const throwing = new SessionFile(
+      {
+        ...SESSION_STATE_FILE,
+        parse: () => {
+          throw new Error("a bug in the parse");
+        },
+      },
+      file,
+      systemTimekeeper,
+      0,
+      (_level, line) => logged.push(line),
+    );
+    expect(() => throwing.load()).toThrow("a bug in the parse");
+    expect(logged.join("\n")).not.toMatch(/corrupt JSON/);
   });
 });

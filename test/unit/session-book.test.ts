@@ -57,7 +57,7 @@ const durable = (dir: string): DurableContext => ({
 
 // A book's file in memory: what it holds when the book loads, and every save.
 function storage(held: ReadonlyMap<SessionId, DurableContext> = new Map()) {
-  const saves: Array<Readonly<Record<SessionId, DurableContext>>> = [];
+  const saves: Array<ReadonlyMap<SessionId, DurableContext>> = [];
   let flushes = 0;
   const storage: SessionFileStorage<DurableContext> = {
     load: () => held,
@@ -75,7 +75,7 @@ function loaded(kept: SessionFileStorage<DurableContext>): SessionBook {
 }
 
 // What a load of the file's text gives back.
-const roundTrip = (value: DurableContext): DurableContext | null =>
+const roundTrip = (value: DurableContext) =>
   SESSION_BOOK_FILE.parse(
     JSON.parse(JSON.stringify(SESSION_BOOK_FILE.record(value))),
   );
@@ -99,7 +99,7 @@ describe("the book's file", () => {
       claudeConfigDir: "/u/.claude-x",
     },
   ])("%j reads back as it was kept", (value) => {
-    expect(roundTrip(value)).toEqual(value);
+    expect(roundTrip(value)).toEqual({ kind: "ok", value });
   });
 
   test("a newer build's source beside a file leaves the file, its source unknown", () => {
@@ -111,18 +111,29 @@ describe("the book's file", () => {
         source: "workspace",
       }),
     ).toEqual({
-      origin: {
-        projectDir: "/p",
-        cwd: "/p",
-        target: { source: "unknown", path: "/x.json5" },
+      kind: "ok",
+      value: {
+        origin: {
+          projectDir: "/p",
+          cwd: "/p",
+          target: { source: "unknown", path: "/x.json5" },
+        },
       },
     });
   });
 
   test.each([
-    ["no record", null],
-    ["no configFile", { projectDir: "/p", cwd: "/p", source: "search" }],
-    ["a relative project", { projectDir: "p", cwd: "/p", configFile: null }],
+    ["no record", null, "is not the origin of a render"],
+    [
+      "no configFile",
+      { projectDir: "/p", cwd: "/p", source: "search" },
+      "is not the origin of a render",
+    ],
+    [
+      "a relative project",
+      { projectDir: "p", cwd: "/p", configFile: null },
+      "holds a path that is not absolute",
+    ],
     [
       "a relative config file",
       {
@@ -131,13 +142,15 @@ describe("the book's file", () => {
         configFile: "x.json5",
         source: "argument",
       },
+      "holds a path that is not absolute",
     ],
     [
       "a relative Claude Code directory",
       { projectDir: "/p", cwd: "/p", configFile: null, claudeConfigDir: "c" },
+      "holds a path that is not absolute",
     ],
-  ])("%s is refused", (_name, value) => {
-    expect(SESSION_BOOK_FILE.parse(value)).toBeNull();
+  ])("%s is refused", (_name, value, reason) => {
+    expect(SESSION_BOOK_FILE.parse(value)).toEqual({ kind: "failed", reason });
   });
 
   test("what a client reports now is never kept", () => {
@@ -149,7 +162,9 @@ describe("the book's file", () => {
     const { saves, storage: kept } = storage();
     loaded(kept).heard(req, TEST_ENVIRONMENT);
     expect(
-      JSON.parse(JSON.stringify(SESSION_BOOK_FILE.record(saves.at(-1)![S1]!))),
+      JSON.parse(
+        JSON.stringify(SESSION_BOOK_FILE.record(saves.at(-1)!.get(S1)!)),
+      ),
     ).toEqual({
       projectDir: "/p",
       cwd: "/p",
@@ -190,7 +205,9 @@ describe("the book", () => {
       kind: "ok",
       value: { TOKEN: "secret" },
     });
-    expect(JSON.stringify(saves)).not.toContain("secret");
+    expect(JSON.stringify(saves.map((saved) => [...saved]))).not.toContain(
+      "secret",
+    );
     // Read back from the file alone, a session has no environment to run in.
     expect(book.environmentOf(S2)).toEqual(NOT_HEARD);
   });
@@ -217,7 +234,7 @@ describe("the book", () => {
     book.heard(request("s1", "/p", { termCols: 120 }), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(2);
     book.heard(request("s1", "/q"), TEST_ENVIRONMENT);
-    expect(saves.at(-1)).toEqual({ [S1]: durable("/q") });
+    expect([...saves.at(-1)!]).toEqual([[S1, durable("/q")]]);
   });
 
   test("the load saves the merged book, so a save made before it never lands alone", () => {
@@ -225,7 +242,10 @@ describe("the book", () => {
     const book = new SessionBook(kept);
     book.heard(request("s1", "/p"), TEST_ENVIRONMENT);
     book.load();
-    expect(saves.at(-1)).toEqual({ [S2]: durable("/q"), [S1]: durable("/p") });
+    expect([...saves.at(-1)!]).toEqual([
+      [S2, durable("/q")],
+      [S1, durable("/p")],
+    ]);
   });
 
   test("a request that moves only the Claude Code directory is saved again", () => {
@@ -237,9 +257,9 @@ describe("the book", () => {
       TEST_ENVIRONMENT,
     );
     expect(saves).toHaveLength(3);
-    expect(saves.at(-1)).toEqual({
-      [S1]: { ...durable("/p"), claudeConfigDir: "/u/.claude-x" },
-    });
+    expect([...saves.at(-1)!]).toEqual([
+      [S1, { ...durable("/p"), claudeConfigDir: "/u/.claude-x" }],
+    ]);
   });
 
   // The book reads back only absolute paths, so the checkpoint refuses a
@@ -276,7 +296,7 @@ describe("the book", () => {
     const book = loaded(kept);
     for (let i = 0; i <= 256; i += 1)
       book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
-    expect(Object.keys(saves.at(-1)!)).toHaveLength(256);
+    expect(saves.at(-1)!.size).toBe(256);
     expect(book.contextOf(sessionIdOf("s0"), null)).toBeNull();
     expect(book.contextOf(sessionIdOf("s256"), null)?.durable).toEqual(
       durable("/p256"),
