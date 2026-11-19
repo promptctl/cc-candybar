@@ -73005,6 +73005,15 @@ function sessionOfEvent(event) {
       return null;
   }
 }
+var COMMAND_KINDS = {
+  stats: true,
+  debug: true,
+  "close-journal": true,
+  "close-views": true
+};
+function isCommand(event) {
+  return Object.hasOwn(COMMAND_KINDS, event.kind);
+}
 function followingOf(viewers) {
   const following = /* @__PURE__ */ new Set();
   for (const [lane, seen] of Object.entries(viewers?.lanes ?? {}))
@@ -76581,38 +76590,41 @@ function mainRenderer(parts, drains) {
     }
   });
   const parkedClickSessions = () => new Set(parked.get().map((click2) => click2.session));
-  const turn = (event, record2, effects, frames) => {
+  const commands = {
+    stats: () => ({
+      kind: "stats",
+      stats: {
+        renderCache: parts.renderCache.stats,
+        effectCache: parts.renderCache.presentations.stats().effects,
+        sessionState: parts.sessionStats(),
+        menuIdle: menuIdle.stats(),
+        rendererTurns: {
+          parked: opening.size + parked.get().length,
+          presents: deliveries.size,
+          deferrals: time.deferrals()
+        },
+        framesDrawn: feeds.drawn()
+      }
+    }),
+    debug: ({ what }) => ({
+      kind: "debug",
+      snapshot: debugOf(parts.renderCache, what)
+    }),
+    // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+    // runs whole, so none is in flight.
+    "close-journal": () => {
+      parts.configWrites.close();
+      return { kind: "close-journal" };
+    },
+    "close-views": () => {
+      feeds.closeAll(time.tick);
+      parts.renderCache.close();
+      return { kind: "close-views" };
+    }
+  };
+  const command = (event) => commands[event.kind](event);
+  const notify2 = (event, record2, effects, frames) => {
     switch (event.kind) {
-      case "stats":
-        return {
-          kind: "stats",
-          stats: {
-            renderCache: parts.renderCache.stats,
-            effectCache: parts.renderCache.presentations.stats().effects,
-            sessionState: parts.sessionStats(),
-            menuIdle: menuIdle.stats(),
-            rendererTurns: {
-              parked: opening.size + parked.get().length,
-              presents: deliveries.size,
-              deferrals: time.deferrals()
-            },
-            framesDrawn: feeds.drawn()
-          }
-        };
-      case "debug":
-        return {
-          kind: "debug",
-          snapshot: debugOf(parts.renderCache, event.what)
-        };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
-      // runs whole, so none is in flight.
-      case "close-journal":
-        parts.configWrites.close();
-        return { kind: "close-journal" };
-      case "close-views":
-        feeds.closeAll(time.tick);
-        parts.renderCache.close();
-        return { kind: "close-views" };
       case "start": {
         const configs = new Map(
           event.configs.map((offer) => [originKey(offer.origin), offer])
@@ -76633,7 +76645,7 @@ function mainRenderer(parts, drains) {
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(({ context, worldState }) => () => {
             offered(context.requested);
-            turn(
+            notify2(
               { kind: "context", context, worldState },
               record2,
               effects,
@@ -76944,9 +76956,10 @@ function mainRenderer(parts, drains) {
         const record2 = [];
         const effects = [];
         const frames = [];
+        const { event } = input;
         const { outcome, ...declaration2 } = ending(
-          input.event,
-          () => turn(input.event, record2, effects, frames)
+          event,
+          () => isCommand(event) ? command(event) : notify2(event, record2, effects, frames)
         );
         return {
           ...outcome.kind === "answered" ? {
@@ -83032,7 +83045,7 @@ var GitDataProvider = class {
 init_globals();
 var import_node_path20 = __toESM(require_path_browserify(), 1);
 
-// src/segments/pricing.ts
+// src/daemon/cache/pricing.ts
 init_globals();
 
 // site/shims/unavailable.ts
@@ -83053,7 +83066,7 @@ var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
 var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
 
-// src/segments/pricing.ts
+// src/daemon/cache/pricing.ts
 init_url();
 
 // src/utils/cache.ts
@@ -83225,7 +83238,7 @@ var CacheManager = class {
   }
 };
 
-// src/segments/pricing.ts
+// src/daemon/cache/pricing.ts
 var OFFLINE_PRICING_DATA = {
   "claude-haiku-4-5-20251001": {
     name: "Claude Haiku 4.5",
@@ -85631,7 +85644,7 @@ async function askSessionName(launcher, hint) {
   return name ? ok(name) : ABSENT2;
 }
 
-// src/segments/host.ts
+// src/daemon/cache/host-identity.ts
 init_globals();
 init_os();
 var HOST_PERIOD_MS = 6e4;
@@ -86560,6 +86573,45 @@ async function runTeardown(steps2, log) {
 // src/daemon/stats.ts
 init_globals();
 
+// src/daemon/foundations/stats-snapshot.ts
+init_globals();
+var RENDERER_STATS_REFERENCE = {
+  renderCache: {
+    size: 0,
+    held: 0,
+    retired: 0,
+    compiles: 0,
+    views: 0,
+    pinned: 0,
+    retiredViews: 0,
+    passages: 0,
+    accountedBytes: 0,
+    budgetBytes: 0
+  },
+  effectCache: { sessions: 0, effects: 0 },
+  menuIdle: { sessions: 0, armed: 0 },
+  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
+  sessionState: { sessions: 0, observers: 0, revision: 0 },
+  framesDrawn: 0
+};
+function missingFields(reference, value, at = "") {
+  const label2 = at || "<snapshot>";
+  if (typeof reference === "number") {
+    return typeof value === "number" && Number.isFinite(value) ? [] : [label2];
+  }
+  if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label2];
+  if (!isPlainObject2(reference)) return [];
+  if (!isPlainObject2(value)) return [label2];
+  if ("kind" in reference) return [];
+  const missing = [];
+  for (const key of Object.keys(reference)) {
+    const path30 = at === "" ? key : `${at}.${key}`;
+    if (!(key in value)) missing.push(path30);
+    else missing.push(...missingFields(reference[key], value[key], path30));
+  }
+  return missing;
+}
+
 // src/version.ts
 init_globals();
 if (false) {
@@ -86728,6 +86780,7 @@ var RuntimeStats = class _RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot() {
+    const { framesDrawn, ...rendererStats } = RENDERER_STATS_REFERENCE;
     return new _RuntimeStats({
       now: () => 0,
       monotonic: () => 0
@@ -86779,29 +86832,14 @@ var RuntimeStats = class _RuntimeStats {
         watches: 0
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 0,
-        held: 0,
-        retired: 0,
-        compiles: 0,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 0,
-        budgetBytes: 0
-      },
+      ...rendererStats,
       collector: { sessions: 0, retiring: 0 },
-      effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0 },
-      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
-      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
+        drawn: framesDrawn,
         pushed: 0,
         refused: 0,
         lookups: 0,
@@ -89080,6 +89118,40 @@ function publishingFrames(signer) {
 // src/daemon/renderer-host.ts
 init_globals();
 
+// src/daemon/foundations/inspection-reply.ts
+init_globals();
+function variableRow(value) {
+  if (!isPlainObject2(value)) return false;
+  const { name, source, type: type3, ageMs, lastError } = value;
+  return typeof name === "string" && (source === null || typeof source === "string") && typeof type3 === "string" && value.value !== void 0 && (ageMs === null || typeof ageMs === "number" && Number.isFinite(ageMs)) && (lastError === null || isPlainObject2(lastError) && typeof lastError.message === "string");
+}
+function segmentRow(value) {
+  if (!isPlainObject2(value)) return false;
+  const { name, description, template, referencedVars, placements } = value;
+  return typeof name === "string" && (description === null || typeof description === "string") && typeof template === "string" && Array.isArray(referencedVars) && referencedVars.every((name2) => typeof name2 === "string") && Array.isArray(placements) && placements.every(
+    (each) => isPlainObject2(each) && typeof each.id === "string" && (each.lastRender === null || typeof each.lastRender === "string")
+  );
+}
+function inspectionPayloadProblem(reply) {
+  if (reply.kind === "stats") {
+    const missing = missingFields(RENDERER_STATS_REFERENCE, reply.stats);
+    return missing.length === 0 ? null : `invalid stats snapshot: ${missing.join(", ")}`;
+  }
+  if (reply.kind !== "debug") return null;
+  const { snapshot } = reply;
+  if (!isPlainObject2(snapshot)) return "invalid debug snapshot";
+  switch (snapshot.what) {
+    case "vars":
+      return Array.isArray(snapshot.vars) && snapshot.vars.every(variableRow) ? null : "invalid vars snapshot";
+    case "segments":
+      return Array.isArray(snapshot.segments) && snapshot.segments.every(segmentRow) ? null : "invalid segments snapshot";
+    case "config":
+      return snapshot.config === null || isPlainObject2(snapshot.config) ? null : "invalid config snapshot";
+    default:
+      return "invalid debug snapshot";
+  }
+}
+
 // src/daemon/effect-interpreter.ts
 init_globals();
 
@@ -89561,12 +89633,6 @@ var THREW_AS = {
   abandoned: "failed",
   down: "failed"
 };
-var COMMAND_KINDS = {
-  stats: true,
-  debug: true,
-  "close-journal": true,
-  "close-views": true
-};
 function rendererHost(name, clock, renderer, log, collector, world) {
   const mailbox = new KeyedSerialQueue();
   let generation = 0;
@@ -89649,6 +89715,19 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     },
     settled: Promise.resolve([])
   });
+  const commandLabel = (event) => `renderer ${name} command ${event.kind}`;
+  const requireReply = (event, reply) => {
+    const label2 = commandLabel(event);
+    if (reply == null) throw new Error(`${label2} returned no reply`);
+    if (reply.kind !== event.kind)
+      throw new Error(`${label2} returned a ${reply.kind} reply`);
+    if (event.kind === "debug" && reply.kind === "debug" && reply.snapshot?.what !== event.what)
+      throw new Error(`${label2} returned no ${event.what} snapshot`);
+    if (reply.kind === "stats" && reply.stats == null)
+      throw new Error(`${label2} returned no stats snapshot`);
+    const problem = inspectionPayloadProblem(reply);
+    if (problem !== null) throw new Error(`${label2} returned ${problem}`);
+  };
   const inSlot = async (input, queuedMs, captures = []) => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
@@ -89667,6 +89746,23 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (input.event.kind === "start") endedStart({ kind: "threw", failure: failure2 });
       return unanswered(failure2, queuedMs);
     }
+    recordDiagnostics(output.diagnostics);
+    if (isCommand(input.event)) {
+      if (output.kind === "answered") requireReply(input.event, output.reply);
+      if (output.frames.length > 0 || output.effects.length > 0) {
+        const problem = `${commandLabel(input.event)} returned a frame or effect`;
+        if (output.kind === "answered") throw new Error(problem);
+        recordDiagnostics([{ level: "error", line: problem }]);
+        output = { ...output, frames: [], effects: [] };
+      }
+    } else if (output.kind === "answered" && output.reply !== void 0) {
+      recordDiagnostics([
+        {
+          level: "error",
+          line: `renderer ${name} returned an unasked command reply to ${input.event.kind}`
+        }
+      ]);
+    }
     if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
       if (configs.has(key))
@@ -89677,16 +89773,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       wake: wake2,
       frames,
       stored,
-      diagnostics,
+      diagnostics: _diagnostics,
       turnMs,
       ...answer3
     } = output;
-    recordDiagnostics(diagnostics);
-    if (answer3.kind === "answered" && answer3.reply !== void 0 && !Object.hasOwn(COMMAND_KINDS, input.event.kind))
-      log(
-        "error",
-        `renderer ${name} returned an unasked command reply to ${input.event.kind}`
-      );
     const finalization = finalizationFields(answer3);
     const turn = {
       ...answer3,
@@ -89844,8 +89934,15 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
   };
   const recordDiagnostics = (diagnostics) => {
-    if (diagnostics === void 0) return;
-    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
+    for (const { level, line } of diagnostics ?? []) {
+      try {
+        log(level, line);
+      } catch (thrown2) {
+        world.unheard(
+          `renderer ${name} could not log ${line}: ${failureOf(thrown2).detail}`
+        );
+      }
+    }
   };
   const took = (subscriptions, nextWake, frames, stored, requested, receipt) => {
     const adoptDemand = startFailure === null;
@@ -90105,8 +90202,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   const command = async (event) => {
     const { turn } = await taken2(() => ({ kind: "event", event }));
-    const label2 = `renderer ${name} command ${event.kind}`;
     if (turn.kind === "threw") {
+      const label2 = commandLabel(event);
       const fields2 = finalizationFields(turn) ?? [];
       if (turn.turnMs !== null) fields2.unshift(["took", `${turn.turnMs}ms`]);
       fields2.push(["error", turn.failure.detail]);
@@ -90116,15 +90213,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         detail: eventLine(`${label2} threw`, fields2)
       });
     }
-    const { reply } = turn;
-    if (reply == null) throw new Error(`${label2} returned no reply`);
-    if (reply.kind !== event.kind)
-      throw new Error(`${label2} returned a ${reply.kind} reply`);
-    if (event.kind === "debug" && reply.kind === "debug" && reply.snapshot?.what !== event.what)
-      throw new Error(`${label2} returned no ${event.what} snapshot`);
-    if (reply.kind === "stats" && reply.stats == null)
-      throw new Error(`${label2} returned no stats snapshot`);
-    return reply;
+    return turn.reply;
   };
   const moved2 = (origins2) => {
     for (const origin of origins2)
