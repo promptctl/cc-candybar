@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-897",
+      "ref": "refs/pull/897/merge",
+      "sha": "8f0a6881a30bfca60ca0c64977090a16975307f7",
+      "timestamp": "2026-11-19T18:08:00.002Z",
+      "commits": [
+        {
+          "sha": "8f0a6881a30bfca60ca0c64977090a16975307f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:06:25-07:00",
+          "message": "Merge 480ae6137b2aa7761190ac9f07f4e40ce4cc944d into e78e6ea53d92f3294c4769635d9d974fb47550ca\n"
+        },
+        {
+          "sha": "480ae6137b2aa7761190ac9f07f4e40ce4cc944d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:05:11-07:00",
+          "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-896",
       "ref": "refs/pull/896/merge",
       "sha": "5228c83eabd47f63c50c0c5720d232a6072ee166",
