@@ -28,7 +28,6 @@
 // re-exports below keep the import surface stable for every consumer.
 
 import nodePath from "node:path";
-import JSON5 from "json5";
 import type { ConfigSnapshot, PluginFile, Stray } from "./config-snapshot.js";
 import {
   type DslConfig,
@@ -45,6 +44,7 @@ import {
   DroppedPlacements,
   DroppedFileError,
   type ConfigIssue,
+  parseJson5Syntax,
 } from "./loader/diagnostics.js";
 import {
   describeType,
@@ -1047,7 +1047,10 @@ function parseDslFile<L>(
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
   // passes that need a parsed structure to inspect.
-  const json = parseJson5OrThrow(filePath, source);
+  const syntax = parseJson5Syntax(source);
+  if (syntax.kind === "invalid")
+    throw new ConfigError(filePath, [syntax.issue]);
+  const json = syntax.value;
   const notice = editabilityNotice(filePath, source);
   // Named before structural validation, so a refusal carries them too.
   const warnings = [
@@ -1113,27 +1116,6 @@ function parseDslFile<L>(
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 const NO_INHERITED_SEGMENTS: ReadonlySet<string> = new Set();
-
-interface Json5Error extends Error {
-  lineNumber?: number;
-  columnNumber?: number;
-}
-
-function parseJson5OrThrow(filePath: string, source: string): unknown {
-  try {
-    return JSON5.parse(source);
-  } catch (err) {
-    const e = err as Json5Error;
-    throw new ConfigError(filePath, [
-      {
-        path: "",
-        message: `JSON5 syntax error: ${e.message}`,
-        line: e.lineNumber,
-        col: e.columnNumber,
-      },
-    ]);
-  }
-}
 
 // [LAW:types-are-the-program] Returns RawDslConfig — absence of a top-level
 // key survives the parse as `undefined`, distinct from explicit empty. The

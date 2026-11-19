@@ -5,7 +5,7 @@
 //   - .json5 and .json are both accepted at every location
 //   - .json5 wins over .json at the same location (documented > legacy)
 //   - every location's file is a layer: XDG < cwd < project
-//   - detectConfigCollisions surfaces same-location duplicates
+//   - collisionsOf surfaces same-location duplicates
 //   - chainPlaces names the file each writable role of the chain lands in
 
 import {
@@ -17,7 +17,11 @@ import {
   mkdirSync,
 } from "node:fs";
 import { locations } from "../src/daemon/paths";
-import { chainPlaces, type Locations } from "../src/config/loader/chain-places";
+import {
+  chainPlaces,
+  configLocations,
+  type Locations,
+} from "../src/config/loader/chain-places";
 import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,8 +30,13 @@ import {
   configResolutionNotice,
   dslConfigCandidatePaths,
 } from "../src/config/dsl-loader";
-import { detectConfigCollisions } from "../src/daemon/config-discovery/config-search";
+import {
+  configCollisionNotice,
+  observeConfigLocations,
+  searchConfig,
+} from "../src/daemon/config-discovery/config-search";
 import { resolutionOf } from "./helpers/config-search";
+import { diskFiles } from "../src/daemon/config-discovery/discovery-files";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 
 // The answers with each of `dirs` approved: these cases are about how layers
@@ -39,6 +48,11 @@ const approving = (...dirs: string[]): RepoAnswers => ({
 
 // What a session reaching no repository's config contributes, or whose
 // repositories are approved and ship no plugins.
+const collisionsOf = (locs: Locations, projectDir?: string) =>
+  configCollisionNotice(
+    searchConfig(locs, approving(), { projectDir }).locations,
+  );
+
 const NOTHING_GATED = {
   plugins: null,
   approved: [],
@@ -244,9 +258,9 @@ describe("the config search", () => {
       ]);
       // Unapproved, the project's layers are not the session's to write.
       const unanswered = { kind: "ok", value: {} } as const;
-      expect(
-        chainPlaces(resolutionOf(L, unanswered, query), query),
-      ).toEqual([{ path: xdgJson5, role: "user" }]);
+      expect(chainPlaces(resolutionOf(L, unanswered, query), query)).toEqual([
+        { path: xdgJson5, role: "user" },
+      ]);
     } finally {
       cleanup();
     }
@@ -321,6 +335,7 @@ describe("the config search", () => {
       });
       expect(resolved).toEqual({
         kind: "missing",
+        unchecked: [],
         path: named,
         home: named,
         repos: NOTHING_GATED,
@@ -361,6 +376,7 @@ describe("the config search", () => {
         });
         expect(resolved).toEqual({
           kind: "unreadable",
+          unchecked: [],
           path: named,
           home: named,
           error: expect.stringContaining("EACCES"),
@@ -425,7 +441,58 @@ describe("the config search", () => {
   );
 });
 
-describe("detectConfigCollisions", () => {
+test("a failed project stat is still reported when the explicit config is missing or unreadable", () => {
+  const locs = isolated("/config-home");
+  const projectDir = "/permission-denied";
+  const configFile = "/asked.json5";
+  for (const verdict of ["absent", "unchecked"] as const) {
+    const files = {
+      ...diskFiles,
+      presence(file: string) {
+        if (file === projectDir) return { path: file, error: "project EACCES" };
+        return verdict === "absent"
+          ? verdict
+          : { path: file, error: "config ELOOP" };
+      },
+    };
+    const { resolution } = searchConfig(
+      locs,
+      approving(),
+      { projectDir, configFile },
+      files,
+    );
+    expect(resolution.kind).toBe(
+      verdict === "absent" ? "missing" : "unreadable",
+    );
+    expect(configResolutionNotice(resolution)).toContain(
+      `Config location could not be checked: ${projectDir} — project EACCES`,
+    );
+  }
+});
+
+describe("config collisions", () => {
+  test("another extension is a sibling of the same location", () => {
+    const candidates = configLocations(isolated("/config-home"), {}, [
+      "json5",
+      "json",
+      "jsonc",
+    ]);
+    const stated = observeConfigLocations(candidates, {
+      presence: () => "present",
+      directory: (dir) => dir,
+    });
+    expect(stated).toHaveLength(1);
+    expect(stated[0]).toMatchObject({
+      kind: "found",
+      role: "user",
+      winner: { extension: "json5" },
+      shadowed: [{ extension: "json" }, { extension: "jsonc" }],
+    });
+    expect(configCollisionNotice(stated)).toMatch(
+      /config\.json5 shadows .*config\.json, .*config\.jsonc/,
+    );
+  });
+
   test("returns null when no duplicates exist", () => {
     const { dir, cleanup } = mkdir();
     const L = isolated(dir);
@@ -434,7 +501,7 @@ describe("detectConfigCollisions", () => {
       mkdirSync(xdgCfgDir);
       writeFileSync(join(xdgCfgDir, "config.json5"), VALID_CFG);
       // Only the .json5 exists.
-      expect(detectConfigCollisions(L)).toBeNull();
+      expect(collisionsOf(L)).toBeNull();
     } finally {
       cleanup();
     }
@@ -451,7 +518,7 @@ describe("detectConfigCollisions", () => {
       writeFileSync(json5, VALID_CFG);
       writeFileSync(json, VALID_CFG);
 
-      const warning = detectConfigCollisions(L);
+      const warning = collisionsOf(L);
       expect(warning).not.toBeNull();
       // Message names both files so the user can locate the duplicate.
       expect(warning).toContain(json5);
@@ -478,7 +545,7 @@ describe("detectConfigCollisions", () => {
       writeFileSync(join(xdgCfgDir, "config.json5"), VALID_CFG);
       writeFileSync(join(xdgCfgDir, "config.json"), VALID_CFG);
 
-      const warning = detectConfigCollisions(L, proj);
+      const warning = collisionsOf(L, proj);
       expect(warning).not.toBeNull();
       // Both location's .json5 + .json should be mentioned.
       expect(warning).toContain(join(proj, ".cc-candybar.json5"));
@@ -505,7 +572,7 @@ describe("detectConfigCollisions", () => {
       writeFileSync(join(locked, ".cc-candybar.json"), VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        expect(detectConfigCollisions(L, locked)).toBeNull();
+        expect(collisionsOf(L, locked)).toBeNull();
       } finally {
         chmodSync(locked, 0o755);
         cleanup();
@@ -522,7 +589,7 @@ describe("detectConfigCollisions", () => {
       // The project's file and its local one are two locations.
       writeFileSync(join(proj, ".cc-candybar.json5"), VALID_CFG);
       writeFileSync(join(proj, ".cc-candybar.local.json"), VALID_CFG);
-      expect(detectConfigCollisions(L, proj)).toBeNull();
+      expect(collisionsOf(L, proj)).toBeNull();
     } finally {
       cleanup();
     }
@@ -573,7 +640,7 @@ describe("the layer chain", () => {
         user,
         join(project, ".cc-candybar.json5"),
       ]);
-      expect(detectConfigCollisions(L, project)).not.toBeNull();
+      expect(collisionsOf(L, project)).not.toBeNull();
     });
   });
 
