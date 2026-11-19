@@ -1,3 +1,9 @@
+## [1.235.7](https://github.com/promptctl/cc-candybar/compare/v1.235.6...v1.235.7) (2026-11-19)
+
+### Bug Fixes
+
+* **sources:** preserve pending observations and distinguish dependency keys ([#893](https://github.com/promptctl/cc-candybar/issues/893)) ([03ed302](https://github.com/promptctl/cc-candybar/commit/03ed3028670db49aa13cedc4dad7687564282cfc))
+
 ## [1.235.6](https://github.com/promptctl/cc-candybar/compare/v1.235.5...v1.235.6) (2026-11-19)
 
 ### Bug Fixes
