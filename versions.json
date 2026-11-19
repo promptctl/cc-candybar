@@ -4,67 +4,67 @@
     {
       "version": "pr-849",
       "ref": "refs/pull/849/merge",
-      "sha": "941e40debbccde844619866747990ef86b3e8aef",
-      "timestamp": "2026-11-19T10:34:09.128Z",
+      "sha": "91ba14001618e64f39fc9e400a3c59c17b5612b7",
+      "timestamp": "2026-11-19T10:35:23.537Z",
       "commits": [
         {
-          "sha": "941e40debbccde844619866747990ef86b3e8aef",
+          "sha": "91ba14001618e64f39fc9e400a3c59c17b5612b7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:32:32Z",
-          "message": "Merge 476fea1348124b92e7b33ec63d20631c101bb6af into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
+          "timestamp": "2026-11-19T03:34:29-07:00",
+          "message": "Merge b1e715d1f971866d913e1768ef8fe8d9eac86e93 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
         },
         {
-          "sha": "476fea1348124b92e7b33ec63d20631c101bb6af",
+          "sha": "b1e715d1f971866d913e1768ef8fe8d9eac86e93",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:32:27-07:00",
           "message": "test: verify picker contrast with the retained segment catalogue\n"
         },
         {
-          "sha": "04cefed527773ddf5ded939db0cc6d71ac9e2c96",
+          "sha": "63c7b6b5e4931f8ce2c610cf036dc5417f3767c5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:26:04-07:00",
           "message": "fix(integration): use the retained statusline in daemon checks\n"
         },
         {
-          "sha": "21682ea96318fbd82dbf6a566077487b9e11d2db",
+          "sha": "008fef814e980d0d3287dcd0fab7cd61dd993535",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:14:19-07:00",
           "message": "refactor: remove the old Doctor implementation (ibyq.dzq)\n"
         },
         {
-          "sha": "8f5124e25babde658d1f8ee257a9ee8ce2a927a8",
+          "sha": "1278cdd4adb6a488aaa01f2459bce93dbe8ade42",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:09:00-07:00",
           "message": "fix(client): make native reconnect consume the passive outcome\n"
         },
         {
-          "sha": "2792801c6c4b8a8519972ea33cb9a3f30614dbdb",
+          "sha": "96fd34f924fdb455ae2a468fbcb6b27659d9f416",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:59:16-07:00",
           "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
         },
         {
-          "sha": "0b6ebe96981173edd9eba4c962a16fe225ea01d1",
+          "sha": "421b0f73da68cdecd7795716b59632d85f2c53bc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:20:10-07:00",
           "message": "refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n"
         },
         {
-          "sha": "a804f608ee5591bd0ed46490095dcb933ca3ea3b",
+          "sha": "0f30bea1544575ae3df59920e9f527829ecc7cb5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:09:42-07:00",
           "message": "fix(config): exclude retired update settings from writable targets\n"
         },
         {
-          "sha": "4d6fa46504fea1a5b1d99ab47bd95d83ed73f5fa",
+          "sha": "1206b29d3d1583f19a1462c581b3185fc9c2c24d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:59:02-07:00",
