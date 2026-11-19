@@ -42,8 +42,6 @@ export interface ActDeps {
   // band install the queued typing every slash click goes through.
   readonly claudeInput: ClaudeInputEdge;
   readonly run: (run: RunAct) => Promise<RunEnd>;
-  // The update notice's act: what it applies is the update watch's.
-  readonly applyUpdate: () => Promise<void>;
   readonly lanes: { readonly edge: LaneEdge; readonly host: LaneHost };
   // Whether the daemon's close has begun: no act starts after it.
   readonly closing: () => boolean;
@@ -58,7 +56,6 @@ const OUTLIVES: Readonly<Record<HostAct["kind"], boolean>> = {
   copy: false,
   open: false,
   "type-slash": false,
-  "apply-update": false,
   run: true,
   "restart-claude": true,
   surface: true,
@@ -71,7 +68,6 @@ function nameOf(act: HostAct): string {
   switch (act.kind) {
     case "copy":
     case "open":
-    case "apply-update":
       return act.kind;
     case "type-slash":
       return act.line;
@@ -154,10 +150,6 @@ export class Acts {
           : not({ kind: "refused", reason: typed.reason });
       },
       run: (act) => deps.run(act),
-      "apply-update": async () => {
-        await deps.applyUpdate();
-        return did("applied");
-      },
       "restart-claude": (act) =>
         this.restart(act.session, act.pane, () =>
           restartClaude(

@@ -544,23 +544,6 @@ themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighte
 
 ### The display globals: colorCompatibility, autoWrap, padding
 
-`updateNotice` is
-the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
-[dismiss] [disable]` row the daemon shows above the bar when the bundle
-rendering it was built from source other than the `src/` beside it — an
-identity check, so a checkout to an older commit trips it too — or, for a
-published install, when the registry's latest release is newer than the
-installed one. Its `[disable]` affordance IS
-`{ persist: "updateNotice", to: "false" }` — the config file, durably — and
-sets this session's pick to `false` in the same click, since a session pick
-outranks the file. Like the other display globals it has a session half, the
-settings menu's `☑ update notice` toggle, read back as
-`.updateNotice.effective`, so it is how a disabled notice is turned back on
-from the bar. The row's own `[dismiss]` is
-a different thing: it writes the session key `update.dismissed` with the
-identity of the newer thing, so a dismissal lapses by itself the next time
-something newer appears.
-
 `menuTimeout` (seconds, 15–600, default 120) is how long a session's open
 menus — every disclosure body and dropped `{{ menu }}` — stay open with no
 click in that session, counted from the later of that click and the first
@@ -1481,7 +1464,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   "Save as preset" above).
 - **`🎨 look`** holds effect, endcaps, fade in/out and the animation speed; **`📐 layout`** holds
   `+ preset`, which keeps the bar as a new preset and switches to it;
-  **`⚙ config`** holds wrap, padding, the update notice and `🧪 toggles`.
+  **`⚙ config`** holds wrap, padding and `🧪 toggles`.
   Every setting is ONE control, in
   exactly one place. A control shows `↺` while resetting it would change
   something — it holds a draft, or your config file holds a value for it —
@@ -2492,7 +2475,7 @@ Give the second its own id and each copy's menu opens on its own:
 ### A setting value the setting does not have
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
-`variation`, `shade`, `autoWrap`, `padding`, `updateNotice`, `menuTimeout`,
+`variation`, `shade`, `autoWrap`, `padding`, `menuTimeout`,
 `transitions`, `animationSpeed`, `renderer`, `experimentalBand`, `experimentalStatusline`,
 `experimentalPane`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click

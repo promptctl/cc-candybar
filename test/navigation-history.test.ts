@@ -20,7 +20,6 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
 import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -49,8 +48,6 @@ function setup() {
   const ctx = verbContextWith(testVerbContext(sessionState), {
     configFor: () => config,
   });
-  // The update notice's dismissal is the daemon's own key, not a config's.
-  const dispose = ctx.gates.state.register(UPDATE_DISMISSED_KEY, ["1.2.3"]);
   const set = async (...pairs: string[]): Promise<void> =>
     await CLICK_VERBS.get(VERB_SET_STATE)!(
       encodeSegments(["s1", ...pairs]),
@@ -73,15 +70,13 @@ function setup() {
     set,
     back,
     undo,
-    dispose,
   };
 }
 
 describe("back", () => {
-  test("a decision is never navigation: an armed confirm and a dismissed notice stay as they are", async () => {
-    const { sessionState, depth, set, back, dispose } = setup();
+  test("a decision is never navigation: an armed confirm stays as it is", async () => {
+    const { sessionState, depth, set, back } = setup();
     await set(ARMED, "armed");
-    await set(UPDATE_DISMISSED_KEY, "1.2.3");
     expect(depth()).toBe(0);
     // The door's click disarms beside closing the menu; going back reopens the
     // menu and leaves the confirm disarmed.
@@ -90,12 +85,10 @@ describe("back", () => {
     await back();
     expect(sessionState.get(S1, MENU)).toBe("open");
     expect(sessionState.get(S1, ARMED)).toBe("disarmed");
-    expect(sessionState.get(S1, UPDATE_DISMISSED_KEY)).toBe("1.2.3");
-    dispose();
   });
 
   test("a step buried under the newest is counted only if going back would still restore it", async () => {
-    const { sessionState, depth, set, back, dispose } = setup();
+    const { sessionState, depth, set, back } = setup();
     await set(MENU, "open");
     sessionState.clear(S1, MENU);
     await set(TAB, "b");
@@ -103,11 +96,10 @@ describe("back", () => {
     await back();
     expect(sessionState.get(S1, TAB)).toBeNull();
     expect(depth()).toBe(0);
-    dispose();
   });
 
   test("a value the key's gate no longer admits is never restored", async () => {
-    const { sessionState, depth, reload, set, back, dispose } = setup();
+    const { sessionState, depth, reload, set, back } = setup();
     await set(TAB, "a");
     await set(TAB, "b");
     // The config reloaded and `a` is gone from the key's domain.
@@ -117,7 +109,6 @@ describe("back", () => {
     expect(depth()).toBe(0);
     await expect(back).rejects.toThrow(BadVerbArgs);
     expect(sessionState.get(S1, TAB)).toBe("b");
-    dispose();
   });
 
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
@@ -132,7 +123,7 @@ describe("back", () => {
   });
 
   test("a step over state something else has since rewritten is discarded, not replayed", async () => {
-    const { sessionState, depth, set, back, dispose } = setup();
+    const { sessionState, depth, set, back } = setup();
     await set(MENU, "open");
     await set(TAB, "b");
     // Not a navigating click: a layout edit releasing what the tab opened.
@@ -142,11 +133,10 @@ describe("back", () => {
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
     await expect(back()).rejects.toThrow(BadVerbArgs);
-    dispose();
   });
 
   test("steps each navigating click back in turn, to the state before the first", async () => {
-    const { sessionState, depth, set, back, dispose } = setup();
+    const { sessionState, depth, set, back } = setup();
     await set(MENU, "open");
     await set(TAB, "b");
     expect(depth()).toBe(2);
@@ -156,51 +146,45 @@ describe("back", () => {
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
     expect(depth()).toBe(0);
-    dispose();
   });
 
   test("one click is one step, however many keys it moved", async () => {
-    const { sessionState, depth, set, back, dispose } = setup();
+    const { sessionState, depth, set, back } = setup();
     await set(MENU, "open", TAB, "a");
     expect(depth()).toBe(1);
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
     expect(sessionState.get(S1, TAB)).toBeNull();
-    dispose();
   });
 
   test("a setting picked in the same click stays picked, and undo still reaches it", async () => {
-    const { sessionState, set, back, undo, dispose } = setup();
+    const { sessionState, set, back, undo } = setup();
     await set(MENU, "open", "theme", "gruvbox");
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
     expect(sessionState.get(S1, "theme")).toBe("gruvbox");
     await undo();
     expect(sessionState.get(S1, "theme")).toBeNull();
-    dispose();
   });
 
   test("a click that changes only a setting is no step", async () => {
-    const { depth, set, dispose } = setup();
+    const { depth, set } = setup();
     await set("theme", "nord");
     expect(depth()).toBe(0);
-    dispose();
   });
 
   test("going back is not itself a step, and an empty history refuses loudly", async () => {
-    const { depth, set, back, dispose } = setup();
+    const { depth, set, back } = setup();
     await set(MENU, "open");
     await back();
     expect(depth()).toBe(0);
     await expect(back).rejects.toThrow(BadVerbArgs);
-    dispose();
   });
 
   test("a click that writes what is already there is no step", async () => {
-    const { depth, set, dispose } = setup();
+    const { depth, set } = setup();
     await set(MENU, "open");
     await set(MENU, "open");
     expect(depth()).toBe(1);
-    dispose();
   });
 });

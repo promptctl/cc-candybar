@@ -463,7 +463,6 @@ export function testActs(
       type: missing("claude input type"),
     },
     run: missing("run"),
-    applyUpdate: missing("apply-update"),
     lanes: {
       edge: new Proxy({} as LaneEdge, {
         get: (_, k) => missing(`lane ${String(k)}`),

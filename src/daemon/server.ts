@@ -25,9 +25,8 @@ import type { World } from "../host";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
-import { daemonGates } from "./foundations/update-keys.js";
+import { createGates } from "./foundations/gates.js";
 import { handleConnection } from "./connection.js";
-import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
 import { heapCapMb, memoryLimitBytes } from "./limits";
 import { processPort } from "./renderer-process.js";
@@ -84,7 +83,6 @@ function serverLog(level: LogLevel, msg: string): void {
 function runningBundle(): RunningBundle {
   const path = fileURLToPath(import.meta.url);
   return {
-    entryUrl: import.meta.url,
     digest: bakedDigest(),
     path,
     node: [process.execPath, ...process.execArgv],
@@ -210,9 +208,8 @@ async function boot(): Promise<void> {
     host,
     paths,
     memoryLimitBytes: memoryLimit,
-    registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,
-    gates: daemonGates(),
+    gates: createGates(),
     exit: shutdown,
   });
   serving = daemon;

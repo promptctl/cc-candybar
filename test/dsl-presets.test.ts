@@ -34,7 +34,7 @@ import { rootNode } from "../src/config/root";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-presets");
@@ -435,7 +435,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset naming a nonexistent segment is FATAL, and the message locates it", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory', 'no-such-segment'] } } } }`,
-      (p) => checkConfig(WORLD, daemonGates(), p),
+      (p) => checkConfig(WORLD, createGates(), p),
     );
     expect(outcome.kind).toBe("fatal");
     if (outcome.kind !== "fatal") throw new Error("unreachable");
@@ -448,7 +448,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset staging only real segments is clean", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory'] } } } }`,
-      (p) => checkConfig(WORLD, daemonGates(), p),
+      (p) => checkConfig(WORLD, createGates(), p),
     );
     expect(outcome.kind).toBe("clean");
   });

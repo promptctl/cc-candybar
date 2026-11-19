@@ -109,11 +109,11 @@ test("a click answered TIMEOUT lands by the daemon's own event, sent once", asyn
 
 test("a click answered TIMEOUT that the daemon then refused fails with the refusal", async () => {
   const daemon = await timingOut(
-    badRequest("apply-update: already rebuilding…"),
+    badRequest("copy: clipboard unavailable"),
   );
   try {
     await expect(click(daemon.sockPath, URL)).rejects.toThrow(
-      /already rebuilding/,
+      /clipboard unavailable/,
     );
     expect(daemon.clicks()).toBe(1);
   } finally {

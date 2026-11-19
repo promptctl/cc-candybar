@@ -65,9 +65,8 @@ export const LAUNCH_CATEGORIES = [
   "install.open",
   "daemon-spawn",
   // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
-  // (process-fingerprint.ts). Spawned only at daemon start, EADDRINUSE
-  // arbitration, and once per update act a daemon reads (src/daemon/update-act.ts)
-  // — never per render — so it needs no rate limit.
+  // (process-fingerprint.ts). Spawned at daemon start and during socket
+  // arbitration.
   "process-fingerprint",
   // The memory backstop's post-mortem memory attribution (memory-report.ts):
   // `footprint`/`vmmap` on the death path, once per breach, never per render.
@@ -76,10 +75,6 @@ export const LAUNCH_CATEGORIES = [
   // (`footprint --noCategories`, memory-report.ts chargeProbe): one a minute,
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
-  // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
-  // over a published install), launched as a job. One click, one long-running
-  // child; the act's record admits one at a time, so no rate limit.
-  "update.apply",
   // `cc-candybar plugin install`'s clone of a plugin's repo
   // (src/plugin-install.ts): three git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".

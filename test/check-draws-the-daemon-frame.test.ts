@@ -10,7 +10,7 @@ import path from "node:path";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { World } from "../src/host";
 import { checkConfig } from "../src/check";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { mainRendererOf } from "../src/renderer/main";
 import {
   rendererOf,
@@ -58,7 +58,7 @@ test("check's bar is the frame the renderer presented for the fresh session, one
       adapter: (input) => renderer.answer(input),
     });
   };
-  const outcome = await checkConfig(world, daemonGates(), p, dir, undefined, spying);
+  const outcome = await checkConfig(world, createGates(), p, dir, undefined, spying);
   if (outcome.kind !== "clean") throw new Error(`check was ${outcome.kind}`);
   // Every preset the merged chain names: the bundled default's and this
   // config's.

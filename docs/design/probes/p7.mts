@@ -18,7 +18,6 @@ const spawn = async (prefix: string) => {
   const d = await spawnDaemonWithEnv({
     ...e.env,
     [PARENT_PID_ENV]: String(process.pid),
-    CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
     CLAUDE_CONFIG_DIR: claude,
     NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
   }, { bin: `${W}/node_modules/.bin/tsx`, args: [`${W}/src/index.ts`] });

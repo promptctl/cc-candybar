@@ -61,7 +61,6 @@ export function productionAdapters(
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
-    fetch,
     stat: fs.statSync,
   };
 }

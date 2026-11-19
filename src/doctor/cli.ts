@@ -31,7 +31,7 @@ import {
   VERB_DOCTOR_RUN,
 } from "../click/wire.js";
 import { discover, readShared } from "../daemon/config-discovery/discover.js";
-import { daemonGates } from "../daemon/foundations/update-keys.js";
+import { createGates } from "../daemon/foundations/gates.js";
 import { PROTOCOL_VERSION } from "../daemon/foundations/protocol.js";
 import { plainEnvironment } from "../daemon/foundations/session-env.js";
 import { MAIN_RENDERER } from "../daemon/foundations/renderer-name.js";
@@ -56,7 +56,6 @@ import { FileEventDelivery } from "../daemon/cache/file-events.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { runTeardown, type TeardownStep } from "../utils/teardown.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { instantAt } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { Launcher } from "../proc/launcher.js";
 import { heardContextOf } from "../renderer-interface/request-context.js";
@@ -254,10 +253,9 @@ async function doctorRun(
       },
     };
   };
-  const at = instantAt(clock);
   const bar = localBar({
     world,
-    gates: daemonGates(),
+    gates: createGates(),
     linkSigner: previewSigner(),
     stateDir: stateDir(host),
     home: host.home,
@@ -303,7 +301,7 @@ async function doctorRun(
       );
       return providers;
     },
-    daemon: () => commandDaemonFacts(at),
+    daemon: commandDaemonFacts,
     build: inputs.build,
   });
   // The bar closes first: what it drew with closes after it. What it logged

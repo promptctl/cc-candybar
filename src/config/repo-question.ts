@@ -34,8 +34,7 @@ export function repoAnswerFields(
 }
 
 // [LAW:dataflow-not-control-flow] One channel while the origin's repository
-// awaits an answer — the list is the answer, so the diagnostics fold it beside
-// the update notice with no "is there a question" branch. The sentence is
+// awaits an answer. Its diagnostic is
 // plain text (the viewer's ⧉ copies it); each answer is its own signed click.
 export function repoQuestions(
   question: RepoQuestion | null,

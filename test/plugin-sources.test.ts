@@ -6,7 +6,7 @@
 
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import { NO_DOCTOR } from "./helpers/payload-owners";
 import {
@@ -19,7 +19,7 @@ import {
 } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
-import { reaction, runInAction } from "mobx";
+import { observable, reaction, runInAction, type IObservableValue } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -51,8 +51,7 @@ import {
   type SessionSource,
 } from "../src/renderer/session-source";
 import { SessionState } from "../src/renderer/session-state";
-import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
-import type { Update } from "../src/facts/world-state";
+import type { DaemonFacts } from "../src/facts/world-state";
 import { restamp } from "../src/facts/fact";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
@@ -79,7 +78,7 @@ import {
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
@@ -172,8 +171,7 @@ interface Rig {
   // What the daemon's owner of file events says, by hand: its period too.
   readonly fileEvents: HandDelivery;
   readonly sessionState: SessionState;
-  // What the views' documents carry as the daemon's update.
-  readonly updateFact: UpdateFact;
+  readonly warnings: IObservableValue<DaemonFacts["fileEvents"]>;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
   // The cache's storage notices, in the order sent: `hold <id>` or
@@ -236,13 +234,13 @@ function rig(): Rig {
     }),
   );
   const sessionState = new SessionState();
-  const updateFact = newUpdateFact();
+  const warnings = observable.box<DaemonFacts["fileEvents"]>([], { deep: false });
   const reloads = new ReloadSignal();
   const storageCalls: string[] = [];
   const served = collected(
     {
       owners: providers,
-      daemon: () => daemonFactsOf(updateFact.get()),
+      daemon: () => daemonFactsOf(warnings.get()),
       log,
     },
     cleanups,
@@ -297,7 +295,7 @@ function rig(): Rig {
     counters,
     fileEvents,
     sessionState,
-    updateFact,
+    warnings,
     reloads,
     lines,
     storageCalls,
@@ -483,7 +481,7 @@ describe("a source's declaration", () => {
       const message = fatal(
         await checkConfig(
           world,
-          daemonGates(),
+          createGates(),
           listing(`{ status: ${source} }`),
           dir,
         ),
@@ -570,7 +568,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        createGates(),
         listing(`{ "a.b": ${SOURCE} }`),
         dir,
       ),
@@ -582,7 +580,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        createGates(),
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -601,7 +599,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        createGates(),
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -624,7 +622,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
-    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, createGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
     );
@@ -645,7 +643,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, createGates(), p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
     );
@@ -690,7 +688,7 @@ describe("`cc-candybar check` on a source", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
     const outcome = await checkConfig(
       world,
-      daemonGates(),
+      createGates(),
       config(["mine", "plugins.p.gated"]),
       dir,
     );
@@ -703,7 +701,7 @@ describe("`cc-candybar check` on a source", () => {
   test("the same read unguarded exits fatal, naming the missing field", async () => {
     const outcome = await checkConfig(
       world,
-      daemonGates(),
+      createGates(),
       config(["mine", "plugins.p.bare"]),
       dir,
     );
@@ -1072,7 +1070,7 @@ describe("the session subscribes to every source the config declares", () => {
 
 // [LAW:behavior-not-structure] The world state a session's view draws
 // (src/facts/world-state.ts), read from the view's source as the renderer
-// does: total, restamped in the turn an owner's reading moves, and one update
+// does: total, restamped in the turn an owner's reading moves, and one daemon warning
 // for every session.
 describe("a session's world state", () => {
   const BUILTINS = [
@@ -1090,12 +1088,6 @@ describe("a session's world state", () => {
     "tmux",
     "today",
   ];
-  const NEWER = restamp(
-    undefined,
-    ok<Update>({ kind: "release", newer: [9, 0, 0], running: [1, 0, 0] }),
-    instantOf(new Date(1_700_000_000_000)),
-  );
-
   test("is total as the view opens; a declared source no segment reads is pending until its first read lands, not missing", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
@@ -1124,22 +1116,19 @@ describe("a session's world state", () => {
     });
   });
 
-  test("an update moving reaches every open view's document and restamps nothing else", () => {
+  test("a daemon warning reaches every open view's document and restamps nothing else", () => {
     const r = rig();
     const file = config(["mine"]);
     const a = viewOf(r, file, "s-a");
     const b = viewOf(r, file, "s-b");
     const before = [a.source.facts(), b.source.facts()];
-    expect(before.map((d) => d.daemon.update.newer)).toEqual([
-      pendingOf("unread"),
-      pendingOf("unread"),
-    ]);
+    expect(before.map((d) => d.daemon.fileEvents)).toEqual([[], []]);
 
-    runInAction(() => r.updateFact.set(NEWER));
+    runInAction(() => r.warnings.set(FILE_EVENTS_STALLED));
 
     const after = [a.source.facts(), b.source.facts()];
     for (const [i, doc] of after.entries()) {
-      expect(doc.daemon.update.newer).toBe(NEWER);
+      expect(doc.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(doc.seq).toBe(before[i]!.seq + 1);
       for (const key of BUILTINS) {
         expect(doc.builtins[key as keyof typeof doc.builtins]).toBe(
@@ -1149,17 +1138,17 @@ describe("a session's world state", () => {
     }
   });
 
-  test("an update that did not move leaves the document, and what watches it, alone", () => {
+  test("an unchanged daemon warning leaves the document, and what watches it, alone", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    runInAction(() => r.updateFact.set(NEWER));
+    runInAction(() => r.warnings.set(FILE_EVENTS_STALLED));
     const held = view.source.facts();
     let woken = 0;
     const stop = reaction(
       () => view.source.facts(),
       () => woken++,
     );
-    runInAction(() => r.updateFact.set(NEWER));
+    runInAction(() => r.warnings.set(FILE_EVENTS_STALLED));
     stop();
     expect(view.source.facts()).toBe(held);
     expect(woken).toBe(0);
@@ -1168,16 +1157,12 @@ describe("a session's world state", () => {
   test("stops with the session: once its collector closed, its document hears no more", () => {
     const r = rig();
     const view = viewOf(r, config(["mine"]));
-    runInAction(() => r.updateFact.set(NEWER));
-    expect(view.source.facts().daemon.update.newer).toBe(NEWER);
+    runInAction(() => r.warnings.set(FILE_EVENTS_STALLED));
+    expect(view.source.facts().daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
     const held = view.source.facts();
 
     r.collector.close();
-    runInAction(() =>
-      r.updateFact.set(
-        restamp(NEWER, ABSENT, instantOf(new Date(1_700_000_100_000))),
-      ),
-    );
+    runInAction(() => r.warnings.set([]));
     expect(view.source.facts()).toBe(held);
   });
 });

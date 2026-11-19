@@ -514,11 +514,6 @@ export const GLOBAL_FIELDS = {
     1,
     control("padding", "config"),
   ),
-  // Whether the daemon renders its update notice — the row saying newer source
-  // or a newer release exists than the code rendering the bar
-  // (src/daemon/update-notice.ts). The notice's own `[disable]` writes `false`
-  // here; a per-session, per-version dismissal lives in SessionState instead.
-  updateNotice: boolSetting(true, control("update notice", "config")),
   // Seconds without a click before every open menu flashes and closes
   // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
   menuTimeout: intSetting(

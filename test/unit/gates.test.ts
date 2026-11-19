@@ -1,13 +1,6 @@
 // [LAW:no-shared-mutable-globals] What a load accepts is the gates it is given:
-// two values share nothing, and a daemon's gates hold the update notice's keys
-// from construction.
+// two values share nothing, and held keys apply from construction.
 
-import {
-  UPDATE_DISMISSED_KEY,
-  UPDATE_NOTICE_FIELD,
-  UPDATE_NOTICE_SESSION_KEY,
-  daemonGates,
-} from "../../src/daemon/foundations/update-keys";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
 
@@ -38,28 +31,16 @@ describe("a gates value is the whole of what its loads accept", () => {
     );
   });
 
-  test("a daemon's gates hold the update notice's keys, and a bare value does not", () => {
-    const held = daemonGates();
-    expect(held.state.gateFor(EMPTY_DEFAULT).listKeys()).toEqual(
-      expect.arrayContaining([UPDATE_NOTICE_SESSION_KEY, UPDATE_DISMISSED_KEY]),
-    );
-    expect(held.config.gateFor(EMPTY_DEFAULT).listKeys()).toContain(
-      UPDATE_NOTICE_FIELD,
-    );
-    expect(
-      createGates(NONE).state.gateFor(EMPTY_DEFAULT).listKeys(),
-    ).not.toContain(UPDATE_DISMISSED_KEY);
-  });
-
   test("a held key stays when a later registration of it is disposed", () => {
-    const gates = daemonGates();
-    const dispose = gates.state.register(UPDATE_DISMISSED_KEY, ["abc"]);
+    const key = "daemon.example";
+    const gates = createGates({ state: [{ key, allowed: [] }], config: [] });
+    const dispose = gates.state.register(key, ["abc"]);
     expect(
-      gates.state.gateFor(EMPTY_DEFAULT).validate(UPDATE_DISMISSED_KEY, "abc"),
+      gates.state.gateFor(EMPTY_DEFAULT).validate(key, "abc"),
     ).toEqual({ ok: true, value: "abc" });
     dispose();
     expect(gates.state.gateFor(EMPTY_DEFAULT).listKeys()).toContain(
-      UPDATE_DISMISSED_KEY,
+      key,
     );
   });
 });
