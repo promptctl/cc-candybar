@@ -1600,6 +1600,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 });
 
 // [LAW:verifiable-goals] Draw every bundled preset at three terminal widths.
+// [LAW:single-enforcer] Each preset uses the same effective-globals resolver as a session draw.
 // The sample session populates the git, usage and telemetry fields their gates read.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];

@@ -93,7 +93,7 @@ process.stdout.write(JSON.stringify({
 JS
 }
 
-# A cold statusline request starts the daemon and can return blank. Repeat the
+# [LAW:no-ambient-temporal-coupling] A cold statusline request starts the daemon and can return blank. Repeat the
 # same ordinary request until this session's first frame arrives.
 render_config() {
     local file="$1" payload frame deadline=$((SECONDS + 15))
@@ -164,6 +164,7 @@ parse_args() {
             --compare-presets) COMPARE="presets" ;;
             --config-only=) invalid "--config-only needs a path" ;;
             --config-only=*)
+                # [LAW:types-are-the-program] A saved file is the complete preview input.
                 ((count == 1)) || invalid "--config-only cannot be combined with template choices"
                 CONFIG_FILE="${1#*=}"
                 ;;

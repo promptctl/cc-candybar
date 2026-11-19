@@ -6,7 +6,7 @@ import { WORLD } from "./helpers/host";
 // segment/action reference, or a palette name the registry can't resolve would
 // otherwise rot silently until a user copies the file onto their bar.
 //
-// Each file is loaded, registered and drawn with the sample session.
+// [LAW:behavior-not-structure] Discover the shipped files and draw each preset they expose.
 
 import { textOf } from "../src/render/frame";
 import fs from "node:fs";
