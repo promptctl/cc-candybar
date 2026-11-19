@@ -8,13 +8,12 @@
 import { isAbsolute } from "node:path";
 import type { ParserId, Run } from "../../facts/source-identity.js";
 import {
-  jsonParser,
+  jsonDocumentParser,
   regexParser,
   textParser,
   type Parser,
 } from "../../var-system/parse.js";
 import type { JsonValue } from "../../var-system/types.js";
-import { ABSENT } from "../../utils/outcome.js";
 
 // Shell runs are refused a period shorter than this: a `ttl: 50ms` against a
 // 200ms command would overlap and stack children. Refused rather than raised,
@@ -69,7 +68,7 @@ function parserOf(parse: ParserId): Parser<JsonValue> | string {
     case "regex":
       return capturing(parse.pattern);
     case "json":
-      return (text) => (text.trim() === "" ? ABSENT : jsonParser(text));
+      return jsonDocumentParser;
   }
 }
 

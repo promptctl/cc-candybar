@@ -92,6 +92,7 @@ export function createPayloadProviders(opts: {
       ledger,
     }),
     managedStorage: new ManagedStorage({
+      files: opts.sourceRuns.files,
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
       clock,
