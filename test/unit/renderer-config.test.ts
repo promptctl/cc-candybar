@@ -32,6 +32,7 @@ import type {
   Present,
   Renderer,
   RendererBoot,
+  RendererConstruction,
   RendererDiagnostics,
   RendererOutput,
   RequestId,
@@ -54,6 +55,10 @@ import { ABSENT } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { heldClock } from "../helpers/held-clock";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../helpers/oversized-renderer-history";
 import { viewFacts } from "../helpers/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -91,29 +96,50 @@ function renderer(boot = bootOf()): Renderer {
 const lineBytes = (line: HostLine | RendererLine): string =>
   `${JSON.stringify(line)}\n`;
 
+// [LAW:types-are-the-program] The core's construction outcome can be compared
+// as data. The spawned-process handshake tests cover the process-ready envelope.
+type CoreConstruction =
+  | Omit<Extract<RendererConstruction, { kind: "built" }>, "renderer">
+  | Extract<RendererConstruction, { kind: "refused" }>;
+
 function rendererLines(send: (bytes: string) => void) {
+  const construction = Promise.withResolvers<CoreConstruction>();
   let heard = (raw: string): void => {
-    const receive = serveRenderer({
-      renderer: timed(renderer(rendererBootFrom(JSON.parse(raw))), () => 0),
-      send: (line) => send(lineBytes(line)),
-      memory: () => {
-        throw new Error("replay unexpectedly inspected process memory");
-      },
-      heapSnapshot: async () => {
-        throw new Error("replay unexpectedly inspected the heap");
-      },
-    });
-    heard = (line) => receive(JSON.parse(line) as HostLine);
+    try {
+      const built = mainRendererOf(rendererBootFrom(JSON.parse(raw)));
+      if (built.kind === "refused") {
+        construction.resolve(built);
+        return;
+      }
+      const { renderer: core, ...outcome } = built;
+      const receive = serveRenderer({
+        renderer: timed(core, () => 0),
+        send: (line) => send(lineBytes(line)),
+        memory: () => {
+          throw new Error("replay unexpectedly inspected process memory");
+        },
+        heapSnapshot: async () => {
+          throw new Error("replay unexpectedly inspected the heap");
+        },
+      });
+      heard = (line) => receive(JSON.parse(line) as HostLine);
+      construction.resolve(outcome);
+    } catch (error) {
+      construction.reject(error);
+    }
   };
   const lines = lineSplitter((line) => heard(line));
   // [LAW:no-ambient-temporal-coupling] A worker handles a pipe message in its
   // own turn. Failure stacks must have the same worker callers on both passes.
-  return (bytes: string) => queueMicrotask(() => lines.push(bytes));
+  return {
+    construction: construction.promise,
+    take: (bytes: string) => queueMicrotask(() => lines.push(bytes)),
+  };
 }
 
 // [LAW:behavior-not-structure] Keep the exact JSON lines written in both
 // directions, including construction and subscription deltas, before decoding.
-function recordedRenderer(boot: RendererBoot) {
+async function recordedRenderer(boot: RendererBoot) {
   const inputs: string[] = [];
   const outputs: string[] = [];
   const child = rendererLines((bytes) => {
@@ -123,7 +149,7 @@ function recordedRenderer(boot: RendererBoot) {
   const send = (line: HostLine) => {
     const bytes = lineBytes(line);
     inputs.push(bytes);
-    child(bytes);
+    child.take(bytes);
   };
   const host = rendererOverLines({
     send,
@@ -135,7 +161,12 @@ function recordedRenderer(boot: RendererBoot) {
     host.heard(JSON.parse(line) as RendererLine),
   );
   send({ kind: "boot", wireVersion: RENDERER_WIRE_VERSION, boot });
-  return { inputs, outputs, renderer: host.renderer };
+  return {
+    construction: await child.construction,
+    inputs,
+    outputs,
+    renderer: host.renderer,
+  };
 }
 
 async function replayLines(inputs: readonly string[]) {
@@ -150,13 +181,15 @@ async function replayLines(inputs: readonly string[]) {
     pending = null;
     complete();
   });
-  child(boot);
+  child.take(boot);
+  const construction = await child.construction;
+  if (construction.kind === "refused") return { construction, outputs };
   for (const bytes of turns)
     await new Promise<void>((resolve) => {
       pending = resolve;
-      child(bytes);
+      child.take(bytes);
     });
-  return outputs;
+  return { construction, outputs };
 }
 
 // A statusline request of `session` in the project, across the host's
@@ -303,10 +336,18 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   const origin = context.requested;
   const palette = [...listResolvablePaletteNames()][0]!;
   const profile = "captured at construction";
-  const live = recordedRenderer(bootOf({
-    ...EMPTY_STORED_STATE,
+  const live = await recordedRenderer(bootOf({
+    ...oversizedRendererHistory(),
     sessions: { [session]: { remembered: profile } },
   }));
+  const bootDiagnostic = {
+    level: "info",
+    line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+  };
+  expect(live.construction).toEqual({
+    kind: "built",
+    diagnostics: [bootDiagnostic],
+  });
   const config = JSON.stringify({
     globals: { experimentalPane: true },
     actions: {
@@ -342,6 +383,12 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   ]);
   expect(started.subscriptions.configs).toEqual([origin]);
   expect(started.subscriptions.lanes[session]?.pane).toBe(true);
+  expect(started.stored).toContainEqual({
+    store: "settings-history",
+    key: oversizedSession,
+    value: null,
+  });
+  expect(started.diagnostics).not.toContainEqual(bootDiagnostic);
   const first = presentOf(answered(await turn(
     { kind: "request", id: 1 as RequestId, context },
     10,
@@ -448,8 +495,10 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     "after replayed reload",
   );
 
-  expect(live.outputs).toHaveLength(live.inputs.length - 1);
-  expect(await replayLines(live.inputs)).toEqual(live.outputs);
+  expect(await replayLines(live.inputs)).toEqual({
+    construction: live.construction,
+    outputs: live.outputs,
+  });
 });
 
 test("a snapshot whose layer will not parse draws the bundled bar, with its error on the indicator", async () => {
