@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-864",
+      "ref": "refs/pull/864/merge",
+      "sha": "06f235420058bcb37a5b710b206ba455ae786cc1",
+      "timestamp": "2026-11-19T12:21:58.761Z",
+      "commits": [
+        {
+          "sha": "06f235420058bcb37a5b710b206ba455ae786cc1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:20:56Z",
+          "message": "Merge c90fe51cbe7cfbb83f49a602cfc1632e37c34c0b into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
+        },
+        {
+          "sha": "c90fe51cbe7cfbb83f49a602cfc1632e37c34c0b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:20:10-07:00",
+          "message": "fix(daemon): admit named renderers from statusline push clients\n"
+        },
+        {
+          "sha": "bf85ae23572ed14a2c0c9124157c769e5c1c560f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:06-07:00",
+          "message": "style(test): format the named renderer process fixture\n"
+        },
+        {
+          "sha": "82df71e02fa06eb07d32cbfe7ac184a535b22625",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:11:10-07:00",
+          "message": "feat(daemon): route named renderers through one shared host\n"
+        }
+      ]
+    },
+    {
       "version": "pr-865",
       "ref": "refs/pull/865/merge",
       "sha": "44991210d5070ae32afd4bbf7321d09481fbe4ef",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:18:15-07:00",
           "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-864",
-      "ref": "refs/pull/864/merge",
-      "sha": "1ad807491bc9673e88cc2aa943a46031418932d2",
-      "timestamp": "2026-11-19T12:19:49.677Z",
-      "commits": [
-        {
-          "sha": "1ad807491bc9673e88cc2aa943a46031418932d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:18:10Z",
-          "message": "Merge c3ee4f2be239aa64559e05b282376fd601ae0e7d into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
-        },
-        {
-          "sha": "c3ee4f2be239aa64559e05b282376fd601ae0e7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:18:06-07:00",
-          "message": "style(test): format the named renderer process fixture\n"
-        },
-        {
-          "sha": "3a247bd55dbcd68df6fd672d99346f752821a4ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:11:10-07:00",
-          "message": "feat(daemon): route named renderers through one shared host\n"
         }
       ]
     },

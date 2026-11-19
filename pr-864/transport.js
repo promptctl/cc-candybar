@@ -89382,7 +89382,8 @@ function createDaemon(inputs) {
     const session = request2.hookData.session_id;
     const route = routes.get(session);
     const asked = environment.kind === "ok" ? variableOf(environment.value, "CC_CANDYBAR_NAME") : null;
-    let name = request2.hints.client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
+    const client = request2.hints.client;
+    let name = client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
     if (asked?.kind === "ok") {
       try {
         name = rendererNameOf(asked.value);
@@ -89395,8 +89396,7 @@ function createDaemon(inputs) {
         `session ${session} has already moved to renderer ${route.name}`
       );
     let target = renderers.get(name);
-    const client = request2.hints.client;
-    const binding = asked?.kind === "ok" && client?.kind !== "frames" ? client?.bundle : void 0;
+    const binding = asked?.kind === "ok" ? client?.bundle : void 0;
     if (target === void 0) {
       if (binding === void 0)
         throw new BadVerbArgs(
