@@ -17,8 +17,9 @@ import type { ClaudeHookData } from "../utils/claude";
 import type { Judged } from "../daemon/foundations/judge-run.js";
 
 // A render request that crossed the checkpoint: its hookData carries every
-// required field with its declared type, its cwd is absolute, `hints` is its
-// client hints, parsed, and its args are parsed into `requested` — the config
+// required field with its declared type and its cwd and workspace directories
+// are absolute. `hints` contains the parsed client hints. Its args are parsed
+// into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
 // `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
 // what its hookData says of the rate-limit windows, and `deadline` is when its

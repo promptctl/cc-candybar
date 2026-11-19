@@ -3,7 +3,6 @@
 // effects the request's turn returned, and answers the client with the one
 // frame presented for it, in the encoding the client asked for.
 
-import path from "node:path";
 import type {
   Event,
   Present,
@@ -96,9 +95,7 @@ function located(
   req: CheckedRenderRequest,
   locate: Locate,
 ): { readonly req: CheckedRenderRequest; readonly error: string | null } {
-  const dir = req.hookData.workspace?.current_dir ?? req.cwd;
-  if (dir === undefined || !path.isAbsolute(dir)) return { req, error: null };
-  const found = locate(dir);
+  const found = locate(req.hookData.workspace.current_dir);
   return {
     error: found.kind === "failed" ? found.reason : null,
     req: {
