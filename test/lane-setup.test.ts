@@ -138,6 +138,7 @@ describe("tmux pane effects", () => {
     edge: BarPaneEdge,
     input: Partial<ClaudeInputEdge> = {},
     host = HOST,
+    closing = () => false,
   ) => {
     const logs: string[] = [];
     const missing = async (): Promise<never> => {
@@ -152,7 +153,7 @@ describe("tmux pane effects", () => {
       },
       run: missing,
       barPane: { edge, host },
-      closing: () => false,
+      closing,
       log: (level, msg) => void logs.push(`${level} ${msg}`),
     });
     return { acts, logs };
@@ -186,6 +187,44 @@ describe("tmux pane effects", () => {
     expect(typing).toEqual(["start /compact", "end /compact", "start /clear"]);
     typed();
     expect(await second).toEqual({ kind: "ok" });
+  });
+
+  test("only the pane act in progress reaches tmux when shutdown begins", async () => {
+    let closing = false;
+    const reads = jest.fn(async () => ({ inMode: false, screen: READY_SCREEN }));
+    const typed = jest.fn(async () => ({ kind: "typed" } as const));
+    const removed = jest.fn(async () => {});
+    let releaseSplit!: (pane: string) => void;
+    let started!: () => void;
+    const splitStarted = new Promise<void>((resolve) => { started = resolve; });
+    const { edge } = fakeEdge({
+      openBarPane: () => {
+        started();
+        return new Promise((resolve) => { releaseSplit = resolve; });
+      },
+      closePane: removed,
+    });
+    const { acts } = performer(edge, { read: reads, type: typed }, HOST, () => closing);
+
+    const opening = acts.setBarPane(TMUX, true);
+    await splitStarted;
+    const slash = acts.perform({
+      kind: "type-slash",
+      id: ++ids as EffectId,
+      session: SID,
+      pane: TMUX,
+      line: "/compact" as never,
+    });
+    const cleanup = expect(acts.setBarPane(TMUX, false)).rejects.toThrow("the daemon closed");
+    closing = true;
+    releaseSplit("%9");
+
+    await expect(opening).resolves.toBe("opened bar pane %9 under %7");
+    await expect(slash).resolves.toMatchObject({ kind: "closing" });
+    await cleanup;
+    expect(reads).not.toHaveBeenCalled();
+    expect(typed).not.toHaveBeenCalled();
+    expect(removed).not.toHaveBeenCalled();
   });
 
   test("a slash line while a bar pane opens under its pane is typed, after the split", async () => {

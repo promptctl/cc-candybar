@@ -6,7 +6,7 @@
 
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
-import type { TmuxHint } from "../tmux-hint.js";
+import { paneKey, type TmuxHint } from "../tmux-hint.js";
 import {
   typeInPane,
   type ClaudeInputEdge,
@@ -17,7 +17,7 @@ import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { clickLaunch, type ClickLaunch } from "./foundations/click-launch.js";
-import { failureOf } from "./foundations/verb-error.js";
+import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
 import {
   paneOff,
   paneOn,
@@ -44,18 +44,9 @@ export interface ActDeps {
   readonly log: DaemonLogger;
 }
 
-// [LAW:types-are-the-program] Which acts outlive the turn that asked for
-// them: a run, and a lane's setup, whose outcome lands once it has finished.
-// The rest are over before their turn returns, so a click answers with how
-// they went.
-const OUTLIVES: Readonly<Record<HostAct["kind"], boolean>> = {
-  copy: false,
-  open: false,
-  "type-slash": false,
-  run: true,
-};
-
-export const outlives = (act: HostAct): boolean => OUTLIVES[act.kind];
+// Runs can continue after the click reply. Other acts report their outcome
+// as part of that reply.
+export const outlives = (act: HostAct): act is Of<"run"> => act.kind === "run";
 
 // How an act's line and its reason name it.
 function nameOf(act: HostAct): string {
@@ -69,9 +60,6 @@ function nameOf(act: HostAct): string {
       return `run ${act.action}`;
   }
 }
-
-export const paneKey = (pane: TmuxHint): string =>
-  `${pane.socket}\0${pane.pane}`;
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
 // line says of it — what it did, or why it did not.
@@ -124,21 +112,27 @@ export class Acts {
     };
   }
 
-  // [LAW:single-enforcer] A bar-pane split and input typing share the pane's
-  // queue regardless of what changed the display setting.
-  setBarPane(pane: TmuxHint, on: boolean): Promise<string> {
-    const { edge, host } = this.deps.barPane;
-    return this.inPane.run(paneKey(pane), async () => {
-      if (this.deps.closing()) return "daemon closing";
-      return on ? paneOn(pane, host, edge) : paneOff(pane, edge);
+  // [LAW:single-enforcer] A bar-pane split and input typing share the
+  // pane's queue. Admission happens when the act reaches the head.
+  private inPaneTurn<Result>(
+    pane: TmuxHint,
+    act: () => Promise<Result>,
+  ): Promise<Result> {
+    return this.inPane.run(paneKey(pane), () => {
+      if (this.deps.closing()) throw new DaemonClosing("pane act");
+      return act();
     });
   }
 
-  // A slash line typed into `pane` in its turn.
+  setBarPane(pane: TmuxHint, on: boolean): Promise<string> {
+    const { edge, host } = this.deps.barPane;
+    return this.inPaneTurn(pane, () =>
+      on ? paneOn(pane, host, edge) : paneOff(pane, edge),
+    );
+  }
+
   private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
-    // [LAW:single-enforcer] The one way a line is typed: in the pane's turn,
-    // once the prompt there reads ready.
-    return this.inPane.run(paneKey(pane), () =>
+    return this.inPaneTurn(pane, () =>
       typeInPane(this.deps.claudeInput)(pane, line),
     );
   }
