@@ -241,9 +241,9 @@ export type Event =
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
   readonly shown: boolean;
-  // Where the latest of its subscribers came among every subscriber the host
-  // has taken: one that joins is owed a frame even when the counts read as
-  // they did, as when one leaves and another takes its place.
+  // The host's draw demand revision. A new viewer the host could not hand a
+  // frame still needs one when the counts read as they did. The v8 wire name
+  // remains `joined`; renderers only compare its value for changes.
   readonly joined: number;
 }
 

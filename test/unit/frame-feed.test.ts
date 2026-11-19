@@ -20,6 +20,10 @@ import { publishingFrames } from "../../src/daemon/foundations/frame-publication
 import { TEST_SIGNER } from "../helpers/link-signer";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
 import type { WireFrame } from "../../src/render/frame";
+import { effectsUrl, VERB_COPY } from "../../src/click/wire";
+import { actionTarget } from "../../src/render/drawn-link";
+import { Feeds } from "../../src/renderer/feeds";
+import type { Instant, Tick } from "../../src/utils/instant";
 import type {
   EffectId,
   PushedFrame,
@@ -166,6 +170,61 @@ const frame = (
     handoff: handoff === null ? null : body(handoff),
   },
 });
+
+// Drive the real host and renderer feeds together, with the viewer mailbox
+// slot and each render tick released by the case.
+function linkedFeeds() {
+  const r = rig();
+  const renderer = rendererNameOf("worktree");
+  const effect = { verb: VERB_COPY, args: ["captured value"] } as const;
+  let receipt = 0;
+  const draws = new Feeds({
+    draw: () => ({
+      frame: {
+        kind: "drawn",
+        receipt: ++receipt as EffectId,
+        bar: {
+          ...body("copy"),
+          nextChange: Infinity,
+          rows: [
+            {
+              kind: "diagnostic",
+              runs: [{ text: "copy", link: actionTarget([effect]) }],
+            },
+          ],
+        },
+        handoff: null,
+      },
+      evaluated: 1,
+      cellBreaks: 0,
+      failure: null,
+    }),
+    pin: () => () => {},
+    log: () => {},
+    periods: { moving: 100, still: 1000 },
+  });
+  return {
+    ...r,
+    signed: TEST_SIGNER.signLink(effectsUrl([effect]), {
+      renderer,
+      session: S,
+    }),
+    async deliver(tick: number) {
+      await r.slot();
+      draws.view(r.handed.at(-1)!, tick as Tick);
+    },
+    due(tick: number) {
+      const frames: PushedFrame[] = [];
+      draws.drawDue(
+        { at: (1000 + tick) as Instant, tick: tick as Tick },
+        frames,
+        () => { throw new Error("the feed fixture builds its own receipt"); },
+      );
+      r.took(frames, renderer);
+      return frames;
+    },
+  };
+}
 
 describe("a session's requests", () => {
   test("the latest is the one received last, however late an earlier one's render finishes", () => {
@@ -388,6 +447,108 @@ describe("a subscriber", () => {
 });
 
 describe("feed delivery", () => {
+  test("a hot viewer replacement receives the same signed bytes without another draw", async () => {
+    const r = linkedFeeds();
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    const staying = subscriber("statusline");
+    r.feeds.subscribe(S, staying.sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+    expect(old.sent).toHaveLength(1);
+    expect(old.sent[0]).toContain(r.signed);
+    expect(r.settled).toEqual([[first, true]]);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    expect(replacement.sent).toEqual(old.sent);
+    replacement.finish(true);
+    await r.deliver(0.1);
+    expect(r.due(0.1)).toEqual([]);
+    expect(staying.sent).toEqual(old.sent);
+    expect(r.settled).toEqual([[first, true]]);
+    expect(r.feeds.getStats()).toMatchObject({
+      feeds: 1,
+      subscribers: 2,
+      pushed: 3,
+    });
+  });
+
+  test("a sole viewer comes back to a new draw when the host has released its cached frame", async () => {
+    const r = linkedFeeds();
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+    expect(old.sent).toHaveLength(1);
+
+    leave();
+    expect(r.feeds.isWatched(S)).toBe(false);
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    expect(replacement.sent).toEqual([]);
+    // The renderer's single slot sees the old count again and needs a first
+    // frame despite never seeing an empty membership.
+    await r.deliver(0.1);
+    const [fresh] = r.due(0.1);
+    expect(fresh).toBeDefined();
+    expect(replacement.sent).toEqual(old.sent);
+    expect(r.settled).toEqual([[first, true]]);
+    replacement.finish(true);
+    expect(r.settled).toEqual([[first, true], [fresh, true]]);
+  });
+
+  test("a declined handover asks for a frame after an unchanged viewer delivery", async () => {
+    const r = linkedFeeds();
+    const leave = r.feeds.subscribe(S, subscriber("pane").sub);
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    await r.deliver(0.1);
+    expect(r.due(0.1)).toEqual([]);
+    replacement.finish(false);
+    await r.deliver(0.2);
+    const [fresh] = r.due(0.2);
+    expect(fresh).toBeDefined();
+    expect(replacement.sent).toHaveLength(2);
+    expect(replacement.sent[0]).toBe(replacement.sent[1]);
+    replacement.finish(true);
+    expect(r.settled).toEqual([[first, true], [fresh, true]]);
+  });
+
+  test("visibility and count changes wake a feed while a pending handover shares its next write", async () => {
+    const r = linkedFeeds();
+    r.hidden.add("%1");
+    r.feeds.note(S, { pane: "%1" }, 1);
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    r.hidden.delete("%1");
+    r.feeds.announce();
+    await r.deliver(0.1);
+    const [shown] = r.due(0.1);
+    expect(shown).toBeDefined();
+    expect(replacement.sent).toEqual(old.sent);
+    replacement.finish(true);
+    expect(r.owed).toHaveLength(0);
+    expect(r.settled).toEqual([[first, true], [shown, true]]);
+
+    r.feeds.subscribe(S, subscriber("pane").sub);
+    await r.deliver(0.2);
+    expect(r.due(0.2)).toHaveLength(1);
+  });
+
   test("the confirmed bytes are published for the renderer and session that drew them", () => {
     const publish = publishingFrames(TEST_SIGNER);
     const routes: Parameters<FeedDeps<Req>["publishFrame"]>[1][] = [];

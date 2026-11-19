@@ -21,7 +21,12 @@ import {
 import type { FrameSource } from "../click/link-signer.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
-import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
+import {
+  answerOf,
+  LANE_NAMES,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
@@ -78,7 +83,6 @@ interface PendingWrite {
 }
 
 interface Follower {
-  readonly joined: number;
   confirmed: string | null;
   // [LAW:single-enforcer] The transport bounds its outstanding writes. Each
   // carries at most one candidate, replaced when the latest draw is identical.
@@ -89,6 +93,9 @@ interface Watched {
   readonly followers: Map<Subscriber, Follower>;
   // The last frame drawn: what a subscriber is handed as it joins.
   last: EncodedFeed | null;
+  // [LAW:single-enforcer] Only the host knows when a new subscriber needs a
+  // first draw. Its demand survives count-preserving viewer coalescing.
+  frameDemand: number;
   pushed: number;
 }
 
@@ -147,7 +154,7 @@ export class FrameFeeds<Req> {
   // The viewers as the renderer was last handed them, serialized; null when
   // what it holds is unknown (a delivery failed).
   private handed: string | null = JSON.stringify({});
-  private joins = 0;
+  private frameDemands = 0;
   private pushed = 0;
   private refused = 0;
   private lookups = 0;
@@ -195,26 +202,47 @@ export class FrameFeeds<Req> {
     }
     let watched = this.watched.get(sessionId);
     if (watched === undefined) {
-      watched = { followers: new Map(), last: null, pushed: 0 };
+      watched = { followers: new Map(), last: null, frameDemand: 0, pushed: 0 };
       this.watched.set(sessionId, watched);
       this.stopWatching ??= this.deps.watching();
     }
     if (watched.followers.has(sub))
       return () => this.unsubscribe(sessionId, sub);
-    watched.followers.set(sub, {
-      confirmed: null,
-      joined: ++this.joins,
-      writes: new Set(),
-    });
-    // A subscriber is handed the frame as it stands; the renderer draws the
-    // next, since who follows the session is drawn into it.
-    if (watched.last !== null) this.send(sessionId, watched, sub, watched.last);
+    const follower: Follower = { confirmed: null, writes: new Set() };
+    watched.followers.set(sub, follower);
+    this.handover(sessionId, watched, sub, follower);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${watched.followers.size} view=${sessionId in this.lanes ? "Y" : "N"}`,
     );
     this.announce();
     return () => this.unsubscribe(sessionId, sub);
+  }
+
+  // [LAW:single-enforcer] A hot join takes the encoded frame from the host.
+  // A missing frame or a declined handover still needs a draw. A newer write
+  // or a departing subscriber has already settled the need for this offer.
+  private handover(
+    sessionId: SessionId,
+    watched: Watched,
+    sub: Subscriber,
+    follower: Follower,
+  ): void {
+    if (watched.last === null) {
+      watched.frameDemand = ++this.frameDemands;
+      return;
+    }
+    this.send(sessionId, watched, sub, watched.last, (delivered) => {
+      if (
+        !delivered &&
+        watched.followers.get(sub) === follower &&
+        follower.confirmed === null &&
+        follower.writes.size === 0
+      ) {
+        watched.frameDemand = ++this.frameDemands;
+        this.announce();
+      }
+    });
   }
 
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
@@ -243,16 +271,25 @@ export class FrameFeeds<Req> {
 
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
     const lanes: Partial<Record<Lane, LaneViewers>> = {};
-    let joined = 0;
-    for (const [sub, follower] of watched.followers) {
+    for (const sub of watched.followers.keys()) {
       const seen = lanes[sub.lane];
       lanes[sub.lane] = {
         subscribers: (seen?.subscribers ?? 0) + 1,
         drawing: (seen?.drawing ?? false) || sub.drawing(),
       };
-      joined = Math.max(joined, follower.joined);
     }
-    return { lanes, shown: this.shown(sessionId), joined };
+    // Follower insertion order can change on a replacement within a lane.
+    // Emit the lane facts in the same order so that it remains the same view.
+    return {
+      lanes: Object.fromEntries(
+        LANE_NAMES.flatMap((lane) => {
+          const viewed = lanes[lane];
+          return viewed === undefined ? [] : [[lane, viewed]];
+        }),
+      ),
+      shown: this.shown(sessionId),
+      joined: watched.frameDemand,
+    };
   }
 
   // [LAW:single-enforcer] Who watches may have changed, or how: the renderer
