@@ -393,6 +393,54 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
 });
 
+test("a failed start's input does not keep the previous renderer's served config", async () => {
+  const origin = { projectDir: "/p", cwd: "/p", target: { source: "search" as const } };
+  const read: string[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held(rendererOf({
+      event: async () => ({
+        ...answered(),
+        subscriptions: { ...NONE, configs: [origin] },
+      }),
+      adapter: async () => {
+        throw new Error("no push here");
+      },
+    })),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      writableSettings: () => [],
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      configs: {
+        ...NO_ACTS.configs,
+        follow: () => {},
+        snapshotOf: ({ cwd }) => {
+          read.push(cwd);
+          return null;
+        },
+      },
+    },
+  );
+  const due = () => ({ kind: "event", event: { kind: "due" } }) as const;
+  await host.answer(due);
+  await host.answer(due);
+  expect(read).toEqual(["/p"]);
+  const start = await host.start(() => {
+    throw new Error("start could not be made");
+  }, []);
+  expect(start.kind).toBe("threw");
+  await host.answer(due);
+  expect(read).toEqual(["/p", "/p"]);
+});
+
 test("a declared wake is handed in as a `due`, and none is made after the wake closes", async () => {
   const fire: Array<() => void> = [];
   const heard: string[] = [];
