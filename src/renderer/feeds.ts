@@ -36,7 +36,7 @@ import {
   type SessionViewers,
   type Viewers,
 } from "../renderer-interface/interface.js";
-import type { Level } from "../renderer-interface/adapter.js";
+import type { LogLevel } from "../utils/logger.js";
 import {
   earliestOf,
   type Instant,
@@ -97,7 +97,7 @@ export interface FeedDraw {
   readonly evaluated: number;
   // How many strip items dividing cells too wide for a line added.
   readonly cellBreaks: number;
-  readonly failure: { readonly level: Level; readonly line: string } | null;
+  readonly failure: { readonly level: LogLevel; readonly line: string } | null;
 }
 
 export interface FeedDeps {
@@ -119,7 +119,7 @@ export interface FeedDeps {
   // feed's open to its close, and wakes the feed whenever the session's own
   // state changes: the feed being open is what keeps them.
   readonly pin: (sessionId: SessionId) => () => void;
-  readonly log: (level: Level, line: string) => void;
+  readonly log: (level: LogLevel, line: string) => void;
   readonly periods: FeedPeriods;
 }
 

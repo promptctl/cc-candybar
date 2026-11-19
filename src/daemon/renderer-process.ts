@@ -13,7 +13,7 @@ import { streamedToFile } from "./streamed-file.js";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import { writeLogLines, type DaemonLogger } from "../utils/logger.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
@@ -347,9 +347,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     switch (line.kind) {
       case "started":
-        started(link, line.wireVersion);
+        started(link, line);
         return;
       case "refused":
+        if (line.diagnostics !== undefined)
+          writeLogLines(log, line.diagnostics);
         refusedBoot(link, line.failure.message, line.failure.detail);
         return;
       default:
@@ -367,11 +369,14 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
   };
 
-  const started = (link: Link, version: unknown): void => {
+  const started = (
+    link: Link,
+    { wireVersion, diagnostics }: Extract<RendererLine, { kind: "started" }>,
+  ): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
     // [LAW:parse-dont-validate] The wire's attestation admits this link.
     // Queued input and pings wait for that agreement.
-    const mismatch = rendererWireVersionProblem("renderer", version);
+    const mismatch = rendererWireVersionProblem("renderer", wireVersion);
     if (mismatch !== null) {
       refusedBoot(link, mismatch);
       link.kill.abort(new Error(mismatch));
@@ -379,6 +384,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     const { queued } = phase;
     phase = { kind: "live", link };
+    if (diagnostics !== undefined) writeLogLines(log, diagnostics);
     // [LAW:nothing-unseen] The start, with what was refused while none ran.
     log(
       "info",

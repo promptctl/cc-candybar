@@ -17,6 +17,7 @@ import type { SessionContext } from "../../renderer-interface/request-context.js
 import type { EditTransactions } from "../edit-transaction.js";
 import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
+import type { TurnLog } from "../turn-log.js";
 import {
   changeDone,
   closeIdleMenus,
@@ -57,6 +58,7 @@ export interface RendererVerbs {
 // The main renderer's parts: the draw's, which the host's own frames share,
 // and the verbs its click and menu-idle turns act through.
 export type MainRendererParts = RendererParts & {
+  readonly turnLog: TurnLog;
   // The owners of a tick a `due` runs: the draw reads only part of each.
   readonly menuIdle: MenuIdle;
   readonly feeds: Feeds;

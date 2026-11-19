@@ -41,6 +41,11 @@ import {
   type IsolatedDaemonHandle,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../../helpers/oversized-renderer-history";
+import type { Instant, Tick } from "../../../src/utils/instant";
 
 jest.setTimeout(30_000);
 
@@ -129,6 +134,52 @@ describe("the renderer wire handshake", () => {
       kind: "refused",
       failure: { message: "renderer boot has no resolved locations" },
     });
+  });
+
+  test("a built child reports history trimmed at boot on readiness alone", () => {
+    const child = bootChild(
+      {
+        ...COMPATIBLE_BOOT,
+        boot: { ...COMPATIBLE_BOOT.boot, stored: oversizedRendererHistory() },
+      },
+      {
+        kind: "input",
+        n: 1,
+        input: {
+          kind: "event",
+          at: 0 as Instant,
+          tick: 0 as Tick,
+          event: { kind: "start", viewers: {}, sessions: [], configs: [] },
+        },
+      } satisfies HostLine,
+    );
+    expect(child.status).toBe(0);
+    const lines = child.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(lines).toEqual([
+      expect.objectContaining({
+        kind: "started",
+        diagnostics: [
+          {
+            level: "info",
+            line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+          },
+        ],
+      }),
+      expect.objectContaining({
+        kind: "output",
+        n: 1,
+        output: expect.objectContaining({
+          kind: "answered",
+          stored: [
+            { store: "settings-history", key: oversizedSession, value: null },
+          ],
+        }),
+      }),
+    ]);
+    expect(lines[1]?.output).not.toHaveProperty("diagnostics");
   });
 });
 
@@ -230,6 +281,20 @@ describe("the daemon's renderer process", () => {
     );
     expect(log).toMatch(
       /renderer main\[1\] killed by SIGKILL after \d+ s; next start in 1 s/,
+    );
+    const profileLoads = log
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes(" config loaded ") &&
+          line.includes(`files=${profileConfig} `),
+      );
+    expect(profileLoads).toHaveLength(2);
+    expect(log.indexOf(profileLoads[0]!)).toBeLessThan(
+      log.indexOf("renderer main[1] killed by SIGKILL"),
+    );
+    expect(log.indexOf(profileLoads[1]!)).toBeGreaterThan(
+      log.indexOf("renderer main[2] started pid="),
     );
   });
 
