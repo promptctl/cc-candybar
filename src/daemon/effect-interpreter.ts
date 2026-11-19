@@ -68,7 +68,11 @@ export interface TrustBook {
 // renderer names a role and never a path.
 export type LayerPlaces = Pick<ConfigDiscovery, "path" | "repoDir">;
 
-const refused = (reason: string): EffectOutcome => ({
+export type ConfigLanding =
+  | { readonly kind: "ok"; readonly files: readonly string[] }
+  | Extract<EffectOutcome, { kind: "refused" | "failed" | "closing" }>;
+
+const refused = (reason: string): ConfigLanding => ({
   kind: "refused",
   reason: `${reason} — nothing was written`,
 });
@@ -103,7 +107,7 @@ export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
   layers: LayerPlaces,
-): EffectOutcome {
+): ConfigLanding {
   const rewrites = new Map<string, Rewrite>();
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
@@ -182,7 +186,7 @@ export function performChanges(
       written.push(rewrite);
     }
     for (const line of answered) book!.said(line);
-    return { kind: "ok" };
+    return { kind: "ok", files: written.map(({ file }) => file) };
   } catch (e) {
     return { kind: "failed", reason: putBack(written, e) };
   }

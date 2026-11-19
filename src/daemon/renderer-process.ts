@@ -393,16 +393,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
-    // [LAW:no-silent-failure] A start that throws is said, and the renderer
-    // serves what the inputs after it bring.
-    const start = own
-      .start()
-      .catch((thrown: unknown) =>
+    // A failed start does not transfer the previous renderer's holds.
+    const start = (async (): Promise<boolean> => {
+      try {
+        await own.start();
+        return true;
+      } catch (thrown) {
         log(
           "error",
           `renderer ${name}[${generationOf}] start failed: ${failureOf(thrown).detail}`,
-        ),
-      );
+        );
+        return false;
+      }
+    })();
     heardBy = (text) => heard(link, start, text);
     void channel.ended.then((result) => {
       stdout.end();
@@ -420,7 +423,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
   };
 
-  const heard = (link: Link, start: Promise<void>, text: string): void => {
+  const heard = (link: Link, start: Promise<boolean>, text: string): void => {
     let line: RendererLine;
     try {
       line = JSON.parse(text) as RendererLine;
@@ -447,7 +450,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
   };
 
-  const started = (link: Link, start: Promise<void>): void => {
+  const started = (link: Link, start: Promise<boolean>): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
     const { queued } = phase;
     phase = { kind: "live", link };
@@ -460,8 +463,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     for (const send of queued) send();
     // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
     // this one has started and taken its start, and stays if it ends first.
-    void start.then(() => {
-      if (current() !== link) return;
+    void start.then((answered) => {
+      if (!answered || current() !== link) return;
       link.tookOver = true;
       releaseGone();
     });
@@ -543,8 +546,14 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         link.usage = usage;
         link.pingSentAt = null;
       },
-      // Its end says why: a ping a gone renderer owed says nothing more.
-      () => {},
+      (thrown: unknown) => {
+        // A gone renderer's end reports its own reason.
+        if (current() !== link) return;
+        log(
+          "warn",
+          `renderer ${name}[${link.generation}] ping failed: ${failureOf(thrown).detail}`,
+        );
+      },
     );
   };
   let stopPings: () => void = () => {};

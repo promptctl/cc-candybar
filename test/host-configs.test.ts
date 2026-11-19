@@ -114,7 +114,12 @@ function hostOver(
       stored: () => {},
       recorded: () => {},
     },
-    { ...NO_ACTS, stateDir: path.join(dir, "state"), configs },
+    {
+      ...NO_ACTS,
+      stateDir: path.join(dir, "state"),
+      configs,
+      unheard: (text) => void logged.push(`unheard ${text}`),
+    },
   );
   return { host, heard, logged };
 }
@@ -129,9 +134,9 @@ test("an origin a turn newly names gets its config turn in that turn's slot, ahe
   expect(heard).toEqual(["due", "config", "due"]);
 });
 
-test("each origin a turn's landing moved gets its config turn before the landing's effect-done", async () => {
+function themeChange(): Effect {
   const id = 1 as EffectId;
-  const change: Effect = {
+  return {
     kind: "change",
     id,
     session: S,
@@ -141,6 +146,10 @@ test("each origin a turn's landing moved gets its config turn before the landing
       `{ globals: { theme: "dawn" } }\n`,
     ),
   };
+}
+
+test("each origin a turn's landing moved gets its config turn before the landing's effect-done", async () => {
+  const change = themeChange();
   let landedOn = "";
   const { host, heard } = hostOver(
     (event) => output(event.kind === "due" ? [change] : [], [ORIGIN]),
@@ -154,6 +163,23 @@ test("each origin a turn's landing moved gets its config turn before the landing
   // Discovery heard of the landing once the change was on disk.
   expect(landedOn).toContain("dawn");
   expect(answered.settled).toEqual([{ kind: "ok" }]);
+});
+
+test("failed rediscovery reports its own failure after the successful write", async () => {
+  const change = themeChange();
+  const { host, heard, logged } = hostOver(
+    (event) => output(event.kind === "due" ? [change] : [], [ORIGIN]),
+    () => {
+      throw new Error("rediscovery refused");
+    },
+  );
+
+  const answered = await host.answer(() => ({ kind: "event", event: due }));
+  expect(answered.kind).toBe("answered");
+  expect(answered.settled).toEqual([{ kind: "ok" }]);
+  expect(heard).toEqual(["due", "config", "effect-done ok"]);
+  expect(fs.readFileSync(file, "utf8")).toContain("dawn");
+  expect(logged).toContainEqual(expect.stringContaining("rediscovery refused"));
 });
 
 // [LAW:one-source-of-truth] A renderer sent its start holds no config, so

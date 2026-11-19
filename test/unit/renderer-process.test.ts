@@ -456,6 +456,35 @@ describe("ids a renderer mints", () => {
     ]);
   });
 
+  test("a refused start keeps the last renderer's storage hold", async () => {
+    let attempt = 0;
+    const { link, children, clock, held, logs } = rig(async () => {
+      if (++attempt === 2) throw new Error("start refused");
+    });
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say({
+      kind: "notice",
+      reach: "storage.hold",
+      args: [1, ["/f"]],
+    });
+    await settled();
+    children[0]!.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_FIRST_MS);
+    children[1]!.say({ kind: "started", pid: 9002 });
+    await settled();
+    expect(held).toEqual([["hold", 1]]);
+    expect(logs).toContainEqual(expect.stringContaining("start refused"));
+
+    children[1]!.exit(CRASHED);
+    await settled();
+    clock.advance(2 * BACKOFF_FIRST_MS);
+    children[2]!.say({ kind: "started", pid: 9003 });
+    await settled();
+    expect(held).toEqual([["hold", 1], ["release", 1]]);
+  });
+
   test("a renderer that never took over releases what it held as it ends", async () => {
     const { link, children, held } = rig();
     link.arm();

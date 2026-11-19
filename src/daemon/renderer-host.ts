@@ -32,6 +32,7 @@ import {
   type Event,
   type EventInput,
   type PushedFrame,
+  type RendererOutput,
   type TimedRenderer,
   type TurnOutcome,
   type Subscriptions,
@@ -52,7 +53,11 @@ import {
   failureOf,
   type Failure,
 } from "./foundations/verb-error.js";
-import { performChanges, type ApproveRepo } from "./effect-interpreter.js";
+import {
+  performChanges,
+  type ApproveRepo,
+  type ConfigLanding,
+} from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
@@ -228,141 +233,160 @@ export function rendererHost(
     settled: Promise.resolve([]),
   });
 
-  // [LAW:single-enforcer] One turn in its slot: the renderer's answer, its
-  // changes landed, and each change's `effect-done` turn, in this slot. Every
-  // caller hears how the whole turn ended as a value: a hold that failed, a
-  // renderer that rejected, or an output the host could not take, is the
-  // turn's failure.
+  // [LAW:single-enforcer] The transport owns whether the renderer
+  // answered. Host failures during landing cannot replace that answer.
   const inSlot = async (
     input: EventInput,
     queuedMs: number,
   ): Promise<Slotted> => {
     const session = sessionOf(input.event);
     let release = (): void => {};
-    // [LAW:one-source-of-truth] A renderer sent its `start` holds no config,
-    // whether or not the start answers: every origin it names after is new.
-    if (input.event.kind === "start") served = new Set();
+    let output: RendererOutput & { readonly turnMs: number };
+    let sentAt: Monotonic;
     try {
-      release = session === null ? release : collector.holding(session);
-      const sentAt = clock.monotonic();
-      const { subscriptions, frames, stored, turnMs, ...output } =
-        await renderer.answer(input);
-      // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
-      // turn, so what the process boundary costs is read from the event.
-      const turn: TakenTurn = {
-        ...output,
-        queuedMs,
-        turnMs,
-        hopMs: elapsedMs(clock, sentAt) - turnMs,
-      };
-      collector.recorded(turn.record);
-      // [LAW:single-enforcer] A turn's changes land here, together with its
-      // answers to the trust book, in the order the turns answered, before
-      // anything else here can throw and before the turn's caller hears it.
-      // Its acts are performed only once they have, in the order it returned
-      // them, each once the one before it has ended, and none is once the
-      // daemon's close has begun. A present answers the request whose turn
-      // returned it, so one another turn returns is refused here. No effect
-      // is left owed its `effect-done`, and the turn's caller hears it only
-      // after each `effect-done` turn of what is over in the turn, so a click
-      // is answered after what its landing and its acts did.
-      const changes = output.effects.filter(
-        (effect): effect is ConfigChange => effect.kind === "change",
-      );
-      const answers = output.effects.filter(
-        (effect): effect is ApproveRepo => effect.kind === "approve-repo",
-      );
-      const landed: EffectOutcome = world.closing()
-        ? { kind: "closing", reason: "the daemon is closing" }
-        : changes.length + answers.length === 0
-          ? { kind: "ok" }
-          : performChanges(
-              changes,
-              {
-                stateDir: world.stateDir,
-                answers,
-                said: (line) => log("info", line),
-              },
-              world.configs,
-            );
-      const named = took(subscriptions, frames, stored);
-      // [LAW:no-ambient-temporal-coupling] Every origin the output newly
-      // names, and every one the landing moved, gets its `config` turn here,
-      // ahead of the landing's `effect-done` turns.
-      const waited: Array<Promise<readonly EffectOutcome[]>> = [];
-      for (const origin of named)
-        waited.push((await configInSlot(origin, "config-subscribed")).settled);
-      const reloaded: Array<Promise<unknown>> = [];
-      const moved =
-        landed.kind === "ok" && changes.length + answers.length > 0
-          ? world.configs.landed(
-              // A landed layer's origin was followed and its chain held the
-              // role, or the landing was refused.
-              changes.flatMap(({ target }) => {
-                const file = world.configs.path(target.origin, target.role);
-                return file === null || file === undefined ? [] : [file];
-              }),
-              answers.length > 0,
-            )
-          : [];
-      for (const origin of moved)
-        reloaded.push((await configInSlot(origin, "config-landed")).settled);
-      // An act no landing let go: the close is its own cause, and any other
-      // is its changes', whose own outcome says why.
-      const unperformed: EffectOutcome =
-        landed.kind === "ok" || landed.kind === "closing"
-          ? landed
-          : { kind: "skipped", reason: `not performed: ${landed.reason}` };
-      const owed: Array<Promise<EffectOutcome>> = [];
-      const acts: HostAct[] = [];
-      for (const effect of output.effects) {
-        if (effect.kind === "present") {
-          if (input.event.kind !== "request")
-            owed.push(
-              (
-                await settleInSlot(effect, {
-                  kind: "failed",
-                  reason: `a ${input.event.kind} turn answers no request`,
-                })
-              ).settled,
-            );
-        } else if (effect.kind === "change" || effect.kind === "approve-repo")
-          owed.push((await settleInSlot(effect, landed)).settled);
-        else acts.push(effect);
-      }
-      // [LAW:no-ambient-temporal-coupling] The acts go once every change of
-      // the turn has had its `effect-done` turn, wherever the turn returned
-      // them, and each once every act over in the turn before it has ended,
-      // so two copies land in the order the turn asked them.
-      let before: Promise<unknown> = Promise.resolve();
-      for (const act of acts) {
-        const acted =
-          landed.kind === "ok"
-            ? before.then(() => world.perform(act))
-            : Promise.resolve(unperformed);
-        const settled = acted.then((outcome) => settle(act, outcome));
-        if (outlives(act)) unawaited("act", settled);
-        else {
-          owed.push(settled);
-          before = acted;
-        }
-      }
-      // [LAW:no-silent-failure] A turn settles as what it caused: its own
-      // effects, and those of the `config` turns it named, which run what
-      // waited on it, so a click that waited answers for what it did. A
-      // `config` turn its landing moved runs nothing of its own: it is
-      // waited for, and its failure is its own turn's line.
-      const settled = Promise.all([
-        Promise.all(waited),
-        Promise.all(reloaded),
-        Promise.all(owed),
-      ])
-        .then(([caused, , own]) => [...caused.flat(), ...own])
-        .finally(release);
-      return { turn, settled };
+      if (session !== null) release = collector.holding(session);
+      sentAt = clock.monotonic();
+      output = await renderer.answer(input);
     } catch (thrown) {
-      release();
+      recordTaken("session release", release);
       return unanswered(failureOf(thrown), queuedMs);
+    }
+    const { subscriptions, frames, stored, turnMs, ...answer } = output;
+    const turn: TakenTurn = {
+      ...answer,
+      queuedMs,
+      turnMs,
+      hopMs: elapsedMs(clock, sentAt) - turnMs,
+    };
+    const { settled } = await landInSlot(input.event, output);
+    return {
+      turn,
+      settled: settled.finally(
+        () => void recordTaken("session release", release),
+      ),
+    };
+  };
+
+  // [LAW:single-enforcer] After an answer, the host lands the configuration
+  // batch, publishes the output, and settles every effect. Only acts that
+  // depend on a refused configuration landing are skipped.
+  const landInSlot = async (
+    event: Event,
+    output: RendererOutput,
+  ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
+    recordTaken("turn record", () => collector.recorded(output.record));
+    const changes = output.effects.filter(
+      (effect): effect is ConfigChange => effect.kind === "change",
+    );
+    const answers = output.effects.filter(
+      (effect): effect is ApproveRepo => effect.kind === "approve-repo",
+    );
+    const landed = landConfig(changes, answers);
+    const named = took(output.subscriptions, output.frames, output.stored);
+    const waited: Array<Promise<readonly EffectOutcome[]>> = [];
+    for (const origin of named)
+      waited.push((await configInSlot(origin, "config-subscribed")).settled);
+    const moved =
+      landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0)
+        ? (recordTaken("landed config discovery", () =>
+            world.configs.landed(landed.files, answers.length > 0),
+          ) ?? [])
+        : [];
+    const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
+    for (const origin of moved)
+      reloaded.push((await configInSlot(origin, "config-landed")).settled);
+
+    const owed: Array<Promise<EffectOutcome>> = [];
+    const acts: HostAct[] = [];
+    for (const effect of output.effects) {
+      if (effect.kind === "present") {
+        if (event.kind !== "request")
+          owed.push(
+            (
+              await settleInSlot(effect, {
+                kind: "failed",
+                reason: `a ${event.kind} turn answers no request`,
+              })
+            ).settled,
+          );
+      } else if (effect.kind === "change" || effect.kind === "approve-repo") {
+        const outcome: EffectOutcome =
+          landed.kind === "ok" ? { kind: "ok" } : landed;
+        owed.push((await settleInSlot(effect, outcome)).settled);
+      } else acts.push(effect);
+    }
+
+    let before: Promise<unknown> = Promise.resolve();
+    for (const act of acts) {
+      const acted =
+        landed.kind === "ok"
+          ? before
+              .then(() => world.perform(act))
+              .catch(
+                (error: unknown): EffectOutcome => ({
+                  kind: "failed",
+                  reason: failureOf(error).detail,
+                }),
+              )
+          : Promise.resolve<EffectOutcome>(
+              landed.kind === "closing"
+                ? landed
+                : {
+                    kind: "skipped",
+                    reason: `not performed: ${landed.reason}`,
+                  },
+            );
+      const settled = acted.then((outcome) => settle(act, outcome));
+      if (outlives(act)) unawaited("act", settled);
+      else {
+        owed.push(settled);
+        before = acted;
+      }
+    }
+    // Acts settle outside this slot; their effect-done turns use the mailbox.
+    const settled = Promise.all([
+      Promise.all(waited),
+      Promise.all(reloaded),
+      Promise.all(owed),
+    ]).then(([caused, , own]) => [...caused.flat(), ...own]);
+    return { settled };
+  };
+
+  const landConfig = (
+    changes: readonly ConfigChange[],
+    answers: readonly ApproveRepo[],
+  ): ConfigLanding => {
+    try {
+      if (world.closing())
+        return { kind: "closing", reason: "the daemon is closing" };
+      if (changes.length + answers.length === 0)
+        return { kind: "ok", files: [] };
+      return performChanges(
+        changes,
+        {
+          stateDir: world.stateDir,
+          answers,
+          said: (line) =>
+            void recordTaken("trust book record", () => log("info", line)),
+        },
+        world.configs,
+      );
+    } catch (thrown) {
+      return { kind: "failed", reason: failureOf(thrown).detail };
+    }
+  };
+
+  const recordTaken = <Value>(
+    what: string,
+    operation: () => Value,
+  ): Value | null => {
+    try {
+      return operation();
+    } catch (thrown) {
+      const text = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown).detail}`;
+      log("error", text);
+      world.unheard(text);
+      return null;
     }
   };
 
@@ -377,9 +401,9 @@ export function rendererHost(
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
   ): readonly RenderOrigin[] => {
-    wake.declare(subscriptions.wake);
+    recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
     let named: readonly RenderOrigin[] = [];
-    for (const [what, take] of [
+    for (const [what, apply] of [
       ["stored writes", () => collector.stored(stored)],
       ["subscriptions", () => collector.subscribed(subscriptions)],
       ["frames", () => collector.frames(frames)],
@@ -394,13 +418,7 @@ export function rendererHost(
         },
       ],
     ] as const) {
-      try {
-        take();
-      } catch (thrown) {
-        const text = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown).detail}`;
-        log("error", text);
-        world.unheard(text);
-      }
+      recordTaken(what, apply);
     }
     return named;
   };
@@ -425,7 +443,13 @@ export function rendererHost(
     origin: RenderOrigin,
     why: string,
   ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
-    const made = configMade(origin)();
+    let made: Made;
+    try {
+      made = configMade(origin)();
+    } catch (thrown) {
+      made = failureOf(thrown);
+      record(null, [["why", why]], unanswered(made, 0).turn);
+    }
     // [LAW:no-silent-failure] An origin let go before its slot ran nothing
     // that waited on it, so the turn that named it did not do what it asked.
     if (made.kind !== "event")
@@ -550,6 +574,13 @@ export function rendererHost(
       } catch (thrown) {
         made = failureOf(thrown);
       }
+      // A new renderer holds no config, even if its start was not made or
+      // could not be answered. The first mailbox place belongs to start.
+      if (
+        at === "first" ||
+        (made.kind === "event" && made.event.kind === "start")
+      )
+        served.clear();
       if (made.kind !== "event")
         return { event: null, slotted: unanswered(made, queuedMs) };
       holds(made.event.kind);

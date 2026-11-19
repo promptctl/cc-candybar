@@ -24,7 +24,11 @@ const failure = (kind: Failure["kind"]): DueEnded => ({
 // A wake over a held clock: each timer set is recorded with the monotonic
 // moment it was set to fire at, and each `due` answers as `ends` says, after
 // `waits` ms in the mailbox.
-function rig(ends: () => DueEnded = () => answered, waits = 0) {
+function rig(
+  ends: () => DueEnded = () => answered,
+  waits = 0,
+  onLog: (text: string) => void = () => {},
+) {
   const clock = { ms: 0 };
   const timers: Array<{ at: number; run: () => void; cancelled: boolean }> = [];
   const dues: number[] = [];
@@ -45,7 +49,10 @@ function rig(ends: () => DueEnded = () => answered, waits = 0) {
       return ends();
     },
     said: (text) => void said.push(text),
-    log: (text) => void logged.push(text),
+    log: (text) => {
+      logged.push(text);
+      onLog(text);
+    },
   });
   const live = () => timers.filter((t) => !t.cancelled);
   // Fires the live timer at the moment it was set for, or at `ms`.
@@ -198,4 +205,21 @@ test("a closed wake arms nothing, a timer it held is let go, and its summary cou
       /^wake closed for=1s dues=1 failed=0 took=n:1,.* tookHistogram=\S+$/,
     ),
   ]);
+});
+
+test("a failing wake summary leaves the next due armed", async () => {
+  const r: ReturnType<typeof rig> = rig(
+    () => {
+      r.wake.declare(tick(61));
+      return answered;
+    },
+    0,
+    (text) => {
+      if (text.startsWith("wake running")) throw new Error("summary failed");
+    },
+  );
+  r.wake.declare(tick(60));
+  await r.fire();
+  expect(r.live().map((timer) => timer.at)).toEqual([61_000]);
+  expect(r.logged).toContainEqual(expect.stringContaining("summary failed"));
 });
