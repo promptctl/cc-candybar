@@ -3,7 +3,7 @@
   "schema": 2,
   "version_count": 9,
   "latest_non_pr": "main",
-  "latest_deploy_version": "pr-875",
-  "latest_deploy_sha": "c1d0ade88d4f50cd6acdf4b6a47a49e810e8962e",
-  "generated_at": "2026-11-19T15:04:28.902Z"
+  "latest_deploy_version": "pr-874",
+  "latest_deploy_sha": "c8cb0b23a263540475933a48372e51d83f25b9d2",
+  "generated_at": "2026-11-19T15:06:14.016Z"
 }
