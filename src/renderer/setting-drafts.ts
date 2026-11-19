@@ -512,6 +512,18 @@ export function fileHeldSettings(raw: RawDslConfig): ReadonlySet<string> {
   );
 }
 
+// [LAW:one-source-of-truth] How many drafts a save writes, settings and
+// placements alike: what the save cell counts, and what an edit has to keep.
+export function unsavedCount(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): number {
+  return (
+    settingDrafts(config, sessionPick).length +
+    placementDrafts(config, sessionPick).length
+  );
+}
+
 // [LAW:one-source-of-truth] What the menu's save cell counts and its controls
 // mark: every draft a save writes, settings and placements alike, and, per
 // setting, whether its reset would change anything — the session holds a
@@ -533,7 +545,7 @@ export function settingCounts(
   );
   const themeDefault = themeDefaultSave(config, sessionPick);
   return {
-    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    unsaved: unsavedCount(config, sessionPick),
     resettable,
     themeDefault:
       themeDefault.kind === "look" && themeDefault.differs

@@ -40,8 +40,8 @@ import {
   type Step,
   type SessionHistory,
   holdsNothing,
-  isSettingKey,
 } from "../renderer-interface/history-storage";
+import { isUndoStepKey } from "../config/session-key";
 import {
   addressText,
   applyChanges,
@@ -59,8 +59,8 @@ import { digestOf } from "../utils/plain.js";
 export interface HistoryDepth {
   readonly undo: number;
   readonly redo: number;
-  // How many targets differ from when edit mode opened — what `↩ cancel`
-  // would put back; 0 when edit mode is closed or nothing differs.
+  // How many config files differ from when edit mode opened; 0 when edit
+  // mode is closed or none does. Its drafts are the save cell's own count.
   readonly sinceEdit: number;
 }
 
@@ -116,8 +116,15 @@ export interface Journal {
   undo(sessionId: SessionId): Step;
   redo(sessionId: SessionId): Step;
   writes(sessionId: SessionId): ReadonlyMap<string, string | null>;
-  commit(): void;
+  // [LAW:no-ambient-temporal-coupling] The session writes it landed, handed
+  // back as a value, so no reader asks for them after they are gone.
+  commit(): ClickWrites;
 }
+
+export type ClickWrites = ReadonlyMap<
+  SessionId,
+  ReadonlyMap<string, string | null>
+>;
 
 // A pending change, keyed by what it touched so a click that writes one target
 // twice records one change from its first `before` to its last `after`.
@@ -148,13 +155,11 @@ export class SettingsHistory {
   private readonly moved = new Set<SessionId>();
 
   // `loaded` is what the profile holds, oldest first, as the host handed it
-  // in: held to the same bounds as every step that lands. `records` is the
-  // session keys a step holds.
+  // in: held to the same bounds as every step that lands.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     loaded: StoredState["history"] = {},
-    private readonly records: (key: string) => boolean = isSettingKey,
   ) {
     this.adopt(
       new Map(Object.entries(loaded) as Array<[SessionId, SessionHistory]>),
@@ -211,7 +216,7 @@ export class SettingsHistory {
     };
     const sessionState = recordingView(
       held,
-      this.records,
+      isUndoStepKey,
       (sessionId, key, before, after) => {
         note(sessionId, { kind: "session", key, before, after });
       },
@@ -255,7 +260,7 @@ export class SettingsHistory {
         const moved = new Map(working);
         working.clear();
         for (const [sessionId, history] of moved) this.put(sessionId, history);
-        held.flush();
+        return held.flush();
       },
     };
   }
@@ -515,7 +520,7 @@ function forgotten(
 // a write whose click may not land, and the click reads its own.
 function heldWrites(store: SessionStateRW): SessionStateRW & {
   readonly writes: Journal["writes"];
-  readonly flush: () => void;
+  readonly flush: () => ClickWrites;
 } {
   const held = new Map<SessionId, Map<string, string | null>>();
   const put = (sessionId: SessionId, key: string, value: string | null) => {
@@ -536,7 +541,8 @@ function heldWrites(store: SessionStateRW): SessionStateRW & {
     },
     clear: (sessionId, key) => put(sessionId, key, null),
     // One transaction, so no observer sees half a click.
-    flush: () =>
+    flush: () => {
+      const landed = new Map(held);
       runInAction(() => {
         for (const [sessionId, writes] of held) {
           const sets = [...writes].flatMap(([key, value]) =>
@@ -547,6 +553,8 @@ function heldWrites(store: SessionStateRW): SessionStateRW & {
             if (value === null) store.clear(sessionId, key);
         }
         held.clear();
-      }),
+      });
+      return landed;
+    },
   };
 }

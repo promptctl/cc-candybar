@@ -25,12 +25,8 @@
 //               can see in the template, never on tree position.
 
 import { escapedIdent, unescapedIdent } from "./ident.js";
-import {
-  EDIT_NS,
-  isEditModeKey,
-  MENU_NS,
-  MENU_PAGE_NS,
-} from "./reserved-names.js";
+import { EDIT_NS, MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
+import { isEditModeKey } from "./session-key.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -140,9 +136,8 @@ export function menuActionName(stateKey: string, member: string): string {
 // may nest under another (loader/nesting.ts), and in its menu's scope, so an
 // edit-mode list's page leaves with the edit.
 export function menuPageKey(stateKey: string): string {
-  const at = stateKey.indexOf(MENU_NS);
-  if (at < 0) throw new Error(`"${stateKey}" is no menu's state key`);
-  return `${stateKey.slice(0, at)}${MENU_PAGE_NS}${stateKey.slice(at)}`;
+  const scope = menuScope(stateKey);
+  return `${scope}${MENU_PAGE_NS}${stateKey.slice(scope.length)}`;
 }
 
 // [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE

@@ -13,8 +13,8 @@ import {
   type HistoryStorage,
   holdsNothing,
   parseSessionHistory,
-  isSettingKey,
 } from "../renderer-interface/history-storage";
+import { isUndoStepKey } from "../config/session-key";
 
 // ─── The file ───────────────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ interface Stripped {
 function withoutRetiredKeys(history: SessionHistory): Stripped {
   const retired = new Set<string>();
   const keep = (change: Change): boolean => {
-    if (change.kind === "layer" || isSettingKey(change.key)) return true;
+    if (change.kind === "layer" || isUndoStepKey(change.key)) return true;
     retired.add(change.key);
     return false;
   };

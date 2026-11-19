@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { textOf, type Frame } from "../../../src/render/frame";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
-import { isEditModeKey } from "../../../src/config/reserved-names";
+import { isEditModeKey } from "../../../src/config/session-key";
 import { menuStateKey } from "../../../src/config/menu-keys";
 import { decodeLayoutOp } from "../../../src/config/layout-ops";
 import { VERB_APPLY_LAYOUT_OP } from "../../../src/click/wire";
@@ -65,12 +65,13 @@ async function barOf(config: string): Promise<Bar> {
   return bar;
 }
 
-// What a restart loads: every edit-mode key stored, by session.
+// What a restart loads: every key of edit mode's stored, by session — its
+// own, and any spelled inside another namespace (a list's page cursor).
 async function storedEditKeys(b: Bar): Promise<string[]> {
   await b.restart();
   return Object.entries(b.stored()).flatMap(([sid, values]) =>
     Object.keys(values)
-      .filter(isEditModeKey)
+      .filter((key) => isEditModeKey(key) || key.split(".").includes("edit"))
       .map((key) => `${sid} ${key}`),
   );
 }
@@ -179,6 +180,7 @@ describe("edit mode leaves nothing behind", () => {
       await b.click("🔧", 2);
       await b.click("▶", 2);
       await b.click("✚", 1);
+      await b.click("→");
       await leave(b);
       expect(await storedEditKeys(b)).toEqual([]);
       expect(textOf(await b.render())).not.toContain("✓");
@@ -274,6 +276,43 @@ describe("one view of the session, in edit mode and out of it", () => {
     const back = (await b.click("◁")).rendered;
     expect(library(back)).toBe(false);
     expect(textOf(back)).toContain("✓ done");
+  });
+
+  test("after a saved edit, ◁ does what it would have done had the edit never happened", async () => {
+    const b = await barOf(CONFIG);
+    const other = b.session("other");
+    await other.render();
+    await other.click(DOOR_GLYPH);
+    const unedited = textOf((await other.click("◁")).rendered);
+    // A library opened, turned a page and folded: the fold clears its page.
+    await enter(b);
+    await b.click("✚");
+    await b.click("→");
+    await b.click("✚");
+    await b.click("✓ done");
+    expect(textOf((await b.click("◁")).rendered)).toBe(unedited);
+  });
+
+  test("a closed edit's steps never reopen anything in the next", async () => {
+    const b = await barOf(CONFIG);
+    const library = (frame: Frame): boolean =>
+      linksOf(frame).some((l) => l.text.startsWith("directory "));
+    await enter(b);
+    await b.click("✚");
+    await b.click("✓ done");
+    await b.click("✎ arrange");
+    await b.click("🔧", 2);
+    const back = (await b.click("◁")).rendered;
+    expect(library(back)).toBe(false);
+    expect(textOf(back)).not.toContain("n 1");
+  });
+
+  test("↶ in an edit steps a placement's unsaved value back", async () => {
+    const b = await barOf(CONFIG);
+    await enter(b);
+    await b.click("🔧", 2);
+    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("↶")).rendered)).toContain("n 1");
   });
 
   test("◁ steps the panels, never a placement's unsaved value", async () => {

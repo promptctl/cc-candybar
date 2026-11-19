@@ -15,7 +15,7 @@ import {
   type StoredState,
   type StoreWrite,
 } from "../renderer-interface/stored-state.js";
-import { quietLogger, type DaemonLogger } from "../utils/logger.js";
+import type { DaemonLogger } from "../utils/logger.js";
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
@@ -39,7 +39,7 @@ export class HeldStores {
 
   constructor(
     private readonly storage: ProfileStorage,
-    private readonly log: DaemonLogger = quietLogger,
+    private readonly log: DaemonLogger,
   ) {}
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a

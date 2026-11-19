@@ -2,8 +2,6 @@
 // renderer's history writes them, and the host's file stores them
 // (src/daemon/history-file.ts).
 
-import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
-import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import { type SessionId } from "../daemon/foundations/session-id";
 import { layerRoleOf, type LayerRole } from "../config/layer-role";
 import { isPlainObject } from "../config/loader/validate-core";
@@ -94,20 +92,3 @@ export interface HistoryStorage {
   // that order.
   save(state: ReadonlyMap<SessionId, SessionHistory>): void;
 }
-
-// [LAW:one-source-of-truth] The session keys a settings control writes, which
-// the session's undo steps. Every other session key (an open menu, a page
-// cursor, edit mode's own state) is the menu's, and undoing it would be
-// undoing navigation.
-const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey),
-);
-
-export const isSettingKey = (key: string): boolean =>
-  SETTING_SESSION_KEYS.has(key);
-
-// A placement's unsaved value is a setting of edit mode's own: it lives and
-// ends with the edit, whose undo steps it beside the settings, and it is never
-// navigation.
-export const isEditSettingKey = (key: string): boolean =>
-  isSettingKey(key) || key.startsWith(PLACEMENT_DRAFT_NS);

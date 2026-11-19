@@ -641,9 +641,13 @@ export function mainRendererOf(
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, {
-            gate: gates.state.gateFor(config),
-          }),
+          (edits.draft(sessionId)?.navigation ?? navigationHistory).depth(
+            sessionId,
+            sessionState,
+            {
+              gate: gates.state.gateFor(config),
+            },
+          ),
       }),
     },
     {

@@ -75,12 +75,8 @@ test("reading a click's errors writes nothing, so a later render inside the hold
   expect(clickErrorAt(state, SID, at(101), "feed").kind).toBe("held");
 });
 
-test("a session with no click error, or a value an older daemon wrote, holds none", () => {
+test("a session with no click error holds none", () => {
   const state = new SessionState();
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
-    kind: "none",
-  });
-  state.set(SID, "candybar.clickError", 'set-state: placement "block" refused');
   expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
     kind: "none",
   });
@@ -93,15 +89,10 @@ test("an answer carrying another failure at the same instant leaves this one owe
   expect(clickErrorAt(state, SID, at(END + 1), "request").kind).toBe("owed");
 });
 
-test("a record an older daemon wrote with no answered mark is owed to the next request", () => {
+test("a record this build did not write is said, not read as none", () => {
   const state = new SessionState();
-  state.set(
-    SID,
-    "candybar.clickError",
-    JSON.stringify({ text: "set-state: refused", at: 100 }),
+  state.set(SID, "candybar.clickError", JSON.stringify({ text: "x", at: 1 }));
+  expect(() => clickErrorAt(state, SID, at(100), "request")).toThrow(
+    /not one this build writes/,
   );
-  expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
-    kind: "owed",
-    error,
-  });
 });

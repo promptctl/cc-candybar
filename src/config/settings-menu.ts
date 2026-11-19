@@ -254,11 +254,10 @@ const accordionOf = (place: Place): string =>
     ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`)
     : PICKER_KEY;
 // [LAW:one-source-of-truth] Every accordion the menu keys, which no author's
-// `{{ menu }}` may join (loader/authored-keys.ts).
-export const SETTINGS_ACCORDIONS: ReadonlySet<string> = new Set([
-  PICKER_KEY,
-  ...SUBMENU_NAMES.map(accordionOf),
-]);
+// `{{ menu }}` may join (loader/authored-keys.ts): the one each place joins.
+export const SETTINGS_ACCORDIONS: ReadonlySet<string> = new Set(
+  Object.values(PLACE).map(accordionOf),
+);
 // A submenu is a member of the accordion the control it is laid beside sits on.
 const submenuRef = (name: SubmenuName): DisclosureRef => {
   const key = accordionOf(PLACE[SUBMENUS[name].beside]);

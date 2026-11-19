@@ -31,10 +31,10 @@
 import { URLSearchParams } from "node:url";
 
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
-import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
-import { isReservedName } from "../config/reserved-names.js";
+import { sessionKeyKind } from "../config/session-key.js";
 import { menuOfKey } from "../config/menu-keys.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
@@ -257,10 +257,11 @@ const sayStep = (key: string, by: string): string =>
 // so an authored key's `closed` is its own data. The viewer's key holds a
 // message's identity, which no reader can use, so its write says what it does.
 function sayWrite(key: string, value: string): string {
-  if (key === DIAGNOSTICS_VIEWING)
+  const { kind } = sessionKeyKind(key);
+  if (kind === "viewer")
     return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
   const set = `set ${key} to ${value}`;
-  if (!isReservedName(key)) return set;
+  if (kind !== "menu" && kind !== "edit") return set;
   const menu = menuOfKey(key);
   if (menu?.page === true)
     return `turn ${menu.menu} to page ${Number(value) + 1}`;

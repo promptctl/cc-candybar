@@ -96,7 +96,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 // `↩ cancel` discards the draft and leaves edit mode.
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-// How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
+// How many files differ from when edit mode opened (HistoryDepth.sinceEdit)
 // — the daemon's own count, read by the cells' labels and gates; a ref, never
 // a second counter. How many settings are unsaved is the settings menu's own
 // `unsaved` variable.
@@ -1001,10 +1001,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   };
   artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
-  // nothing changed there is nothing to discard.
+  // nothing to keep there is nothing to discard.
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "↩ cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${TO_KEEP} }}`,
   };
   const lead: LayoutNode[] = [
     { kind: "segment", name: EDIT_DONE_SEG },
