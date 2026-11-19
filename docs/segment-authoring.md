@@ -866,6 +866,9 @@ places its segment like any other:
 }
 ```
 
+Config and plugin definition paths must resolve to regular files. Symlinks to
+regular files work.
+
 What the definition can say, and what follows from it:
 
 - **The folder is the name.** A definition is `<name>/plugin.json5`, and

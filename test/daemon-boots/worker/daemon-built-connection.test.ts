@@ -13,12 +13,27 @@ import {
   type Monotonic,
   type Timekeeper,
 } from "../../../src/time";
-import { PROTOCOL_VERSION, type Request, type Response } from "../../../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type Request,
+  type Response,
+} from "../../../src/daemon/foundations/protocol";
+import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
+import {
+  inProcessPort,
+  type RendererPort,
+} from "../../../src/daemon/renderer-process";
 import { textOf } from "../../../src/render/frame";
 import { render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import { heldClock } from "../../helpers/held-clock";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
+import { field, landedEvents, only } from "../../helpers/request-event";
+import { hearingEvents, holdable } from "../../helpers/renderers";
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
@@ -153,5 +168,56 @@ describe("a connection to a daemon built in this worker", () => {
       "the render event of connection-clock",
     );
     expect(event).toContain(" queued=500ms ");
+  });
+
+  // [LAW:verifiable-goals] Hold a real render at the renderer boundary so the
+  // connection's backstop can win without blocking the process or waiting.
+  test("a render that outlives its request timeout writes timedOut=Y", async () => {
+    const clock = heldClock(new Date());
+    let entered = (): void => {};
+    const drawing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release = (): void => {};
+    const renderer: RendererPort = (prepared) =>
+      inProcessPort({
+        ...prepared,
+        build: (reaches) => {
+          const held = holdable(prepared.build(reaches));
+          return hearingEvents(held.renderer, ({ event }) => {
+            if (event.kind === "request") {
+              release = held.hold();
+              entered();
+            }
+          });
+        },
+      });
+    const running = startDaemon(process.env, { clock, renderer });
+    started = running;
+    const opened = openedOn(running.connect());
+    try {
+      opened.send(renderRequest("ev-backstop", clock.now() + 2_000));
+      await drawing;
+      await clock.settle(REQUEST_TIMEOUT_MS + 1);
+      expect(await answered(opened)).toMatchObject({
+        ok: false,
+        code: "TIMEOUT",
+      });
+      release();
+
+      const late = only(await landedEvents(process.env, "ev-backstop", 1));
+      expect(field(late, "outcome")).toBe("ok");
+      expect(field(late, "timedOut")).toBe("Y");
+      expect(field(late, "took")).toBe(`${REQUEST_TIMEOUT_MS + 1}ms`);
+      expect(opened.received).toHaveLength(1);
+      const stats = openedOn(running.connect());
+      stats.send({ v: PROTOCOL_VERSION, kind: "stats" });
+      expect(await answered(stats)).toMatchObject({
+        ok: true,
+        stats: { renderCache: { held: 0 } },
+      });
+    } finally {
+      release();
+    }
   });
 });
