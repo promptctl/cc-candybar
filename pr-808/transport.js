@@ -30525,12 +30525,6 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
 function sessionStatePath(host) {
   return import_node_path5.default.join(stateDir(host), "session-state.json");
 }
@@ -30556,7 +30550,6 @@ function logPath(host) {
 function daemonPaths(host) {
   return {
     socket: socketPath(host),
-    lease: leasePath(host),
     state: stateDir(host),
     registry: daemonRegistryDir(host),
     log: logPath(host),
@@ -50798,12 +50791,56 @@ var refusedRender = (problems) => ({
 init_globals();
 init_os();
 var import_node_path14 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process.kill(pid2, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+function sameProcess(a, b) {
+  if (a.pid !== b.pid) return "different";
+  if (a.startTime === null || b.startTime === null) return "incomparable";
+  return a.startTime === b.startTime ? "same" : "different";
+}
+
+// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path14.default.join(stateDir2, "update-act", key);
 }
 function looked(prev, job, began, done, longestLookMs) {
-  if (prev === null || !sameJob(prev.job, job)) {
+  if (prev === null || !sameRecord(prev.job, job)) {
     return {
       kind: "first",
       watched: {
@@ -50888,7 +50925,7 @@ var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
 async function isRecordedJob(record2, read2, jobs, boot) {
   if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
-  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
+  return leader.kind === "unavailable" || sameProcess(record2, { pid: record2.pid, startTime: leader.token }) !== "different";
 }
 function readRecord(actDir) {
   const file = recordOf(actDir);
@@ -50913,15 +50950,16 @@ function parsedRecord(file, text4) {
   }
   throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
-var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
+var sameRecord = (a, b) => a.identity === b.identity && a.pid === b.pid && a.startTime === b.startTime && a.started === b.started;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
-    if (known === null || !sameJob(known.record, record2)) {
+    if (known === null || known.act !== act2 || !sameRecord(known.record, record2)) {
       known = {
+        act: act2,
         record: record2,
         ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
@@ -51096,7 +51134,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.8";
+var PACKAGE_VERSION = "1.232.10";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -54281,6 +54319,10 @@ var GLOBAL_FIELDS = {
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
   menuGlyph: text2(menuGlyphSpec)
 };
+function settingNameOf(field) {
+  const row2 = GLOBAL_FIELDS[field];
+  return row2.kind === "selection" ? row2.sessionKey : field;
+}
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
   ([, row2]) => row2.kind === "session" || row2.kind === "config"
@@ -54307,13 +54349,9 @@ function wireKindOf(field) {
 
 // src/config/setting-projections.ts
 var effectiveVarOf = (name) => `${name}.effective`;
-var nameOf = (field) => {
-  const row2 = GLOBAL_FIELDS[field];
-  return row2.kind === "selection" ? row2.sessionKey : field;
-};
 var SETTINGS = Object.fromEntries(
   CONTROLLED_FIELDS.map((field) => {
-    const name = nameOf(field);
+    const name = settingNameOf(field);
     return [
       name,
       {
@@ -61955,10 +61993,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf3 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
+  const nameOf2 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
   const actions = {};
   for (let held2 = 0; held2 < 2 ** gates.length; held2++)
-    actions[nameOf3(held2)] = {
+    actions[nameOf2(held2)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -61966,7 +62004,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i2, held2) => i2 === gates.length ? `"${nameOf3(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
+  const link = (i2, held2) => i2 === gates.length ? `"${nameOf2(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -72815,7 +72853,7 @@ function resolveValued(field, staged, sessionPick, globals) {
   const row2 = valuedRow(field);
   return effectiveGlobal(
     staged[field],
-    row2.kind === "session" ? sessionPick(field) : null,
+    row2.kind === "session" ? sessionPick(settingNameOf(field)) : null,
     globals[field],
     row2.floor,
     row2.parse
@@ -72823,7 +72861,9 @@ function resolveValued(field, staged, sessionPick, globals) {
 }
 function presetOf(config2, sessionPick) {
   return effectivePresetName(
-    sessionPick("preset"),
+    // [LAW:one-source-of-truth] Read under the key a preset pick is written
+    // under.
+    sessionPick(settingNameOf("preset")),
     config2.globals.preset,
     config2.presets
   );
@@ -72834,7 +72874,7 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config2.editGlobals : {};
   const theme24 = resolveThemeSelection(
     staged.palette,
-    sessionPick("theme"),
+    sessionPick(settingNameOf("palette")),
     declared.palette
   );
   const globals = underThemeDefault(
@@ -72853,13 +72893,13 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
     theme: theme24,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick("style"),
+      sessionPick(settingNameOf("style")),
       globals.style,
       config2.styles
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick("effect"),
+      sessionPick(settingNameOf("effect")),
       globals.effect
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
@@ -75089,7 +75129,7 @@ var OUTLIVES = {
   surface: true
 };
 var outlives = (act2) => OUTLIVES[act2.kind];
-function nameOf2(act2) {
+function nameOf(act2) {
   switch (act2.kind) {
     case "copy":
     case "open":
@@ -75225,9 +75265,9 @@ var Acts = class {
     const { outcome, said: said2 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act2);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf2(act2)}: ${said2}`
+      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf(act2)}: ${said2}`
     );
-    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act2)}: ${outcome.reason}` };
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf(act2)}: ${outcome.reason}` };
   }
   async performed(act2) {
     try {
@@ -87202,11 +87242,7 @@ function landingKey(config2, preset, field) {
   return field in (presetByName(config2.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
 }
 function durableLanding(config2, sessionPick, key) {
-  const preset = effectivePresetName(
-    sessionPick(SETTINGS.preset.sessionKey),
-    config2.globals.preset,
-    config2.presets
-  );
+  const preset = presetOf(config2, sessionPick);
   const target = parsePersistTarget(key);
   return {
     key: target?.scope === "globals" ? landingKey(config2, preset, target.field) : key,
@@ -95616,43 +95652,6 @@ function productionClaudeInputEdge(launcher) {
   return {
     read: (hint) => read(launcher, hint),
     type: (hint, line) => type2(launcher, hint, line)
-  };
-}
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
   };
 }
 
