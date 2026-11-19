@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5963672e13da996839cf05d223e81c4ddc63f648",
-      "timestamp": "2026-11-19T23:24:38.033Z",
+      "sha": "6611e97d364f8951f711c89a3c951456c0e94ca7",
+      "timestamp": "2026-11-19T23:31:21.285Z",
       "commits": [
         {
-          "sha": "5963672e13da996839cf05d223e81c4ddc63f648",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:23:39-07:00",
-          "message": "fix(renderer): settle pane deliveries and inspections in their owning turns (#912)\n\n* build(renderer): reject host modules across the process import graph\n\n* test(renderer): replay captured private-wire turns\n\n* refactor(renderer): boot with only the transport clock\n\n* refactor(renderer): deliver inspection and shutdown as events\n\n* test(renderer): compare core construction in captured replay\n\n* build(renderer): keep host observations outside the render graph\n\n* fix(renderer): check inspection payloads before use\n\n* fix(host): admit command replies before settling their work\n\n* refactor(renderer): require each command own reply type\n\n* fix(host): validate inspection data before accepting a turn\n\n* fix(renderer): translate pane receipts across process generations\n\n* style(host): format the startup turn signature"
+          "sha": "6611e97d364f8951f711c89a3c951456c0e94ca7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T23:30:14Z",
+          "message": "chore(release): set `package.json` to 1.235.15\n\n## [1.235.15](https://github.com/promptctl/cc-candybar/compare/v1.235.14...v1.235.15) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** settle pane deliveries and inspections in their owning turns ([#912](https://github.com/promptctl/cc-candybar/issues/912)) ([5963672](https://github.com/promptctl/cc-candybar/commit/5963672e13da996839cf05d223e81c4ddc63f648))\n"
         }
       ]
     },
