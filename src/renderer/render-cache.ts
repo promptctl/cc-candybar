@@ -1306,8 +1306,16 @@ export class RenderCache<
       if (draft !== null) key = draftKey(editing);
     }
     const existing = this.entries.get(key);
+    const priorRepo = existing?.snapshot.repo;
+    // [LAW:types-are-the-program] A draft can fall back to its last good
+    // render only while that render's repository approval still holds.
+    const lostApproval =
+      draft !== null &&
+      priorRepo?.standing === "approved" &&
+      (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
     if (
       existing !== undefined &&
+      !lostApproval &&
       originKey(existing.origin) === originKey(origin)
     ) {
       this.entries.delete(key);
@@ -1434,9 +1442,10 @@ export class RenderCache<
     const view = this.views.get(sessionId);
     if (view === undefined) return;
     const { origin } = this.leaseOf(view).entry;
+    const requested = view.facts();
     const entry = this.getOrCreate(origin, sessionId);
     if (this.views.get(sessionId)?.state !== entry.state)
-      this.viewOf(entry, entry.state, view.facts(), "reload");
+      this.viewOf(entry, entry.state, requested, "reload");
     if (this.deps.editSnapshot?.(origin, sessionId) == null)
       this.dropDraft(sessionId);
     this.observers.onViewChanged?.(sessionId);
