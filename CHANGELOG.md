@@ -1,3 +1,9 @@
+## [1.232.13](https://github.com/promptctl/cc-candybar/compare/v1.232.12...v1.232.13) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** settle host effects after the renderer answers (ibyq.3h0) ([#844](https://github.com/promptctl/cc-candybar/issues/844)) ([30d7a34](https://github.com/promptctl/cc-candybar/commit/30d7a34587b836199bfd5c0bb320894e7119c63e))
+
 ## [1.232.12](https://github.com/promptctl/cc-candybar/compare/v1.232.11...v1.232.12) (2026-11-19)
 
 ### Bug Fixes
