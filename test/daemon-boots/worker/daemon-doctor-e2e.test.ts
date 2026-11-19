@@ -547,28 +547,37 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
     expect(run).toBeDefined();
+    // Each run's report is noted on the record of the turn that took its
+    // reading. [LAW:no-ambient-temporal-coupling] A click while the session's
+    // run waits for its reading starts no run, so each click waits for the
+    // run before it to be noted.
+    const doctorLines = (lines: readonly string[]) =>
+      lines.filter((l) => {
+        const fields = fieldsOf(l);
+        return fields.has("doctor") && fields.get("sid") === SID;
+      });
+    const runs = (n: number) =>
+      loggedLines(
+        env,
+        doctorLines,
+        (found) => found.length >= n,
+        `the doctor's ${n} runs`,
+      );
+    const moves =
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval";
     await click(daemon, run!);
-    await reported(
-      draw,
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
-    );
+    await runs(1);
+    await reported(draw, moves);
 
-    // The config is polled, so the doctor runs once the bar draws the edit.
-    writeFileSync(projectConfig, barOf("at rest"));
-    await reported(draw, "at rest");
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
-    // when that starts (candybar-animation-wbxz.014), so the bar moves.
-    const underMenu =
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
-    // [LAW:no-ambient-temporal-coupling] A click while the session's run waits
-    // for its reading starts no run, so each click waits for the run before it
-    // to report: a run's click clears its row, and the row is drawn again only
-    // once the reading is in.
+    // when that starts (candybar-animation-wbxz.014), so the bar moves. The
+    // config is polled, so the doctor runs once the bar draws the edit.
+    writeFileSync(projectConfig, barOf("at rest"));
+    await reported(draw, "at rest");
     await click(daemon, run!);
-    await reported(draw, underMenu);
-    await click(daemon, run!);
-    await reported(draw, underMenu);
+    await runs(2);
+    await reported(draw, moves);
 
     // The same bar with its menu closed is still, and passes.
     await click(
@@ -577,6 +586,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
     await draw();
     await click(daemon, run!);
+    await runs(3);
     await click(
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
@@ -593,25 +603,15 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(menuIdle[0]).toBe("-");
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
-    // Each run's report is noted on the record of the turn that took its
-    // reading.
-    const doctorLines = (lines: readonly string[]) =>
-      lines.filter((l) => {
-        const fields = fieldsOf(l);
-        return fields.has("doctor") && fields.get("sid") === SID;
-      });
-    expect(
-      (
-        await loggedLines(
-          env,
-          doctorLines,
-          (found) => found.length >= 4,
-          "the doctor's four runs",
-        )
-      ).map((l) => fieldsOf(l).get("frames")),
-      // The third run's still bar sits under a menu counting down to its
-      // close, which moves it; the fourth's menu is closed.
-    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);
+    // The frames each run judged, counted moves/can-move/still/failed/drawing:
+    // the first run's bar animates its template; the second's is at rest but
+    // drawn under the open menu it was clicked from, which counts down to its
+    // close; the third's menu is closed, so its bar is still.
+    expect((await runs(3)).map((l) => fieldsOf(l).get("frames"))).toEqual([
+      "1/0/0/0/0",
+      "1/0/0/0/0",
+      "0/0/1/0/0",
+    ]);
   } finally {
     await daemon.stop();
     removeTmpDirs();

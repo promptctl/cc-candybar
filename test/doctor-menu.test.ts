@@ -16,7 +16,11 @@ import { systemTimekeeper } from "../src/time";
 import type { PostMortem } from "../src/daemon/foundations/memory-limit";
 import type { Asked } from "../src/doctor/checks";
 import { daemonSighted } from "../src/daemon/cache/doctor";
-import { readDoctorNote } from "../src/renderer-interface/noted-doctor";
+import {
+  DOCTOR_RUN_NAME_NOTE,
+  DOCTOR_RUN_NOTE,
+  readDoctorNote,
+} from "../src/renderer-interface/noted-doctor";
 import { valueOf, type Field } from "../src/utils/logfmt";
 import {
   emptyStores,
@@ -527,10 +531,21 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
     await clickUrl(run, rt.ctx);
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
-    // A second click while the run is on its way asks no other.
+    // A second click while the run is on its way asks no other, and its
+    // record says it joined that run.
     const asked = rt.ctx.doctorRuns.subscriptions().get(S1);
+    const askedOn = (): string[] =>
+      rt.ctx.record
+        .filter(
+          ([key]) => key === DOCTOR_RUN_NOTE || key === DOCTOR_RUN_NAME_NOTE,
+        )
+        .map(([, value]) => value);
+    const before = askedOn();
     await clickUrl(run, rt.ctx);
     expect(rt.ctx.doctorRuns.subscriptions().get(S1)).toEqual(asked);
+    const name = String(rt.ctx.doctorRuns.waiting(S1));
+    expect(before.slice(-2)).toEqual(["started", name]);
+    expect(askedOn().slice(before.length)).toEqual(["joined", name]);
     await rt.click(run);
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
   });

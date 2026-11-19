@@ -159,7 +159,15 @@ import {
   decodeWire,
   failureOf,
 } from "../../daemon/foundations/verb-error";
-import type { RequestFacts } from "../../daemon/foundations/request-event";
+import {
+  noteFacts,
+  type RequestFacts,
+} from "../../daemon/foundations/request-event";
+import {
+  DOCTOR_RUN_NAME_NOTE,
+  DOCTOR_RUN_NOTE,
+  type RunAsked,
+} from "../../renderer-interface/noted-doctor";
 import type { ActsOnTheirWay } from "../acts";
 import {
   parseSessionId,
@@ -1192,12 +1200,30 @@ const applyUpdate: VerbHandler = (value, ctx) =>
 // turn's subscriptions name it, after the turn's changes have landed.
 function startRun(ctx: ClickContext, sid: SessionId): void {
   const origin = sessionOrigin(ctx, sid);
-  ctx.doctorRuns.start(ctx.sessionState, sid, {
+  const run = ctx.doctorRuns.start(ctx.sessionState, sid, {
     at: ctx.now(),
     load: ctx.doctorLoad(origin),
     target: origin.target,
     pick: (key) => ctx.sessionState.get(sid, key),
     arrival: ctx.arrival,
+  });
+  noteRun(ctx, "started", run);
+}
+
+// A click while the session's run is on its way starts no other: the launcher
+// refuses a probe within a second of the last of its kind, so a second run
+// behind the first would be refused, and the first is the one the click asks.
+function askRun(ctx: ClickContext, sid: SessionId): void {
+  const waiting = ctx.doctorRuns.waiting(sid);
+  if (waiting === null) startRun(ctx, sid);
+  else noteRun(ctx, "joined", waiting);
+}
+
+// [LAW:nothing-unseen] The click's record names the run it asked, and how.
+function noteRun(ctx: ClickContext, asked: RunAsked, run: number): void {
+  noteFacts(ctx.record, {
+    [DOCTOR_RUN_NOTE]: asked,
+    [DOCTOR_RUN_NAME_NOTE]: String(run),
   });
 }
 
@@ -1212,19 +1238,14 @@ function reportedFacts(
 ): DoctorFacts {
   const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
   if (facts !== null) return facts;
-  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
+  askRun(ctx, sid);
   throw new BadVerbArgs(
     `${verb}: the doctor's report is being read — click again once it is in`,
   );
 }
 
-// A click while the session's run is on its way starts no other: the launcher
-// refuses a probe within a second of the last of its kind, so a second run
-// behind the first would be refused, and the first is the one the click asks.
-const doctorRun: VerbHandler = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
-};
+const doctorRun: VerbHandler = (value, ctx) =>
+  askRun(ctx, requireSessionId(oneArg(value)));
 
 // The fix THIS check's verdict carries over the reported facts. A settings fix
 // is a change guarded by what the run read of the one setting it writes

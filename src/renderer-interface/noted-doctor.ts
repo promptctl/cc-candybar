@@ -8,6 +8,13 @@
 // The field the note rides in.
 export const DOCTOR_NOTE = "doctor";
 
+// [LAW:nothing-unseen] The fields a doctor click's record names the session's
+// run in: whether the click started it or joined the one already on its way,
+// and the run's name, so a click that starts nothing is seen doing so.
+export const DOCTOR_RUN_NOTE = "doctorRun";
+export const DOCTOR_RUN_NAME_NOTE = "doctorRunName";
+export type RunAsked = "started" | "joined";
+
 // [LAW:types-are-the-program] One check's verdict as the record carries it:
 // ok, with what the check could not judge where it says so; or failed, with
 // every problem it found, whether the bar can fix it, and the glyphs it asks

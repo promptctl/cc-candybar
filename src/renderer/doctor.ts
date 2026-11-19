@@ -98,8 +98,12 @@ export class DoctorRuns {
   // names no run an earlier one asked: the host may still hold that run's
   // reading, which would be taken for the new run's. The report the run
   // replaces goes from `store`, the click's view, with it: no verdict or
-  // [fix] stands for a run no longer the session's.
-  start(store: SessionStateRW, session: SessionId, request: RunRequest): void {
+  // [fix] stands for a run no longer the session's. Answers the run's name.
+  start(
+    store: SessionStateRW,
+    session: SessionId,
+    request: RunRequest,
+  ): number {
     store.setBatch(session, UNRUN);
     this.last = Math.max(Math.round(request.at * 1000), this.last + 1);
     this.runs.set(session, {
@@ -109,11 +113,14 @@ export class DoctorRuns {
       arrival: request.arrival,
       reading: null,
     });
+    return this.last;
   }
 
-  // Whether the session's run is on its way: asked, its reading not in.
-  awaiting(session: SessionId): boolean {
-    return this.runs.get(session)?.reading === null;
+  // The name of the session's run on its way (asked, its reading not in), or
+  // null when it has none.
+  waiting(session: SessionId): number | null {
+    const run = this.runs.get(session);
+    return run === undefined || run.reading !== null ? null : run.ask.run;
   }
 
   // [LAW:one-source-of-truth] What each session's unread run asks the host to
