@@ -47720,6 +47720,20 @@ var boundOf = (folder) => {
 var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
 var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
+// src/daemon/foundations/polled-entry.ts
+init_globals();
+function polledEntryOf(stat3) {
+  const identity2 = `${stat3.mode}:${identityKey(stat3)}`;
+  return stat3.isDirectory() ? identity2 : `${identity2}:${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
+}
+function readPolledEntry(at) {
+  try {
+    return polledEntryOf(lstatSync(at, { bigint: true }));
+  } catch (error) {
+    return `error:${error.code}`;
+  }
+}
+
 // src/daemon/foundations/watch-targets.ts
 init_globals();
 
@@ -47804,6 +47818,7 @@ var failedOf = (d) => ({
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
+var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 var isBelow = (at, root) => at.startsWith(root + import_node_path7.default.sep);
 function dirsBelow(at, held, trusted, unlisted) {
@@ -47821,15 +47836,6 @@ function dirsBelow(at, held, trusted, unlisted) {
     const below = import_node_path7.default.join(at, e.name);
     return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
   });
-}
-function entryAt(at) {
-  try {
-    const s = fs_default.lstatSync(at, { bigint: true });
-    const identity2 = `${s.mode}:${identityKey({ dev: s.dev, ino: s.ino, birthtimeNs: s.birthtimeNs })}`;
-    return s.isDirectory() ? identity2 : `${identity2}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-  } catch (e) {
-    return `error:${e.code}`;
-  }
 }
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
@@ -47853,13 +47859,14 @@ var WatcherRegistry = class {
   // Keys acquired in this window belong to it until their last release.
   batch(completed) {
     const window2 = { pending: null, completed };
-    const acquire = (key, targets, onInvalidate) => this.acquired(key, targets, onInvalidate, window2);
+    const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
     return {
       acquire,
-      follow: (held, spec, onInvalidate) => this.followed(
+      follow: (held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) => this.followed(
         held,
         spec,
-        (key, targets) => acquire(key, targets, onInvalidate)
+        observed2,
+        (key, targets) => acquire(key, targets, onInvalidate, observed2)
       )
     };
   }
@@ -47869,13 +47876,15 @@ var WatcherRegistry = class {
   // original target set (consumers must use a fresh key if they need different
   // targets). A consumer that needs no more than "something changed" ignores
   // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    return this.acquired(key, targets, onInvalidate);
+  acquire(key, targets, onInvalidate, observed2) {
+    return this.acquired(key, targets, onInvalidate, observed2);
   }
-  acquired(key, targets, onInvalidate, window2) {
+  acquired(key, targets, onInvalidate, observed2 = NO_OBSERVATIONS, window2) {
     if (this.closed) {
       return {
         release: () => {
+        },
+        observed: () => {
         },
         deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
           (path31) => ({
@@ -47898,25 +47907,31 @@ var WatcherRegistry = class {
       this.reconciled(shared, "acquire", null);
     }
     this.sighted(
-      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? []),
+      observed2
     );
-    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null });
-    const holder = { onInvalidate };
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null }, observed2);
+    const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
     slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
+    const handle = this.makeHandle(slot, holder);
+    handle.observed(observed2);
+    return handle;
   }
   // The held watch following `spec` (`followWatch`).
-  follow(held, spec, onInvalidate) {
+  follow(held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) {
     return this.followed(
       held,
       spec,
-      (key, targets) => this.acquire(key, targets, onInvalidate)
+      observed2,
+      (key, targets) => this.acquire(key, targets, onInvalidate, observed2)
     );
   }
-  followed(held, spec, acquire) {
+  followed(held, spec, observed2, acquire) {
     const followed = followWatch(held, spec, acquire);
-    if (followed.move === "kept")
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    if (followed.move === "kept") {
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed2);
+      followed.watch.handle.observed(observed2);
+    }
     return followed;
   }
   // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
@@ -47926,15 +47941,15 @@ var WatcherRegistry = class {
   // heard. Only the sweep fires, so the work a path drives stays once a
   // period; a change undone before the holder acquired or followed is one no
   // poll sees.
-  // [LAW:escape-local-minima] exception: seeing a change undone before the
-  // holder looks needs the entry the holder read, which polled consumers do
-  // not yet hand over.
-  sighted(records) {
+  // [LAW:escape-local-minima] exception: a child that does its own reads
+  // cannot supply descriptor evidence to its parent. Its hold still compares
+  // against the registry's best available observation.
+  sighted(records, observed2) {
     for (const record2 of records)
-      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+      if (!observed2.has(record2.path) && record2.entry !== UNSEEN && readPolledEntry(record2.path) !== record2.entry)
         record2.entry = UNSEEN;
   }
-  opened(key, targets, window2) {
+  opened(key, targets, window2, observed2) {
     const slot = {
       key,
       targets: targets.dirs,
@@ -47945,7 +47960,7 @@ var WatcherRegistry = class {
     };
     this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
-      const record2 = this.polledAt(at);
+      const record2 = this.polledAt(at, observed2.get(at));
       record2.slots.add(slot);
       slot.polled.push(record2);
     }
@@ -48195,6 +48210,14 @@ var WatcherRegistry = class {
       },
       // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
       ridesStream: slot.listeners.size > 0,
+      observed: (files) => {
+        if (!slot.holders.has(holder)) return;
+        holder.observed.clear();
+        for (const { path: path31 } of slot.polled) {
+          const seen = files.get(path31);
+          if (seen !== void 0) holder.observed.set(path31, seen);
+        }
+      },
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -48232,14 +48255,12 @@ var WatcherRegistry = class {
     if (this.polled.size === 0) this.disarmSweep();
     if (this.counters) this.counters.watchersClosed++;
   }
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, which the acquire sights.
-  polledAt(at) {
+  polledAt(at, observed2) {
     const held = this.polled.get(at);
     if (held !== void 0) return held;
     const record2 = {
       path: at,
-      entry: entryAt(at),
+      entry: observed2 ?? readPolledEntry(at),
       slots: /* @__PURE__ */ new Set()
     };
     this.polled.set(at, record2);
@@ -48269,11 +48290,19 @@ var WatcherRegistry = class {
   // path, through the slot's debounce, as a directory watch reports a child.
   readPolled() {
     for (const record2 of this.polled.values()) {
-      const now2 = entryAt(record2.path);
-      if (now2 === record2.entry) continue;
+      const now2 = readPolledEntry(record2.path);
+      const previous2 = record2.entry;
       record2.entry = now2;
-      for (const slot of record2.slots)
-        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      for (const slot of record2.slots) {
+        let changed = false;
+        for (const holder of slot.holders) {
+          const seen = holder.observed.get(record2.path) ?? previous2;
+          holder.observed.delete(record2.path);
+          changed ||= now2 !== seen;
+        }
+        if (changed)
+          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      }
     }
   }
   // The slots held now.
@@ -66490,7 +66519,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.234.2";
+var PACKAGE_VERSION = "1.234.3";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -86582,8 +86611,8 @@ var EditTransactions = class {
     runInAction(() => this.entries.delete(sid));
   }
   update(sid, draft) {
-    const revision2 = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision: revision2 }));
+    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision }));
   }
 };
 
@@ -89636,9 +89665,6 @@ function contentAt({ resolution, locations: locations2 }, place, files) {
 init_globals();
 var MAX_ENTRIES4 = 256;
 var MAX_BYTES2 = 4 * 1024 * 1024;
-function revision(stat3) {
-  return `${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
-}
 var ConfigText = class {
   constructor(open2 = withRegularTextFile) {
     this.open = open2;
@@ -89649,28 +89675,28 @@ var ConfigText = class {
   read(file) {
     return this.open(file, (opened) => {
       const key = identityKey(opened.observed);
-      const version = revision(opened.observed);
+      const entry = polledEntryOf(opened.observed);
       const held = this.held.get(key);
       if (held !== void 0) {
         this.held.delete(key);
-        if (held.revision === version) {
+        if (held.entry === entry) {
           this.held.set(key, held);
-          return held.text;
+          return held;
         }
         this.bytes -= held.bytes;
       }
       const text4 = opened.text();
       const bytes = text4.length * 2;
-      if (bytes <= MAX_BYTES2 && revision(opened.stat()) === version) {
-        this.held.set(key, { revision: version, text: text4, bytes });
+      if (bytes <= MAX_BYTES2 && polledEntryOf(opened.stat()) === entry) {
+        this.held.set(key, { entry, text: text4, bytes });
         this.bytes += bytes;
-        for (const [oldest, entry] of this.held) {
+        for (const [oldest, entry2] of this.held) {
           if (this.held.size <= MAX_ENTRIES4 && this.bytes <= MAX_BYTES2) break;
           this.held.delete(oldest);
-          this.bytes -= entry.bytes;
+          this.bytes -= entry2.bytes;
         }
       }
-      return text4;
+      return { entry, text: text4 };
     });
   }
   clear() {
@@ -89738,7 +89764,7 @@ var ConfigDiscovery = class {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = this.shared();
+      const shared = this.batch();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -89815,7 +89841,7 @@ var ConfigDiscovery = class {
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = this.shared();
+    const shared = this.batch();
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
@@ -89840,14 +89866,20 @@ var ConfigDiscovery = class {
     );
     return moved2;
   }
-  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
-  // one physical-text owner reuses bytes once the descriptor proves its revision.
-  shared() {
-    return readShared(this.deps, {
+  // [LAW:single-enforcer] The observation supplied to a poll watch comes
+  // from the same descriptor as the snapshot's text.
+  batch() {
+    const observed2 = /* @__PURE__ */ new Map();
+    const facts = readShared(this.deps, {
       ...diskFiles,
-      text: textFrom((file) => this.texts.read(file)),
+      text: textFrom((path31) => {
+        const read2 = this.texts.read(path31);
+        observed2.set(path31, read2.entry);
+        return read2.text;
+      }),
       ...this.deps.files?.()
     });
+    return { facts, observed: observed2 };
   }
   // What discovery finds at `origin` now, with its watch following the
   // targets that finding names, and what that watch cannot hear in the
@@ -89858,7 +89890,7 @@ var ConfigDiscovery = class {
         ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd
       },
-      shared
+      shared.facts
     );
     const key = originKey(origin);
     const paths2 = watchTargetsFor(found2);
@@ -89866,9 +89898,14 @@ var ConfigDiscovery = class {
       ...paths2,
       key: `config:${JSON.stringify(key)}:${paths2.key}`
     };
-    const { watch: watch2, move } = this.watches.follow(held, spec, () => {
-      this.invalidated.add(key);
-    });
+    const { watch: watch2, move } = this.watches.follow(
+      held,
+      spec,
+      () => {
+        this.invalidated.add(key);
+      },
+      shared.observed
+    );
     if (move === "rebound") this.bound(origin, paths2);
     const snapshot = {
       ...found2.snapshot,

@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-875",
+      "ref": "refs/pull/875/merge",
+      "sha": "2a263f9dcc9b493e0a164120b226e47763656478",
+      "timestamp": "2026-11-19T14:56:51.841Z",
+      "commits": [
+        {
+          "sha": "2a263f9dcc9b493e0a164120b226e47763656478",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:55:31-07:00",
+          "message": "Merge 1871d2bae253baa449ae0a31f8d2e856d8992589 into ba64a50c816d01574c923bb0ef96182d56914d25\n"
+        },
+        {
+          "sha": "1871d2bae253baa449ae0a31f8d2e856d8992589",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:34:35-07:00",
+          "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-882",
       "ref": "refs/pull/882/merge",
       "sha": "efd4451c2117266fa346d07183747bfe0f27b2b6",
@@ -92,28 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-875",
-      "ref": "refs/pull/875/merge",
-      "sha": "71d60e61f159428247addb3f8b9c52a65d2cb779",
-      "timestamp": "2026-11-19T14:37:42.910Z",
-      "commits": [
-        {
-          "sha": "71d60e61f159428247addb3f8b9c52a65d2cb779",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:36:41Z",
-          "message": "Merge aaa17ead7c8e088dba92459ce1a29d0f1653345e into 481101f839d97ef1ae569bddbf9336ec8cfe52b5\n"
-        },
-        {
-          "sha": "aaa17ead7c8e088dba92459ce1a29d0f1653345e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:34:35-07:00",
-          "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
         }
       ]
     },
