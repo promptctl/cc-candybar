@@ -425,6 +425,7 @@ export async function replyTo(
     if (!checked.ok) return recorded(refusedRender(checked.problems));
     const answered = await answerStatusline(
       parts.renderer,
+      parts.publishFrame,
       parts.collector,
       clock,
       parts.closing,

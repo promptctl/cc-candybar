@@ -42,6 +42,7 @@ import {
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RequestFacts } from "./foundations/request-event.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import { publishingFrames } from "./foundations/frame-publication.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
 // What builds the renderer: the main renderer, unless a test wraps it.
@@ -238,6 +239,7 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     },
   };
   const answering = host;
+  const publish = publishingFrames(inputs.linkSigner);
   let id = 0;
   return {
     draw: async (req, environment, waitEndsAt) => {
@@ -245,6 +247,7 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       const from = turns.length;
       const answer = await answerStatusline(
         answering,
+        publish,
         collector,
         world.clock,
         new AbortController().signal,

@@ -49,6 +49,7 @@ import { clickLaunchVia } from "./foundations/click-launch.js";
 import { Acts } from "./acts.js";
 import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
+import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost } from "./renderer-host.js";
@@ -290,6 +291,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
+  const publishFrame = publishingFrames(linkSigner);
   // [LAW:single-enforcer] The renderer's stored state, held here: every
   // renderer is built from what it holds then, and every turn's stored writes
   // move it.
@@ -421,6 +423,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // handed to the renderer, whose feeds draw them, and what each subscriber
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
+    publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: (make) =>
@@ -605,6 +608,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     sessionBook,
     stats,
     linkSigner,
+    publishFrame,
     renderSightings,
     watcherRegistry,
     refreshLedger,

@@ -86,6 +86,7 @@ import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
 import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
@@ -902,6 +903,7 @@ function statusline(r: Rig, configFile: string) {
     const facts: RequestFacts = [];
     const answered = await answerStatusline(
       host,
+      publishingFrames(TEST_SIGNER),
       r.collector,
       systemTimekeeper,
       new AbortController().signal,

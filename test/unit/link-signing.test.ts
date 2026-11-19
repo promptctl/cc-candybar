@@ -4,7 +4,6 @@
 
 import {
   linkSigner,
-  signingFrames,
   transitForm,
   unprovenLink,
   type LinkSigner,
@@ -12,6 +11,7 @@ import {
 import { effectsUrl, VERB_COPY } from "../../src/click/wire";
 import { effectsOf } from "../../src/click/read";
 import { parseClick } from "../../src/daemon/click-reading";
+import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import type { Frame } from "../../src/render/frame";
 import { TEST_SIGNER } from "../helpers/link-signer";
 
@@ -134,7 +134,7 @@ describe("a draw's frames", () => {
   });
 
   test("sign every bar link however many cells repeat it, and leave other schemes as they are", () => {
-    const sign = signingFrames(TEST_SIGNER);
+    const sign = publishingFrames(TEST_SIGNER);
     const pr = "https://github.com/o/r/pull/1";
     const drawn = [
       sign(frame([COPY, COPY, pr, undefined])),

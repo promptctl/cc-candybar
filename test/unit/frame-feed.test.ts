@@ -15,6 +15,8 @@ import {
   type Subscriber,
 } from "../../src/daemon/frame-feed";
 import type { Refusal } from "../../src/daemon/foundations/protocol";
+import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
+import { TEST_SIGNER } from "../helpers/link-signer";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
 import type { WireFrame } from "../../src/render/frame";
 import type {
@@ -45,6 +47,7 @@ function rig() {
   const logged: string[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
+    publishFrame: publishingFrames(TEST_SIGNER),
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
       watching.started++;
