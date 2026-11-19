@@ -81644,10 +81644,10 @@ var REQUIRED_FIELDS = [
   ["model.id", "string"],
   ["model.display_name", "string"],
   ["workspace", "object"],
-  ["workspace.current_dir", "string"],
   ["workspace.project_dir", "string"]
 ];
 var OPTIONAL_FIELDS = [
+  ["workspace.current_dir", "string"],
   ["workspace.added_dirs", "string-list"]
 ];
 function validateHookData(raw) {
@@ -81670,7 +81670,7 @@ function validateHookData(raw) {
   }
   for (const [path31, expectedType] of OPTIONAL_FIELDS) {
     const value = resolvePath2(obj, path31);
-    const got = value === void 0 ? expectedType : listKind(value);
+    const got = value === void 0 ? expectedType : optionalKind(value);
     if (got !== expectedType) {
       report2.typeMismatches.push({ path: path31, expected: expectedType, got });
     }
@@ -81688,7 +81688,7 @@ function kindOf(value) {
     return "ill-formed string";
   return typeof value;
 }
-function listKind(value) {
+function optionalKind(value) {
   return Array.isArray(value) && value.every((v) => kindOf(v) === "string") ? "string-list" : kindOf(value);
 }
 function resolvePath2(obj, dotPath) {
@@ -81850,6 +81850,12 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
   }
+  const currentDir = req.hookData?.workspace?.current_dir;
+  if (typeof currentDir === "string" && !(0, import_node_path18.isAbsolute)(currentDir)) {
+    wireProblems.push(
+      `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`
+    );
+  }
   if (!Array.isArray(req.args) || !req.args.every((a) => typeof a === "string")) {
     wireProblems.push(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
@@ -81923,7 +81929,14 @@ function checkRenderRequest(req, stats, log, home, lookup2) {
       ...Object.fromEntries(
         refusedHints(rawHints, hints).map(({ hint, sent }) => [hint, sent])
       ),
-      hookData: { ...req.hookData, session_id: sessionId2.id },
+      hookData: {
+        ...req.hookData,
+        session_id: sessionId2.id,
+        workspace: {
+          ...req.hookData.workspace,
+          current_dir: currentDir ?? req.cwd
+        }
+      },
       deadline,
       encoding: encoding.encoding,
       hints,
