@@ -94,7 +94,7 @@ cc-candybar record stop
 cc-candybar replay ./bar.jsonl
 ```
 
-Both record commands accept `--renderer NAME`. The default is `CC_CANDYBAR_NAME`, then `main`. Starting replaces a running worker between turns, resetting its open menus and edit drafts. The host and other renderers keep running. A name that has never been used starts recording when that renderer first starts. Choose a new file. The host publishes it when you stop recording or when the daemon shuts down normally with a complete capture.
+Both record commands accept `--renderer NAME`. The default is `CC_CANDYBAR_NAME`, then `main`. Starting replaces a running worker between turns. Its menu history and unsaved edit drafts reset. Saved state carries over, and the host and other renderers keep running. An unbound name starts recording when that renderer first starts. Choose a new file. The host publishes it when you stop recording or when the daemon shuts down normally with a complete capture.
 
 Replay runs offline and verifies the whole recording before reporting success. Use the `cc-candybar` build for the renderer you recorded. Different builds can draw different output even with the same private wire version. Add `--frames` to print JSON lines containing `session`, `surface`, and `frame` on stdout. The summary goes to stderr in this mode. If frame output exceeds 32 MiB, replay reports the limit and emits no frames. Summary mode verifies incrementally without retaining frames.
 

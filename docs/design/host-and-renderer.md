@@ -388,7 +388,7 @@ Every renderer's panel is the same, because there is one kind of renderer. Watch
 
 ### Recording an installed renderer
 
-`cc-candybar record start <file> [--renderer NAME]` asks the running daemon to capture one generation. The client resolves the path from its working directory. An existing renderer is replaced between turns so its build and startup inputs serve as the first entry. This resets transient menus and drafts for that renderer. Unbound names are armed for their next start. The daemon continues serving the other renderers from the same shared caches.
+`cc-candybar record start <file> [--renderer NAME]` asks the running daemon to capture one generation. The client resolves the path from its working directory. An existing renderer is replaced between turns so its build and startup inputs serve as the first entry. Its navigation history and unsaved edit drafts reset. Saved state goes into the new worker's construction input. Unbound names are armed for their next start. The daemon continues serving the other renderers from the same shared caches.
 
 `cc-candybar record stop [--renderer NAME]` publishes the complete file without overwriting a destination. An orderly daemon shutdown also finishes a complete capture. A failed recording or an unexpected worker exit leaves the target unpublished. Both commands default to `CC_CANDYBAR_NAME`, then `main`.
 
