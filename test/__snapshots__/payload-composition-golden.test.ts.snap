@@ -60,9 +60,6 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -142,22 +139,17 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -268,9 +260,6 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -350,22 +339,17 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -476,9 +460,6 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -558,22 +539,17 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -684,9 +660,6 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -766,22 +739,17 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -892,9 +860,6 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -974,22 +939,17 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -1100,9 +1060,6 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
     "endcaps": {
       "effective": "powerline",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -1182,22 +1139,17 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -1308,9 +1260,6 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
     "endcaps": {
       "effective": "plain",
     },
-    "experimentalBand": {
-      "effective": false,
-    },
     "experimentalPane": {
       "effective": false,
     },
@@ -1390,22 +1339,17 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
         "used_percentage": 21,
       },
     },
-    "renderer": {
-      "effective": "claude",
-    },
     "repo": {},
     "resettable": {
       "animationSpeed": true,
       "autoWrap": true,
       "effect": true,
       "endcaps": true,
-      "experimentalBand": true,
       "experimentalPane": true,
       "experimentalStatusline": true,
       "menuTimeout": true,
       "padding": true,
       "preset": true,
-      "renderer": true,
       "shade": true,
       "style": true,
       "theme": true,
@@ -1517,9 +1461,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -1597,22 +1538,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -1723,9 +1659,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -1803,22 +1736,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": false,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -1929,9 +1857,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -2009,22 +1934,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -2135,9 +2055,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -2215,22 +2132,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -2341,9 +2253,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -2421,22 +2330,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": false,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -2548,9 +2452,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -2628,22 +2529,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -2756,9 +2652,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
   "endcaps": {
     "effective": "powerline",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -2836,22 +2729,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,
@@ -2959,9 +2847,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   "endcaps": {
     "effective": "plain",
   },
-  "experimentalBand": {
-    "effective": false,
-  },
   "experimentalPane": {
     "effective": false,
   },
@@ -3039,22 +2924,17 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
       "used_percentage": 21,
     },
   },
-  "renderer": {
-    "effective": "claude",
-  },
   "repo": {},
   "resettable": {
     "animationSpeed": false,
     "autoWrap": false,
     "effect": false,
     "endcaps": false,
-    "experimentalBand": false,
     "experimentalPane": false,
     "experimentalStatusline": false,
     "menuTimeout": false,
     "padding": false,
     "preset": true,
-    "renderer": false,
     "shade": false,
     "style": false,
     "theme": false,

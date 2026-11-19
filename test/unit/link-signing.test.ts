@@ -109,19 +109,16 @@ describe("a link the bar did not draw", () => {
   });
 });
 
-describe("the clicks nothing signs", () => {
-  test("a status-line range comes only from tmux's binding, which runs the CLI", () => {
-    const range = "cc-candybar://tmux-status-click/sock/3/r1";
-    expect(parseClick(range, CLI, KEYLESS)).toEqual({
-      kind: "status-line",
-      value: "sock/3/r1",
-    });
-    expect(parseClick(range, FORWARDED, KEYLESS)).toEqual({
+test("a retired status-line range cannot bypass signed click admission", () => {
+  const range = "cc-candybar://tmux-status-click/sock/3/r1";
+  for (const delivery of [CLI, FORWARDED]) {
+    expect(parseClick(range, delivery, KEYLESS)).toEqual({
       kind: "refused",
-      problem: "a status-line click comes only from tmux's own binding",
+      problem: "no key",
     });
-  });
+  }
 });
+
 
 describe("a draw's frames", () => {
   const run = (text: string, link?: string) => ({

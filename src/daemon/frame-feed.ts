@@ -1,7 +1,7 @@
 // A session's frames, pushed to whoever subscribes to them (epic
 // candybar-animation-wbxz, ticket .jmm.usl). Claude Code reruns the statusline
-// once a second at best; a subscriber here — a patched Claude Code, a mod, a
-// renderer outside Claude Code — receives each frame the moment the renderer
+// once a second at best; attached Claude Code and tmux panes can receive
+// each frame the moment the renderer
 // draws it, and the renderer draws at the rate the bar moves.
 //
 // Data and frames travel separately. A session's data arrives as ordinary
@@ -12,8 +12,6 @@
 // in a turn's output, and the host sends each subscriber what changed for it.
 
 import { inspect } from "node:util";
-import type { Frame, WireFrame } from "../render/frame";
-import { parseFrame } from "../render/frame";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
 import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
@@ -28,19 +26,10 @@ import type {
   Viewers,
 } from "../renderer-interface/interface";
 
-// A subscriber: each frame's bar, which a lane drawing it elsewhere encodes,
-// and its lane's answer as the renderer serialized it once for every
-// subscriber of that lane.
-export type Sink = (bar: Frame, json: string) => void;
-
-// One subscription: the lane it serves, where its frames go, where its
-// refusal goes — the last thing it receives, since a refused subscription is
-// over — and whether it draws the bar where its lane puts it now. A client's
-// subscription draws whatever it is sent; the daemon's own tmux status line
-// draws a session only while that status line shows the session's pane.
+// A subscriber holds the ANSI answer for its own display.
 export interface Subscriber {
   readonly lane: Lane;
-  readonly frame: Sink;
+  readonly frame: (json: string) => void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
 }
@@ -76,7 +65,7 @@ interface Watched {
   // frame left as it was is not sent it again; and where it joined.
   readonly followers: Map<Subscriber, { sent: string | null; joined: number }>;
   // The last frame drawn: what a subscriber is handed as it joins.
-  last: { readonly bar: Frame; readonly answers: Answers } | null;
+  last: Answers | null;
   pushed: number;
 }
 
@@ -191,13 +180,6 @@ export class FrameFeeds<Req> {
     return viewers;
   }
 
-  // Who watches the session now, as `viewers` reads it: undefined while
-  // nobody does.
-  viewersOf(sessionId: SessionId): SessionViewers | undefined {
-    const watched = this.watched.get(sessionId);
-    return watched === undefined ? undefined : this.seen(sessionId, watched);
-  }
-
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
     const lanes: Partial<Record<Lane, LaneViewers>> = {};
     let joined = 0;
@@ -267,11 +249,11 @@ export class FrameFeeds<Req> {
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
   took(frames: readonly PushedFrame[]): void {
-    for (const { session, bar, answers } of frames) {
+    for (const { session, answers } of frames) {
       const watched = this.watched.get(session);
       // Unwatched since the renderer drew it.
       if (watched === undefined) continue;
-      watched.last = { bar: parseFrame(bar as WireFrame), answers };
+      watched.last = answers;
       for (const sub of watched.followers.keys()) this.send(watched, sub);
     }
   }
@@ -349,12 +331,12 @@ export class FrameFeeds<Req> {
   private send(watched: Watched, sub: Subscriber): void {
     const follower = watched.followers.get(sub);
     if (watched.last === null || follower === undefined) return;
-    const json = answerOf(watched.last.answers, sub.lane);
+    const json = answerOf(watched.last, sub.lane);
     if (follower.sent === json) return;
     follower.sent = json;
     this.pushed++;
     watched.pushed++;
-    sub.frame(watched.last.bar, json);
+    sub.frame(json);
   }
 
   // A subscription its lane's toggle refuses, told why.

@@ -328,7 +328,6 @@ const ZONE_ROWS = {
   "src/tmux-hint.ts": "shared",
   "src/click/wire.ts": "shared",
   "src/click/link-signer.ts": "shared",
-  "src/tmux-status/frames.ts": "shared",
   "src/cli-flags.ts": "shared",
   "mod/": "shared",
   "src/claude-input/slash-line.ts": "shared",

@@ -86,27 +86,23 @@ function rig() {
 // A subscriber on `lane`, recording the answers it was sent and its refusal.
 function subscriber(lane: Lane, drawing = true) {
   const sent: string[] = [];
-  const bars: Frame[] = [];
   const refusals: Refusal[] = [];
   const sub: Subscriber = {
     lane,
-    frame: (bar, json) => {
-      bars.push(bar);
+    frame: (json) => {
       sent.push(json);
     },
     refused: (resp) => void refusals.push(resp),
     drawing: () => drawing,
   };
-  return { sub, sent, bars, refusals };
+  return { sub, sent, refusals };
 }
 
-const BAR: WireFrame = { ...renderFailedFrame("the bar"), nextChange: null };
 const frame = (
   session = S,
   answers: Answers = { resp: "r", statusline: "s" },
 ): PushedFrame => ({
   session,
-  bar: BAR,
   answers,
 });
 
@@ -131,7 +127,7 @@ describe("a session's requests", () => {
   test("a watched session's request outlives the eviction of the least recently noted", () => {
     const { feeds } = rig();
     feeds.note(S, { pane: "%0" }, 0);
-    feeds.subscribe(S, subscriber("band").sub);
+    feeds.subscribe(S, subscriber("pane").sub);
     for (let i = 1; i <= 300; i++)
       feeds.note(sessionIdOf(`other${i}`), { pane: `%${i}` }, i);
     expect(feeds.latest(S)).toEqual({ pane: "%0" });
@@ -145,12 +141,12 @@ describe("the viewers the renderer is handed", () => {
     const r = rig();
     r.feeds.note(S, { pane: "%1" }, 1);
     r.hidden.add("%1");
-    r.feeds.subscribe(S, subscriber("band", false).sub);
-    r.feeds.subscribe(S, subscriber("band", true).sub);
+    r.feeds.subscribe(S, subscriber("pane", false).sub);
+    r.feeds.subscribe(S, subscriber("pane", true).sub);
     r.feeds.subscribe(T, subscriber("statusline", false).sub);
     expect(r.feeds.viewers()).toEqual({
       [S]: {
-        lanes: { band: { subscribers: 2, drawing: true } },
+        lanes: { pane: { subscribers: 2, drawing: true } },
         shown: false,
         joined: 2,
       },
@@ -165,8 +161,8 @@ describe("the viewers the renderer is handed", () => {
 
   test("announcements before the delivery's slot comes are one delivery, read as its slot comes", async () => {
     const r = rig();
-    r.feeds.subscribe(S, subscriber("band").sub);
-    r.feeds.subscribe(T, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
+    r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.owed).toHaveLength(1);
     await r.slot();
     expect(Object.keys(r.handed[0]!)).toEqual([S, T]);
@@ -174,7 +170,7 @@ describe("the viewers the renderer is handed", () => {
 
   test("viewers that read as last handed are not handed again; a start's handing counts", async () => {
     const r = rig();
-    const { sub } = subscriber("band");
+    const { sub } = subscriber("pane");
     r.feeds.subscribe(S, sub);
     await r.slot();
     r.feeds.announce();
@@ -187,7 +183,7 @@ describe("the viewers the renderer is handed", () => {
 
   test("a delivery that failed is made good by the next announcement, though the viewers did not change", async () => {
     const r = rig();
-    r.feeds.subscribe(S, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.slot("threw");
     r.feeds.announce();
     expect(r.owed).toHaveLength(1);
@@ -197,7 +193,7 @@ describe("the viewers the renderer is handed", () => {
 
   test("a delivery that rejected is said, and the next announcement delivers again", async () => {
     const r = rig();
-    r.feeds.subscribe(S, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.rejected();
     expect(r.logged).toContainEqual(
       expect.stringMatching(
@@ -213,7 +209,7 @@ describe("the viewers the renderer is handed", () => {
   test("a request whose pane comes off a screen is announced; one that changes nothing the renderer is handed is not", async () => {
     const r = rig();
     r.feeds.note(S, { pane: "%1" }, 1);
-    r.feeds.subscribe(S, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.slot();
     r.feeds.note(S, { pane: "%1" }, 2);
     expect(r.owed).toHaveLength(0);
@@ -228,16 +224,14 @@ describe("the viewers the renderer is handed", () => {
 describe("a subscriber", () => {
   test("is sent each frame whose answer for its lane changed, and nothing for one that changed only another lane's", () => {
     const r = rig();
-    const band = subscriber("band");
+    const pane = subscriber("pane");
     const line = subscriber("statusline");
-    r.feeds.subscribe(S, band.sub);
+    r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
     r.feeds.took([frame(S, { resp: "r1", statusline: "s1" })]);
     r.feeds.took([frame(S, { resp: "r2", statusline: "s1" })]);
-    expect(band.sent).toEqual(["r1", "r2"]);
+    expect(pane.sent).toEqual(["r1", "r2"]);
     expect(line.sent).toEqual(["s1"]);
-    // The bar crosses with its Infinity as null, and is read back whole.
-    expect(band.bars[0]!.nextChange).toBe(Infinity);
     expect(r.feeds.getStats()).toMatchObject({
       feeds: 1,
       subscribers: 2,
@@ -247,16 +241,16 @@ describe("a subscriber", () => {
 
   test("joining later is handed the bar as it stands, at once", () => {
     const r = rig();
-    r.feeds.subscribe(S, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     r.feeds.took([frame(S, { resp: "r1", statusline: "s1" })]);
-    const late = subscriber("band");
+    const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
     expect(late.sent).toEqual(["r1"]);
   });
 
   test("of a session unwatched since the renderer drew it is sent nothing", () => {
     const r = rig();
-    const { sub, sent } = subscriber("band");
+    const { sub, sent } = subscriber("pane");
     const leave = r.feeds.subscribe(S, sub);
     leave();
     r.feeds.took([frame(S)]);
@@ -266,8 +260,8 @@ describe("a subscriber", () => {
 
   test("the feeds watch from the first subscriber to the last leaving, which is logged with what it was sent", () => {
     const r = rig();
-    const leaveS = r.feeds.subscribe(S, subscriber("band").sub);
-    const leaveT = r.feeds.subscribe(T, subscriber("band").sub);
+    const leaveS = r.feeds.subscribe(S, subscriber("pane").sub);
+    const leaveT = r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.watching).toEqual({ started: 1, stopped: 0 });
     r.feeds.took([frame(S)]);
     leaveS();
@@ -280,16 +274,14 @@ describe("a subscriber", () => {
 
 describe("a subscription's lane", () => {
   const OFF: LaneSwitches = {
-    band: false,
     statusline: true,
-    pane: true,
-    tmuxStatus: true,
+    pane: false,
   };
 
   test("switched off in the session's settings is refused at once, and opens nothing", () => {
     const r = rig();
     r.feeds.switched({ [S]: OFF });
-    const { sub, refusals } = subscriber("band");
+    const { sub, refusals } = subscriber("pane");
     r.feeds.subscribe(S, sub);
     expect(refusals).toEqual([
       expect.objectContaining({ ok: false, code: "SWITCHED_OFF" }),
@@ -301,16 +293,16 @@ describe("a subscription's lane", () => {
 
   test("of a session with no view yet is admitted, and the switches its view opens with decide", () => {
     const r = rig();
-    const band = subscriber("band");
+    const pane = subscriber("pane");
     const line = subscriber("statusline");
-    r.feeds.subscribe(S, band.sub);
+    r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
     r.feeds.switched({ [S]: OFF });
-    expect(band.refusals).toHaveLength(1);
+    expect(pane.refusals).toHaveLength(1);
     expect(line.refusals).toHaveLength(0);
     // The other lane streams on.
     r.feeds.took([frame(S)]);
-    expect(band.sent).toEqual([]);
+    expect(pane.sent).toEqual([]);
     expect(line.sent).toEqual(["s"]);
   });
 });
@@ -318,16 +310,16 @@ describe("a subscription's lane", () => {
 describe("the daemon's close", () => {
   test("ends every subscriber, hands the renderer nothing more, and drops a subscribe after it, saying so", async () => {
     const r = rig();
-    r.feeds.subscribe(S, subscriber("band").sub);
+    r.feeds.subscribe(S, subscriber("pane").sub);
     await r.slot();
     r.feeds.close();
     expect(r.feeds.isWatched(S)).toBe(false);
     expect(r.watching.stopped).toBe(1);
     expect(r.owed).toHaveLength(0);
-    r.feeds.subscribe(T, subscriber("band").sub);
+    r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.feeds.isWatched(T)).toBe(false);
     expect(r.logged.at(-1)).toBe(
-      `info feed sid="${T}" dropped lane=band daemon-closed`,
+      `info feed sid="${T}" dropped lane=pane daemon-closed`,
     );
   });
 });

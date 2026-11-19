@@ -1,6 +1,5 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import { inTmux } from "../tmux-hint.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -49,7 +48,6 @@ import type { FrameRecord } from "../render/frame-memory.js";
 import {
   feedsFact,
   LANE_NAMES,
-  LANES,
   ANSWERING,
   type Drawing,
   type Lane,
@@ -219,12 +217,7 @@ export function viewLanes(
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
-  return hold === null
-    ? null
-    : laneSwitches(
-        hold.view.source.effective(),
-        inTmux(hold.view.facts().hints.tmux),
-      );
+  return hold === null ? null : laneSwitches(hold.view.source.effective());
 }
 
 // What a render of a checked request draws with, resolved once and held for
@@ -503,7 +496,7 @@ export function drawRender(
   const failure = view.source.failure();
   const document = view.source.facts();
   // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = laneSwitches(effective, payload.tmux !== undefined);
+  const lanes = laneSwitches(effective);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
     // The preset the session's settings resolve to, which the draw uses.
@@ -709,17 +702,7 @@ export function drawRender(
   const recorded = renderWarnings.moves(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
-    // A feed's one frame is shown by every lane switched on, so it pages
-    // within the shortest of their surfaces.
-    rows: viewerRowCap(
-      hints.termRows,
-      drawing.by === "feed"
-        ? LANE_NAMES.flatMap((lane) => {
-            const rows = LANES[lane].rows;
-            return lanes[lane] && rows !== null ? [rows] : [];
-          })
-        : [],
-    ),
+    rows: viewerRowCap(hints.termRows),
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
     colorCompatibility: frame.depth,

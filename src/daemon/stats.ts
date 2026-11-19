@@ -11,7 +11,6 @@ import {
 import type {
   Durations,
   RunStats,
-  TmuxStatusStats,
   FeedStats,
   FileEventsStats,
   SourceRunsStats,
@@ -298,7 +297,6 @@ export class RuntimeStats {
         lookups: 0,
         found: 0,
       },
-      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
       polledPaths: 0,
@@ -328,7 +326,6 @@ export class RuntimeStats {
     runs: RunStats;
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
-    tmuxStatus: TmuxStatusStats;
     watchersActive: number;
     dirWatchesActive: number;
     polledPaths: number;
@@ -375,7 +372,6 @@ export class RuntimeStats {
       runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
-      tmuxStatus: extras.tmuxStatus,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

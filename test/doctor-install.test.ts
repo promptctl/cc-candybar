@@ -110,7 +110,7 @@ describe("install probe", () => {
       ]),
     ).toEqual({
       ok: false,
-      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`node ${CHECKOUT_BUNDLE} frames --lane <band|statusline|pane|tmuxStatus>\``,
+      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`node ${CHECKOUT_BUNDLE} frames --lane <statusline|pane>\``,
       more: [],
     });
     // Re-installing stages the same files and changes nothing a frames
@@ -126,7 +126,7 @@ describe("install probe", () => {
       ]),
     ).toEqual({
       ok: false,
-      reason: `the statusline client runs /global/dist/index.mjs, not the daemon's ${BUNDLE} — run \`node ${BUNDLE} frames --lane <band|statusline|pane|tmuxStatus>\``,
+      reason: `the statusline client runs /global/dist/index.mjs, not the daemon's ${BUNDLE} — run \`node ${BUNDLE} frames --lane <statusline|pane>\``,
       more: [],
     });
   });

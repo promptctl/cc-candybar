@@ -3,16 +3,14 @@
 // leaves no pane `pane off` cannot find, and the user's pane keeps focus.
 
 import { spawnSync } from "node:child_process";
-import { processLauncher, processProbe } from "./helpers/host";
+import { processLauncher } from "./helpers/host";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { productionLaneEdge } from "../src/daemon/lane-edge";
-import { NOT_HEARD } from "../src/daemon/foundations/session-env";
+import { productionBarPaneEdge } from "../src/daemon/lane-edge";
 import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
-import { systemTimekeeper } from "../src/time";
 import { HAS_TMUX } from "./helpers/private-tmux";
 
 
@@ -80,24 +78,12 @@ import { HAS_TMUX } from "./helpers/private-tmux";
         return result;
       },
     };
-    const edge = productionLaneEdge(
-      launcher,
-      () => new Set(),
-      closing.signal,
-      systemTimekeeper,
-      processProbe, () => NOT_HEARD
-    );
+    const edge = productionBarPaneEdge(launcher);
 
     const opened = await edge.openBarPane(hint, barPane(), {});
 
     expect(panes()).toContain(opened);
-    const tagged = productionLaneEdge(
-      processLauncher,
-      () => new Set(),
-      new AbortController().signal,
-      systemTimekeeper,
-      processProbe, () => NOT_HEARD
-    );
+    const tagged = productionBarPaneEdge(processLauncher);
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
   });
@@ -114,13 +100,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       "sleep",
       "60",
     ).trim();
-    const edge = productionLaneEdge(
-      processLauncher,
-      () => new Set(),
-      new AbortController().signal,
-      systemTimekeeper,
-      processProbe, () => NOT_HEARD
-    );
+    const edge = productionBarPaneEdge(processLauncher);
 
     await edge.openBarPane(hint, barPane(), {});
 
@@ -130,13 +110,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
   test("a failed split is reported as the split, and tags nothing", async () => {
     // One row has no room for another pane.
     tmux("resize-window", "-t", "bar", "-y", "1");
-    const edge = productionLaneEdge(
-      processLauncher,
-      () => new Set(),
-      new AbortController().signal,
-      systemTimekeeper,
-      processProbe, () => NOT_HEARD
-    );
+    const edge = productionBarPaneEdge(processLauncher);
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(
       /tmux split-window failed/,

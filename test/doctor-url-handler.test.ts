@@ -78,8 +78,7 @@ describe("urlHandler probe", () => {
 
   // A run with no link to prove the handler judges what is registered, and
   // says that a click's arrival is not judged.
-  test.each<[string, "tmux-status" | "command", string]>([
-    ["from the tmux status line", "tmux-status", TMUX_UNDELIVERED],
+  test.each<[string, "command", string]>([
     [
       "by the command",
       "command",
@@ -131,7 +130,7 @@ describe("urlHandler probe", () => {
     expect(
       verdict({
         kind: "registered",
-        via: "tmux-status",
+        via: "command",
         opener: { kind: "failed", reason: "osascript: timeout" },
       }),
     ).toMatchObject({
@@ -293,23 +292,23 @@ describe("the daemon's side of the round trip", () => {
     });
   });
 
-  // Review of PR #405: tmux runs a status-line click itself, so it proves
+  // The command runs a click itself, so it proves
   // neither the handler nor that the terminal draws links: the run judges
   // what is registered, and files no terminal.
-  test("a doctor click from the tmux status line judges the registration, not the handler, and files no terminal", async () => {
-    const row = await doctorRow({ via: "tmux-status" }, REGISTERED);
+  test("a doctor click from the command judges the registration, not the handler, and files no terminal", async () => {
+    const row = await doctorRow({ via: "command" }, REGISTERED);
     expect(row.verdict).toBe("ok");
     expect(row.noted).toEqual({
       ok: true,
-      note: `the forwarder app opens cc-candybar://; ${TMUX_UNDELIVERED}`,
+      note: `the forwarder app opens cc-candybar://; ${notJudged("whether a clicked link reaches the daemon")}`,
     });
     expect(row.clicked).toBe("no");
   });
 
   // A [fix] or mark click on a run asked another way judges the facts as the
   // click in hand proves them: one that came by a link proves the handler.
-  test("a link click on a run asked from the tmux status line proves the handler", async () => {
-    const d = daemon({ via: "tmux-status" }, REGISTERED);
+  test("a link click on a run asked from the command proves the handler", async () => {
+    const d = daemon({ via: "command" }, REGISTERED);
     hearRender(
       d.sessionState,
       heardRequest(S1, "/tmp/proj", {
@@ -322,7 +321,7 @@ describe("the daemon's side of the round trip", () => {
     await d.click(VERB_DOCTOR_RUN, "s1");
     const now = instantAt(systemTimekeeper);
     expect(
-      d.ctx.doctorRuns.facts(S1, { via: "tmux-status" }, now)?.urlHandler,
+      d.ctx.doctorRuns.facts(S1, { via: "command" }, now)?.urlHandler,
     ).toMatchObject({ kind: "registered" });
     expect(
       d.ctx.doctorRuns.facts(S1, link(FORWARDED), now)?.urlHandler,
@@ -330,7 +329,7 @@ describe("the daemon's side of the round trip", () => {
   });
 
   test("a platform with no URL handler: a run with no link is ok", async () => {
-    const row = await doctorRow({ via: "tmux-status" }, async () => ({
+    const row = await doctorRow({ via: "command" }, async () => ({
       kind: "unsupported",
     }));
     expect(row.verdict).toBe("ok");

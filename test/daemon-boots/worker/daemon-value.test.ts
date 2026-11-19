@@ -9,7 +9,6 @@ import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
 import { createHook } from "node:async_hooks";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -89,7 +88,6 @@ describe("the daemon is a value", () => {
   let root: string;
   let projectDir: string;
   let config: string;
-  let scratchPath: string | undefined;
   let open: Daemon | null = null;
   // Every log the case opened: a case that builds a second daemon ends both.
   const openLogs: DaemonLog[] = [];
@@ -211,8 +209,6 @@ describe("the daemon is a value", () => {
     // time, so what is left here is the case's own.
     rmSync(sessionStatePath(hostNow()), { force: true });
     rmSync(settingsHistoryPath(hostNow()), { force: true });
-    if (scratchPath !== undefined) process.env.PATH = scratchPath;
-    scratchPath = undefined;
   });
 
   afterAll(() => {
@@ -253,7 +249,7 @@ describe("the daemon is a value", () => {
     const refused = jest.fn();
     expect(() =>
       daemon.subscribe(VALUE_REFUSED, {
-        lane: "band",
+        lane: "statusline",
         frame: () => {},
         refused,
         drawing: () => true,
@@ -338,25 +334,11 @@ describe("the daemon is a value", () => {
   });
 
   test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {
-    // A `claude` first on PATH that says it started and blocks: the band's
-    // setup launches it with no signal of its own, so only the daemon's close
-    // can end it.
-    const bin = path.join(root, "bin");
-    mkdirSync(bin, { recursive: true });
-    const pidFile = path.join(root, "claude.pid");
-    rmSync(pidFile, { force: true });
-    writeFileSync(
-      path.join(bin, "claude"),
-      `#!/bin/sh\necho $$ > '${pidFile}'\nexec sleep 30\n`,
-    );
-    chmodSync(path.join(bin, "claude"), 0o755);
-    scratchPath = process.env.PATH;
-    process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
     const ran = path.join(root, "shell-ran");
     rmSync(ran, { force: true });
     writeConfig(`{
       variables: {
-        slow: { kind: 'shell', command: 'touch ${ran}; exec sleep 30', parse: { json: true }, cache: { never: true } },
+        slow: { kind: 'shell', command: 'echo $$ > ${ran}; exec sleep 30', parse: { json: true }, cache: { never: true } },
       },
       segments: { mark: { template: 'mark {{ .slow }}' } },
       root: { h: ['mark'] },
@@ -368,17 +350,9 @@ describe("the daemon is a value", () => {
     daemon.arm();
 
     // The first render settles its wait early: a deadline in the past draws
-    // the slow source as pending, and leaves the session's origin recorded,
-    // and the pane the band's setup is asked for.
-    await answer(daemon, {
-      ...renderRequest("value-close", 1),
-      tmux: {
-        socket: `/tmp/value-close-${process.pid}`,
-        pane: "%7",
-        truecolor: null,
-      },
-    });
-    const { setting, on } = LANES.band.switch;
+    // the slow source as pending and leaves the session's origin recorded.
+    await answer(daemon, renderRequest("value-close", 1));
+    const { setting, on } = LANES.statusline.switch;
     await clickLink(
       daemon,
       drawnHere(
@@ -394,18 +368,17 @@ describe("the daemon is a value", () => {
     // feed, and would leave nothing here for the close to end.
     const refused = jest.fn();
     daemon.subscribe(VALUE_CLOSE, {
-      lane: "band",
+      lane: "statusline",
       frame: () => {},
       refused,
       drawing: () => true,
     });
     expect(refused).not.toHaveBeenCalled();
-    await until(() => existsSync(pidFile), "the claude stub started");
-    const claudePid = Number(readFileSync(pidFile, "utf8").trim());
-    expect(processProbe.alive(claudePid)).toBe(true);
+    await until(() => existsSync(ran) && Number(readFileSync(ran, "utf8")) > 0, "the slow source running");
+    const child = Number(readFileSync(ran, "utf8"));
+    expect(processProbe.alive(child)).toBe(true);
 
-    // A render waiting on the slow source as the daemon closes.
-    await until(() => existsSync(ran), "the slow source running");
+    // A render is waiting on that child as the daemon closes.
     const midWait = daemon.handle(
       classifyInbound(renderRequest("value-close", 20_000)),
       () => false,
@@ -425,7 +398,7 @@ describe("the daemon is a value", () => {
     });
 
     expect(await closing).toEqual({ unreaped: [] });
-    expect(processProbe.alive(claudePid)).toBe(false);
+    expect(processProbe.alive(child)).toBe(false);
     await midWait;
 
     // Turns, not timers: a wait of this test's own would be in the record.

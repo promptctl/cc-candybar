@@ -1,3 +1,4 @@
+import { decodeAnsi } from "@promptctl/rich-js";
 // [LAW:verifiable-goals] A connection to a daemon built in this jest worker, over
 // a stream with no socket: its own handling answers a render, feeds a subscriber
 // and reaches the exit it was built with. A connection to a stand-in daemon is the
@@ -58,14 +59,10 @@ describe("a connection to a daemon built in this worker", () => {
     return opened.received[0]!;
   };
 
-  // What a band frame drew. Anything else is named, where a bare read of `band`
-  // would leave the assertion to fail without saying what came back.
-  const drawn = (resp: Response): string => {
-    if (!("band" in resp))
-      throw new Error(`no drawn band: ${JSON.stringify(resp)}`);
-    return resp.band
-      .map((row) => row.map(({ text }) => text).join(""))
-      .join("\n");
+  const drawn = (response: Response): string => {
+    if (!response.ok || !("output" in response))
+      throw new Error(`expected a drawn frame: ${JSON.stringify(response)}`);
+    return decodeAnsi(response.output).plain;
   };
 
   // [LAW:no-ambient-temporal-coupling] The backstop here is the real one, and a
@@ -91,7 +88,7 @@ describe("a connection to a daemon built in this worker", () => {
     config = path.join(root, "bar.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
     );
   });
 
@@ -119,7 +116,7 @@ describe("a connection to a daemon built in this worker", () => {
     feed.send({
       ...SUBSCRIBE,
       sessionId: "connection-feed",
-      lane: "band",
+      lane: "statusline",
     } as Request);
     expect(drawn(await answered(feed))).toContain("a drawn mark");
     expect(running.daemon.stats.inFlight).toBe(0);

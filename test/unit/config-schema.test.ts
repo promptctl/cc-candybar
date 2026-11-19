@@ -50,11 +50,11 @@ beforeAll(() => {
 const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
   [
-    "retired update setting in every globals block",
+    "retired display and update settings still load",
     `{
-      globals: { updateNotice: false },
-      editGlobals: { updateNotice: true },
-      presets: { old: { globals: { updateNotice: false } } },
+      globals: { updateNotice: false, experimentalBand: true, renderer: "tmux" },
+      editGlobals: { updateNotice: true, experimentalBand: false },
+      presets: { old: { globals: { updateNotice: false, renderer: "claude", experimentalTmuxStatus: true } } },
     }`,
   ],
   [

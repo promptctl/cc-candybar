@@ -12,9 +12,7 @@ import {
   type ClientKind,
 } from "../../client-hint";
 import type { Lane } from "../../config/lanes";
-import type { BandBar } from "../../../mod/types";
 import type { WireFrame } from "../../render/frame";
-import type { TmuxStatusBar } from "../../tmux-status/frames";
 import type { Timekeeper } from "../../time";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
@@ -95,8 +93,7 @@ export interface RenderRequest {
 // [LAW:no-mode-explosion] How a render is answered: the bytes a terminal
 // prints, or the Frame. The cap is these two, and the second has no exit, since
 // a reader holding one render's answer has no other way to read the bar once
-// decoding is ruled out. A new surface is a lane (LANES, LANE_FRAMES), which
-// names its own encoding, so a subscription takes none.
+// decoding is ruled out. Subscriptions push the ANSI answer for their display.
 export const RENDER_ENCODINGS = ["ansi", "frame"] as const;
 export type RenderEncoding = (typeof RENDER_ENCODINGS)[number];
 
@@ -357,14 +354,7 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
-// A click as `cc-candybar url-handle` sends it: the link as it was clicked,
-// so the host opens the same bytes the bar signed. The tmux status line's
-// click binding runs that command.
-// [LAW:carrying-cost] exception: its required shape changed without a bump.
-// Only that binding sends it, and a daemon binds it from its own bundle and
-// restarts when the bundle changes, so a mismatched CLI and daemon meet only
-// until that restart, and the one click between is refused saying why. A
-// bump would blank every running statusbar to cover that one click.
+// A manual `url-handle` request carries the original signed link.
 export interface ClickRequest {
   v: number;
   kind: "click";
@@ -483,12 +473,6 @@ export type Response =
   // A pane-session answer: the session, or null when no request the daemon
   // holds came from that pane.
   | { ok: true; paneSession: string | null }
-  // A band-lane subscriber's frame: the bar as the band mod's rows of styled
-  // runs (src/daemon/lane-frames.ts), declared by the mod (mod/types).
-  | BandBar
-  // A tmux-status-lane subscriber's frame: the bar as a tmux status line's
-  // rows and the links of their ranges (src/tmux-status/frames.ts).
-  | { ok: true; tmuxStatus: TmuxStatusBar }
   // [LAW:types-are-the-program] `daemonV` is the daemon's own
   // PROTOCOL_VERSION, echoed on every error response so the client can render
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human

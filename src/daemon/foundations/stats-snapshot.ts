@@ -146,9 +146,6 @@ export interface StatsSnapshot {
   // Subscribed sessions, their subscribers, and the frames drawn for them and
   // pushed (a drawn frame identical to the last is not pushed).
   frameFeeds: FeedStats;
-  // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
-  // it draws, status lines it has laid out, tmux invocations, failed ones.
-  tmuxStatus: TmuxStatusStats;
   // Watch slots: open now, opened with every target watched, closed, opened
   // with a target the OS refused, and errors watches reported after opening.
   // `dirs`: the OS directory watches the slots share, open now, opened and
@@ -210,13 +207,6 @@ export interface RunStats {
   readonly refused: number;
   // In flight now.
   readonly running: number;
-}
-
-export interface TmuxStatusStats {
-  readonly sessions: number;
-  readonly layouts: number;
-  readonly writes: number;
-  readonly failedWrites: number;
 }
 
 export interface FeedStats {

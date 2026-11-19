@@ -39,7 +39,7 @@ import type {
 import { ActsOnTheirWay } from "../../src/renderer/acts";
 import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
-import type { LaneEdge, LaneHost } from "../../src/daemon/lane-setup";
+import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
 import {
   heardContextOf,
@@ -435,11 +435,11 @@ export function testActs(
       type: missing("claude input type"),
     },
     run: missing("run"),
-    lanes: {
-      edge: new Proxy({} as LaneEdge, {
+    barPane: {
+      edge: new Proxy({} as BarPaneEdge, {
         get: (_, k) => missing(`lane ${String(k)}`),
       }),
-      host: new Proxy({} as LaneHost, {
+      host: new Proxy({} as BarPaneHost, {
         get: (_, k) => missing(`lane ${String(k)}`),
       }),
     },

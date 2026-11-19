@@ -51,7 +51,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
         runFrames(argv, "/opt/cc/dist/index.mjs", WORLD),
       ).rejects.toThrow("exit 2");
       expect(String(stderr.mock.calls[0]?.[0])).toMatch(
-        /--lane needs one of band, statusline, pane/,
+        /--lane needs one of statusline, pane/,
       );
     } finally {
       exit.mockRestore();
@@ -63,7 +63,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
 test("--session is not a flag of frames: a named session's frames are the native client's follow", async () => {
   await expect(
     runFrames(
-      ["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"],
+      ["node", "cc-candybar", "frames", "--lane", "statusline", "--session", "s"],
       "/opt/cc/dist/index.mjs",
       WORLD,
     ),

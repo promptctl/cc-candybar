@@ -20,7 +20,6 @@ import {
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
-  VERB_TMUX_STATUS_CLICK,
   VERB_UNDO,
   effectsUrl,
   encodeSegments,
@@ -72,7 +71,6 @@ async function drain(): Promise<void> {
 function setup(
   over: {
     readonly collector?: Parameters<typeof clickParts>[1];
-    readonly linkAt?: () => unknown;
   } = {},
 ) {
   const sessionState = new SessionState();
@@ -92,9 +90,6 @@ function setup(
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
-    tmuxStatusLines: {
-      linkAt: over.linkAt ?? (() => ({ kind: "link", url: "" })),
-    },
     ...host,
   } as unknown as DaemonParts;
   const stats = new RuntimeStats(systemTimekeeper);
@@ -404,28 +399,6 @@ describe("the click path", () => {
     await send(VERB_UNDO, encodeSegments([A]));
     await send(VERB_UNDO, encodeSegments([A]));
     expect(events.map((e) => fieldOf(e, "req"))).toEqual(["1", "2"]);
-  });
-
-  test("a status-line link naming a verb re-enters without deadlock", async () => {
-    const url = `cc-candybar://${VERB_UNDO}/${encodeSegments([A])}`;
-    const { send } = setup({ linkAt: () => ({ kind: "link", url }) });
-    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
-    expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-  });
-
-  test("a status-line click that throws is its outcome, and writes its event", async () => {
-    const { send, events } = setup({
-      linkAt: () => {
-        throw new Error("the opener failed");
-      },
-    });
-    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
-    expect(resp).toMatchObject({
-      ok: false,
-      error: expect.stringContaining("the opener failed"),
-    });
-    expect(events).toHaveLength(1);
-    expect(fieldOf(events[0]!, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
   });
 
   test("a click's turn holds its session in the collector while it runs and not while it waits; a refused click holds nothing", async () => {

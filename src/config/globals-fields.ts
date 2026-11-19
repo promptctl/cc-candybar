@@ -55,12 +55,9 @@ import {
 import { findKeyLine } from "./loader/diagnostics.js";
 import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "./disclosure.js";
 import {
-  IN_TMUX,
   LANES,
-  RENDERERS,
   TOGGLED_LANES,
   type LaneSetting,
-  type Renderer,
   type ToggledLane,
 } from "./lanes.js";
 import type { DomainLibrary, OptionLabel } from "./option-domain.js";
@@ -388,20 +385,6 @@ const LANE_ROWS = Object.fromEntries(
   ]),
 ) as { readonly [K in LaneSetting]: SessionRow<boolean, false> };
 
-// What each renderer's row says in the open renderer menu, laid out as the
-// add-segment menu lays its library: one aligned row per option.
-const RENDERER_DESCRIPTIONS: Readonly<Record<Renderer, string>> = {
-  claude: "Claude Code's status line",
-  tmux: "the tmux status line, while this pane is shown",
-};
-const RENDERER_LIBRARY: DomainLibrary = {
-  groups: [{ id: "renderer", label: "draw the bar in" }],
-  entry: (option) => ({
-    group: "renderer",
-    description: RENDERER_DESCRIPTIONS[option as Renderer],
-  }),
-};
-
 // Row order is the order the settings carry everywhere they are listed — the
 // menu's controls within a place, the drafts a save writes, the schema's keys.
 export const GLOBAL_FIELDS = {
@@ -520,16 +503,6 @@ export const GLOBAL_FIELDS = {
     MENU_TIMEOUT_RANGE,
     MENU_TIMEOUT_DEFAULT,
     control("menu timeout", "config"),
-  ),
-  // Where the bar is drawn (RENDERERS, src/config/lanes.ts). Offered only to a
-  // session inside tmux: outside it, `claude` is the one renderer there is,
-  // and a session there draws in Claude Code's status line whatever this
-  // says, leaving the setting the sessions share as it is.
-  renderer: enumSetting(
-    RENDERERS,
-    "claude",
-    control("renderer", "config", { shown: IN_TMUX }),
-    { optionDomain: "renderers", library: RENDERER_LIBRARY },
   ),
   ...LANE_ROWS,
   // The color depth rich-js downsamples output to (the legacy
