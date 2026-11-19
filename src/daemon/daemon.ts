@@ -325,6 +325,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
+  // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
+  // provider installs a timer. A failing profile or renderer factory leaves
+  // the daemon unbuilt and nothing to close.
+  const primaryPrepared = prepareRenderer(
+    inputs.rendererName,
+    bundle.path,
+    inputs.rendererEntry ?? bundle.path,
+  );
   const renderers = new Map<RendererName, RendererRuntime>();
   // [LAW:one-source-of-truth] A session's accepted render request selects
   // the renderer that receives its subsequent world state and viewer inputs.
@@ -578,11 +586,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     declaredBarPanes.declare(lanes);
   };
 
-  const makeRenderer = (
+  function prepareRenderer(
     name: RendererName,
     reported: string,
     entry: string,
-  ): RendererRuntime => {
+  ) {
     const stores = new HeldStores(inputs.profile(name, log));
     const prepared = inputs.renderer({
       name,
@@ -613,6 +621,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       },
       node: bundle.node,
     });
+    return { name, reported, entry, stores, prepared };
+  }
+
+  const connectRenderer = ({
+    name,
+    reported,
+    entry,
+    stores,
+    prepared,
+  }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
     const link = prepared.start({
       reaches,
       log,
@@ -629,9 +647,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             event: {
               kind: "start",
               viewers: viewersOf(name, viewers),
-              sessions: collector.liveSessions().filter(
-                ({ worldState }) => nameOf(worldState.session) === name,
-              ),
+              sessions: collector
+                .liveSessions()
+                .filter(
+                  ({ worldState }) => nameOf(worldState.session) === name,
+                ),
             },
           };
         }, [["why", "renderer-start"]]);
@@ -683,11 +703,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     return { reported, entry, stores, link, renderer };
   };
 
-  const primary = makeRenderer(
-    inputs.rendererName,
-    bundle.path,
-    inputs.rendererEntry ?? bundle.path,
-  );
+  const primary = connectRenderer(primaryPrepared);
   renderers.set(inputs.rendererName, primary);
 
   // [LAW:effects-at-boundaries] Resolve and validate a worktree bundle here,
@@ -742,7 +758,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         throw new BadVerbArgs(
           `renderer ${name} needs a statusline client's bundle`,
         );
-      target = makeRenderer(name, binding, canonicalEntry(name, binding));
+      target = connectRenderer(
+        prepareRenderer(name, binding, canonicalEntry(name, binding)),
+      );
       target.stores.load();
       target.link.serve();
       renderers.set(name, target);
