@@ -22,7 +22,7 @@ import {
 } from "../../src/renderer-interface/interface";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { Instant, Tick } from "../../src/utils/instant";
-import type { HeldEvent } from "../../src/utils/event-hold";
+import { joinedEvent, type HeldEvent } from "../../src/utils/event-hold";
 import {
   CrossedFailure,
   failureOf,
@@ -108,6 +108,23 @@ function linesOver(
 
 const overLines = (host: AdapterToHost): TimedRenderer =>
   linesOver(host).renderer;
+
+test("v8 notices carry legacy and revised held event identities through JSON", () => {
+  const heard: HeldEvent[] = [];
+  const lines = rendererOverLines({
+    send: () => {},
+    host: { ...inertHost(), eventAnswered: (event) => void heard.push(event) },
+    fault: (message) => { throw new Error(message); },
+  });
+  const toHost = hostOverLines((line) => {
+    lines.heard(JSON.parse(JSON.stringify(line)) as RendererLine);
+  });
+  const revised = joinedEvent(EVENT, "a later failure", EVENT.at);
+  toHost.eventAnswered(EVENT);
+  toHost.eventAnswered(revised);
+  expect(heard).toEqual([EVENT, revised]);
+  expect(heard[1]?.revision).toBe(1);
+});
 
 const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   kind: "adapter",

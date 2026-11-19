@@ -78,7 +78,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import type { HeldEvent } from "../src/utils/event-hold";
+import { joinedEvent, type HeldEvent } from "../src/utils/event-hold";
 import {
   hearingEvents,
   hostHeld,
@@ -496,11 +496,7 @@ describe("a statusline request", () => {
   });
 
   test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
-    const event = {
-      text: "copy: pbcopy failed: exit 1",
-      ...READ,
-      answered: false,
-    };
+    const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
       actFailed: event,

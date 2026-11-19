@@ -26,6 +26,8 @@ The rate cell hangs on the menu's anchor, beside the door, because the anchor is
 
 A throw while taking an output's frames or switches is logged and shown on every bar, and never fails the turn that drew them: the turn's other effects already happened.
 
+Unanswered click and daemon-act diagnostics share one bounded text record. Short messages keep their order. At the limit the bar keeps recent details and can shorten one oversized message around its middle. The full error still follows its usual log path. Each joined record has its own acknowledgement revision, so equal visible text in the same instant can still identify separate arrivals.
+
 ## Followers
 
 The Node and native followers share their reconnect decisions through one fixture of cases, which both test suites assert. Only a daemon speaking a newer protocol ends a follower. A bad-request answer comes from an older daemon, which restarts on the new build, so the follower reconnects.
