@@ -31,7 +31,12 @@ import {
   readPending,
   type JsonValue,
 } from "./types.js";
-import { VariableStore, type Derivation, type StoredValue } from "./store.js";
+import {
+  VariableStore,
+  type Derivation,
+  type StoredValue,
+  type VariableKey,
+} from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -67,6 +72,8 @@ export type { ReadMode } from "../facts/source-identity.js";
 // while what its policy reads has not answered, failed while a key failed
 // before answering.
 export type SourceRun = Present<Run>;
+
+type SourceKey = string | readonly VariableKey[];
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -593,14 +600,13 @@ export class SourceRegistry {
       reaction(
         () => this.inputs.get().env(envVar),
         (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read: Outcome<string> =
-            outcome.kind === "absent"
-              ? failed(`env var "${envVar}" is not set`, "read")
-              : outcome;
-          this.noteOutcome(name, read);
-          this.store.setBox(name, orElse(read, fallback));
+          // [LAW:one-source-of-truth] Both display and diagnostics follow
+          // the host's current fact, including a value that becomes pending.
+          this.noteOutcome(name, fact, `env var "${envVar}" is not set`);
+          this.store.setBox(
+            name,
+            fact.kind === "pending" ? fact : orElse(fact, fallback),
+          );
         },
         { fireImmediately: true },
       ),
@@ -1080,10 +1086,10 @@ export class SourceRegistry {
         // [LAW:dataflow-not-control-flow] The source re-reads whenever any
         // named variable changes. Variability lives in the dep values, not in
         // whether the update executes.
-        return this.answeredUnder(name, (): Reading<string> => {
+        return this.answeredUnder(name, () => {
           const keys = policy.varNames.map((n) => this.store.changeKey(n));
           return keys.every((key) => key.kind === "ok")
-            ? ok(keys.map((key) => key.value).join(","))
+            ? ok(keys.map((key) => key.value))
             : pendingOf("unread");
         });
       }
@@ -1102,7 +1108,7 @@ export class SourceRegistry {
   // failure, so the render event says failed rather than unread.
   private answeredUnder(
     name: string,
-    reads: () => Reading<string>,
+    reads: () => Reading<SourceKey>,
   ): () => Present<RunRefresh> {
     // Equal by value, so an input that moved without moving what the policy
     // read hashes nothing and names the run it named.
@@ -1118,12 +1124,14 @@ export class SourceRegistry {
     // the run's derivation, as a value a reaction wrote would lag the key's
     // move inside the host's batch. The registry observes its runs for its
     // life (the constructor), so this derivation runs at every answer.
-    let last: string | undefined;
+    let last: SourceKey | undefined;
     return () => {
       const now = answer.get();
       if (now.kind === "ok") last = now.value;
+      // [LAW:single-enforcer] Encode the complete key once. A template can
+      // spell a dependency tuple, and its encoded value is still a string.
       return last !== undefined
-        ? ok({ kind: "key", hash: keyHashOf(last) })
+        ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last)) })
         : now.kind === "failed"
           ? now
           : pendingOf("unread");
@@ -1183,14 +1191,19 @@ export class SourceRegistry {
     });
   }
 
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  private noteOutcome(name: string, outcome: Outcome<unknown>): void {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
+  // [LAW:single-enforcer] The one fold from a source reading to the
+  // variable's error record. A pending or successful read ends an old error.
+  private noteOutcome(
+    name: string,
+    outcome: Reading<unknown>,
+    absentReason = "no value",
+  ): void {
+    if (outcome.kind === "ok" || outcome.kind === "pending")
+      this.lastErrors.delete(name);
     else
       this.recordError(
         name,
-        outcome.kind === "failed" ? outcome.reason : "no value",
+        outcome.kind === "failed" ? outcome.reason : absentReason,
       );
   }
 }

@@ -403,6 +403,14 @@ function shaped(outcome: Reading<JsonValue>): Reading<JsonValue> {
 // proxy, debug introspection) switches on `kind` once.
 export type StoreNode = VarNode | DocumentNode;
 
+// [LAW:types-are-the-program] A variable's contribution to a change key.
+// A failed read has an identity of its own, even when a scalar spells its
+// reason. Numeric text keeps non-finite scalars distinct through JSON.
+export type VariableKey =
+  | readonly [kind: "scalar", type: VarType, text: string]
+  | readonly [kind: "document", key: string]
+  | readonly [kind: "failed", reason: string];
+
 function assertType(
   name: string,
   declared: VarType,
@@ -570,19 +578,14 @@ export class VariableStore {
     return this.requireNode(name).kind;
   }
 
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
-  changeKey(name: string): Pending | Ok<string> {
+  // [LAW:one-source-of-truth] A dependant sees the same change a node's own
+  // observers see, with pending blocking a first run and failures counting
+  // as changes. A document key uses the store's own structural comparison.
+  changeKey(name: string): Pending | Ok<VariableKey> {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(["document", documentKey(doc)]);
     }
     // A scalar read can throw: a `template` variable with no authored `default`
     // reads as its failure (brandon-var-sources-1p6). Failing IS a change — a
@@ -593,11 +596,11 @@ export class VariableStore {
     // with no way to recover. [LAW:no-silent-failure] the failure is carried in
     // the key, not swallowed; not answered yet is no failure, and no key.
     try {
-      return ok(String(node.read()));
+      return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
       return readPending(e) !== undefined
         ? pendingOf("unread")
-        : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+        : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }
 
