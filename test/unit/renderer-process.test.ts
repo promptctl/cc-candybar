@@ -44,7 +44,6 @@ import {
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
-import { inertHost } from "../helpers/renderer-parts";
 import {
   oversizedRendererHistory,
   oversizedSession,
@@ -126,7 +125,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
-    reaches: inertHost(),
     log: (level, msg) => {
       logs.push(msg);
       levels.push(level);
@@ -376,7 +374,6 @@ test("the in-process link logs construction diagnostics once before its first an
     entry: "/app/index.mjs",
     node: ["/bin/node"],
   }).start({
-    reaches: inertHost(),
     log: (level, line) => void logs.push({ level, line }),
     clock: heldClock(new Date(0)),
     start: async () => {},

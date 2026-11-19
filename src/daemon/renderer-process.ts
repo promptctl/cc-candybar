@@ -27,7 +27,6 @@ import {
   type TimedRenderer,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
@@ -97,8 +96,7 @@ export function processPort(
   });
 }
 
-// What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `context` and who
+// What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
 // watches each session through the host's one path to the renderer,
 // resolving once its turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
@@ -106,7 +104,6 @@ export function processPort(
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
 export interface LinkOwner {
-  readonly reaches: AdapterToHost;
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
@@ -307,7 +304,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
-        host: own.reaches,
         fault: (message) =>
           log("error", `renderer ${name}[${generationOf}]: ${message}`),
       }),

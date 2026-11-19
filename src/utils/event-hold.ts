@@ -29,6 +29,13 @@ export interface HeldEvent {
   readonly answered: boolean;
 }
 
+// [LAW:types-are-the-program] A frame names the daemon's occurrence and its
+// owner. Session click errors never leave the renderer's delivery record.
+export interface DisplayedEvent {
+  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+  readonly event: HeldEvent;
+}
+
 // `held` inside the hold, `owed` past it to a request no answer has served,
 // `over` once neither holds.
 export type EventHold = "held" | "owed" | "over";
@@ -90,10 +97,9 @@ export function joinedEvent(
 // [LAW:single-enforcer] The one rule for which answer marks an event: one that
 // carried the latest event, not yet marked. A newer event since stays unmarked.
 export function answeredBy(last: HeldEvent, shown: HeldEvent): boolean {
-  return (
-    !last.answered &&
-    last.at === shown.at &&
-    last.text === shown.text &&
-    last.revision === shown.revision
-  );
+  return !last.answered && sameOccurrence(last, shown);
+}
+
+export function sameOccurrence(a: HeldEvent, b: HeldEvent): boolean {
+  return a.at === b.at && a.text === b.text && a.revision === b.revision;
 }

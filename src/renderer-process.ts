@@ -19,7 +19,6 @@ import {
   type RendererConstruction,
 } from "./renderer-interface/interface.js";
 import {
-  hostOverLines,
   lineSplitter,
   rendererBootFrom,
   RENDERER_WIRE_VERSION,
@@ -32,7 +31,6 @@ export function runRenderer(world: World): void {
   const send = (line: RendererLine): void => {
     process.stdout.write(`${JSON.stringify(line)}\n`);
   };
-  const host = hostOverLines(send);
   // [LAW:single-enforcer] One way out, taken once, whichever end came first:
   // the host holds everything this process stored, so nothing is left to
   // save.
@@ -68,7 +66,7 @@ export function runRenderer(world: World): void {
     let result: RendererConstruction;
     try {
       const boot = rendererBootFrom(JSON.parse(text));
-      result = mainRendererOf(boot, host);
+      result = mainRendererOf(boot);
     } catch (thrown) {
       result = { kind: "refused", failure: failureOf(thrown) };
     }

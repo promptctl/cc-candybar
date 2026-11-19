@@ -18,6 +18,7 @@ import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
+import type { DisplayedEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
@@ -305,6 +306,7 @@ export interface Present {
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
+  readonly displayedEvents?: readonly DisplayedEvent[];
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
@@ -466,6 +468,8 @@ export type FeedFrame<Body = WireFrame> =
       readonly receipt: EffectId;
       readonly bar: Body;
       readonly handoff: Body | null;
+      // The bar and its statusline handoff share the draw's diagnostics.
+      readonly displayedEvents?: readonly DisplayedEvent[];
     }
   | { readonly kind: "failed"; readonly message: string };
 

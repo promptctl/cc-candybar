@@ -373,6 +373,9 @@ function pipeEvent(
   state.pipeEvent = {
     text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
     at: state.scope.now(),
+    // [LAW:types-are-the-program] An old write must not answer a later event
+    // with the same count, category and instant.
+    revision: (last?.revision ?? 0) + 1,
     answered: false,
     counts,
   };
@@ -404,7 +407,12 @@ function standing(state: LaunchState): LauncherFact[] {
       : [
           {
             kind: "launch-pipes" as const,
-            event: { text: event.text, at: event.at, answered: event.answered },
+            event: {
+              text: event.text,
+              at: event.at,
+              revision: event.revision,
+              answered: event.answered,
+            },
           },
         ]),
   ];
