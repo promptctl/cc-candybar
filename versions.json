@@ -4,15 +4,29 @@
     {
       "version": "pr-909",
       "ref": "refs/pull/909/merge",
-      "sha": "d079f337c4bfd09b9b948e4ccd5c3d26c57f4704",
-      "timestamp": "2026-11-19T21:42:36.167Z",
+      "sha": "535c8510045270d51762cec71e29a8f994eaed25",
+      "timestamp": "2026-11-19T21:52:36.038Z",
       "commits": [
         {
-          "sha": "d079f337c4bfd09b9b948e4ccd5c3d26c57f4704",
+          "sha": "535c8510045270d51762cec71e29a8f994eaed25",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T21:41:35Z",
-          "message": "Merge 7107fbc98638207792f42f0d741a504c49e55887 into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+          "timestamp": "2026-11-19T21:51:20Z",
+          "message": "Merge 9efe832ff1122b592fc8ae6041c166dc9bfdd44c into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+        },
+        {
+          "sha": "9efe832ff1122b592fc8ae6041c166dc9bfdd44c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:51:05-07:00",
+          "message": "docs(renderer): distinguish authored and bundled recovery\n"
+        },
+        {
+          "sha": "62daf67e439d6f68dc30bf4bea54a9c559be5e8e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:50:42-07:00",
+          "message": "fix(renderer): refresh bundled fallback from current discovery\n"
         },
         {
           "sha": "7107fbc98638207792f42f0d741a504c49e55887",

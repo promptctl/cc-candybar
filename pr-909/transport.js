@@ -70459,8 +70459,8 @@ function loadOrigin(cwd2, snapshot, deps, served = null) {
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
   return settle(snapshot, resolved.warnings, attempt4);
 }
-function fallbackState(cwd2, snapshot, deps) {
-  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps);
+function fallbackState(cwd2, snapshot, deps, served) {
+  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps, served);
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause
@@ -71028,7 +71028,7 @@ var RenderCache = class {
   configSelections() {
     return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, selected }]) => ({
       origin,
-      digest: selected.digest
+      digest: selected.kind === "authored" ? selected.digest : null
     }));
   }
   subscriptions() {
@@ -71062,23 +71062,32 @@ var RenderCache = class {
   // built after would hold timers and watchers nothing tears down.
   selectState(origin, { snapshot, digest: digest2 }, previous2) {
     if (this.closed) throw new Error("render cache used after close");
-    const retained = previous2 !== null && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
+    const retained = previous2?.kind === "authored" && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
+    const bundled = previous2?.kind === "bundled" ? previous2 : null;
     const { cwd: cwd2 } = origin;
     const { repo: repo2 } = snapshot;
     const loaded = loadOrigin(
       cwd2,
       snapshot,
       this.deps,
-      retained?.state ?? null
+      (retained ?? bundled)?.state ?? null
     );
     if (loaded.state !== null)
-      return { loaded, selected: { state: loaded.state, digest: digest2, repo: repo2 } };
-    const selected = retained ?? {
-      state: fallbackState(cwd2, snapshot, this.deps),
-      digest: null,
-      repo: repo2
+      return {
+        loaded,
+        selected: { kind: "authored", state: loaded.state, digest: digest2, repo: repo2 }
+      };
+    if (retained !== null) return { loaded, selected: retained };
+    const state = fallbackState(
+      cwd2,
+      snapshot,
+      this.deps,
+      bundled?.state ?? null
+    );
+    return {
+      loaded,
+      selected: bundled?.state === state ? bundled : { kind: "bundled", state }
     };
-    return { loaded, selected };
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
   // snapshot the host handed in for its origin. None is an event the renderer
