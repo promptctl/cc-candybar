@@ -23,8 +23,21 @@ import {
 } from "./recording-privacy.js";
 
 type CaptureState =
-  | { readonly kind: "armed" | "booting" | "built" | "refused" | "finished" }
+  | {
+      readonly kind:
+        | "armed"
+        | "booting"
+        | "built"
+        | "refused"
+        | "sealed"
+        | "finished";
+    }
   | { readonly kind: "failed"; readonly reason: string };
+
+// [LAW:effects-at-boundaries] A slow recording destination cannot grow the
+// shared host indefinitely or hold a live turn open. A single large entry can
+// write on its own. Subsequent entries share this per-recording byte budget.
+const MAX_QUEUED_BYTES = 8 * 1024 * 1024;
 
 // [LAW:no-ambient-temporal-coupling] A capture belongs to exactly one
 // generation. Its boot and turns are taken before the supervisor renumbers
@@ -32,6 +45,7 @@ type CaptureState =
 export class RendererRecording {
   private state: CaptureState = { kind: "armed" };
   private pending: Promise<void> = Promise.resolve();
+  private waitingBytes = 0;
   private turns = 0;
 
   constructor(
@@ -91,7 +105,7 @@ export class RendererRecording {
     }
     if (captured === undefined || !this.active) return timed;
     const { turnMs: _transportTiming, ...output } = timed;
-    await this.admit(
+    this.admit(
       () => recordingOutputProblem(output),
       () => {
         this.turns++;
@@ -116,7 +130,7 @@ export class RendererRecording {
     return undefined;
   }
 
-  private append(entry: RecordingEntry): Promise<void> {
+  private append(entry: RecordingEntry): void {
     // Serialize in the accepting turn. Production data can share a held
     // declaration with a later turn, and a queued write must own its bytes.
     let line: string;
@@ -124,28 +138,34 @@ export class RendererRecording {
       line = JSON.stringify(entry) + "\n";
     } catch {
       this.fail("renderer data could not be encoded");
-      return this.pending;
+      return;
     }
+    const bytes = Buffer.byteLength(line);
+    if (this.waitingBytes > 0 && this.waitingBytes + bytes > MAX_QUEUED_BYTES) {
+      this.fail("recording storage could not keep up with the renderer");
+      return;
+    }
+    this.waitingBytes += bytes;
     this.pending = this.pending.then(async () => {
-      if (this.state.kind === "failed") return;
       try {
-        await this.destination.append(line);
+        if (this.state.kind !== "failed") await this.destination.append(line);
       } catch (error) {
         this.fail(`writing recording: ${String(error)}`);
+      } finally {
+        this.waitingBytes -= bytes;
       }
     });
-    return this.pending;
   }
 
   fail(reason: string): void {
     if (this.state.kind === "failed" || this.state.kind === "finished") return;
     this.state = { kind: "failed", reason };
-    this.report("failed", reason);
     this.pending = this.pending
       .then(() => this.destination.discard())
       .catch((error: unknown) => {
         this.report("cleanup-failed", String(error));
       });
+    this.report("failed", reason);
   }
 
   interrupted(): void {
@@ -165,13 +185,21 @@ export class RendererRecording {
     );
   }
 
-  async finish(): Promise<string> {
+  // [LAW:no-ambient-temporal-coupling] Seal inside the selected renderer's
+  // mailbox. Draining and publishing happen after that mailbox is free.
+  seal(): void {
     if (this.state.kind === "armed" || this.state.kind === "booting")
       this.fail(
         "the selected renderer did not finish booting during this recording",
       );
-    await this.checkedWrites();
-    await this.append({ kind: "end", turns: this.turns });
+    if (this.state.kind === "built" || this.state.kind === "refused") {
+      this.state = { kind: "sealed" };
+      this.append({ kind: "end", turns: this.turns });
+    }
+  }
+
+  async finish(): Promise<string> {
+    this.seal();
     // A failed append can schedule its cleanup as the write settles.
     await this.checkedWrites();
     let cleanup: string | null;
@@ -213,10 +241,10 @@ export class RendererRecordings {
 
   request(
     command: RecordingCommand,
-    atBoundary: (
+    atBoundary: <T>(
       name: RendererName,
-      operation: (restart?: () => Promise<void>) => Promise<string>,
-    ) => Promise<string>,
+      operation: (restart?: () => Promise<void>) => Promise<T>,
+    ) => Promise<T>,
   ): Promise<string> {
     const name = command.renderer;
     if (this.closing) return Promise.reject(new Error("daemon is closing"));
@@ -226,10 +254,11 @@ export class RendererRecordings {
       if (command.action === "stop") {
         if (current === undefined)
           throw new Error(`no recording for renderer ${name}`);
-        return atBoundary(name, async () => {
+        await atBoundary(name, async () => {
           this.selected.delete(name);
-          return current.finish();
+          current.seal();
         });
+        return current.finish();
       }
       if (current !== undefined) {
         if (current.file === command.file)
@@ -275,19 +304,11 @@ export class RendererRecordings {
   async close(): Promise<void> {
     this.closing = true;
     await Promise.allSettled(this.requests);
-    await Promise.all(
-      [...this.selected.keys()].map((name) =>
-        this.control.run(name, async () => {
-          const capture = this.selected.get(name);
-          if (capture === undefined) return;
-          this.selected.delete(name);
-          try {
-            await capture.finish();
-          } catch {
-            // finish has already recorded the failure and discarded its staging file.
-          }
-        }),
-      ),
+    const finishing = Array.from(this.selected.values(), (capture) =>
+      capture.finish(),
     );
+    this.selected.clear();
+    // Every failed capture reports its own cause and discards its staging file.
+    await Promise.allSettled(finishing);
   }
 }

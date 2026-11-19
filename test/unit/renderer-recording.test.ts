@@ -90,7 +90,7 @@ test("opening a recording resolves the renderer that bound during the file open 
   const replace = jest.fn(async () => {
     registry.generation(MAIN_RENDERER)!.constructed(boot, { kind: "built" });
   });
-  const boundary = (_name: typeof MAIN_RENDERER, operation: (reset?: () => Promise<void>) => Promise<string>) =>
+  const boundary = <T>(_name: typeof MAIN_RENDERER, operation: (reset?: () => Promise<void>) => Promise<T>) =>
     operation(bound ? replace : undefined);
   const command = { action: "start", renderer: MAIN_RENDERER, file: "/captures/foo" } as const;
   const start = registry.request(command, boundary);
@@ -102,6 +102,48 @@ test("opening a recording resolves the renderer that bound during the file open 
   expect(replace).toHaveBeenCalledTimes(1);
   await expect(registry.request({ action: "stop", renderer: MAIN_RENDERER }, boundary)).resolves.toContain("Saved 0");
   expect(file.publish).toHaveBeenCalledTimes(1);
+});
+
+test("live turns and sealing a renderer never wait for the capture disk", async () => {
+  const { file } = memoryFile();
+  let release!: () => void;
+  file.append.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  const registry = new RendererRecordings(async () => file, () => {});
+  let capture!: RendererRecording;
+  let occupied = false;
+  const boundary = async <T>(_name: typeof MAIN_RENDERER, operation: (restart?: () => Promise<void>) => Promise<T>) => {
+    occupied = true;
+    try {
+      return await operation(async () => {
+        capture = registry.generation(MAIN_RENDERER)!;
+        capture.constructed(boot, { kind: "built" });
+      });
+    } finally { occupied = false; }
+  };
+  await registry.request({ action: "start", renderer: MAIN_RENDERER, file: "/capture" }, boundary);
+  expect(await capture.turn(input, async () => output)).toBe(output);
+  expect(await capture.turn(input, async () => output)).toBe(output);
+  const stopped = registry.request({ action: "stop", renderer: MAIN_RENDERER }, boundary);
+  await Promise.resolve();
+  expect(occupied).toBe(false);
+  expect(capture.active).toBe(false);
+  expect(file.publish).not.toHaveBeenCalled();
+  release();
+  await expect(stopped).resolves.toContain("Saved 2");
+});
+
+test("a stalled destination cannot accumulate an unbounded live trace", async () => {
+  const { capture, file } = recording();
+  let release!: () => void;
+  file.append.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  capture.constructed(boot, { kind: "built" });
+  const large: Timed<RendererOutput> = { ...output, diagnostics: [{ level: "info", line: "x".repeat(2 * 1024 * 1024) }] };
+  for (let i = 0; i < 5 && capture.active; i++)
+    expect(await capture.turn(input, async () => large)).toBe(large);
+  expect(capture.active).toBe(false);
+  release();
+  await expect(capture.finish()).rejects.toThrow("could not keep up");
+  expect(file.publish).not.toHaveBeenCalled();
 });
 
 test("shutdown while opening an unbound capture discards its private staging file", async () => {
