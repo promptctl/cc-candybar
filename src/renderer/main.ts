@@ -141,6 +141,13 @@ export function mainRenderer(
     return true;
   };
 
+  const parkedClickSessions = (): Set<SessionId> =>
+    new Set(
+      parked.flatMap(({ event }) =>
+        event.kind === "click" && event.session?.ok ? [event.session.id] : [],
+      ),
+    );
+
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
   // click's changes are owed their `effect-done` however its handler ended.
@@ -254,7 +261,9 @@ export function mainRenderer(
       case "viewers":
         feeds.view(event.viewers, time.tick);
         return;
-      case "due":
+      case "due": {
+        const busy = parkedClickSessions();
+        for (const session of event.pendingClicks ?? []) busy.add(session);
         // [LAW:dataflow-not-control-flow] Every owner of a tick, in one
         // order: held work first (a walk's load, a settled write), so the
         // menus a close reads and the frames drawn after it see it landed;
@@ -263,10 +272,11 @@ export function mainRenderer(
         // other's close or frames.
         runEach([
           () => time.runDue(),
-          () => closeIdleMenus(parts, effects),
+          () => closeIdleMenus(parts, effects, busy),
           () => feeds.drawDue({ at: time.at, tick: time.tick }, frames),
         ]);
         return;
+      }
     }
   };
 
@@ -302,7 +312,11 @@ export function mainRenderer(
       configs: [...configs.values()],
       // [LAW:one-source-of-truth] The tick the renderer next wants a turn
       // at: the earliest any owner of a tick holds.
-      wake: earliestOf([time.next(), menuIdle.next(), feeds.next()]),
+      wake: earliestOf([
+        time.next(),
+        menuIdle.next(parked.length === 0 ? undefined : parkedClickSessions()),
+        feeds.next(),
+      ]),
     };
   };
 
@@ -374,8 +388,12 @@ export function mainRenderer(
 // [LAW:no-silent-failure] A close that throws is said with its session, and
 // the others close all the same: the session's period begins again
 // (`MenuIdle.due`), so its close is tried a timeout later, never at once.
-function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
-  for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
+function closeIdleMenus(
+  parts: MainRendererParts,
+  effects: Effect[],
+  busy: ReadonlySet<SessionId>,
+): void {
+  for (const { session, idle } of parts.menuIdle.due(parts.time.tick, busy)) {
     try {
       parts.verbs.closeIdle(
         session,

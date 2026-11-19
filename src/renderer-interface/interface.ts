@@ -233,6 +233,9 @@ export type Event =
       // The tick the renderer last declared (`Subscriptions.wake`) has
       // come: what is due by the turn's tick runs in it.
       readonly kind: "due";
+      // An admitted click postpones only its session's idle close. Omitted
+      // by older hosts and direct callers when no click hold is supplied.
+      readonly pendingClicks?: readonly SessionId[];
     };
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host

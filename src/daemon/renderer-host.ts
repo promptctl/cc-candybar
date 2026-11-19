@@ -110,6 +110,8 @@ export interface RendererHost {
   // slot comes up, and answers the input, or why there is none to send,
   // which is the turn's failure.
   answer(make: () => Made): Promise<HostTurn>;
+  // A click keeps its session busy until its mailbox slot lands.
+  answerClick(session: SessionId | null, make: () => Made): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
@@ -187,6 +189,12 @@ export function rendererHost(
   // when: its answer, its changes landing and their `effect-done` turns.
   let holder: { input: string; readonly since: Monotonic } | null = null;
   let queued = 0;
+  // [LAW:one-source-of-truth] A due observes the sessions of admitted clicks
+  // whose slots have yet to land. Outliving effects do not keep a menu busy.
+  const pendingClicks = new Map<
+    SessionId,
+    { readonly session: SessionId; count: number }
+  >();
   // [LAW:one-source-of-truth] The origins, by `originKey`, whose config the
   // live renderer was served: what its last output named. A `start` is a
   // renderer that holds none.
@@ -565,37 +573,55 @@ export function rendererHost(
   const throughSlot = (
     make: () => Made,
     at: Place,
-  ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> =>
-    inMailbox(async (queuedMs, holds) => {
-      // [LAW:no-silent-failure] A make that threw is the turn's failure.
-      let made: Made;
+    click: SessionId | null = null,
+  ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
+    const held =
+      click === null
+        ? null
+        : (pendingClicks.get(click) ?? { session: click, count: 0 });
+    if (held !== null) {
+      held.count++;
+      pendingClicks.set(held.session, held);
+    }
+    return inMailbox(async (queuedMs, holds) => {
       try {
-        made = make();
-      } catch (thrown) {
-        made = failureOf(thrown);
+        // [LAW:no-silent-failure] A make that threw is the turn's failure.
+        let made: Made;
+        try {
+          made = make();
+        } catch (thrown) {
+          made = failureOf(thrown);
+        }
+        // A new renderer holds no config, even if its start was not made or
+        // could not be answered. The first mailbox place belongs to start.
+        if (
+          at === "first" ||
+          (made.kind === "event" && made.event.kind === "start")
+        )
+          served.clear();
+        if (made.kind !== "event")
+          return { event: null, slotted: unanswered(made, queuedMs) };
+        holds(made.event.kind);
+        return {
+          event: made.event,
+          slotted: await inSlot(stamped(made), queuedMs),
+        };
+      } finally {
+        // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
+        // select another slot, including when this click was refused.
+        if (held !== null && --held.count === 0)
+          pendingClicks.delete(held.session);
       }
-      // A new renderer holds no config, even if its start was not made or
-      // could not be answered. The first mailbox place belongs to start.
-      if (
-        at === "first" ||
-        (made.kind === "event" && made.event.kind === "start")
-      )
-        served.clear();
-      if (made.kind !== "event")
-        return { event: null, slotted: unanswered(made, queuedMs) };
-      holds(made.event.kind);
-      return {
-        event: made.event,
-        slotted: await inSlot(stamped(made), queuedMs),
-      };
     }, at);
+  };
   // One input from its arrival to its settling: its acts settled after its
   // slot.
   const taken = async (
     make: () => Made,
     at: Place = "last",
+    click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
-    const { event, slotted } = await throughSlot(make, at);
+    const { event, slotted } = await throughSlot(make, at, click);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled },
@@ -603,6 +629,10 @@ export function rendererHost(
   };
   const answer = async (make: () => Made): Promise<HostTurn> =>
     (await taken(make)).turn;
+  const answerClick = async (
+    session: SessionId | null,
+    make: () => Made,
+  ): Promise<HostTurn> => (await taken(make, "last", session)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const recorded =
@@ -691,11 +721,9 @@ export function rendererHost(
   // [LAW:single-enforcer] The one timer the renderer's turns are scheduled
   // by: its `due` is an input like any other, made in its slot, and refused
   // once the wake has closed.
-  // [LAW:no-ambient-temporal-coupling] A `due` is the renderer's idle work:
-  // every input that arrives while it waits goes ahead of it, so a click that
-  // has arrived lands before an idle close reads its session idle. The wake
-  // hears the turn once the renderer has answered it: the acts it returned
-  // settle on their own, and hold back no later `due`.
+  // [LAW:no-ambient-temporal-coupling] The mailbox bounds the ordinary turns
+  // ahead of a `due`. Its input carries any pending clicks so the renderer
+  // can leave those sessions' menus alone. Its acts settle outside the slot.
   const wake: RendererWake = new RendererWake({
     clock,
     due: async () => {
@@ -710,8 +738,14 @@ export function rendererHost(
                 message: "the daemon is closing",
                 detail: "a due made after the renderer's wake closed",
               }
-            : { kind: "event", event: { kind: "due" } },
-        "idle",
+            : {
+                kind: "event",
+                event: {
+                  kind: "due",
+                  pendingClicks: [...pendingClicks.keys()],
+                },
+              },
+        "scheduled",
       );
       unawaited("due acts", settled);
       record(event, [], turn);
@@ -725,6 +759,7 @@ export function rendererHost(
   return {
     name,
     answer,
+    answerClick,
     deliver,
     start: recorded("first"),
     ask,

@@ -36,9 +36,11 @@ import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";
+import { heldClock } from "./helpers/held-clock";
+import { FOREGROUND_BURST } from "../src/utils/keyed-serial-queue";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
@@ -59,6 +61,7 @@ async function drain(): Promise<void> {
 function setup(
   over: {
     readonly collector?: Parameters<typeof clickParts>[1];
+    readonly clock?: Timekeeper;
   } = {},
 ) {
   const sessionState = new SessionState();
@@ -68,16 +71,17 @@ function setup(
     log: (_level, line) => logged.push(line),
   });
   const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
-  const host = clickParts(verbCtx, over.collector);
+  const clock = over.clock ?? systemTimekeeper;
+  const host = clickParts(verbCtx, over.collector, undefined, clock);
   const events: string[] = [];
   const parts = {
-    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    clock,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
     ...host,
   } as unknown as DaemonParts;
-  const stats = new RuntimeStats(systemTimekeeper);
+  const stats = new RuntimeStats(clock);
   const send = (verb: string, value: string, gone = () => false) =>
     replyTo(
       parts,
@@ -208,6 +212,35 @@ describe("the idle close decides as its turn comes", () => {
         new RegExp(`^menu-idle: closed=.* timeout=30s \\(session=${A}\\)$`),
       ),
     ]);
+  });
+
+  test("a scheduled due closes another session's menu while leaving a queued click's menu open", async () => {
+    const clock = heldClock(new Date(0));
+    const { menuIdle, park, renderer, sessionState, write, theme, logged } = setup({ clock });
+    const other = sessionIdOf("session-b");
+    recordRender(sessionState, other);
+    menuIdle.drew(A, tickAt(clock), true, 30);
+    menuIdle.drew(other, tickAt(clock), true, 30);
+    const viewers = () => ({ kind: "event", event: { kind: "viewers", viewers: {} } }) as const;
+    await renderer.deliver(viewers, []);
+    const parked = park();
+    const foreground = Array.from({ length: FOREGROUND_BURST }, () => renderer.deliver(viewers, []));
+    clock.advance(30_000);
+    let beforeClick: readonly string[] = [];
+    const atNextOrdinarySlot = renderer.deliver(() => {
+      beforeClick = closes(logged);
+      return viewers();
+    }, []);
+    const clicked = write("nord");
+    parked.open();
+    await Promise.all([parked.holding, ...foreground, atNextOrdinarySlot, clicked]);
+    expect(beforeClick).toEqual([
+      expect.stringContaining(`(session=${other})`),
+    ]);
+    expect(theme()).toBe("nord");
+    expect(closes(logged)).toEqual(beforeClick);
+    expect(menuIdle.next()).toBe(60);
+    renderer.closeWake();
   });
 
   test("a due waiting behind a click finds the period the click restarted, and closes nothing", async () => {

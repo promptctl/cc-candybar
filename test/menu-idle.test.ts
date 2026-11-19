@@ -93,6 +93,18 @@ describe("the idle period: a close is due a timeout after it began, while a menu
     expect(idle.next()).toBe(55);
   });
 
+  test("a session with a pending click retains its idle deadline while another expires", () => {
+    const idle = new MenuIdle();
+    const busy = new Set([S]);
+    idle.drew(S, tick(0), true, 30);
+    idle.drew(T, tick(0), true, 30);
+    expect(idle.due(tick(30), busy)).toEqual([
+      { session: T, idle: { idleS: 30, timeoutS: 30 } },
+    ]);
+    expect(idle.next(busy)).toBeNull();
+    expect(idle.next()).toBe(30);
+  });
+
   test("a menu first shown long after the last click is due a timeout after it appears", () => {
     const idle = new MenuIdle();
     idle.drew(S, tick(0), false, 30);
