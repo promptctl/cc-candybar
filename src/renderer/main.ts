@@ -331,8 +331,8 @@ export function mainRenderer(
         return;
       }
       case "request": {
-        // [LAW:one-source-of-truth] The request supplies the reply's client
-        // and slot. The current session record supplies the draw's inputs.
+        // [LAW:one-source-of-truth] The request supplies its own presentation
+        // and reply slot. The current session record supplies what is drawn.
         const current = parts.worldStates.requestOf(
           event.context.hookData.session_id,
         );
@@ -346,7 +346,7 @@ export function mainRenderer(
         const { frame, delivery, inspection } = answerRequest(
           parts,
           current,
-          event.context.hints.client ?? null,
+          event.context.hints,
           record,
           event.inspect,
         );
