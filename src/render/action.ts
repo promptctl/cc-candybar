@@ -43,7 +43,7 @@ import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import {
-  configWriteArgs,
+  configWriteEffect,
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_OPEN_VSCODE,
@@ -920,10 +920,13 @@ export function realize(
       const current = readVar(store, c.stateVar);
       return {
         effects: [
-          {
-            verb: VERB_SET_CONFIG,
-            args: configWriteArgs(sessionId, c.layer, c.key, c.value),
-          },
+          configWriteEffect(
+            VERB_SET_CONFIG,
+            sessionId,
+            c.layer,
+            c.key,
+            c.value,
+          ),
         ],
         active: current === c.value,
       };
@@ -933,10 +936,7 @@ export function realize(
       const current = readVar(store, c.stateVar);
       return {
         effects: [
-          {
-            verb: VERB_SET_CONFIG,
-            args: configWriteArgs(sessionId, c.layer, c.key, value),
-          },
+          configWriteEffect(VERB_SET_CONFIG, sessionId, c.layer, c.key, value),
         ],
         active: current === value,
       };
@@ -945,10 +945,7 @@ export function realize(
       const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
       return {
         effects: [
-          {
-            verb: VERB_SET_CONFIG,
-            args: configWriteArgs(sessionId, c.layer, c.key, next),
-          },
+          configWriteEffect(VERB_SET_CONFIG, sessionId, c.layer, c.key, next),
         ],
         active: false,
       };
@@ -956,10 +953,13 @@ export function realize(
     case "persist-bounded": {
       return {
         effects: [
-          {
-            verb: VERB_STEP_CONFIG,
-            args: configWriteArgs(sessionId, c.layer, c.key, String(c.by)),
-          },
+          configWriteEffect(
+            VERB_STEP_CONFIG,
+            sessionId,
+            c.layer,
+            c.key,
+            String(c.by),
+          ),
         ],
         active: false,
       };
@@ -967,10 +967,7 @@ export function realize(
     case "reset":
       return {
         effects: [
-          {
-            verb: VERB_RESET_CONFIG,
-            args: configWriteArgs(sessionId, c.layer, c.key),
-          },
+          configWriteEffect(VERB_RESET_CONFIG, sessionId, c.layer, c.key),
         ],
         active: false,
       };
@@ -1009,39 +1006,32 @@ export function realize(
           `a save that asks which layer it writes binds the layer as its value — {{ action "<save>" "💾 project" "project" }} — and ${boundValue === undefined ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`,
         );
       return {
-        effects: [{ verb: VERB_SAVE, args: configWriteArgs(sessionId, layer) }],
+        effects: [configWriteEffect(VERB_SAVE, sessionId, layer)],
         active: false,
       };
     }
     // Never "active": one-shot triggers, like save.
     case "preset-save":
       return {
-        effects: [
-          { verb: VERB_SAVE_PRESET, args: configWriteArgs(sessionId, c.layer) },
-        ],
+        effects: [configWriteEffect(VERB_SAVE_PRESET, sessionId, c.layer)],
         active: false,
       };
     case "theme-default-save":
       return {
         effects: [
-          {
-            verb: VERB_SAVE_THEME_DEFAULT,
-            args: configWriteArgs(sessionId, c.layer),
-          },
+          configWriteEffect(VERB_SAVE_THEME_DEFAULT, sessionId, c.layer),
         ],
         active: false,
       };
     case "preset-delete":
       return {
         effects: [
-          {
-            verb: VERB_DELETE_PRESET,
-            args: configWriteArgs(
-              sessionId,
-              c.layer,
-              evalTemplate(c.name, buildScope(store)),
-            ),
-          },
+          configWriteEffect(
+            VERB_DELETE_PRESET,
+            sessionId,
+            c.layer,
+            evalTemplate(c.name, buildScope(store)),
+          ),
         ],
         active: false,
       };
@@ -1088,15 +1078,13 @@ export function realize(
     case "layout-op":
       return {
         effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: configWriteArgs(
-              sessionId,
-              c.layer,
-              c.key,
-              encodeLayoutOp(c.op),
-            ),
-          },
+          configWriteEffect(
+            VERB_APPLY_LAYOUT_OP,
+            sessionId,
+            c.layer,
+            c.key,
+            encodeLayoutOp(c.op),
+          ),
         ],
         active: false,
       };
@@ -1134,15 +1122,13 @@ export function realize(
       };
       return {
         effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: configWriteArgs(
-              sessionId,
-              c.layer,
-              c.key,
-              encodeLayoutOp(op),
-            ),
-          },
+          configWriteEffect(
+            VERB_APPLY_LAYOUT_OP,
+            sessionId,
+            c.layer,
+            c.key,
+            encodeLayoutOp(op),
+          ),
         ],
         active: false,
       };

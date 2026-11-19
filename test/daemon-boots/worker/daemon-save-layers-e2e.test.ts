@@ -208,6 +208,7 @@ describe("save writes the layer it is asked for", () => {
         );
         expect(textOf(preserved)).toContain("☐ wrap");
         expect(textOf(preserved)).toContain("↩ cancel");
+        expect(textOf(preserved)).toContain("⚠");
         fs.rmSync(userFile, { recursive: true });
         fs.writeFileSync(userFile, ASKING);
         const ready = await renderUntil(

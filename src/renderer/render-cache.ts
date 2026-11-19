@@ -983,6 +983,16 @@ const DIRECTORY_SCOPE: ReadonlySet<VarScope> = new Set(["directory"]);
 const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 const NO_WRITABLE_LAYERS: readonly LayerRole[] = [];
 
+// [LAW:types-are-the-program] A view can offer writes or show why its
+// current config blocks them, even while it draws an older preview.
+export type ConfigAccess =
+  | { readonly kind: "available"; readonly roles: readonly LayerRole[] }
+  | { readonly kind: "unavailable"; readonly error: string };
+
+export function writableRoles(access: ConfigAccess): readonly LayerRole[] {
+  return access.kind === "available" ? access.roles : NO_WRITABLE_LAYERS;
+}
+
 // [LAW:one-source-of-truth] A session's view of one entry's state
 // (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
 // its state reads, its derivations, the sources keyed on them — in a store
@@ -1009,7 +1019,7 @@ export interface SessionView<
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  readonly writable: () => readonly LayerRole[];
+  readonly configAccess: () => ConfigAccess;
   // Standalone views can update the request they hold.
   requested?(facts: F): void;
   // The current request the view draws by.
@@ -1040,7 +1050,7 @@ export interface SourcedView {
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly requested: () => ViewFacts;
-  readonly writable: () => readonly LayerRole[];
+  readonly configAccess: () => ConfigAccess;
 }
 
 export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
@@ -1066,7 +1076,7 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly source: SourceOf<S>;
   readonly changed: (sessionId: SessionId) => void;
   readonly log: DaemonLogger;
-  readonly writable?: () => readonly LayerRole[];
+  readonly configAccess?: () => ConfigAccess;
 }
 
 function standaloneRequest<F>(facts: F) {
@@ -1093,7 +1103,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     source: sourceOf,
     changed,
     log,
-    writable: writableLayers = () => state.writable,
+    configAccess = () => ({ kind: "available", roles: state.writable }),
   }: ViewDeclaring<S>,
   currentRequest?: () => F,
 ): SessionView<S, F> {
@@ -1118,7 +1128,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
       state,
       store: registry.variableStore,
       requested: request.read,
-      writable: writableLayers,
+      configAccess,
     });
   } catch (e) {
     registry.dispose();
@@ -1158,7 +1168,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     state,
     store: registry.variableStore,
     registry,
-    writable: writableLayers,
+    configAccess,
     source,
     requested: request.update,
     facts: request.read,
@@ -1618,7 +1628,7 @@ export class RenderCache<
           source: this.deps.source,
           changed: (sid) => this.observers.onViewChanged?.(sid),
           log: this.log,
-          writable: () => this.writableFrom(entry, state),
+          configAccess: () => this.accessTo(entry, state),
         },
         currentRequest === undefined
           ? undefined
@@ -1640,16 +1650,23 @@ export class RenderCache<
 
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
-  private writableFrom(
-    entry: CacheEntry,
-    state: DslRenderState,
-  ): readonly LayerRole[] {
-    const held = this.snapshots.get(originKey(entry.origin));
-    return entry.lastError === null &&
-      held !== undefined &&
-      held.snapshot.chain.every((layer) => writable(layer.content))
-      ? state.writable
-      : NO_WRITABLE_LAYERS;
+  private accessTo(entry: CacheEntry, state: DslRenderState): ConfigAccess {
+    const key = originKey(entry.origin);
+    const error = entry.lastError ?? this.entries.get(key)?.lastError;
+    if (error != null) return { kind: "unavailable", error };
+    const held = this.snapshots.get(key);
+    if (held === undefined)
+      return {
+        kind: "unavailable",
+        error: "No current config is held for this session",
+      };
+    for (const { role, path, content } of held.snapshot.chain)
+      if (content.kind === "unreadable")
+        return {
+          kind: "unavailable",
+          error: `The ${role} config layer at ${path} could not be read: ${content.error}`,
+        };
+    return { kind: "available", roles: state.writable };
   }
 
   private leaseOf(view: SessionView<S, F>): ViewHold {

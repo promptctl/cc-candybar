@@ -33,7 +33,7 @@ import {
 } from "../facts/world-state.js";
 import { ownValue } from "../utils/plain.js";
 import type { WorldStates } from "./world-states.js";
-import type { SourceOf } from "./render-cache.js";
+import { writableRoles, type SourceOf } from "./render-cache.js";
 import {
   composePayload,
   type ComposeInputs,
@@ -85,7 +85,7 @@ export interface SessionSourceDeps {
 export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
-  return ({ sessionId, state, store, requested, writable }) => {
+  return ({ sessionId, state, store, requested, configAccess }) => {
     const pick = (key: string): string | null =>
       deps.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
@@ -116,7 +116,7 @@ export function sessionSource(
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick),
           configPath: state.configPath,
-          layers: layerFlags(writable()),
+          layers: layerFlags(writableRoles(configAccess())),
         },
         history: deps.history(sessionId),
         back: deps.navigation(sessionId, state.config),

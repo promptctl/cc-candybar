@@ -10,6 +10,8 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { LayerRole } from "../config/layer-role.js";
 import type { DslConfig, RawDslConfig } from "../config/dsl-types.js";
+import { presetGlobalsKey } from "../config/loader/persist-target.js";
+import { presetByName, presetNames } from "../config/presets.js";
 import {
   LANES,
   LANE_NAMES,
@@ -17,9 +19,9 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { configWriteArgs, VERB_RESET_CONFIG } from "../click/wire.js";
+import { configWriteEffect, VERB_RESET_CONFIG } from "../click/wire.js";
 import { actionTarget } from "../render/drawn-link.js";
-import { isBundledPreset } from "./bundled-presets.js";
+import { resetLayers } from "./setting-drafts.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
@@ -40,29 +42,34 @@ export function handedOffTo(
 
 export const HANDOFF_BUTTON = "[⟲ claude]";
 
-// [LAW:one-source-of-truth] Reset clears personal global settings and
-// personal deltas over bundled presets. The project and custom preset
-// pins survive. Compute the remaining defaults once per configuration.
+// [LAW:one-source-of-truth] Compute what survives the same reset keys the
+// writer clears. The project layer never takes part in the handoff reset.
 export function laneDefaultsAfterReset(
   config: DslConfig,
   bundled: DslConfig,
   project: RawDslConfig,
 ): ReadonlyMap<string, LaneSwitches> {
+  const resetKeys = perLane(
+    (lane) => new Set(resetLayers(LANES[lane].switch.setting).fileKeys),
+  );
   return new Map(
-    Object.entries(config.presets).map(([name, preset]) => [
-      name,
-      perLane((lane) => {
-        const { setting } = LANES[lane].switch;
-        const pin = isBundledPreset(name)
-          ? (project.presets?.[name]?.globals?.[setting] ??
-            bundled.presets[name]?.globals?.[setting])
-          : preset.globals?.[setting];
-        return (
-          (pin ?? project.globals?.[setting] ?? bundled.globals[setting]) ===
-          true
-        );
-      }),
-    ]),
+    presetNames(config.presets).map((name) => {
+      const preset = presetByName(config.presets, name);
+      return [
+        name,
+        perLane((lane) => {
+          const { setting } = LANES[lane].switch;
+          const pin = resetKeys[lane].has(presetGlobalsKey(name, setting))
+            ? (project.presets?.[name]?.globals?.[setting] ??
+              bundled.presets[name]?.globals?.[setting])
+            : preset.globals?.[setting];
+          return (
+            (pin ?? project.globals?.[setting] ?? bundled.globals[setting]) ===
+            true
+          );
+        }),
+      ];
+    }),
   );
 }
 
@@ -86,14 +93,14 @@ export function laneHandoff(
       ? diagnosticSpan(
           HANDOFF_BUTTON,
           actionTarget(
-            personal.map((role) => ({
-              verb: VERB_RESET_CONFIG,
-              args: configWriteArgs(
+            personal.map((role) =>
+              configWriteEffect(
+                VERB_RESET_CONFIG,
                 sessionId,
                 role,
                 ...lanes.map((lane) => LANES[lane].switch.setting),
               ),
-            })),
+            ),
           ),
         )
       : diagnosticSpan(reason, null);

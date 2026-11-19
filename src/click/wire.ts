@@ -227,14 +227,28 @@ export interface Effect {
   readonly args: readonly string[];
 }
 
+type ConfigWriteVerb =
+  | typeof VERB_SET_CONFIG
+  | typeof VERB_STEP_CONFIG
+  | typeof VERB_RESET_CONFIG
+  | typeof VERB_APPLY_LAYOUT_OP
+  | typeof VERB_SAVE
+  | typeof VERB_SAVE_PRESET
+  | typeof VERB_DELETE_PRESET
+  | typeof VERB_SAVE_THEME_DEFAULT;
+
 // [LAW:single-enforcer] Durable effects address a checked session and one
 // layer before the verb's payload.
-export function configWriteArgs(
+export function configWriteEffect(
+  verb: ConfigWriteVerb,
   session: SessionId,
   role: LayerRole,
   ...payload: string[]
-): readonly [SessionId, LayerRole, ...string[]] {
-  return [session, role, ...payload];
+): {
+  readonly verb: ConfigWriteVerb;
+  readonly args: readonly [SessionId, LayerRole, ...string[]];
+} {
+  return { verb, args: [session, role, ...payload] };
 }
 
 const sayStep = (key: string, by: string): string =>

@@ -15,9 +15,9 @@ import {
   type ClientHints,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
-import type { LayerRole } from "../config/layer-role";
 import { repoQuestions } from "../config/repo-question";
 import {
+  writableRoles,
   type CacheEntry,
   type RenderCache,
   type DslRenderState,
@@ -158,8 +158,8 @@ export function renderFrame(
     );
     const bar = drawn.body;
     const statusline = statuslineOf(
-      sessionId,
-      setup.view.writable(),
+      setup,
+      parts.sessionState,
       drawn,
       handedOffTo(lanes, following),
     );
@@ -458,10 +458,7 @@ export function drawRender(
   const document = view.source.facts();
   // Which animation lanes this session's settings switch on, as drawn.
   const lanes = laneSwitches(effective);
-  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
-  const editGlobals = editGlobalsOf(state.config, (key) =>
-    sessionState.get(sessionId, key),
-  );
+  const configAccess = view.configAccess();
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
     // The preset the session's settings resolve to, which the draw uses.
@@ -500,7 +497,11 @@ export function drawRender(
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
-    sourced("load", "load", entry.lastError),
+    sourced(
+      "load",
+      "load",
+      configAccess.kind === "unavailable" ? configAccess.error : null,
+    ),
     ...state.dropped.map(
       (e): MaybeError => ({
         kind: "dropped",
@@ -785,11 +786,6 @@ export function drawRender(
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
-      remainingLanes: perLane(
-        (lane) =>
-          (editGlobals[LANES[lane].switch.setting] ??
-            defaultsAfterReset?.[lane]) === true,
-      ),
     },
     evaluated,
     cellBreaks,
@@ -970,7 +966,6 @@ interface DrawnBar {
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
-  readonly remainingLanes: LaneSwitches;
 }
 
 // A render request's answer: the bar drawn for its client.
@@ -1008,7 +1003,7 @@ export function answerRequest(
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(presentation.client ?? null) === "statusline";
   const frame = toStatusline
-    ? statuslineOf(sessionId, setup.view.writable(), drawn, elsewhere)
+    ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
     : drawn.body;
   // Kept once nothing of the turn is left to throw.
   keepDraw(parts, setup, kept);
@@ -1059,26 +1054,39 @@ export function deliver(parts: RendererParts, delivery: Delivery): void {
 // one list, and its click opens the one viewer: while it is open the statusline
 // shows it, the same body the lanes draw.
 function statuslineOf(
-  sessionId: SessionId,
-  writable: readonly LayerRole[],
+  { sessionId, state, view }: RenderSetup,
+  picks: SessionStateRW,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
 ): Frame {
-  const [first, ...rest] = elsewhere;
-  return first === undefined || drawn.viewerOpen
-    ? drawn.body
-    : standIn(
-        drawn.body,
-        handoffRows(
-          laneHandoff(
-            sessionId,
-            writable,
-            [first, ...rest],
-            drawn.remainingLanes,
-          ),
-          drawn.diagnostics,
-          sessionId,
-          drawn.geometry,
-        ),
-      );
+  const first = elsewhere[0];
+  if (first === undefined || drawn.viewerOpen) return drawn.body;
+
+  const effective = view.source.effective();
+  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
+  if (defaultsAfterReset === undefined)
+    throw new Error(
+      `No lane reset defaults for resolved preset '${effective.preset}'`,
+    );
+  const editGlobals = editGlobalsOf(state.config, (key) =>
+    picks.get(sessionId, key),
+  );
+  const remaining = perLane(
+    (lane) =>
+      editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane],
+  );
+  return standIn(
+    drawn.body,
+    handoffRows(
+      laneHandoff(
+        sessionId,
+        writableRoles(view.configAccess()),
+        [first, ...elsewhere.slice(1)],
+        remaining,
+      ),
+      drawn.diagnostics,
+      sessionId,
+      drawn.geometry,
+    ),
+  );
 }
