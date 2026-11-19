@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "99736d58e59a636f23bf2fc28651bb8eeb1df4da",
+      "timestamp": "2026-11-19T20:11:53.256Z",
+      "commits": [
+        {
+          "sha": "99736d58e59a636f23bf2fc28651bb8eeb1df4da",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:10:51-07:00",
+          "message": "fix(config): recognize equivalent saved project directories (#896)"
+        }
+      ]
+    },
+    {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
       "sha": "c1049984b5820d50ba2c16becd78df35777313bf",
@@ -34,43 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T12:22:57-07:00",
           "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-896",
-      "ref": "refs/pull/896/merge",
-      "sha": "0768980699d4a060aa59ecf52acfa2860ebaf69c",
-      "timestamp": "2026-11-19T20:05:09.788Z",
-      "commits": [
-        {
-          "sha": "0768980699d4a060aa59ecf52acfa2860ebaf69c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T20:03:41Z",
-          "message": "Merge 84d756c3ee87d1fc26a2c1b68b5effa49a288947 into 7b97b3062fa1b643825a0aae621edcce5c8a63af\n"
-        },
-        {
-          "sha": "84d756c3ee87d1fc26a2c1b68b5effa49a288947",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:05:04-07:00",
-          "message": "fix(config): recognize equivalent saved project directories\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7b97b3062fa1b643825a0aae621edcce5c8a63af",
-      "timestamp": "2026-11-19T20:03:54.216Z",
-      "commits": [
-        {
-          "sha": "7b97b3062fa1b643825a0aae621edcce5c8a63af",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T20:02:45Z",
-          "message": "chore(release): set `package.json` to 1.235.11\n\n## [1.235.11](https://github.com/promptctl/cc-candybar/compare/v1.235.10...v1.235.11) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** check render workspace directories at ingress ([#895](https://github.com/promptctl/cc-candybar/issues/895)) ([c2d97e8](https://github.com/promptctl/cc-candybar/commit/c2d97e8387a54fe5bcd2ce30580d704c3d509943))\n"
         }
       ]
     },

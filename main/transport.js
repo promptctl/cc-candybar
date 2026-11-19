@@ -28615,20 +28615,6 @@ function withAnswer(book, dir, answer2, superseded) {
   const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
   return { ...Object.fromEntries(rest2), [dir]: answer2 };
 }
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
 function repoUnreadNotice(gate2) {
   return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
 }
@@ -88883,6 +88869,45 @@ function repoConfigsDir(dir) {
 }
 function repoConfigsPath(dir) {
   return import_node_path27.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+}
+function storedDirectory(written2) {
+  const dir = import_node_path27.default.sep === "\\" ? written2.replaceAll("/", import_node_path27.default.sep) : written2;
+  if (!import_node_path27.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path27.default.sep).includes("..")) {
+    return null;
+  }
+  return import_node_path27.default.format(import_node_path27.default.parse(import_node_path27.default.normalize(dir)));
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  const book = /* @__PURE__ */ new Map();
+  for (const [written2, value] of Object.entries(doc)) {
+    const dir = storedDirectory(written2);
+    if (dir === null) {
+      return {
+        kind: "failed",
+        reason: `has invalid project directory ${JSON.stringify(written2)}: expected an absolute directory without ".." or NUL`
+      };
+    }
+    const answer2 = REPO_ANSWERS.find((known) => known === value);
+    if (answer2 === void 0) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(written2)} ${JSON.stringify(value)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+    if (written2 !== dir && Object.hasOwn(doc, dir)) continue;
+    const prior = book.get(dir);
+    if (prior !== void 0 && prior !== answer2) {
+      return {
+        kind: "failed",
+        reason: `has conflicting answers for project directory ${JSON.stringify(dir)}`
+      };
+    }
+    book.set(dir, answer2);
+  }
+  return ok(Object.fromEntries(book));
 }
 var repoConfigs = (dir, readText) => stateFile(
   [repoConfigsPath(dir), import_node_path27.default.join(dir, REPO_CONFIGS_FILE)],
