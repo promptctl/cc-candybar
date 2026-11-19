@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-874",
+      "ref": "refs/pull/874/merge",
+      "sha": "4478fea677f39512fa432999e7c76e2ebfaa34d3",
+      "timestamp": "2026-11-19T19:04:14.580Z",
+      "commits": [
+        {
+          "sha": "4478fea677f39512fa432999e7c76e2ebfaa34d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T19:03:02Z",
+          "message": "Merge 2bbdcfbb5b55ce4881f34479515e2e744d49ca7a into ca59b705bf84552eb3ec9b216786363ccde4b4da\n"
+        },
+        {
+          "sha": "2bbdcfbb5b55ce4881f34479515e2e744d49ca7a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:11:40-07:00",
+          "message": "fix(launch): state truly why config is withheld and spell GH_REPO in the e2e test\n\nThe launcher withholds all of git's repository-local variables, config included, which is more than git clears for a submodule: a hook's -c core.worktree can move a child's worktree. The e2e test spells GH_REPO literally, as the outside fact under test.\n"
+        },
+        {
+          "sha": "0acaaace08ea27eaedb507ff442bc34b1602c80f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:11:56-07:00",
+          "message": "fix(launch): one filter for repository-scoped variables, one env resolution for every child\n\nThe lifeline's environment resolves through the same function as every launch, and the e2e git runner uses the shared filter.\n"
+        },
+        {
+          "sha": "db93b70e426d48d405f2404b4703dfbd0f58e178",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:11:55-07:00",
+          "message": "fix(launch): withhold git's whole repository-local list, config included\n\nA hook's -c flags travel in GIT_CONFIG_PARAMETERS, and config can relocate a child's worktree or alter a clone, so children go without it too. The PR lookup's failure text now comes from the one launch-failure speller.\n"
+        },
+        {
+          "sha": "ef86a993d39e37adb2eb9669a19688b86404b800",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:26:44-07:00",
+          "message": "fix(launch): read the inherited environment live and let git config pass\n\nThe launcher keeps its owner's live environment and removes the\nrepository-scoped variables as each launch and the lifeline read it, so\na variable the owner sets later still reaches its children. Only git's\nlocating variables are withheld; its config variables name no\nrepository and pass through. The reason is stated once, beside the\nlist. Dead doctor lint config and the unread PR field record go.\n"
+        },
+        {
+          "sha": "093944946b63dc13dc8edc6c3442adaadfb2caeb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:08:49-07:00",
+          "message": "fix(launch): strip repository-scoped variables once at scope build\n\nThe launcher's scope now holds its owner's environment less the\nrepository-scoped variables, so every child inherits that copy and an\noverlay applies over it as given; the lifeline spawns with it too. The\nrenderer's boot hands on the same stripped environment. The list is\nrenamed for what it holds, its git part marked as a copy of git's, and\nstale doctor citations and comments are corrected. The daemon case\nmoves into the existing PR-state fixture.\n"
+        },
+        {
+          "sha": "62aa6768233683f5d66d9325dbde3e0187bf4007",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:44:44-07:00",
+          "message": "fix(launch): withhold repository-naming variables from the inherited base only\n\nAn overlay is a launch's explicit intent, so a variable it names now\nreaches the child as given; only the ambient inherited environment loses\nthe names. The never-keyed overlay type and its type-level test go.\n"
+        },
+        {
+          "sha": "37ad9a11e71f4cb72f14bbfb302e490b25e53fad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:38:42-07:00",
+          "message": "fix(launch): type the overlay against repository-naming variables and derive the forge part from the table\n\nEach forge entry carries its CLI and the variable it reads as its\nrepository, and the withheld list derives its forge part from the\ntable, so a new forge cannot leave its variable out. An overlay naming\none of those variables no longer type-checks. The memory note says the\ndaemon's own environment still carries them.\n"
+        },
+        {
+          "sha": "65a0d98a31a0cc529258bbf9fd437c60c91c0bf1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:23:24-07:00",
+          "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-904",
       "ref": "refs/pull/904/merge",
       "sha": "aaeea859620dde4cc98fa4db0106f6967a0d17d3",
@@ -122,77 +193,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:48:47-07:00",
           "message": "fix(install): replace staged executables atomically\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-874",
-      "ref": "refs/pull/874/merge",
-      "sha": "e08e2b6223f321c876fdfc6de568dc8262c99621",
-      "timestamp": "2026-11-19T18:47:58.610Z",
-      "commits": [
-        {
-          "sha": "e08e2b6223f321c876fdfc6de568dc8262c99621",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T18:46:49Z",
-          "message": "Merge 32be77f972c867d92f1299d4fe8f5820dbcf5c0c into 059ece30eb17a3358d9abdd230f2cd671892624c\n"
-        },
-        {
-          "sha": "32be77f972c867d92f1299d4fe8f5820dbcf5c0c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:11:40-07:00",
-          "message": "fix(launch): state truly why config is withheld and spell GH_REPO in the e2e test\n\nThe launcher withholds all of git's repository-local variables, config included, which is more than git clears for a submodule: a hook's -c core.worktree can move a child's worktree. The e2e test spells GH_REPO literally, as the outside fact under test.\n"
-        },
-        {
-          "sha": "b886adbc63bc5cfb3ce53c6235bb2d837f9a9a29",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:11:56-07:00",
-          "message": "fix(launch): one filter for repository-scoped variables, one env resolution for every child\n\nThe lifeline's environment resolves through the same function as every launch, and the e2e git runner uses the shared filter.\n"
-        },
-        {
-          "sha": "06e98adf9b21fc555be6a23b1b4f79d2d7b2fce6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:11:55-07:00",
-          "message": "fix(launch): withhold git's whole repository-local list, config included\n\nA hook's -c flags travel in GIT_CONFIG_PARAMETERS, and config can relocate a child's worktree or alter a clone, so children go without it too. The PR lookup's failure text now comes from the one launch-failure speller.\n"
-        },
-        {
-          "sha": "318e5b5acc84cd0a6b74d67a9118358db5797520",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:26:44-07:00",
-          "message": "fix(launch): read the inherited environment live and let git config pass\n\nThe launcher keeps its owner's live environment and removes the\nrepository-scoped variables as each launch and the lifeline read it, so\na variable the owner sets later still reaches its children. Only git's\nlocating variables are withheld; its config variables name no\nrepository and pass through. The reason is stated once, beside the\nlist. Dead doctor lint config and the unread PR field record go.\n"
-        },
-        {
-          "sha": "afd057049a4270277272c507982e9106daf6ef51",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:08:49-07:00",
-          "message": "fix(launch): strip repository-scoped variables once at scope build\n\nThe launcher's scope now holds its owner's environment less the\nrepository-scoped variables, so every child inherits that copy and an\noverlay applies over it as given; the lifeline spawns with it too. The\nrenderer's boot hands on the same stripped environment. The list is\nrenamed for what it holds, its git part marked as a copy of git's, and\nstale doctor citations and comments are corrected. The daemon case\nmoves into the existing PR-state fixture.\n"
-        },
-        {
-          "sha": "7ef74fb31b5e876c018c3369ea29e7a96208b9ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:44:44-07:00",
-          "message": "fix(launch): withhold repository-naming variables from the inherited base only\n\nAn overlay is a launch's explicit intent, so a variable it names now\nreaches the child as given; only the ambient inherited environment loses\nthe names. The never-keyed overlay type and its type-level test go.\n"
-        },
-        {
-          "sha": "98814cf0aadc84c0a0409660bf8095ccd751acad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:38:42-07:00",
-          "message": "fix(launch): type the overlay against repository-naming variables and derive the forge part from the table\n\nEach forge entry carries its CLI and the variable it reads as its\nrepository, and the withheld list derives its forge part from the\ntable, so a new forge cannot leave its variable out. An overlay naming\none of those variables no longer type-checks. The memory note says the\ndaemon's own environment still carries them.\n"
-        },
-        {
-          "sha": "ee16435523ecc4fe5d96c929e73a77cce16e85a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:23:24-07:00",
-          "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
         }
       ]
     },
