@@ -1,3 +1,9 @@
+## [1.235.1](https://github.com/promptctl/cc-candybar/compare/v1.235.0...v1.235.1) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** keep one presentation record for delivered frames ([#878](https://github.com/promptctl/cc-candybar/issues/878)) ([7f6f9c5](https://github.com/promptctl/cc-candybar/commit/7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d))
+
 ## [1.235.0](https://github.com/promptctl/cc-candybar/compare/v1.234.4...v1.235.0) (2026-11-19)
 
 ### Features
