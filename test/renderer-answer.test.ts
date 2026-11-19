@@ -417,6 +417,22 @@ describe("a statusline request", () => {
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
   });
 
+  test("a dropped statusline reply preserves the last delivered layout and segment cells", async () => {
+    const t = renderer();
+    const first = presentOf(answered(await request(t)).effects);
+    const view = viewOf(t.rig)!;
+    expect(view.frames.get("request")).toBeUndefined();
+    await done(t.r, first, true);
+    const record = view.frames.get("request");
+    const segments = view.frames.get("request")?.segments;
+    expect(record).toBeDefined();
+    const next = presentOf(answered(await request(t)).effects);
+    expect(view.frames.get("request")).toBe(record);
+    await done(t.r, next, false);
+    expect(view.frames.get("request")).toBe(record);
+    expect(view.frames.get("request")?.segments).toBe(segments);
+  });
+
   test("records nothing for a present its client never took, and hears of each present once", async () => {
     const { r, recorded, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
@@ -433,10 +449,12 @@ describe("a draw", () => {
   // only the turn that drew it keeps them.
   test("drawn twice from the same state and instant is the same frame and memory, and leaves the renderer as it found it", async () => {
     const { r, parts, recorded, rig } = renderer();
-    answered(await request({ r, rig }));
+    const present = presentOf(answered(await request({ r, rig })).effects);
+    await done(r, present, true);
+    const deliveries = recorded.length;
     const view = viewOf(rig)!;
     const record = view.frames.get("request");
-    const cells = view.lastRenderCellsBySegment;
+    const cells = view.frames.get("request")?.segments;
     const motion = parts.effectSessions.of(SESSION).lastFrame();
     const warned = parts.renderWarnings.of(SESSION, "request");
     const draw = () => {
@@ -454,10 +472,10 @@ describe("a draw", () => {
     expect(second.drawn).toEqual(first.drawn);
     expect(second.kept).toEqual(first.kept);
     expect(view.frames.get("request")).toBe(record);
-    expect(view.lastRenderCellsBySegment).toBe(cells);
+    expect(view.frames.get("request")?.segments).toBe(cells);
     expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
     expect(parts.renderWarnings.of(SESSION, "request")).toBe(warned);
-    expect(recorded).toEqual([]);
+    expect(recorded).toHaveLength(deliveries);
   });
 });
 
@@ -510,7 +528,8 @@ describe("a feed's frame", () => {
   // own; the animation clock is the session's, one for both.
   test("leaves the request's record of the view as it was, beside its own, under the session's one clock", async () => {
     const { r, parts, rig } = renderer();
-    answered(await request({ r, rig }));
+    const present = presentOf(answered(await request({ r, rig })).effects);
+    await done(r, present, true);
     const view = viewOf(rig)!;
     const answeredRecord = view.frames.get("request");
     expect(answeredRecord).toBeDefined();
@@ -549,7 +568,8 @@ describe("a feed's frame", () => {
   // what the closed one last showed.
   test("whose feed closed leaves no record of it, and the request's stands", async () => {
     const { r, parts, rig } = renderer();
-    answered(await request({ r, rig }));
+    const present = presentOf(answered(await request({ r, rig })).effects);
+    await done(r, present, true);
     const view = viewOf(rig)!;
     renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
     expect(view.frames.get("feed")).toBeDefined();

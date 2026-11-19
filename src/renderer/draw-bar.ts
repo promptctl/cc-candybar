@@ -26,7 +26,7 @@ import {
 } from "./render-cache";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { partsOf } from "../dsl/parts.js";
-import { drawDsl, type RenderWarning } from "../dsl/render.js";
+import { drawDsl, type DrawnFrame, type RenderWarning } from "../dsl/render.js";
 import { standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
@@ -46,12 +46,7 @@ import {
   laneSwitches,
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
-import {
-  type PassageFrame,
-  type EffectSessions,
-  type SessionMotion,
-} from "../render/effect.js";
-import type { FrameRecord } from "../render/frame-memory.js";
+import { type PassageFrame, type EffectSessions } from "../render/effect.js";
 import {
   feedsFact,
   LANES,
@@ -95,7 +90,10 @@ import {
 } from "../daemon/foundations/request-event.js";
 
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
-import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
+import type {
+  PreparedWarnings,
+  RenderWarningRecords,
+} from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import { renderFailure } from "../daemon/foundations/render-answers";
@@ -164,15 +162,12 @@ export function renderFrame(
       handedOffTo(lanes, following),
     );
     const handoff = statusline === bar ? null : statusline;
-    // Kept once nothing of the turn is left to throw: a frame that fails
-    // part-way leaves the last frame's memory standing.
-    keepDraw(parts, setup, kept);
     // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
     // as it is handed to the feed: a frame whose bytes match the last shows
     // the same links, and a feed's close retires what the feed drew.
     deliver(parts, {
-      session: sessionId,
-      by: "feed",
+      kept,
+      surfaceFrames: setup.view.frames,
       copies,
       clickShown: null,
       eventsShown: [],
@@ -633,7 +628,7 @@ export function drawRender(
       {
         ...effective,
         effects,
-        record: view.frames.get(drawing.by),
+        record: view.frames.get(drawing.by)?.record,
         idleSince: idleSince ?? undefined,
       },
     );
@@ -668,7 +663,6 @@ export function drawRender(
   // moved is shown by the renderer's next frame: a feed's next spaced frame,
   // a request's next poll. Nothing wakes for it, since a frame whose own
   // indicator moves what it warns would wake itself forever.
-  const recorded = renderWarnings.moves(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
     rows,
@@ -740,7 +734,15 @@ export function drawRender(
       faultOf("warning", w.kind, w.message, subjectOf(w)),
     ),
   ];
+  const warnings = renderWarnings.prepare(
+    sessionId,
+    drawing.by,
+    scope,
+    drawnWarnings,
+    faults,
+  );
   noteFacts(facts, {
+    faults: warnings.faultsNote,
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
     // The rate the session's animation clock ran at for this frame.
@@ -773,7 +775,7 @@ export function drawRender(
     // What the indicator counted, and whether this frame's warnings moved
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
-    warnRecord: recorded ? "new" : "kept",
+    warnRecord: warnings.moved ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
     viewer:
       viewing === null
@@ -796,9 +798,8 @@ export function drawRender(
     kept: {
       session: sessionId,
       by: drawing.by,
-      record: memory.record,
-      motion: memory.motion,
-      warnings: { scope, list: drawnWarnings, faults },
+      memory,
+      warnings,
       // What this frame drew is what the session's idle close follows.
       menu: {
         tick: readings.tick,
@@ -817,15 +818,9 @@ export interface DrawMemory {
   readonly session: SessionId;
   readonly by: Drawing["by"];
   // The surface's record of what the frame drew, and the session's motion.
-  readonly record: FrameRecord<RenderedLine>;
-  readonly motion: SessionMotion;
+  readonly memory: DrawnFrame["memory"];
   // What the frame warned, in the scope its renderer's record is kept in.
-  readonly warnings: {
-    readonly scope: RecordScope;
-    readonly list: readonly RenderWarning[];
-    // Every fault the frame met, as its turn record noted them.
-    readonly faults: readonly Fault[];
-  };
+  readonly warnings: PreparedWarnings;
   // Whether the frame showed a menu, under the timeout its settings resolve
   // to, at the tick of the turn that drew it.
   readonly menu: {
@@ -836,32 +831,26 @@ export interface DrawMemory {
   readonly segments: ReadonlyMap<string, readonly RichText[]>;
 }
 
-// [LAW:single-enforcer] The state machine's one store of a draw's memory,
-// called by the turn that drew it once the draw returned: each piece to its
-// one owner — the record on the view the draw read it from, the motion with
-// the session — once the turn has nothing left to throw, so a frame that
-// fails keeps nothing and the last frame's memory stands.
+// [LAW:single-enforcer] Apply what the delivered frame showed, to the
+// surface that produced it and the session's shared animation clock.
 function keepDraw(
   parts: RendererParts,
-  setup: RenderSetup,
+  surfaceFrames: SessionView["frames"],
   kept: DrawMemory,
 ): void {
-  const { session, by, record, motion, warnings, menu, segments } = kept;
-  const { view } = setup;
-  view.frames.set(by, record);
-  view.lastRenderCellsBySegment = segments;
+  const {
+    session,
+    by,
+    memory: { record, motion },
+    warnings,
+    menu,
+    segments,
+  } = kept;
+  surfaceFrames.set(by, { record, segments });
   parts.effectSessions.keep(session, motion);
   // [LAW:single-enforcer] The faults are noted as their record is kept, so a
   // frame that throws notes none.
-  noteFacts(setup.facts, {
-    faults: parts.renderWarnings.keep(
-      session,
-      by,
-      warnings.scope,
-      warnings.list,
-      warnings.faults,
-    ),
-  });
+  parts.renderWarnings.keep(session, by, warnings);
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
 }
 
@@ -1005,8 +994,6 @@ export function answerRequest(
   const frame = toStatusline
     ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
     : drawn.body;
-  // Kept once nothing of the turn is left to throw.
-  keepDraw(parts, setup, kept);
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
   // long the turn took is the host's `drew=`, timed around the turn.
   noteFacts(facts, {
@@ -1015,8 +1002,8 @@ export function answerRequest(
   return {
     frame,
     delivery: {
-      session: sessionId,
-      by: ANSWERING.by,
+      kept,
+      surfaceFrames: setup.view.frames,
       copies,
       clickShown,
       eventsShown,
@@ -1028,8 +1015,9 @@ export function answerRequest(
 // what its copy clicks copy, and the click error and the held events it
 // carried.
 export interface Delivery {
-  readonly session: SessionId;
-  readonly by: Drawing["by"];
+  readonly kept: DrawMemory;
+  // Holding only this surface map lets the originating view itself retire.
+  readonly surfaceFrames: SessionView["frames"];
   readonly copies: ReadonlyMap<string, string>;
   readonly clickShown: ClickErrorRecord | null;
   readonly eventsShown: readonly HeldEvent[];
@@ -1039,7 +1027,9 @@ export interface Delivery {
 // click error or a daemon-wide held event that reaches its client is the one
 // that delivered it (src/utils/event-hold.ts).
 export function deliver(parts: RendererParts, delivery: Delivery): void {
-  const { session, by, copies, clickShown, eventsShown } = delivery;
+  const { kept, surfaceFrames, copies, clickShown, eventsShown } = delivery;
+  const { session, by } = kept;
+  keepDraw(parts, surfaceFrames, kept);
   parts.renderCache.delivered(session, by, copies);
   if (clickShown !== null)
     answeredClickError(parts.sessionState, session, clickShown);

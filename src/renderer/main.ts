@@ -802,6 +802,7 @@ function debugOf(
   view: SessionView<SessionSource, CheckedRenderRequest> | null,
   what: DebugWhat,
 ): DebugSnapshot {
+  const frame = view?.frames.get("request") ?? view?.frames.get("feed");
   return buildDebugSnapshot(
     what,
     view === null
@@ -812,9 +813,9 @@ function debugOf(
           config: view.state.config,
           compiled: view.state.compiled,
           lastRenderBySegment:
-            what === "segments"
+            what === "segments" && frame !== undefined
               ? serializeSegmentCells(
-                  view.lastRenderCellsBySegment,
+                  frame.segments,
                   view.state.config.globals.colorCompatibility ??
                     floorOf("colorCompatibility"),
                 )

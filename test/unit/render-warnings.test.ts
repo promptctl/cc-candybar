@@ -44,9 +44,9 @@ const drawn = (
   warnings: readonly RenderWarning[],
   faults: readonly Fault[] = [],
 ): boolean => {
-  const moved = records.moves(session, by, warnings);
-  records.keep(session, by, scope, warnings, faults);
-  return moved;
+  const change = records.prepare(session, by, scope, warnings, faults);
+  records.keep(session, by, change);
+  return change.moved;
 };
 
 describe("a renderer's warning record", () => {
@@ -127,8 +127,11 @@ describe("a renderer's warning record", () => {
       subject: "said",
       message,
     });
-    const kept = (session: SessionId, by: Drawing["by"], faults: Fault[]) =>
-      records.keep(session, by, S, [], faults);
+    const kept = (session: SessionId, by: Drawing["by"], faults: Fault[]) => {
+      const change = records.prepare(session, by, S, [], faults);
+      records.keep(session, by, change);
+      return change.faultsNote;
+    };
     expect(readFaults(kept(A_2, "request", [fault("a")]))).toEqual([
       fault("a"),
     ]);

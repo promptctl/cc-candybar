@@ -50,22 +50,28 @@ interface WarningRecord {
 // Every renderer, in the order the session's list takes them.
 const RENDERERS: ReadonlyArray<Drawing["by"]> = ["request", "feed"];
 
-const generations = new WeakMap<object, number>();
-let nextGeneration = 0;
-const generationOf = (config: object): number => {
-  const held = generations.get(config);
-  if (held !== undefined) return held;
-  const minted = nextGeneration++;
-  generations.set(config, minted);
-  return minted;
-};
+export interface PreparedWarnings {
+  readonly record: WarningRecord;
+  readonly moved: boolean;
+  readonly faultsNote: string;
+}
 
 // [LAW:no-shared-mutable-globals] Single owner, hard cap, least recently drawn
 // evicted first.
 export class RenderWarningRecords {
   private readonly records = new Map<string, WarningRecord>();
+  private readonly generations = new WeakMap<object, number>();
+  private nextGeneration = 0;
 
   constructor(private readonly maxRecords: number = MAX_RECORDS) {}
+
+  private generationOf(config: object): number {
+    const held = this.generations.get(config);
+    if (held !== undefined) return held;
+    const next = this.nextGeneration++;
+    this.generations.set(config, next);
+    return next;
+  }
 
   // The warnings `by` last recorded for `sessionId`; none before its first.
   of(sessionId: SessionId, by: Drawing["by"]): readonly RenderWarning[] {
@@ -80,7 +86,7 @@ export class RenderWarningRecords {
     by: Drawing["by"],
     scope: RecordScope,
   ): readonly RenderWarning[] {
-    const generation = generationOf(scope.config);
+    const generation = this.generationOf(scope.config);
     const listed: RenderWarning[] = [];
     for (const renderer of RENDERERS) {
       const held = this.records.get(keyOf(sessionId, renderer));
@@ -103,40 +109,40 @@ export class RenderWarningRecords {
 
   // Whether a frame that warned `warnings` changes what the renderer's next
   // frame shows.
-  moves(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    warnings: readonly RenderWarning[],
-  ): boolean {
-    return JSON.stringify(this.of(sessionId, by)) !== JSON.stringify(warnings);
-  }
-
-  // [LAW:single-enforcer] The one writer: the turn that drew a frame records
-  // what it warned and the faults it met, and answers the note its record
-  // carries of them. The note is made only with the record it is compared
-  // with, so a frame that kept nothing noted nothing a later `kept` could be
-  // read against. A record evicted, or none yet, makes the note whole.
-  keep(
+  prepare(
     sessionId: SessionId,
     by: Drawing["by"],
     scope: RecordScope,
     warnings: readonly RenderWarning[],
     faults: readonly Fault[],
-  ): string {
-    const key = keyOf(sessionId, by);
+  ): PreparedWarnings {
+    const prior = this.records.get(keyOf(sessionId, by));
     const spelled = spelledFaults(faults);
-    const last = this.records.get(key)?.faults;
+    return {
+      record: {
+        generation: this.generationOf(scope.config),
+        warnings,
+        faults: spelled,
+      },
+      moved: JSON.stringify(prior?.warnings ?? []) !== JSON.stringify(warnings),
+      faultsNote: faultsNote(spelled, prior?.faults),
+    };
+  }
+
+  // [LAW:single-enforcer] Only a delivered frame supplies the baseline
+  // for the next frame's warnings and fault comparison.
+  keep(
+    sessionId: SessionId,
+    by: Drawing["by"],
+    prepared: PreparedWarnings,
+  ): void {
+    const key = keyOf(sessionId, by);
     this.records.delete(key);
-    this.records.set(key, {
-      generation: generationOf(scope.config),
-      warnings,
-      faults: spelled,
-    });
+    this.records.set(key, prepared.record);
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
-    return faultsNote(spelled, last);
   }
 }
 
