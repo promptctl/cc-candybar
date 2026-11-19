@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-889",
+      "ref": "refs/pull/889/merge",
+      "sha": "9ce615eeb7cb8285d0d84c0b506bbf5c13ac71d6",
+      "timestamp": "2026-11-19T16:41:55.880Z",
+      "commits": [
+        {
+          "sha": "9ce615eeb7cb8285d0d84c0b506bbf5c13ac71d6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:40:44-07:00",
+          "message": "Merge d0b3b56309d606ef94244a3843d66777a5f91ebd into d5df8f6d8a5a3e24c1189a1486241b29febe8053\n"
+        },
+        {
+          "sha": "d0b3b56309d606ef94244a3843d66777a5f91ebd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:39:56-07:00",
+          "message": "test(daemon): assert source values in delivered pane frames\n"
+        }
+      ]
+    },
+    {
       "version": "pr-887",
       "ref": "refs/pull/887/merge",
       "sha": "42909051570bc34706f25713602012b68f5270d9",
