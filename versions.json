@@ -2,6 +2,126 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-856",
+      "ref": "refs/pull/856/merge",
+      "sha": "373369c1fbf9bf0bee4dc0a9eaa1ea6e4211968b",
+      "timestamp": "2026-11-19T11:19:36.252Z",
+      "commits": [
+        {
+          "sha": "373369c1fbf9bf0bee4dc0a9eaa1ea6e4211968b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:18:25-07:00",
+          "message": "Merge 85f02a19e17069167cdbdfb32e1219e13729c650 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
+        },
+        {
+          "sha": "85f02a19e17069167cdbdfb32e1219e13729c650",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:16:40-07:00",
+          "message": "test: run readiness through host frame publication\n"
+        },
+        {
+          "sha": "dbed1a279f15f77847fbd0a6212820124df9f092",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:12:20-07:00",
+          "message": "fix(daemon): resolve statusline config readiness in the host (ibyq.n91)\n\n(cherry picked from commit 325247e0dead22e60437d1ac1955db1de8b8a634)\n"
+        },
+        {
+          "sha": "61fcd960c43ffe6fb17e224b931b4bc8e4507ead",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:15:19-07:00",
+          "message": "fix(daemon): publish presents only for the requested session\n"
+        },
+        {
+          "sha": "ddc4bd3502985ef1dd51fae3b386ecd48c3d4835",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:10:44-07:00",
+          "message": "test: verify the composed host and renderer boundary\n"
+        },
+        {
+          "sha": "dcc227c96dffec4e042a66d023d33411b4d5de4f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:06:31-07:00",
+          "message": "fix(tmux): admit pane acts at the head of the queue (ibyq.6n3)\n\n(cherry picked from commit b8ed01b20393872eb821b991b0f4213620f00527)\n"
+        },
+        {
+          "sha": "955ef8f6d78f93b409c28471f363fe07d57dd4b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:05:34-07:00",
+          "message": "refactor(click): sign published frame links in the host (ibyq.vne)\n\n(cherry picked from commit 34a2a2df324817b0940f2349d570ba1bb8935508)\n"
+        },
+        {
+          "sha": "9af30d0252733e679f4bd5d8e87eb23232ff3ded",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:57:11-07:00",
+          "message": "refactor(renderer): publish pushed frame presentations in the host (ibyq.vne)\n\n(cherry picked from commit 5f85d9fe4b4c8a0bf2a35539cc1ec4bade8d9d42)\n"
+        },
+        {
+          "sha": "007a27c6d6aa1f7bdb309d46a08ffb1fa5dac293",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:02:54-07:00",
+          "message": "fix(renderer): bound scheduled work in a busy mailbox (ibyq.4nf)\n\n(cherry picked from commit 4196b831ad87f5443878a742f56a780f9b328e6f)\n"
+        },
+        {
+          "sha": "2fa0a14f88b6d2c52691736592a9581fbd33ec2d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:01:36-07:00",
+          "message": "refactor(check): use typed render inspection (ibyq.62x)\n\n(cherry picked from commit afa093c1e080872aa399f0dd08e769156dcd8f0f)\n"
+        },
+        {
+          "sha": "46c49d9c3a92e9a09658e650958a4898d5fb14ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:52:49-07:00",
+          "message": "fix(renderer): keep one live context per session (ibyq.n91)\n\n(cherry picked from commit 11d9f23b6672f8ac6c0a2a319cda153dd5030fcb)\n"
+        },
+        {
+          "sha": "2bae0c8b4b4ffcaeab5688e0bf017cab9c412b3b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:54:28-07:00",
+          "message": "refactor(click): admit one typed session at the host (ibyq.afa)\n\n(cherry picked from commit bddc650f29b188140220a688d7d0793b476b58c1)\n"
+        },
+        {
+          "sha": "3620e2cf3b88b0a73b314a0b3b4a820f1ff86ab6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:40:26-07:00",
+          "message": "refactor(config): share origin watches across renderer names (ibyq.5lt)\n\n(cherry picked from commit b68a964c35f8c6900dd53785162bb633ea09c633)\n"
+        },
+        {
+          "sha": "0f3fd9d9c13482d2e52fa3c582b7f8bd4ecc1540",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:32:41-07:00",
+          "message": "fix(config): share reads through file symlinks (ibyq.i9x)\n\n(cherry picked from commit a4215b5c35f12fe55532cd286dd228a093ed46a8)\n"
+        },
+        {
+          "sha": "cf8620434dee250a4c4be12455752546b3fa17d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:29:09-07:00",
+          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n\n(cherry picked from commit e56a941f91b0811fc646ab2b566ba4382ee5b03b)\n"
+        },
+        {
+          "sha": "a7bc4e94e041050f6e10bdab20f36bff43475745",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:45:50-07:00",
+          "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ecf212eaa936d5cb5e72328591459059b6f50927",
