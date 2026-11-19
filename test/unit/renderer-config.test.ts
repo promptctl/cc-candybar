@@ -38,7 +38,12 @@ import type {
   RequestId,
 } from "../../src/renderer-interface/interface";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
+import {
+  RECORDING_VERSION,
+  type RecordingEntry,
+} from "../../src/renderer-interface/recording";
 import { mainRendererOf } from "../../src/renderer/main";
+import { replayRecording } from "../../src/renderer/replay";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import {
   lineSplitter,
@@ -337,10 +342,15 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   const origin = context.requested;
   const palette = [...listResolvablePaletteNames()][0]!;
   const profile = "captured at construction";
-  const live = await recordedRenderer(bootOf({
+  const boot = bootOf({
     ...oversizedRendererHistory(),
     sessions: { [session]: { remembered: profile } },
-  }));
+  });
+  const live = await recordedRenderer(boot);
+  const recording: RecordingEntry[] = [{
+    kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
+    input: boot, result: live.construction,
+  }];
   const bootDiagnostic = {
     level: "info",
     line: `settings-history: trimmed an old step for session ${oversizedSession}`,
@@ -362,13 +372,17 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     root: { h: ["said"] },
   });
   const clock = heldClock(new Date(1_700_000_000_000));
-  const turn = (event: Event, afterMs: number) => {
+  const turn = async (event: Event, afterMs: number) => {
     clock.advance(afterMs);
-    return live.renderer.answer({
-      kind: "event",
+    const input = {
+      kind: "event" as const,
       ...readingsAt(clock),
       event,
-    });
+    };
+    const answer = await live.renderer.answer(input);
+    const { turnMs: _transport, ...output } = answer;
+    recording.push({ kind: "turn", input, output });
+    return answer;
   };
   const started = answered(await turn(
     {
@@ -469,6 +483,13 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   const animatedPane = await due(initialPane.wake);
   expect(textOf(animatedPane.frame)).toContain("remembered by click phase-b");
   answered(await turn({ kind: "viewers", viewers: {} }, 0));
+
+  const recordedTurns = recording.length - 1;
+  const replayed: RendererOutput[] = [];
+  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
+  expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
+  expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
+  expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
 
   const missingContext = contextOf("missing-from-capture");
   const failed = await turn(
