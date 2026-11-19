@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-843",
-      "ref": "refs/pull/843/merge",
-      "sha": "ab2887c4f3789b979277bc59b311444128eaea3d",
-      "timestamp": "2026-11-19T11:08:46.562Z",
-      "commits": [
-        {
-          "sha": "ab2887c4f3789b979277bc59b311444128eaea3d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:07:44Z",
-          "message": "Merge 3e5565431419a344593ad4add95074f912bfbcf6 into b2c14ebf42db01edd317ebe6cd8bedeee033c50f\n"
-        },
-        {
-          "sha": "3e5565431419a344593ad4add95074f912bfbcf6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:07:32-07:00",
-          "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\nA process started from a git hook, a `rebase --exec` or a vcsh shell\ncarries the repository variables (what `git rev-parse --local-env-vars`\nnames, and GH_REPO), so a daemon spawned from one read that shell's\nrepository for every session.\n\nA reader launcher owns git's answer: it asks once, at its first launch\nthat inherits the process's environment, holds it for its lifetime, and\nwithholds the forge's variable plus whatever git names from every child\nthat inherits the process's environment. A launch in a session's own\nenvironment keeps it whole. A plain launcher withholds nothing.\n\nThe daemon builds its reader after the fork-bomb breaker admits it and\nasks there, logging what its launches withhold; its own launcher\nwithholds by that same answer. git naming nothing stands as a ⚠ on every\nbar and a warning in the log. plugin install takes a reader and refuses\nthe clone with git's reason; a usage error or a path install runs no\ngit. The ask gives up inside the client's spawn cooldown.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "b2c14ebf42db01edd317ebe6cd8bedeee033c50f",
-      "timestamp": "2026-11-19T11:06:51.688Z",
+      "sha": "ecf212eaa936d5cb5e72328591459059b6f50927",
+      "timestamp": "2026-11-19T11:13:41.895Z",
       "commits": [
         {
-          "sha": "b2c14ebf42db01edd317ebe6cd8bedeee033c50f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:05:51-07:00",
-          "message": "fix(renderer): integrate edit transactions and menu navigation (#851)\n\n* fix(renderer): give edit mode a draft transaction with undo and redo\n\n* fix(renderer): keep live repository trust in edit previews\n\n* test(edit): verify help and chrome through the active draft\n\n* fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n\n* refactor(renderer): navigate between menu views\n\n* test(integration): verify pane settings activate after saving an edit draft\n\n* test(config): assert typed layer reads at the click boundary"
+          "sha": "ecf212eaa936d5cb5e72328591459059b6f50927",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T11:12:46Z",
+          "message": "chore(release): set `package.json` to 1.232.14\n\n## [1.232.14](https://github.com/promptctl/cc-candybar/compare/v1.232.13...v1.232.14) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** integrate edit transactions and menu navigation ([#851](https://github.com/promptctl/cc-candybar/issues/851)) ([b2c14eb](https://github.com/promptctl/cc-candybar/commit/b2c14ebf42db01edd317ebe6cd8bedeee033c50f))\n"
         }
       ]
     },
