@@ -23,7 +23,6 @@ import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { actionTarget, type DrawnAction } from "./drawn-link.js";
 import {
-  bindsTemplateValue,
   linkFragment,
   linkOver,
   clickSession,
@@ -126,14 +125,15 @@ export function carouselFuncs(runtime: ActionRuntime): FuncMap {
         if (label.trim() === "") {
           throw new Error(`carousel "${applyName}": label is empty`);
         }
-        if (!runtime.compiled.has(openName)) {
+        const open = runtime.compiled.get(openName);
+        if (open === undefined) {
           throw new Error(
             `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`,
           );
         }
         // The label fires with nothing bound, so an action that writes a bound
         // value would write the option the ring sits on instead.
-        if (bindsTemplateValue(runtime.compiled.get(openName)!)) {
+        if (open.bindsTemplateValue) {
           throw new Error(
             `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none — name an action that writes a fixed value, a cycle, or a do of them`,
           );

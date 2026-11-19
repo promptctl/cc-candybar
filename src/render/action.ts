@@ -28,7 +28,11 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import { runDeclaration, type ResolvedActionDecl } from "../config/action.js";
+import {
+  actionBindsTemplateValue,
+  runDeclaration,
+  type ResolvedActionDecl,
+} from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
@@ -84,7 +88,7 @@ import {
 // widget uses). A literal carries its fixed `value`; an option binds the value
 // from the template at render; a bounded carries its [min,max]/by navigation.
 // copy/open carry a pre-parsed template evaluated against the live scope.
-export type CompiledActionDecl =
+type CompiledActionShape =
   | {
       readonly kind: "set-literal";
       readonly key: string;
@@ -274,6 +278,10 @@ export type CompiledActionDecl =
       readonly rest: readonly CompiledActionDecl[];
     };
 
+export type CompiledActionDecl = CompiledActionShape & {
+  readonly bindsTemplateValue: boolean;
+};
+
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
@@ -451,10 +459,23 @@ export function compileActions(
     ...entries.filter(([, a]) => !("do" in a)),
     ...entries.filter(([, a]) => "do" in a),
   ]) {
-    out.set(
+    const compiled = compileAction(
+      parse,
       name,
-      compileAction(parse, name, action, stateKeyToVar, perConfigDomains, out),
+      action,
+      stateKeyToVar,
+      perConfigDomains,
+      out,
     );
+    // [LAW:one-source-of-truth] The loader and the compiled entry share a
+    // binding rule. A compound action uses the same result as its actual head.
+    out.set(name, {
+      ...compiled,
+      bindsTemplateValue:
+        compiled.kind === "do"
+          ? compiled.head.bindsTemplateValue
+          : actionBindsTemplateValue(action),
+    });
   }
   return out;
 }
@@ -470,7 +491,7 @@ function compileAction(
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
   compiled: CompiledActions,
-): CompiledActionDecl {
+): CompiledActionShape {
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
     if ("to" in action) {
@@ -660,44 +681,6 @@ function compileAction(
 // picker: the grid reads the head, the click realizes the whole.
 export function presentedAction(c: CompiledActionDecl): CompiledActionDecl {
   return c.kind === "do" ? presentedAction(c.head) : c;
-}
-
-// [LAW:one-source-of-truth] The compiled twin of `actionBindsTemplateValue`
-// (src/config/action.ts): whether the action a click presents as writes a
-// value the template binds — an option, an int, a segment to insert. A caller
-// that realizes an action with nothing bound refuses these. Total over every
-// kind, so a new arm is a compile error until it answers.
-export function bindsTemplateValue(c: CompiledActionDecl): boolean {
-  const presented = presentedAction(c);
-  switch (presented.kind) {
-    case "set-option":
-    case "set-int":
-    case "persist-option":
-    case "layout-op-option":
-      return true;
-    case "set-literal":
-    case "set-bounded":
-    case "set-cycle":
-    case "copy":
-    case "open":
-    case "persist-literal":
-    case "persist-bounded":
-    case "persist-cycle":
-    case "reset":
-    case "layout-op":
-    case "undo":
-    case "redo":
-    case "back":
-    case "rewind":
-    case "save":
-    case "preset-save":
-    case "preset-delete":
-    case "theme-default-save":
-    case "slash":
-    case "run":
-    case "do":
-      return false;
-  }
 }
 
 function parseActionTemplate(

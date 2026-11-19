@@ -926,9 +926,10 @@ derives, so nothing a `do` fires could not be clicked alone.
   `do` takes one display per member exactly as `toggleFocus` would — and its
   current-state mark. A `{{ menu }}`/`{{ picker }}` can apply a `do` whose
   first member is an option action; each option then also fires the rest.
-- **Only the first member may take its value from the template** (`from`,
-  `int`, `insertSegmentFrom`): the others are handed no value to write, so
-  listing one of them anywhere but first is a load error.
+- **Only the first member may take its value from the template.** This
+  includes `from`, `int`, `insertSegmentFrom`, and a save with `layer: "ask"`.
+  The loader rejects these actions as followers because the template only binds
+  the first member. A save with a fixed layer can follow another action.
 - **Members fire in the order listed, each against what the bar showed.**
   Every member computes its write from the state the render displayed, not
   from the state an earlier member leaves: a cycle writes the successor of
@@ -2500,7 +2501,7 @@ member that writes a template-bound value would have nothing to write:
 ```
 
 ```error
-actions.broken do: "pickTheme" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member
+actions.broken do: "pickTheme" takes its value from the template, so it can only be the first member
 ```
 
 ### A `do` listing another `do`
