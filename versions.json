@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-889",
+      "ref": "refs/pull/889/merge",
+      "sha": "314856c78d1e1022103335580162dc35f7c7d102",
+      "timestamp": "2026-11-19T17:51:06.712Z",
+      "commits": [
+        {
+          "sha": "314856c78d1e1022103335580162dc35f7c7d102",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:49:57-07:00",
+          "message": "Merge 33bd8ac7a6ea6fd9bff1b32e7d45a96aec73148f into da639d74bdb0798ffa62eec23cd0beee4614be6f\n"
+        },
+        {
+          "sha": "33bd8ac7a6ea6fd9bff1b32e7d45a96aec73148f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:39:56-07:00",
+          "message": "test(daemon): assert source values in delivered pane frames\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "da639d74bdb0798ffa62eec23cd0beee4614be6f",
@@ -128,28 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-889",
-      "ref": "refs/pull/889/merge",
-      "sha": "73bc0050d46cdccece6da6b3e1875c71405cbfd4",
-      "timestamp": "2026-11-19T17:33:21.168Z",
-      "commits": [
-        {
-          "sha": "73bc0050d46cdccece6da6b3e1875c71405cbfd4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:31:43Z",
-          "message": "Merge e6b8a8d2ab9aab0719a6956beb9e4ac02f260a1d into e04e83316aabc769ec7d2a322cf9ecc6ff181f44\n"
-        },
-        {
-          "sha": "e6b8a8d2ab9aab0719a6956beb9e4ac02f260a1d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:39:56-07:00",
-          "message": "test(daemon): assert source values in delivered pane frames\n"
         }
       ]
     },
