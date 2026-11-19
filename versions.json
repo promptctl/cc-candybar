@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "dfaab1cbb5c68bf5b52129fdbd498b688b747382",
+      "timestamp": "2026-11-19T20:33:22.221Z",
+      "commits": [
+        {
+          "sha": "dfaab1cbb5c68bf5b52129fdbd498b688b747382",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T20:32:26Z",
+          "message": "chore(release): set `package.json` to 1.235.12\n\n## [1.235.12](https://github.com/promptctl/cc-candybar/compare/v1.235.11...v1.235.12) (2026-11-19)\n\n### Bug Fixes\n\n* **config:** recognize equivalent saved project directories ([#896](https://github.com/promptctl/cc-candybar/issues/896)) ([99736d5](https://github.com/promptctl/cc-candybar/commit/99736d58e59a636f23bf2fc28651bb8eeb1df4da))\n* **config:** select plugin definitions before reading them ([#906](https://github.com/promptctl/cc-candybar/issues/906)) ([98df29e](https://github.com/promptctl/cc-candybar/commit/98df29e0562517e9beb1e1386c47a4f552e80236))\n* **renderer:** use one outcome for each config delivery ([#894](https://github.com/promptctl/cc-candybar/issues/894)) ([f9d55e5](https://github.com/promptctl/cc-candybar/commit/f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-907",
       "ref": "refs/pull/907/merge",
       "sha": "681d80e108381d50cbd0beafe4a76ebd593da2e9",
@@ -134,21 +149,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:22:36-07:00",
           "message": "perf(renderer): publish subscription revisions once\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81",
-      "timestamp": "2026-11-19T20:25:27.949Z",
-      "commits": [
-        {
-          "sha": "f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:24:24-07:00",
-          "message": "fix(renderer): use one outcome for each config delivery (#894)\n\n* fix(renderer): use one outcome for each config delivery\n\n* test(renderer): supply current config delivery in click rig"
         }
       ]
     },
