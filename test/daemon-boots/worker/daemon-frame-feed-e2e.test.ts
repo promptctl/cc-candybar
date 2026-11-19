@@ -30,6 +30,7 @@ import {
   type StreamEnd,
 } from "../../../src/daemon/client-frames";
 import { FEED_PERIODS } from "../../../src/renderer/feeds";
+import * as sessionSources from "../../../src/renderer/session-source";
 import {
   followFrames,
   SWITCHED_OFF_RETRY_MS,
@@ -1142,4 +1143,107 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       CLICK_ERROR_HOLD_S * 1000,
     );
   });
+});
+
+test("a running pane recovers from a failed view on the next config edit", async () => {
+  const { env, sockPath, removeTmpDirs } =
+    prepareIsolatedDaemonEnv("ccb-pane-recovery");
+  const project = mkdtempSync(path.join(os.tmpdir(), "ccb-pane-recovery-"));
+  const file = path.join(project, "config.json5");
+  const sid = "failed-pane-view";
+  const marks = ["paneBefore", "paneBroken", "paneRecovered"] as const;
+  const config = (mark: (typeof marks)[number]) =>
+    JSON.stringify({
+      globals: { experimentalPane: true },
+      segments: { [mark]: { template: mark } },
+      root: { h: [mark] },
+    });
+  const attempts: string[] = [];
+  const buildSource = sessionSources.sessionSource;
+  // [LAW:locality-or-seam] Inject only the view-opening failure. The daemon,
+  // file watcher, renderer mailbox, and pane subscriber remain production.
+  const injected = jest
+    .spyOn(sessionSources, "sessionSource")
+    .mockImplementation((deps) => {
+      const source = buildSource(deps);
+      return (view) => {
+        if (view.sessionId === sid) {
+          const mark = marks.find((name) =>
+            Object.hasOwn(view.state.config.segments, name),
+          );
+          if (mark !== undefined) attempts.push(mark);
+          if (mark === "paneBroken")
+            throw new Error("the pane successor failed to open");
+        }
+        return source(view);
+      };
+    });
+  let daemon: InWorkerDaemon | undefined;
+  let stream: FrameStream | undefined;
+  const responses: Response[] = [];
+  let ended: StreamEnd | undefined;
+  const reaches = (predicate: (answer: Response) => boolean, name: string) =>
+    until(() => {
+      if (ended !== undefined)
+        throw new Error(`pane feed ended: ${JSON.stringify(ended)}`);
+      return responses.some(predicate);
+    }, name);
+  const shows = (text: string) => (answer: Response) =>
+    answer.ok &&
+    "output" in answer &&
+    decodeAnsi(answer.output).plain.includes(text);
+  try {
+    writeFileSync(file, config("paneBefore"));
+    daemon = startDaemon(env);
+    await daemon.listen(sockPath);
+    await render(sockPath, sid, project, {}, [
+      "cc-candybar",
+      "--config-only",
+      file,
+    ]);
+    stream = openFrameStream(
+      sockPath,
+      sid,
+      "pane",
+      (answer) => responses.push(answer),
+      (end) => {
+        ended = end;
+      },
+    );
+    await reaches(shows("paneBefore"), "initial pane frame");
+
+    writeFileSync(file, config("paneBroken"));
+    await reaches(
+      (answer) =>
+        !answer.ok &&
+        answer.code === "RENDER_FAILED" &&
+        answer.error.includes("the pane successor failed to open"),
+      "failure on the same pane stream",
+    );
+    const running = daemon.daemon;
+    const failedAt = (await statsOf(running)).frameFeeds.drawn;
+    await until(
+      async () => (await statsOf(running)).frameFeeds.drawn > failedAt,
+      "another frame tick during the failure",
+    );
+    expect(attempts).toEqual(["paneBefore", "paneBroken"]);
+
+    // The open stream is the only client that needs a bar. The file watcher
+    // must deliver the fix and the renderer wake it without another render.
+    writeFileSync(file, config("paneRecovered"));
+    await reaches(
+      shows("paneRecovered"),
+      "recovered pane without a new render request",
+    );
+    expect(attempts).toEqual(["paneBefore", "paneBroken", "paneRecovered"]);
+  } finally {
+    stream?.close();
+    try {
+      await daemon?.stop();
+    } finally {
+      injected.mockRestore();
+      removeTmpDirs();
+      rmSync(project, { recursive: true, force: true });
+    }
+  }
 });

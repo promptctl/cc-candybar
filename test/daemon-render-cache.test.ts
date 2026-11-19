@@ -1497,7 +1497,7 @@ describe("RenderCache close", () => {
 // 3248.8ro6, step 5): `holdView` only finds the session's view, an open feed's
 // pin keeps that view and its entry. Only an event opens a view.
 describe("RenderCache frames and pins", () => {
-  function pinCache() {
+  function pinCache(source = SOURCES_NOTHING) {
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
@@ -1511,7 +1511,7 @@ describe("RenderCache frames and pins", () => {
         gates: bareGates(),
         sessionState: new SessionState(),
         log: (_level, line) => logs.push(line),
-        source: SOURCES_NOTHING,
+        source,
       },
       // Room for four entries over one compile, and the view of one.
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
@@ -1612,14 +1612,125 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
-  test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
+  test.each(["committed", "draft"])(
+    "a failed pinned %s successor keeps its owner and reopens on corrective config under pressure",
+    (which) => {
+      const watchers = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const logs: string[] = [];
+      const { dir, cleanup } = mkConfigDir();
+      const other = mkConfigDir();
+      let latest = viewFacts(dir, "s1");
+      let draft: ConfigSnapshot | null = null;
+      let opens = 0;
+      const cache = new RenderCache(
+        {
+          clock: systemTimekeeper,
+          locations: locations(host),
+          storage: NO_PLUGIN_STORAGE,
+          gates: bareGates(),
+          sessionState: new SessionState(),
+          currentRequest: () => latest,
+          editSnapshot: (_origin, session) => (session === S1 ? draft : null),
+          log: (_level, line) => logs.push(line),
+          // The second view built over the entry, the reload's successor, fails.
+          source: (view) => {
+            if (++opens === 2) throw new Error("the successor broke");
+            return SOURCES_NOTHING(view);
+          },
+        },
+        {
+          budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES,
+          maxEntries: 1,
+        },
+      );
+      const configs = configHost(cache, {
+        locations: locations(host),
+        stateDir: stateDir(host),
+        watchers,
+      });
+      const originAt = configs.at;
+      const edit = () => {
+        configs.again();
+        if (which === "draft") {
+          draft = cache.snapshotFor(originAt(dir, dir, undefined));
+          cache.refreshEditedView(S1);
+        }
+      };
+      try {
+        const origin = originAt(dir, dir, undefined);
+        if (which === "draft") draft = cache.snapshotFor(origin);
+        {
+          using _request = cache.holdSession(origin, latest);
+        }
+        const unpin = cache.pin(S1);
+        editProjectConfig(dir);
+        edit();
+        expect(logs).toContainEqual(
+          expect.stringMatching(
+            /^session view reopen failed sid="s1": Error: the successor broke/,
+          ),
+        );
+        // Frames find nothing, and open nothing; they find the error instead.
+        expect(cache.holdView(S1)).toBeNull();
+        expect(cache.holdView(S1)).toBeNull();
+        expect(opens).toBe(2);
+        expect(String(cache.openFailure(S1)?.error)).toBe(
+          "Error: the successor broke",
+        );
+        // The live session's facts can move while the view is absent.
+        latest = {
+          ...latest,
+          hookData: {
+            ...latest.hookData,
+            model: { id: "new", display_name: "New" },
+          },
+        };
+        {
+          using _pressure = cache.hold(
+            originAt(other.dir, other.dir, undefined),
+          );
+          expect(cache.size).toBe(2);
+          expect(cache.openFailure(S1)).not.toBeNull();
+        }
+        writeFileSync(
+          join(dir, ".cc-candybar.json5"),
+          '{ segments: { recovered: { template: "RECOVERED" } }, root: { h: ["recovered"] } }',
+        );
+        edit();
+        {
+          using recovered = cache.holdView(S1);
+          expect(recovered?.view.facts()).toBe(latest);
+          expect(recovered?.state.config.segments.recovered).toBeDefined();
+        }
+        expect(opens).toBe(3);
+        expect(cache.openFailure(S1)).toBeNull();
+        unpin();
+        using _pressure = cache.hold(originAt(other.dir, other.dir, undefined));
+        expect(cache.size).toBe(1);
+        expect(cache.holdView(S1)).toBeNull();
+      } finally {
+        cache.close();
+        configs.close();
+        watchers.closeAll();
+        cleanup();
+        other.cleanup();
+      }
+    },
+  );
+
+  // A retired session has no frame to draw its failure in, so the retire
+  // forgets it.
+  test("a retired session's open failure is forgotten", () => {
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       logger: () => {},
     });
-    const logs: string[] = [];
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
+    let canOpen = false;
     const cache = new RenderCache(
       {
         clock: systemTimekeeper,
@@ -1627,10 +1738,10 @@ describe("RenderCache frames and pins", () => {
         storage: NO_PLUGIN_STORAGE,
         gates: bareGates(),
         sessionState: new SessionState(),
-        log: (_level, line) => logs.push(line),
-        // The second view built over the entry, the reload's successor, fails.
+        log: () => {},
         source: (view) => {
-          if (++opens === 2) throw new Error("the successor broke");
+          opens++;
+          if (!canOpen) throw new Error("the view broke");
           return SOURCES_NOTHING(view);
         },
       },
@@ -1642,74 +1753,7 @@ describe("RenderCache frames and pins", () => {
       watchers,
     });
     const originAt = configs.at;
-    try {
-      {
-        using _request = cache.holdSession(
-          originAt(dir, dir, undefined),
-          viewFacts(dir, "s1"),
-        );
-      }
-      const unpin = cache.pin(S1);
-      editProjectConfig(dir);
-      configs.again();
-      expect(logs).toContainEqual(
-        expect.stringMatching(
-          /^session view reopen failed sid="s1": Error: the successor broke/,
-        ),
-      );
-      // Frames find nothing, and open nothing; they find the error instead.
-      expect(cache.holdView(S1)).toBeNull();
-      expect(cache.holdView(S1)).toBeNull();
-      expect(opens).toBe(2);
-      expect(String(cache.openFailure(S1)?.error)).toBe(
-        "Error: the successor broke",
-      );
-      // The session's next request opens its view, and the error goes.
-      {
-        using _request = cache.holdSession(
-          originAt(dir, dir, undefined),
-          viewFacts(dir, "s1"),
-        );
-      }
-      expect(cache.holdView(S1)).not.toBeNull();
-      expect(cache.openFailure(S1)).toBeNull();
-      unpin();
-    } finally {
-      cache.close();
-      configs.close();
-      watchers.closeAll();
-      cleanup();
-    }
-  });
-
-  // A retired session has no frame to draw its failure in, so the retire
-  // forgets it.
-  test("a retired session's open failure is forgotten", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
-      logger: () => {},
-    });
-    const { dir, cleanup } = mkConfigDir();
-    const cache = new RenderCache(
-      {
-        clock: systemTimekeeper,
-        locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
-        gates: bareGates(),
-        sessionState: new SessionState(),
-        log: () => {},
-        source: () => {
-          throw new Error("the view broke");
-        },
-      },
-      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
-    );
-    const configs = configHost(cache, {
-      locations: locations(host),
-      stateDir: stateDir(host),
-      watchers,
-    });
-    const originAt = configs.at;
+    const unpin = cache.pin(S1);
     try {
       expect(() =>
         cache.holdSession(originAt(dir, dir, undefined), viewFacts(dir, "s1")),
@@ -1717,11 +1761,45 @@ describe("RenderCache frames and pins", () => {
       expect(cache.openFailure(S1)).not.toBeNull();
       cache.retireSession(S1);
       expect(cache.openFailure(S1)).toBeNull();
+      canOpen = true;
+      editProjectConfig(dir);
+      configs.again();
+      expect(opens).toBe(1);
+      expect(cache.holdView(S1)).toBeNull();
+      using renewed = cache.holdSession(
+        originAt(dir, dir, undefined),
+        viewFacts(dir, "s1"),
+      );
+      expect(renewed.view.sessionId).toBe(S1);
+      expect(opens).toBe(2);
     } finally {
+      unpin();
       cache.close();
       configs.close();
       watchers.closeAll();
       cleanup();
+    }
+  });
+
+  test("the inactive failure bound preserves an open feed's error only while it is pinned", () => {
+    const { cache, dirs, close, request } = pinCache(() => {
+      throw new Error("the view broke");
+    });
+    const directory = dirs[0]!;
+    const unpin = cache.pin(S1);
+    try {
+      expect(() => request(S1, directory)).toThrow("the view broke");
+      for (let i = 0; i < 300; i++)
+        expect(() => request(`idle-${i}`, directory)).toThrow("the view broke");
+      expect(cache.openFailure(sessionIdOf("idle-0"))).toBeNull();
+      expect(cache.openFailure(sessionIdOf("idle-299"))).not.toBeNull();
+      expect(cache.openFailure(S1)).not.toBeNull();
+      unpin();
+      expect(cache.openFailure(S1)).toBeNull();
+      cache.close();
+      expect(cache.openFailure(sessionIdOf("idle-299"))).toBeNull();
+    } finally {
+      close();
     }
   });
 

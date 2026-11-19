@@ -143,6 +143,7 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 // the bytes bind just short of it (~230 entries with no view); it is what
 // bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
+const MAX_UNPINNED_FAILURES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — session state
 // (for declareState atoms) and the host's storage owner. Daemon-
@@ -1030,19 +1031,17 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
   const sessionId = facts.hookData.session_id;
-  const registry = state.registry.view();
-  // What fails to declare here failed in the load's probe (buildRenderState),
-  // which reported it: a declaration reads only the config.
-  declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
   const request =
     currentRequest === undefined
       ? standaloneRequest(facts)
       : { read: currentRequest, update: undefined };
-  // [LAW:no-silent-failure] A source that throws in its opening turn fails the
-  // open, which the cache records and reports; what the open took is released
-  // first, so a session that keeps failing to open leaks nothing.
+  const registry = state.registry.view();
+  // [LAW:no-ambient-temporal-coupling] A failed declaration, source or bind
+  // releases this opening's registry before the session can try again.
   let source: S;
   try {
+    // The load probes the same declarations and reports their warnings.
+    declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
     source = sourceOf({
       sessionId,
       state,
@@ -1050,13 +1049,12 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
       requested: request.read,
       configAccess,
     });
+    // [LAW:single-enforcer] Inputs and slots read this source at draw time.
+    bindView(state.compiled, registry.variableStore, registry, source);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  // [LAW:single-enforcer] The view's inputs and slots read its source from
-  // here on (src/dsl/parts.ts): no draw writes one.
-  bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
   // its payload (a fold of its session's world state, its request, its picks
   // and the depths of its histories), its selections, or what its own or its
@@ -1129,6 +1127,14 @@ export const registrySubscriptions = (
 
 const draftKey = (sessionId: SessionId): string => `edit:${sessionId}`;
 
+// [LAW:no-ambient-temporal-coupling] A failed opening belongs to its exact
+// cache entry. A retry reads the live session's request through its owner.
+interface OpenFailure<F> {
+  readonly entry: CacheEntry;
+  readonly requestOf: (session: SessionId) => F;
+  readonly error: unknown;
+}
+
 export class RenderCache<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
@@ -1171,14 +1177,9 @@ export class RenderCache<
   // long as the feed is open. The collector asks the feeds themselves whether
   // a session is watched before it retires one.
   private readonly pins = new Map<SessionId, number>();
-  // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
-  private readonly openFailures = new Map<
-    SessionId,
-    { readonly error: unknown }
-  >();
+  // [LAW:no-silent-failure] A frame sees the opening's error while the view
+  // is absent. An open feed keeps the entry eligible for a config retry.
+  private readonly openFailures = new Map<SessionId, OpenFailure<F>>();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
@@ -1408,11 +1409,17 @@ export class RenderCache<
   // view now so pushed frames and click validation see the same draft.
   refreshEditedView(sessionId: SessionId): void {
     const view = this.views.get(sessionId);
-    if (view === undefined) return;
-    const { origin } = this.leaseOf(view).entry;
-    const requested = view.facts();
+    const previous =
+      view !== undefined
+        ? { entry: this.leaseOf(view).entry, requestOf: view.facts }
+        : this.pinnedFailure(sessionId);
+    if (previous === undefined) return;
+    const { origin } = previous.entry;
+    const requested = previous.requestOf(sessionId);
     const entry = this.getOrCreate(origin, sessionId);
-    if (this.views.get(sessionId)?.state !== entry.state)
+    // getOrCreate reloads an existing owner in place. Only moving to a
+    // different owner needs another opening here.
+    if (entry !== previous.entry)
       this.viewOf(entry, entry.state, requested, "reload");
     if (this.deps.editSnapshot?.(origin, sessionId) == null)
       this.dropDraft(sessionId);
@@ -1472,6 +1479,23 @@ export class RenderCache<
     return this.openFailures.get(sessionId) ?? null;
   }
 
+  private pinnedFailure(sessionId: SessionId): OpenFailure<F> | undefined {
+    return this.pins.has(sessionId)
+      ? this.openFailures.get(sessionId)
+      : undefined;
+  }
+
+  // [LAW:carrying-cost] Open feeds own their failures. Inactive errors keep
+  // only the latest bounded set, including after the last feed unpins.
+  private trimOpenFailures(): void {
+    if (this.openFailures.size <= MAX_UNPINNED_FAILURES) return;
+    const idle = [...this.openFailures.keys()].filter(
+      (sid) => !this.pins.has(sid),
+    );
+    for (const sid of idle.slice(0, -MAX_UNPINNED_FAILURES))
+      this.openFailures.delete(sid);
+  }
+
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
   // session, so it follows the view wherever a request or a reload moves it.
@@ -1483,7 +1507,10 @@ export class RenderCache<
       released = true;
       const left = (this.pins.get(sessionId) ?? 0) - 1;
       if (left > 0) this.pins.set(sessionId, left);
-      else this.pins.delete(sessionId);
+      else {
+        this.pins.delete(sessionId);
+        this.trimOpenFailures();
+      }
     };
   }
 
@@ -1532,9 +1559,9 @@ export class RenderCache<
   ): SessionView<S, F> {
     const sessionId = facts.hookData.session_id;
     const { cwd } = entry.origin;
+    const { currentRequest } = this.deps;
     let view: SessionView<S, F>;
     try {
-      const { currentRequest } = this.deps;
       view = openView(
         state,
         cwd,
@@ -1550,7 +1577,13 @@ export class RenderCache<
           : () => currentRequest(sessionId),
       );
     } catch (error) {
-      this.openFailures.set(sessionId, { error });
+      this.openFailures.delete(sessionId);
+      this.openFailures.set(sessionId, {
+        entry,
+        requestOf: currentRequest ?? (() => facts),
+        error,
+      });
+      this.trimOpenFailures();
       throw error;
     }
     this.openFailures.delete(sessionId);
@@ -1716,6 +1749,8 @@ export class RenderCache<
     reason: Teardown["reason"],
   ): void {
     this.entries.delete(key);
+    for (const [session, failure] of this.openFailures)
+      if (failure.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
   }
 
@@ -1753,12 +1788,14 @@ export class RenderCache<
     const fits = (): boolean =>
       this.entries.size <= this.maxEntries &&
       this.accountedBytes() <= this.budgetBytes();
-    // [LAW:no-ambient-temporal-coupling] An entry a pinned session's view is
-    // of is drawn by an open feed, which a frame never rebuilds (`holdView`).
+    // [LAW:no-ambient-temporal-coupling] An open feed protects the entry its
+    // view draws or will retry. A frame never rebuilds it (`holdView`).
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId) => {
-        const view = this.views.get(sessionId);
-        return view === undefined ? [] : [view.state];
+        const state =
+          this.views.get(sessionId)?.state ??
+          this.openFailures.get(sessionId)?.entry.state;
+        return state === undefined ? [] : [state];
       }),
     );
     for (const [key, evicted] of this.entries) {
@@ -1821,10 +1858,7 @@ export class RenderCache<
   private retire(
     state: DslRenderState,
     reason: Teardown["reason"],
-    successor: {
-      readonly entry: CacheEntry;
-      readonly state: DslRenderState;
-    } | null,
+    successor: CacheEntry | null,
   ): void {
     // [LAW:single-enforcer] A view is a child of its state: the state going
     // retires every view of it first, so each is disposed before or with it.
@@ -1833,24 +1867,30 @@ export class RenderCache<
     // the next frame draws a view (brandon-unfiled-3248.8ro6, 4a).
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
-      if (successor !== null) {
-        // [LAW:no-silent-failure] A successor that fails to open is said, and
-        // the old view is still retired, so the reload never leaves a state
-        // half torn down; the session's next render opens its view.
-        try {
-          this.opened(successor.entry, successor.state, view.facts(), "reload");
-        } catch (e) {
-          this.log(
-            "error",
-            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`,
-          );
-        }
-      }
+      if (successor !== null)
+        this.reopen(successor, view.sessionId, view.facts);
       this.retireView(view, reason);
     }
     const hold = this.holdOf(state);
     hold.retired = { reason, held: hold.holders };
     this.reclaim(state, hold);
+  }
+
+  // [LAW:single-enforcer] A reload opens a successor once. A failed opening
+  // remains visible to its feed and leaves the other sessions recoverable.
+  private reopen(
+    entry: CacheEntry,
+    session: SessionId,
+    requestOf: (session: SessionId) => F,
+  ): void {
+    try {
+      this.opened(entry, entry.state, requestOf(session), "reload");
+    } catch (error) {
+      this.log(
+        "error",
+        `session view reopen failed sid=${JSON.stringify(session)}: ${String(error)}`,
+      );
+    }
   }
 
   // [LAW:single-enforcer] The one place a state is disposed: once it is
@@ -1896,11 +1936,16 @@ export class RenderCache<
     { snapshot, digest }: HeldSnapshot,
     cause: LoadCause,
   ): void {
-    // Taken before the reload, so a session whose view fails to reopen over
-    // the new state is still among those it changed.
-    const sessions = this.sessionsOn(entry);
-    // A reload whose load inputs did not move keeps the state the entry
-    // serves, so it reopens no view and restarts no source.
+    // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
+    // this observation. A successor that fails here waits for a new one.
+    const retry = [...this.openFailures].filter(
+      ([session, failed]) => failed.entry === entry && this.pins.has(session),
+    );
+    const sessions = [
+      ...this.sessionsOn(entry),
+      ...retry.map(([session]) => session),
+    ];
+    // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
     const loaded = this.load(entry.origin, snapshot, served);
     entry.snapshot = snapshot;
@@ -1919,8 +1964,10 @@ export class RenderCache<
     // The successor's hold precedes its predecessor's release, so a folder
     // both name is never closed and reopened.
     this.holdFolders(entry.state);
-    if (loaded.kind === "built")
-      this.retire(served, "reload", { entry, state: loaded.state });
+    if (loaded.kind === "built") this.retire(served, "reload", entry);
+    if (loaded.state !== null)
+      for (const [session, failure] of retry)
+        this.reopen(entry, session, failure.requestOf);
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);
