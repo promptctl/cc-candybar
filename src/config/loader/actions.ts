@@ -1,22 +1,7 @@
-// [LAW:types-are-the-program] The action-table schema. An ActionDecl is
-// discriminated by exactly-one-of set/persist/copy/open/reset; a `set` or
-// `persist` adds exactly-one value SOURCE (to/from/min-max-by/int — `persist`
-// excludes `int`). The proof here is what lets every downstream consumer
-// (renderAction, deriveActionValidators, deriveConfigActionValidators) match
-// on the present key with no fallthrough. Whether a `{{ action "name" }}`
-// reference resolves is a cross-ref concern. This file changes when the
-// action vocabulary changes.
-//
-// [LAW:no-mode-explosion] Unlike cache (single-key value-arms → oneOfPresent) and
-// variables (tag-by-field-value → taggedUnion), an action's arms are multi-key
-// RECORDS: a `set`/`persist` carries the discriminator plus a value-source group
-// (`to` | `from` | `min`/`max`/`by` | `int`). A single key never selects an arm, so
-// the shared present-key engine doesn't fit — bending it to would mean per-arm
-// sibling allow-lists and bespoke unknown-key messages bolted on as modes. Instead
-// the leaf machinery is shared (`fields` + `refine` + field specs carry every arm's
-// shape and cross-field invariant as DATA, parameterized by discriminator name so
-// `set` and `persist` share one field-map definition) and this file owns only the
-// thin total present-key dispatch — the irreducible union eliminator.
+// [LAW:types-are-the-program] An action declares exactly one action key.
+// Set and persist also select one source for their value. Some sources span
+// several fields, such as a bounded step's min, max and by. Each variant
+// owns its field constraints and contributes its shape to the editor schema.
 
 import {
   ACTION_KEYS,
@@ -26,6 +11,7 @@ import {
   type OptionDomain,
 } from "../action.js";
 import nodePath from "node:path";
+import { IDENTIFIER } from "../identifier.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   parseSlashLine,
@@ -34,7 +20,6 @@ import {
 import {
   describeType,
   describeValue,
-  ENV_NAME,
   fields,
   isPlainObject,
   objectJson,
@@ -48,12 +33,9 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:locality-or-seam] Structural validation of the `actions` block: each
-// action is discriminated by which of set/copy/open is present, a `set` further
-// by its value SOURCE (to | from | min/max/by | int). Whether a `{{ action
-// "name" }}` reference resolves is a cross-ref concern (validateCrossReferences),
-// which runs on the MERGED config so a segment can reference a default-provided
-// action.
+// [LAW:locality-or-seam] The declaring file supplies each action's shape
+// and a run's directory. References between actions and segments resolve
+// after merging, when actions declared in another layer are visible.
 export function validateActions(
   ctx: ValidateCtx,
   raw: unknown,
@@ -92,12 +74,8 @@ function issue(ctx: ValidateCtx, path: string, message: string): void {
   });
 }
 
-// [LAW:dataflow-not-control-flow] The top-level union eliminator: exactly one of
-// set/copy/open is present, then dispatch the whole record to that arm via the
-// arm table. The dispatch is a total projection over the present key (no
-// fallthrough) — the only branch is the presence-count, which every union must
-// discriminate somewhere. The set arm owns its own siblings (the value source),
-// so this level rejects no keys generically.
+// [LAW:dataflow-not-control-flow] The action key selects its parser.
+// Each parser knows which other fields its variants accept.
 function validateActionDecl(
   ctx: ValidateCtx,
   path: string,
@@ -122,7 +100,7 @@ function validateActionDecl(
     );
     return null;
   }
-  const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
+  const present = ACTION_KEYS.filter((k) => k in raw);
   if (present.length !== 1) {
     issue(
       ctx,
@@ -133,12 +111,13 @@ function validateActionDecl(
     );
     return null;
   }
-  const key = present[0] as ActionKey;
+  const key = present[0]!;
   // [LAW:single-enforcer] The layer an action writes is read here, once, for
   // every arm: the arm parses the rest of the record.
   const { layer, ...rest } = raw;
   const layers = LAYER_CHOICES[key];
-  if (layer === undefined) return actionArms(home)[key](ctx, path, rest);
+  const { parse } = ACTION_ARMS[key];
+  if (layer === undefined) return parse(ctx, path, rest, home);
   if (layers === undefined) {
     issue(
       ctx,
@@ -155,7 +134,7 @@ function validateActionDecl(
     );
     return null;
   }
-  const parsed = actionArms(home)[key](ctx, path, rest);
+  const parsed = parse(ctx, path, rest, home);
   return parsed === null ? null : ({ ...parsed, layer } as ActionDecl);
 }
 
@@ -178,33 +157,6 @@ export function actionHomeOf(filePath: string): ActionHome {
     : { text: filePath };
 }
 
-// [LAW:dataflow-not-control-flow] The top-level arm table as DATA: copy/open share
-// one template-arm shape (their key names the only difference); set/persist
-// delegate to their value-source sub-union (the SAME field shapes, a different
-// discriminator key — see valueSourceAction); reset is copy/open's plain-string
-// sibling. The present key indexes this map — the eliminator never branches on
-// the key name.
-const actionArms = (
-  home: ActionHome,
-): Record<ActionKey, ArmParse<ActionDecl>> => ({
-  set: (ctx, path, raw) => valueSourceAction(ctx, path, raw, "set", SET_ARMS),
-  persist: (ctx, path, raw) =>
-    valueSourceAction(ctx, path, raw, "persist", PERSIST_ARMS),
-  copy: templateArm("copy"),
-  open: templateArm("open"),
-  reset: resetArm,
-  undo: markerArm("undo"),
-  redo: markerArm("redo"),
-  back: markerArm("back"),
-  rewind: markerArm("rewind"),
-  save: markerArm("save"),
-  preset: presetArm,
-  themeDefault: themeDefaultArm,
-  slash: slashArm,
-  run: runArm(home),
-  do: doArm,
-});
-
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
 // object its arm validates — symmetric to `templateArm(key)`'s parse.
 function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
@@ -216,46 +168,19 @@ function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
   };
 }
 
-// [LAW:one-source-of-truth] One ActionDecl's schema: the set/persist sub-unions
-// (each arm's `json`, derived from SET_ARMS/PERSIST_ARMS) joined with
-// copy/open/reset — the SAME members `validateActionDecl` dispatches over. The
-// `actions` block is a name → ActionDecl map, symmetric to `validateActions`.
-function actionDeclJson(): JsonNode {
-  return {
-    anyOf: [
-      ...SET_ARMS.map((arm) => arm.json),
-      ...PERSIST_ARMS.map((arm) => writesJson("persist", arm.json)),
-      templateArmJson("copy"),
-      templateArmJson("open"),
-      writesJson("reset", templateArmJson("reset")),
-      markerArmJson("undo"),
-      markerArmJson("redo"),
-      markerArmJson("back"),
-      markerArmJson("rewind"),
-      writesJson("save", markerArmJson("save")),
-      ...presetArmJson().map((json) => writesJson("preset", json)),
-      writesJson("themeDefault", THEME_DEFAULT_ARM_JSON),
-      SLASH_ARM_JSON,
-      RUN_ARM_JSON,
-      DO_ARM_JSON,
-    ],
-  };
-}
-
-// [LAW:one-source-of-truth] A config-writing arm's schema admits the layers
-// the dispatcher admits for it (LAYER_CHOICES).
-function writesJson(key: ActionKey, json: JsonNode): JsonNode {
-  return {
-    ...json,
-    properties: {
-      ...(json.properties as JsonNode),
-      layer: { enum: LAYER_CHOICES[key] },
-    },
-  };
-}
-
 export function actionsJson(): JsonNode {
-  return { type: "object", additionalProperties: actionDeclJson() };
+  // [LAW:one-source-of-truth] Every variant of an action admits exactly the
+  // layers its parser accepts, including a save that asks for its target.
+  const anyOf = ACTION_KEYS.flatMap((key) => {
+    const { variants } = ACTION_ARMS[key];
+    const layers = LAYER_CHOICES[key];
+    if (layers === undefined) return variants;
+    return variants.map((json) => ({
+      ...json,
+      properties: { ...(json.properties as JsonNode), layer: { enum: layers } },
+    }));
+  });
+  return { type: "object", additionalProperties: { anyOf } };
 }
 
 // [LAW:one-type-per-behavior] copy and open are one behavior — a single required
@@ -280,10 +205,7 @@ function templateArm(key: "copy" | "open"): ArmParse<ActionDecl> {
 // [LAW:one-type-per-behavior] `reset` is copy/open's shape (a single required
 // string, no other keys) but the string is a KEY (a config globals field name),
 // not a template — no Go-template parsing happens for it, so it reuses the
-// slash-free/non-empty shape `set`/`persist` keys share rather than
-// requireString's bare-presence check. A `function` declaration (not a const
-// arrow) so it is hoisted — actionArms above references it directly, not
-// through a deferred closure.
+// slash-free/non-empty shape of the keys that set and persist accept.
 function resetArm(
   ctx: ValidateCtx,
   path: string,
@@ -312,9 +234,7 @@ function resetArm(
 // one step further reduced: a single required key whose only legal VALUE is
 // the literal `true` (mirrors intMarkerSpec — a marker, not data), because
 // there is no key to name: the history they step is one stack per session, and
-// the settings a save writes are the session's own drafts. `function`, not a
-// const arrow, so actionArms above (built before this declaration in source
-// order) can reference it directly via hoisting.
+// the settings a save writes are the session's own drafts.
 type MarkerKey = "undo" | "redo" | "back" | "rewind" | "save";
 const MARKER_SUBJECT: Record<MarkerKey, string> = {
   undo: "it steps the session's settings history",
@@ -360,8 +280,7 @@ function markerArmJson(key: MarkerKey): JsonNode {
 
 // [LAW:types-are-the-program] `preset` (brandon-save-undo-bwi.o6u) is the
 // shape: `"save"` alone, or `"delete"` with the `name` it removes — a
-// template, so its preset can be the one the bar is in. `function`, not a
-// const arrow, so actionArms above can reference it directly via hoisting.
+// template, so its preset can be the one the bar is in.
 function presetArm(
   ctx: ValidateCtx,
   path: string,
@@ -410,8 +329,7 @@ function presetArmJson(): readonly JsonNode[] {
 // [LAW:types-are-the-program] `themeDefault` (candybar-theme-colours-6fq5.ix8)
 // is `preset: "save"`'s shape with nothing beside it: one verb, `"save"`, and
 // no other key — which theme and which look are the daemon's to read at click
-// time. `function`, not a const arrow, so actionArms above can reference it
-// directly via hoisting.
+// time.
 function themeDefaultArm(
   ctx: ValidateCtx,
   path: string,
@@ -445,7 +363,7 @@ const THEME_DEFAULT_ARM_JSON: JsonNode = {
 
 // [LAW:parse-dont-validate] `slash` is the one place a line to type becomes a
 // SlashLine (src/claude-input/slash-line.ts); the verb and the edge take
-// nothing else. `function`, not a const arrow, so actionArms can reference it.
+// nothing else.
 function slashArm(
   ctx: ValidateCtx,
   path: string,
@@ -484,68 +402,71 @@ const SLASH_ARM_JSON: JsonNode = {
 // runs in.
 const RUN_KEYS = ["run", "env", "refreshes"];
 
-function runArm(home: ActionHome): ArmParse<ActionDecl> {
-  return (ctx, path, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (!RUN_KEYS.includes(k))
-        issue(
-          ctx,
-          `${path}.${k}`,
-          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`,
-        );
-    }
-    const before = ctx.issues.length;
-    const run = raw.run;
-    if (
-      !Array.isArray(run) ||
-      run.length === 0 ||
-      run.some((item) => typeof item !== "string") ||
-      run[0] === ""
-    ) {
+function runArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  home: ActionHome,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (!RUN_KEYS.includes(k))
       issue(
         ctx,
-        `${path}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run)}`,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`,
       );
-    }
-    const env = raw.env ?? {};
-    if (
-      !isPlainObject(env) ||
-      Object.entries(env).some(
-        ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string",
-      )
-    ) {
-      issue(
-        ctx,
-        `${path}.env`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env)}`,
-      );
-    }
-    const refreshes = raw.refreshes ?? [];
-    if (
-      !Array.isArray(refreshes) ||
-      refreshes.some((name) => typeof name !== "string" || name === "")
-    ) {
-      issue(
-        ctx,
-        `${path}.refreshes`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`,
-      );
-    }
-    if (!("dir" in home)) {
-      issue(
-        ctx,
-        `${path}.run`,
-        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`,
-      );
-    }
-    if (ctx.issues.length > before || !("dir" in home)) return null;
-    return {
-      run: run as [string, ...string[]],
-      env: env as Record<string, string>,
-      refreshes: refreshes as string[],
-      cwd: home.dir,
-    };
+  }
+  const before = ctx.issues.length;
+  const run = raw.run;
+  if (
+    !Array.isArray(run) ||
+    run.length === 0 ||
+    run.some((item) => typeof item !== "string") ||
+    run[0] === ""
+  ) {
+    issue(
+      ctx,
+      `${path}.run`,
+      `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run)}`,
+    );
+  }
+  const env = raw.env ?? {};
+  if (
+    !isPlainObject(env) ||
+    Object.entries(env).some(
+      ([name, value]) => !IDENTIFIER.test(name) || typeof value !== "string",
+    )
+  ) {
+    issue(
+      ctx,
+      `${path}.env`,
+      `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env)}`,
+    );
+  }
+  const refreshes = raw.refreshes ?? [];
+  if (
+    !Array.isArray(refreshes) ||
+    refreshes.some((name) => typeof name !== "string" || name === "")
+  ) {
+    issue(
+      ctx,
+      `${path}.refreshes`,
+      `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`,
+    );
+  }
+  if (!("dir" in home)) {
+    issue(
+      ctx,
+      `${path}.run`,
+      `a run action runs in the directory of the file that declares it, and ${home.text} is no file`,
+    );
+  }
+  if (ctx.issues.length > before || !("dir" in home)) return null;
+  return {
+    run: run as [string, ...string[]],
+    env: env as Record<string, string>,
+    refreshes: refreshes as string[],
+    cwd: home.dir,
   };
 }
 
@@ -555,7 +476,7 @@ const RUN_ARM_JSON: JsonNode = {
     run: { type: "array", items: { type: "string" }, minItems: 1 },
     env: {
       type: "object",
-      propertyNames: { pattern: ENV_NAME.source },
+      propertyNames: { pattern: IDENTIFIER.source },
       additionalProperties: { type: "string" },
     },
     refreshes: { type: "array", items: { type: "string", minLength: 1 } },
@@ -568,8 +489,7 @@ const RUN_ARM_JSON: JsonNode = {
 // head first. Two or more: one member is that action itself, and nothing is
 // gained by the indirection. Whether each name resolves, and whether a
 // follower can ride behind a head at all, needs the merged action table, so
-// both are cross-ref concerns (validateCrossReferences). `function`, not a
-// const arrow, so actionArms above can reference it directly via hoisting.
+// both are cross-ref concerns (validateCrossReferences).
 function doArm(
   ctx: ValidateCtx,
   path: string,
@@ -879,6 +799,56 @@ const PERSIST_ARMS: readonly ValueSourceArm[] = [
     ["insertSegmentFrom"],
   ),
 ];
+
+interface ActionSyntax {
+  readonly parse: (
+    ctx: ValidateCtx,
+    path: string,
+    raw: Record<string, unknown>,
+    home: ActionHome,
+  ) => ActionDecl | null;
+  readonly variants: readonly JsonNode[];
+}
+
+function syntax(
+  parse: ActionSyntax["parse"],
+  ...variants: JsonNode[]
+): ActionSyntax {
+  return { parse, variants };
+}
+
+const markerSyntax = (key: MarkerKey): ActionSyntax =>
+  syntax(markerArm(key), markerArmJson(key));
+
+function valueSyntax(
+  key: Discriminator,
+  arms: readonly ValueSourceArm[],
+): ActionSyntax {
+  return syntax(
+    (ctx, path, raw) => valueSourceAction(ctx, path, raw, key, arms),
+    ...arms.map((arm) => arm.json),
+  );
+}
+
+// [LAW:single-enforcer] One entry per action joins its parser to every shape
+// an editor can suggest. Only a run needs the declaring file's directory.
+const ACTION_ARMS: Record<ActionKey, ActionSyntax> = {
+  set: valueSyntax("set", SET_ARMS),
+  persist: valueSyntax("persist", PERSIST_ARMS),
+  copy: syntax(templateArm("copy"), templateArmJson("copy")),
+  open: syntax(templateArm("open"), templateArmJson("open")),
+  reset: syntax(resetArm, templateArmJson("reset")),
+  undo: markerSyntax("undo"),
+  redo: markerSyntax("redo"),
+  back: markerSyntax("back"),
+  rewind: markerSyntax("rewind"),
+  save: markerSyntax("save"),
+  preset: syntax(presetArm, ...presetArmJson()),
+  themeDefault: syntax(themeDefaultArm, THEME_DEFAULT_ARM_JSON),
+  slash: syntax(slashArm, SLASH_ARM_JSON),
+  run: syntax(runArm, RUN_ARM_JSON),
+  do: syntax(doArm, DO_ARM_JSON),
+};
 
 // [LAW:one-source-of-truth] The clause list, not the joined string, is the
 // data that varies per discriminator — the "or" belongs on the LAST clause

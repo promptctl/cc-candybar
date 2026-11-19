@@ -30,7 +30,7 @@ import {
 // numerically ahead of every other key, which would silently reorder a rows
 // map under the by-name spread. Shared with group names for the same reason
 // they share the constraint (both splice into addresses).
-export const ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export { IDENTIFIER as ROW_NAME_RE } from "./identifier.js";
 
 // [LAW:one-source-of-truth] The name a whole tree's i-th row lowers to. `#`
 // fails ROW_NAME_RE, so a positional row can never collide with — or be

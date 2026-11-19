@@ -101,6 +101,17 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     }`,
   ],
   [
+    "config-writing actions name their target layers",
+    `{ actions: {
+      narrow: { persist: "padding", to: "2", layer: "project" },
+      forget: { reset: "palette", layer: "local" },
+      keepPreset: { preset: "save", layer: "project" },
+      dropPreset: { preset: "delete", name: "custom", layer: "local" },
+      keepTheme: { themeDefault: "save", layer: "user" },
+      choose: { save: true, layer: "ask" }
+    } }`,
+  ],
+  [
     "cycle action (2de.4 toggle form)",
     `{
       segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
@@ -190,6 +201,14 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
 
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
+  [
+    "a session action names a write layer",
+    `{ actions: { a: { set: "wrap", to: "true", layer: "project" } } }`,
+  ],
+  [
+    "a reset asks to choose a layer",
+    `{ actions: { a: { reset: "palette", layer: "ask" } } }`,
+  ],
   ["unknown top-level key", `{ segmnets: {} }`],
   [
     "a new segment without a template",

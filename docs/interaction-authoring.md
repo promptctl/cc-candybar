@@ -265,9 +265,9 @@ draws for.
 
 A setting the menu offers — theme, style, variation, shade, endcaps, wrap,
 padding, preset — is a **draft** while the bar your session
-renders differs from the bar your config file renders on its own. Nothing
-records that: the daemon compares the two on every render and publishes how
-many differ as the payload input `unsaved`. Pick a value and then pick your
+renders differs from the bar your config file renders on its own. The
+renderer compares the two and supplies the count as the payload input
+`unsaved`. Pick a value and then pick your
 saved one back, and there is nothing to save; a pick the bar ignores (a preset
 or style your config no longer declares) is never a draft.
 
@@ -277,11 +277,11 @@ names goes into `presets.<name>.globals`, since a top-level value would be
 shadowed there, and every other field into `globals`. The daemon reloads the
 file before it drops those picks from the session, so the bar reads the saved
 values from the very next render and follows the file from then on.
-A save writes the user's own file by default; `layer: "project"` or
-`"local"` fixes another, and `layer: "ask"` has each link bind one as the
-action's value. The
-settings menu's `💾 save N` is exactly this, shown while `unsaved` is above
-zero, with a link per layer the session can write:
+A save writes the user's own file by default. Set `layer` to `"project"` or
+`"local"` to use that layer. The editor schema lists the targets each action
+accepts. Save also accepts `layer: "ask"`, which binds a target to each link.
+The settings menu uses this form for `💾 save N`. While `unsaved` is above
+zero, it shows a link for each layer the session can write.
 
 ```json5 check:pass
 {

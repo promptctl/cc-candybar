@@ -15,6 +15,7 @@ import {
   type SettingDecl,
   type SettingValue,
 } from "../dsl-types.js";
+import { IDENTIFIER as SETTING_NAME } from "../identifier.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isReservedName, RESERVED_NAMESPACES } from "../reserved-names.js";
 import {
@@ -27,7 +28,6 @@ import {
 
 // A setting's name is read in a template as `.settings.<name>`, so it must be
 // a field name the template engine parses.
-const SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
 
 const SETTING_VALUE_JSON = {
