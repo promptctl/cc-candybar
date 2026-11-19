@@ -2,31 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-908",
-      "ref": "refs/pull/908/merge",
-      "sha": "ed5856795061e5e1ce4f9b995bb47e9e53a77dbb",
-      "timestamp": "2026-11-19T21:18:21.342Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "4680c55df0a0905e549e817bb85a273c8c6dc221",
+      "timestamp": "2026-11-19T21:24:54.502Z",
       "commits": [
         {
-          "sha": "ed5856795061e5e1ce4f9b995bb47e9e53a77dbb",
+          "sha": "4680c55df0a0905e549e817bb85a273c8c6dc221",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T21:16:57Z",
-          "message": "Merge b340e4df9c86d8d7854ae84f88d7a9878dd28cc4 into 6a830601d6a9c3e2737510757ff24dcaf67ef2c6\n"
-        },
-        {
-          "sha": "b340e4df9c86d8d7854ae84f88d7a9878dd28cc4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:16:45-07:00",
-          "message": "fix(renderer): keep pending cleanup and encode push failures\n"
-        },
-        {
-          "sha": "3d7342ead03ec4e37234f952c81d2bc0b414ec8a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:01:13-07:00",
-          "message": "fix(renderer): preserve each turn's failure and collected results\n"
+          "timestamp": "2026-11-19T14:23:52-07:00",
+          "message": "fix(renderer): keep writes and failures attached to their turn (#908)\n\n* fix(renderer): preserve each turn's failure and collected results\n\n* fix(renderer): keep pending cleanup and encode push failures"
         }
       ]
     },
@@ -49,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T14:16:05-07:00",
           "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "6a830601d6a9c3e2737510757ff24dcaf67ef2c6",
-      "timestamp": "2026-11-19T20:44:15.107Z",
-      "commits": [
-        {
-          "sha": "6a830601d6a9c3e2737510757ff24dcaf67ef2c6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:42:55-07:00",
-          "message": "Keep renderer subscriptions and frame work bounded (#899)\n\n* perf(renderer): publish subscription revisions once\n\n* test(renderer): verify two stable ordinary subscription turns\n\n* fix(renderer): keep the retry deadline of a throwing feed (ibyq.l7z)\n\n* fix(host): reuse the current frame on viewer replacement (ibyq.l7z)\n\n* fix(renderer): bound held diagnostic text (ibyq.l7z)\n\n* fix(host): reconcile tmux panes when a request changes"
         }
       ]
     },

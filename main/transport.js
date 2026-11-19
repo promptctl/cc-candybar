@@ -77413,7 +77413,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 }
 
 // src/renderer/main.ts
-function mainRenderer(parts, pushed, drained) {
+function mainRenderer(parts, pushed, drains) {
   const { time, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
   const prepare = (delivery) => {
@@ -77707,77 +77707,99 @@ function mainRenderer(parts, pushed, drained) {
     };
   });
   let observed2;
+  let pruneOwed = false;
   const declare = (configOffered) => {
+    pruneOwed ||= configOffered;
     let next2 = declaration.read();
     if (next2 !== observed2 && next2.unprepared.length > 0) {
       for (const origin of next2.unprepared)
         parts.renderCache.getOrCreate(origin);
       next2 = declaration.read();
     }
-    const before = subscriptions.configs;
+    if (pruneOwed || subscriptions.configs !== next2.plan.configs) {
+      parts.renderCache.prune(new Set(next2.plan.configs.map(originKey)));
+      pruneOwed = false;
+    }
     observed2 = next2;
     subscriptions = next2.plan;
-    if (configOffered || before !== subscriptions.configs)
-      parts.renderCache.prune(new Set(subscriptions.configs.map(originKey)));
   };
-  let stored = [];
-  const ending = (run2, configOffered = false) => {
+  const storeOrder = Object.keys(drains);
+  const ending = (input, run2) => {
+    let outcome;
     try {
-      let value;
-      try {
-        value = run2();
-      } finally {
-        stored = drained();
-        declare(configOffered);
-        wake = earliestOf([
-          time.next(),
-          menuIdle.next(
-            parked.get().length === 0 ? void 0 : parkedClickSessions()
-          ),
-          feeds.next()
-        ]);
-      }
-      return { kind: "answered", value };
+      outcome = { kind: "answered", value: run2() };
     } catch (thrown2) {
-      return { kind: "threw", failure: failureOf(thrown2) };
+      outcome = { kind: "threw", failure: failureOf(thrown2) };
     }
+    const stored = [];
+    const collect = (stage, read2) => {
+      try {
+        read2();
+      } catch (thrown2) {
+        const failure2 = failureOf(thrown2);
+        if (outcome.kind === "answered") outcome = { kind: "threw", failure: failure2 };
+        else {
+          const after = { stage, failure: failure2 };
+          outcome = {
+            ...outcome,
+            secondary: outcome.secondary === void 0 ? [after] : [...outcome.secondary, after]
+          };
+        }
+      }
+    };
+    for (const store of storeOrder)
+      collect(store, () => stored.push(...drains[store]()));
+    collect(
+      "subscriptions",
+      () => declare(input.kind === "event" && input.event.kind === "config")
+    );
+    collect("wake", () => {
+      wake = earliestOf([
+        time.next(),
+        menuIdle.next(
+          parked.get().length === 0 ? void 0 : parkedClickSessions()
+        ),
+        feeds.next()
+      ]);
+    });
+    if (input.kind === "adapter" && input.push.kind === "close-views")
+      collect(
+        "release-subscriptions",
+        () => runInAction(() => declaration.release())
+      );
+    return { outcome, subscriptions, wake, stored };
   };
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) => time.during(input, () => {
-      const ended = ending(
+      const { outcome, ...declaration2 } = ending(
+        input,
         () => pushed(input.push, {
           parked: opening.size + parked.get().length,
           presents: deliveries.size,
           deferrals: time.deferrals()
         })
       );
-      if (input.push.kind === "close-views")
-        runInAction(() => declaration.release());
       return {
-        ...ended.kind === "answered" ? { kind: "replied", reply: ended.value } : ended,
-        subscriptions,
-        wake,
-        stored
+        ...outcome.kind === "answered" ? { kind: "replied", reply: outcome.value } : outcome,
+        ...declaration2
       };
     }),
     event: async (input) => time.during(input, () => {
       const record2 = [];
       const effects = [];
       const frames = [];
-      const ended = ending(
-        () => turn(input.event, record2, effects, frames),
-        input.event.kind === "config"
+      const { outcome, ...declaration2 } = ending(
+        input,
+        () => turn(input.event, record2, effects, frames)
       );
       return {
-        ...ended.kind === "answered" ? { kind: "answered" } : ended,
+        ...outcome.kind === "answered" ? { kind: "answered" } : outcome,
         effects,
         record: record2,
-        subscriptions,
-        wake,
         frames,
-        stored
+        ...declaration2
       };
     })
   });
@@ -77814,10 +77836,6 @@ function mainRendererOf(inputs, host) {
     log,
     inputs.stored.history
   );
-  const drained = () => [
-    ...sessionState.drain(),
-    ...settingsHistory.drain()
-  ];
   let minted = 0;
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint);
@@ -77972,7 +77990,10 @@ function mainRendererOf(inputs, host) {
       acts
     },
     pushed,
-    drained
+    {
+      "session-state": () => sessionState.drain(),
+      "settings-history": () => settingsHistory.drain()
+    }
   );
 }
 function debugOf(cache2, what) {
@@ -89357,6 +89378,10 @@ var RendererWake = class {
 };
 
 // src/daemon/renderer-host.ts
+var finalizationFields = (outcome) => outcome.kind === "threw" ? outcome.secondary?.map(({ stage, failure: failure2 }) => [
+  `finalize.${stage}`,
+  `${failure2.kind}: ${failure2.detail}`
+]) : void 0;
 var THREW_AS = {
   "bad-request": "refused",
   threw: "failed",
@@ -89428,13 +89453,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (configs.has(key)) configs.set(key, "received");
     }
     const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
+    const finalization = finalizationFields(answer3);
     const turn = {
       ...answer3,
+      record: finalization === void 0 ? answer3.record : [...answer3.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
     };
+    recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled: settled3, configFailure } = await landInSlot(
       input.event,
       output,
@@ -89449,7 +89477,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     };
   };
   const landInSlot = async (event, output, captures, receipt) => {
-    recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -89824,19 +89851,27 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           }
         return answered;
       } catch (thrown2) {
-        return {
+        const unavailable = {
           kind: "threw",
           failure: failureOf(thrown2),
           turnMs: null
         };
+        return unavailable;
       }
     });
     if (output.kind === "threw") {
-      const took2 = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const fields2 = finalizationFields(output) ?? [];
+      if (output.turnMs !== null)
+        fields2.unshift(["took", `${output.turnMs}ms`]);
+      fields2.push(["error", output.failure.detail]);
+      const detail = eventLine(
+        `renderer ${name} push ${push.kind} threw`,
+        fields2
+      );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took2}: ${output.failure.detail}`
+        detail
       });
     }
     if (output.reply.kind !== push.kind)
