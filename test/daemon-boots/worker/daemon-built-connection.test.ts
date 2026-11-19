@@ -22,7 +22,6 @@ import {
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { rendererOf } from "../../../src/renderer-interface/interface";
-import { mainRendererOf } from "../../../src/renderer/main";
 import { textOf } from "../../../src/render/frame";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
@@ -190,8 +189,8 @@ describe("a connection to a daemon built in this worker", () => {
       entered = resolve;
     });
     let release = (): void => {};
-    const renderer = inProcessRenderer((boot, reaches) => {
-      const held = holdable(mainRendererOf(boot, reaches));
+    const renderer = inProcessRenderer((real) => {
+      const held = holdable(real);
       return hearingEvents(held.renderer, ({ event }) => {
         if (event.kind === "request") {
           release = held.hold();
@@ -233,8 +232,8 @@ describe("a connection to a daemon built in this worker", () => {
     const entered = Promise.withResolvers<void>();
     let draws = 0;
     let release = () => {};
-    const renderer = inProcessRenderer((boot, reaches) => {
-      const held = holdable(mainRendererOf(boot, reaches));
+    const renderer = inProcessRenderer((real) => {
+      const held = holdable(real);
       return hearingEvents(held.renderer, ({ event }) => {
         if (event.kind === "request") draws++;
         if (event.kind === "context") {
@@ -278,8 +277,7 @@ describe("a connection to a daemon built in this worker", () => {
       const contexts: string[] = [];
       let occupyNext = false;
       let occupiedTurn: ReturnType<typeof statsOf> | undefined;
-      const renderer = inProcessRenderer((boot, reaches) => {
-        const real = mainRendererOf(boot, reaches);
+      const renderer = inProcessRenderer((real) => {
         return rendererOf({
           event: async (input) => {
             const { event } = input;

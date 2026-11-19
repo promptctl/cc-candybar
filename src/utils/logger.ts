@@ -31,6 +31,18 @@ export type LogLevel = "info" | "warn" | "error";
 // inject a different impl (a quiet default in tests) take this shape.
 export type DaemonLogger = (level: LogLevel, msg: string) => void;
 
+export interface LogLine {
+  readonly level: LogLevel;
+  readonly line: string;
+}
+
+export function writeLogLines(
+  log: DaemonLogger,
+  lines: readonly LogLine[],
+): void {
+  for (const { level, line } of lines) log(level, line);
+}
+
 // [LAW:one-type-per-behavior] A log line that repeats only on change, one
 // per channel — the steady state of a one-minute clock is silence.
 export function changeLogger(

@@ -31,8 +31,8 @@ import { inertHost } from "../helpers/renderer-parts";
 
 const EVENT: HeldEvent = { text: "e", at: 7 as Instant, answered: false };
 
-// A renderer that tells the host two notices and answers; and one push that
-// throws. Its turns take no time, so both ends time them alike.
+// A renderer that sends a notice and answers with a diagnostic. Its turns
+// take no time, so both ends time them alike.
 function talkingRenderer(host: AdapterToHost): TimedRenderer {
   return timed(
     rendererOf({
@@ -41,10 +41,10 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
       },
       adapter: async (input) => {
         if (input.push.kind === "close-views") throw new Error("close refused");
-        host.log("info", "closed");
         host.eventAnswered(EVENT);
         return {
           kind: "replied",
+          diagnostics: [{ level: "info", line: "closed" }],
           stored: [],
           reply: { kind: "close-journal" },
           subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
@@ -63,7 +63,6 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
     saw,
     host: {
       ...inertHost(),
-      log: (_level, msg) => saw.push(`log ${msg}`),
       eventAnswered: (event) => saw.push(`answered ${event.text} ${event.at}`),
     },
   };
@@ -328,7 +327,8 @@ describe("the renderer over lines", () => {
     const crossed = await overLines(there.host).answer(push("close-journal"));
     expect(crossed).toEqual(inProcess);
     expect(there.saw).toEqual(here.saw);
-    expect(there.saw).toEqual(["log closed", "answered e 7"]);
+    expect(crossed.diagnostics).toEqual([{ level: "info", line: "closed" }]);
+    expect(there.saw).toEqual(["answered e 7"]);
   });
 
   test("a heap snapshot reaches the host as its text, in order, and settles once it has all come", async () => {
@@ -364,8 +364,12 @@ describe("the renderer over lines", () => {
       },
     });
     lines.heard({ kind: "notice", reach: "eventAnswered", args: [EVENT] });
-    lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
-    expect(saw).toEqual(["answered e 7", "log after"]);
+    lines.heard({
+      kind: "notice",
+      reach: "eventAnswered",
+      args: [joinedEvent(EVENT, "after", EVENT.at)],
+    });
+    expect(saw).toEqual(["answered e 7", "answered e\nafter 7"]);
   });
 
   test("a line heard after the renderer's end reaches nothing, and is said", () => {
@@ -377,7 +381,7 @@ describe("the renderer over lines", () => {
       fault: (message) => faults.push(message),
     });
     lines.ended(new Error("renderer main exited"));
-    lines.heard({ kind: "notice", reach: "log", args: ["info", "late"] });
+    lines.heard({ kind: "notice", reach: "eventAnswered", args: [EVENT] });
     expect(saw).toEqual([]);
     expect(faults).toEqual([
       "renderer said notice after its end (renderer main exited)",

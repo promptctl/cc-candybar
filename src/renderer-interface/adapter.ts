@@ -16,15 +16,10 @@ import type {
 } from "../daemon/foundations/debug-types.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 
-export type Level = "info" | "warn" | "error";
-
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
 // host that crosses a process: each a notice, which answers nothing, so a
 // turn never waits on the host.
 export interface AdapterToHost {
-  // A line into the host's one log, which rotates itself: two writers would
-  // each shift its generations.
-  readonly log: (level: Level, line: string) => void;
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;

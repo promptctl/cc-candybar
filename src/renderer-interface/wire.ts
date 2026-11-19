@@ -21,6 +21,7 @@ import {
   type AdapterInput,
   type AdapterOutput,
   type RendererBoot,
+  type RendererDiagnostics,
   type RendererInput,
   type RendererOutput,
   type Subscriptions,
@@ -32,7 +33,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 10;
+export const RENDERER_WIRE_VERSION = 11;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -111,12 +112,15 @@ export type HostLine =
 
 export type RendererLine =
   // The boot answered: the renderer is built, or why it is not.
-  | {
+  | (RendererDiagnostics & {
       readonly kind: "started";
       readonly pid: number;
       readonly wireVersion: RendererWireVersion;
-    }
-  | { readonly kind: "refused"; readonly failure: Failure }
+    })
+  | (RendererDiagnostics & {
+      readonly kind: "refused";
+      readonly failure: Failure;
+    })
   | {
       readonly kind: "output";
       readonly n: number;
@@ -160,7 +164,6 @@ type ReachKinds<T> = {
 };
 
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
-  log: "notice",
   eventAnswered: "notice",
 };
 

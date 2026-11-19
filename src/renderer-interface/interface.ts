@@ -17,6 +17,7 @@ import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
+import type { LogLine } from "../utils/logger";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
@@ -38,6 +39,12 @@ export interface RendererBoot {
   readonly locations: Locations;
   readonly memoryLimitBytes: number;
 }
+
+export type RendererConstruction = RendererDiagnostics &
+  (
+    | { readonly kind: "built"; readonly renderer: Renderer }
+    | { readonly kind: "refused"; readonly failure: Failure }
+  );
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -390,6 +397,12 @@ export type Effect = Present | ConfigChange | Act;
 // the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
 
+export interface RendererDiagnostics {
+  // [LAW:nothing-unseen] Boot and turn results carry diagnostic lines in
+  // order, including on failure. Silence carries no payload.
+  readonly diagnostics?: readonly [LogLine, ...LogLine[]];
+}
+
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
 // that reads it; a `shell` or `file` run, named by its digest; or an
@@ -436,7 +449,7 @@ export interface Subscriptions {
   readonly configSelections: readonly ConfigSelection[];
 }
 
-interface RendererDeclaration {
+interface RendererDeclaration extends RendererDiagnostics {
   readonly subscriptions: Subscriptions;
   // [LAW:no-ambient-temporal-coupling] The host keeps one timer to this tick
   // and hands it in as a `due`. It can move while all subscriptions stand.

@@ -13,6 +13,7 @@ import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { EffectId } from "../../src/renderer-interface/interface";
 import { TurnTime } from "../../src/renderer/turn-time";
+import { TurnLog } from "../../src/renderer/turn-log";
 import { FEED_PERIODS, Feeds } from "../../src/renderer/feeds";
 
 // A renderer that acts no verb: every click names a verb it does not have,
@@ -48,7 +49,6 @@ export const minter = (): (() => EffectId) => {
 // events are heard.
 export function inertHost(): AdapterToHost {
   return {
-    log: () => {},
     eventAnswered: () => {},
   };
 }
@@ -70,6 +70,7 @@ export function rendererParts({
     // The rig's own time: a test drawing outside a turn runs it in one
     // (`time.during`).
     time: new TurnTime(),
+    turnLog: new TurnLog(),
     // No feed follows a session, and nothing is idle.
     menuIdle: renderCache.presentations.menuIdle,
     feeds: noFeeds(),

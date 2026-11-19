@@ -16,6 +16,7 @@ import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper, type Timekeeper } from "../../src/time";
 import { TurnTime } from "../../src/renderer/turn-time";
+import { TurnLog } from "../../src/renderer/turn-log";
 import { MenuIdle } from "../../src/renderer/menu-idle";
 import {
   verbsOver,
@@ -61,6 +62,7 @@ export function clickParts(
   menuIdle: MenuIdle;
 } {
   const time = new TurnTime();
+  const turnLog = new TurnLog();
   const menuIdle = new MenuIdle();
   // A click's turn reads the verbs and, for its output, the open views'
   // subscriptions: this rig opens none.
@@ -69,6 +71,7 @@ export function clickParts(
     // renderer wires it.
     verbs: verbsOver({
       ...verbCtx,
+      log: turnLog.add,
       clickLanded: (sessionId) => {
         verbCtx.clickLanded(sessionId);
         menuIdle.clicked(sessionId, time.tick);
@@ -106,8 +109,7 @@ export function clickParts(
     },
     sessionState: verbCtx.sessionState,
     edits: verbCtx.edits,
-    // The renderer says what it does on the log its verbs write to.
-    log: verbCtx.log,
+    turnLog,
     // No view is open, so no lane is read.
     // The readings each input carries, and the idle periods a `due` closes.
     time,
@@ -134,7 +136,7 @@ export function clickParts(
     MAIN_RENDERER,
     clock,
     hostHeld(held.renderer, clock.monotonic),
-    () => {},
+    verbCtx.log,
     {
       subscribed: () => {},
       frames: () => {},

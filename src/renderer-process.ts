@@ -1,8 +1,8 @@
 // A renderer's own process: the main renderer, built from the boot line its
 // host sends on stdin, answering every later line as the renderer interface
 // over lines (src/renderer-interface/wire.ts) says. It opens no file and
-// writes nothing of its own: its log lines are notices into the host's one
-// log, and what it stores leaves as its turns' stored writes.
+// writes nothing of its own. Log lines and store writes are part of each
+// turn's answer, which the host lands.
 //
 // This process supplies its own clock, memory readings and pipes. The host
 // sends the same resolved boot data it uses to build an in-process renderer.
@@ -16,10 +16,8 @@ import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
   timed,
-  type RendererBoot,
-  type TimedRenderer,
+  type RendererConstruction,
 } from "./renderer-interface/interface.js";
-import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import {
   hostOverLines,
   lineSplitter,
@@ -67,17 +65,22 @@ export function runRenderer(world: World): void {
       served(JSON.parse(text) as HostLine);
       return;
     }
-    let renderer: TimedRenderer;
+    let result: RendererConstruction;
     try {
       const boot = rendererBootFrom(JSON.parse(text));
-      renderer = booted(world, boot, host);
+      result = mainRendererOf(boot, host);
     } catch (thrown) {
-      send({ kind: "refused", failure: failureOf(thrown) });
+      result = { kind: "refused", failure: failureOf(thrown) };
+    }
+    if (result.kind === "refused") {
+      send(result);
       leave(1);
       return;
     }
+    const { renderer, diagnostics } = result;
     served = serveRenderer({
-      renderer,
+      // [LAW:single-enforcer] Each turn is timed in its own process.
+      renderer: timed(renderer, () => world.clock.monotonic()),
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();
@@ -97,6 +100,7 @@ export function runRenderer(world: World): void {
       kind: "started",
       pid: process.pid,
       wireVersion: RENDERER_WIRE_VERSION,
+      ...(diagnostics === undefined ? {} : { diagnostics }),
     });
   };
   const lines = lineSplitter(heard);
@@ -108,16 +112,4 @@ export function runRenderer(world: World): void {
     lines.end();
     leave(0);
   });
-}
-
-function booted(
-  world: World,
-  boot: RendererBoot,
-  reaches: AdapterToHost,
-): TimedRenderer {
-  const { clock } = world;
-  // [LAW:single-enforcer] Each turn timed in this process, around its
-  // answer: the host tells the hop from the turn.
-  const renderer = mainRendererOf(boot, reaches);
-  return timed(renderer, () => clock.monotonic());
 }
