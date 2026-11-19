@@ -42,7 +42,8 @@ import {
 } from "./render-payload.js";
 import type { SessionStateReader } from "../renderer-interface/session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
-import { settingCounts, stalePicks, type StalePick } from "./setting-drafts.js";
+import { settingCounts, stalePicks } from "./setting-drafts.js";
+import type { StalePick } from "../config/setting-table.js";
 import { layerFlags } from "../config/layer-role.js";
 
 // What a session's view draws from: the selections its slots settle and the

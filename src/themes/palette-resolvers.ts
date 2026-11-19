@@ -1,29 +1,26 @@
-// Memoized Palette construction over rich-js. cc-candybar moves theme
-// NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
-// memos live here: a theme name -> base palette, and a (palette, ThemeKey) ->
-// transposed palette. They compose — the per-render base palette feeds the
-// per-render style transposition.
+// Palette construction over rich-js. cc-candybar moves theme NAMES and
+// ThemeKey axes (data); rich-js owns every color value operation. A theme
+// name's base palette is rich-js's registry lookup, which memoizes it; the one
+// memo kept here is a (palette, ThemeKey) -> transposed palette. They compose
+// — the per-render base palette feeds the per-render style transposition.
 //
-// [LAW:no-shared-mutable-globals] Single owner: this module. Both are pure
-// memos of pure rich-js functions, keyed by immutable inputs (resolved theme
-// name; the palette object + the four ThemeKey axes). rich-js palettes are
-// immutable, so a cached palette never goes stale. Key spaces are bounded by
-// #themes and #themes × #declared styles (style axes bounded by the loaded
-// configs' styles blocks) — both small. Shared on purpose: a theme's base
-// palette and its gruvbox-under-`vivid` transposition are each computed once
-// per process, not once per RenderCache entry or per render. Read/written only
-// through the two functions below.
+// [LAW:no-shared-mutable-globals] Single owner: this module. The memo is of a
+// pure rich-js function, keyed by immutable inputs (the palette object + the
+// four ThemeKey axes). rich-js palettes are immutable, so a cached palette
+// never goes stale. Its key space is bounded by #themes × #declared styles
+// (style axes bounded by the loaded configs' styles blocks) — small. Shared on
+// purpose: a theme's gruvbox-under-`vivid` transposition is computed once per
+// process, not once per RenderCache entry or per render. Read/written only
+// through the function below.
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
 import {
   FOLLOW_BAR,
-  isInstalledTheme,
   notInstalledTheme,
   resolveSelection,
   ruleFloorMessage,
-  storedPick,
   THEME_FLOOR,
   type Decided,
   type Selection,
@@ -35,18 +32,17 @@ import {
  *
  * [LAW:single-enforcer] The one place a theme name becomes a Palette —
  * the per-render base palette and every placement's pinned `theme` both flow
- * through here. Every name reaching it was found installed by the one
- * authority (`isInstalledTheme`) — the loader, the session gate, the fold over
- * a stored pick, a rule's result — so a name that does not resolve is
- * registry drift. [LAW:no-defensive-null-guards] the throw is the loud failure
+ * through here. Every name reaching it was found installed — by the loader,
+ * the session gate, or a placement's theme setting — so a name that does not
+ * resolve is registry drift. [LAW:no-defensive-null-guards] the throw is the loud failure
  * for that broken invariant, not a fallback.
  */
 export function paletteForThemeName(name: string): Palette {
   const palette = getThemePalette(name);
   if (palette === null) {
     throw new Error(
-      `Palette "${name}" did not resolve in the theme registry — allowed ` +
-        `names and the registry are inconsistent`,
+      `Palette "${name}" did not resolve in the theme registry — a name ` +
+        `judged installed and the registry are inconsistent`,
     );
   }
   return palette;
@@ -104,15 +100,15 @@ export type DecidedTheme = Decided<Palette>;
 
 // One rung's contribution: the theme this name selects, or null when it names
 // nothing installed — which is not a pick at all, so the fold moves on.
-function namedTheme(name: string): DecidedTheme | null {
-  return isInstalledTheme(name)
-    ? { kind: "decided", name, value: paletteForThemeName(name) }
-    : null;
+//
+// [LAW:polishing-by-subtraction] The lookup IS the membership test: the
+// registry answers null for exactly the names it does not hold, so asking
+// whether the name is installed first would be the same question twice — and
+// the second answer could only ever restate the first.
+export function namedTheme(name: string): DecidedTheme | null {
+  const value = getThemePalette(name);
+  return value === null ? null : { kind: "decided", name, value };
 }
-
-// A stored theme pick, parsed against the installed themes.
-export const themePick = (raw: string | null): StoredPick<DecidedTheme> =>
-  storedPick(raw, namedTheme);
 
 // [LAW:single-enforcer] The membership policy for a theme NAME, wherever the
 // name came from — a config default, a session pick, or an expression's RESULT.

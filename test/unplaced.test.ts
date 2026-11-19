@@ -20,11 +20,9 @@ import { EMPTY_DEFAULT, validateConfig } from "./helpers/parse-and-validate";
 import { withoutUnplaced } from "../src/config/loader/unplaced";
 
 const authored = (source: string) => {
-  const raw = parseDslConfig(
-    "<test>",
-    source,
-    inheritableSegmentNames(EMPTY_DEFAULT),
-  );
+  const raw = parseDslConfig("<test>", source, {
+    inheritedSegments: inheritableSegmentNames(EMPTY_DEFAULT),
+  });
   return { config: mergeWithDefault(raw, EMPTY_DEFAULT), raw, source };
 };
 

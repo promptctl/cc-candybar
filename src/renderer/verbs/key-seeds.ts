@@ -4,14 +4,12 @@
 
 import {
   settingSpelling,
-  settingVarDecls,
-  settingVarValue,
   stateVarDecls,
   type DslConfig,
   type Globals,
 } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
-import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
+import { placementValue, settingTable } from "../../config/setting-table";
 import { sessionSettingValue } from "../setting-drafts";
 
 // [LAW:one-source-of-truth] What a stepped SessionState key shows — the value
@@ -26,14 +24,13 @@ export function stateKeyShows(
   sessionPick: (key: string) => string | null,
   key: string,
 ): string | null {
-  const setting = SESSION_KEY_TO_SETTING.get(key);
+  const setting = settingTable(config).byKey.get(key);
   if (setting !== undefined) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  for (const [, decl] of settingVarDecls(config)) {
-    if (decl.key === key) {
-      return settingSpelling(settingVarValue(decl, sessionPick(key)));
-    }
+    // A global setting resolves through the session's whole fold; a
+    // placement's through its own parse over its saved value.
+    return setting.kind === "global"
+      ? sessionSettingValue(config, sessionPick, setting.name)
+      : settingSpelling(placementValue(setting, sessionPick(key)));
   }
   const stored = sessionPick(key);
   if (stored !== null && STEP_INT_RE.test(stored)) return stored;

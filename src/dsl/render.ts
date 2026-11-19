@@ -26,8 +26,7 @@ import {
   type SettingValue,
   type SourceDefault,
   parseArm,
-  settingVarDecls,
-  settingVarValue,
+  savedSetting,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -43,7 +42,7 @@ import {
   type CachePolicy,
 } from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
-import type { JsonValue, VarType } from "../var-system/types.js";
+import { typeOf, type JsonValue } from "../var-system/types.js";
 import {
   type BuildLineOptions,
   drawStripCells,
@@ -89,7 +88,11 @@ import {
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
-import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
+import {
+  placementSetting,
+  placementValue,
+  settingTable,
+} from "../config/setting-table.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { pickerFuncs } from "../render/picker.js";
@@ -373,25 +376,17 @@ function declareOne(
       break;
 
     // [LAW:one-source-of-truth] A placement setting reads its stored pick
-    // through the setting's one parse, typed as its value is, so `.settings`,
-    // its control and a step all read one value.
-    case "setting":
-      registry.declareStored(
-        name,
-        decl.key,
-        settingVarType(decl.saved),
-        (raw) => settingVarValue(decl, raw),
+    // through the setting's one parse, typed as its saved value is, so
+    // `.settings`, its control and a step all read one value.
+    case "setting": {
+      const setting = placementSetting(name, decl);
+      registry.declareStored(name, decl.key, typeOf(decl.saved), (raw) =>
+        placementValue(setting, raw),
       );
       break;
+    }
   }
 }
-
-const settingVarType = (value: SettingValue): VarType =>
-  typeof value === "string"
-    ? "string"
-    : typeof value === "number"
-      ? "number"
-      : "boolean";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -571,27 +566,25 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   // config named the variable after the key. For an ordinary key that is the
   // `state` variable over it.
   //
-  // A settings key the daemon resolves per render (theme, style, preset, …)
-  // reads back through its `.effective` projection — no `state` variable may
-  // take its key (the loader refuses one): the current value of a setting is
-  // the one the bar is rendering with, a stale pick's fallback included, so a
-  // carousel over `{ set: "theme", from: "themes" }`
-  // centres on the theme the bar wears even when the session never picked one
-  // — the same read-back the settings menu's controls get, so a bar control
-  // and the menu cannot disagree (brandon-theme-picker-bgw.exj).
+  // A setting's key — a global one the daemon resolves per render (theme,
+  // style, preset, …) or a placement's — reads back through the variable the
+  // bar wears it through, and no `state` variable may take it (the loader
+  // refuses one): the current value of a setting is the one the bar is
+  // rendering with, a stale pick's fallback included, so a carousel over
+  // `{ set: "theme", from: "themes" }` centres on the theme the bar wears even
+  // when the session never picked one — the same read-back the settings
+  // menu's controls get, so a bar control and the menu cannot disagree
+  // (brandon-theme-picker-bgw.exj).
   const stateKeyToVar = new Map<string, string>();
-  for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
-    if (name in variables) stateKeyToVar.set(key, name);
+  for (const setting of settingTable(config).byKey.values()) {
+    if (setting.wears in variables)
+      stateKeyToVar.set(setting.key, setting.wears);
   }
-  // A placement setting's key reads back through its setting variable, for
-  // the same reason. Segment-local state vars read the same SessionState keys
-  // under their namespaced `segName.varName` (the form the store + scope
-  // use); a global wins on key collision (yielded first) — the value is the
-  // same key regardless, so either reads correctly.
-  for (const [name, decl] of [
-    ...settingVarDecls(config),
-    ...stateVarDecls(config),
-  ]) {
+  // Segment-local state vars read their SessionState keys under their
+  // namespaced `segName.varName` (the form the store + scope use); where two
+  // read one key, the first yielded (a global) is the read-back, and both
+  // read the same stored value.
+  for (const [name, decl] of stateVarDecls(config)) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
   return {
@@ -887,7 +880,7 @@ export function compileDslConfig({
         enumerable: true,
         get: () =>
           draft === undefined
-            ? (node.settings?.[name] ?? decl.default)
+            ? savedSetting(node, name, decl)
             : renderBinding(actionRuntime, `setting ${name}`).store.read(
                 draft.variable,
               ),
@@ -1267,14 +1260,12 @@ export type RenderWarning =
       readonly error: string;
       readonly message: string;
     }
-  // A setting whose stored pick its domain no longer holds (a theme not
-  // installed, a style the config no longer declares, a value past its
-  // range), so the bar wears `wears` instead and the pick stays stored.
+  // A setting whose stored pick at `key` its domain no longer holds (a theme
+  // not installed, a style the config no longer declares, a value past its
+  // range), so the bar wears its fallback and the pick stays stored.
   | {
       readonly kind: "stale";
-      readonly setting: string;
-      readonly stored: string;
-      readonly wears: string;
+      readonly key: string;
       readonly message: string;
     };
 

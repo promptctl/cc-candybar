@@ -35,7 +35,9 @@ const OPTS = {
 };
 
 function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
-  const raw = parseDslConfig("<test>", source, inheritableSegmentNames(dflt));
+  const raw = parseDslConfig("<test>", source, {
+    inheritedSegments: inheritableSegmentNames(dflt),
+  });
   const config = validateConfig(
     { config: mergeWithDefault(raw, dflt), raw, source: source },
     "<test>",

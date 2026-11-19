@@ -81,6 +81,7 @@ import {
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
+import { holdsStale } from "../../config/setting-table";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
 import {
   configureMember,
@@ -95,7 +96,6 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
-  staleSettingKeys,
   themeDefaultSave,
 } from "../setting-drafts";
 import {
@@ -758,6 +758,22 @@ const stepConfig: VerbHandler = (args, ctx) => {
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
+// [LAW:single-enforcer] THE release of a save's picks: each of `keys` is
+// cleared from the session, except a stale pick — no value a save could
+// write, so it stays stored and holds again the moment its domain does.
+function releasePicks(
+  ctx: ClickContext,
+  config: DslConfig,
+  keys: readonly string[],
+): void {
+  const sid = ctx.session;
+  for (const key of keys) {
+    if (!holdsStale(config, key, ctx.sessionState.get(sid, key))) {
+      ctx.sessionState.clear(sid, key);
+    }
+  }
+}
+
 const save: VerbHandler = (args, ctx) => {
   const sid = ctx.session;
   const { role } = configArgs("save", args);
@@ -783,12 +799,10 @@ const save: VerbHandler = (args, ctx) => {
   gatePlacements("save", gate, placements);
   const into = heldLayer(ctx, origin, role);
   writeDrafts(editStore(ctx, sid), into, pairs, placements);
-  for (const key of [
+  releasePicks(ctx, config, [
     ...drafts.map((d) => d.sessionKey),
     ...placements.map((p) => p.key),
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
+  ]);
   ctx.finishEdit("save");
   ctx.log(
     "info",
@@ -849,19 +863,10 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
-  // [LAW:one-source-of-truth] A stale pick is no value the preset could
-  // render, so it stays stored for its domain to return to.
-  const stale = staleSettingKeys(config, (key) =>
-    ctx.sessionState.get(sid, key),
-  );
-  for (const key of [
-    ...SETTING_PROJECTIONS.map((p) => p.sessionKey).filter(
-      (key) => !stale.has(key),
-    ),
+  releasePicks(ctx, config, [
+    ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
     ...snapshot.placements.map((p) => p.key),
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
+  ]);
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.log(
     "info",
@@ -905,11 +910,13 @@ const saveThemeDefault: VerbHandler = (args, ctx) => {
   const drafted = new Set(
     settingDrafts(written, pick).map((d) => d.sessionKey),
   );
-  const stale = staleSettingKeys(written, pick);
-  const released = THEME_DEFAULT_FIELDS.map(
-    (f) => SETTINGS[f].sessionKey,
-  ).filter((key) => !drafted.has(key) && !stale.has(key));
-  for (const key of released) ctx.sessionState.clear(sid, key);
+  releasePicks(
+    ctx,
+    written,
+    THEME_DEFAULT_FIELDS.map((f) => SETTINGS[f].sessionKey).filter(
+      (key) => !drafted.has(key),
+    ),
+  );
   ctx.log(
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${into.path} (session=${sid})`,

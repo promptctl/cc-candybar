@@ -91,6 +91,7 @@ import { insertNotice, placeInserts, type AuthoredTrees } from "./presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
   authoredPlacement,
+  checkKeyOwners,
   unplacedMessage,
   validateCrossReferences,
   validateDeclarations,
@@ -833,6 +834,7 @@ function judgeRenderable(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
+  checkKeyOwners(ctx, withChrome);
   refuseIfIssues();
   // [LAW:single-enforcer] Authored and synthesized actions share the same
   // layer checkpoint before any reaches the renderer.
@@ -974,12 +976,15 @@ function droppedByFile(
  * `inheritedSegments` is the set of segment names the source may declare as a
  * DELTA (template omitted): the segments of the default it will be merged
  * over. It defaults to the empty set — a source parsed on its own (the bundled
- * default itself) must carry every template.
+ * default itself) must carry every template. It is named at the call, so no
+ * set of other names binds to it by position.
  */
 export function parseDslConfig(
   filePath: string,
   source: string,
-  inheritedSegments: ReadonlySet<string> = NO_INHERITED_SEGMENTS,
+  {
+    inheritedSegments = NO_INHERITED_SEGMENTS,
+  }: { readonly inheritedSegments?: ReadonlySet<string> } = {},
 ): RawDslConfig {
   return parseDslFile(filePath, source, () => ({
     inherited: inheritedSegments,

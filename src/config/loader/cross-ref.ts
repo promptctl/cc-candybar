@@ -51,6 +51,7 @@ import {
   SETTINGS,
   type SettingName,
 } from "../setting-projections.js";
+import { settingTable, settingTitle } from "../setting-table.js";
 import {
   controlDomainAdmits,
   describeControlDomain,
@@ -96,6 +97,7 @@ import { reportable } from "./unplaced.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
+  declarationsAt,
   declaredVariables,
   templateActionRefs,
   templateReads,
@@ -1279,20 +1281,25 @@ function setWrites(
 // config, a plugin's own for a plugin joining a layer that was checked.
 export type Subject = (name: string) => boolean;
 
-// [LAW:single-enforcer] One owner per session key: a setting's key belongs to
-// the setting, which parses what it holds against its domain. A `state`
-// variable over it would read the stored spelling raw, so the bar and the
-// variable could name two values. Judged on the merged config, where a
-// plugin's keys already sit under its namespace.
-function checkKeyOwner(ctx: ValidateCtx, path: string, v: VariableDecl): void {
-  if (v.kind !== "state") return;
-  const setting = SESSION_KEY_TO_SETTING.get(v.key);
-  if (setting === undefined) return;
-  ctx.issues.push({
-    path: `${path}.key`,
-    message: `${path}: "${v.key}" is the key of the "${setting}" setting, which owns it — read its value as "${SETTINGS[setting].effectiveVar}", or give this variable a key of its own`,
-    line: findKeyLine(ctx.source, [...path.split("."), "key"]),
-  });
+// [LAW:single-enforcer] One owner per session key: a setting's key — a global
+// setting's or a placement's — belongs to the setting, which parses what it
+// holds against its domain. A `state` variable over it would read the stored
+// spelling raw, so the bar and the variable could name two values. Judged on
+// the config edit chrome finished, where every placement setting has its key
+// and a plugin's keys already sit under its namespace.
+export function checkKeyOwners(ctx: ValidateCtx, cfg: DslConfig): void {
+  const { byKey } = settingTable(cfg);
+  for (const [, v, at] of declarationsAt(cfg)) {
+    if (v.kind !== "state") continue;
+    const setting = byKey.get(v.key);
+    if (setting === undefined) continue;
+    const path = at.join(".");
+    ctx.issues.push({
+      path: `${path}.key`,
+      message: `${path}: "${v.key}" is the key of ${settingTitle(setting)}, which owns it — read its value as "${setting.wears}", or give this variable a key of its own`,
+      line: findKeyLine(ctx.source, [...at, "key"]),
+    });
+  }
 }
 
 // The names of `record` a check is about.
@@ -1507,7 +1514,6 @@ export function validateDeclarations(
   // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of subjects(cfg.variables, subject)) {
     checkVarRefs(ctx, `variables.${name}`, v, templateScope);
-    checkKeyOwner(ctx, `variables.${name}`, v);
     const retired = retiredVariableMessage(name);
     if (retired !== undefined) {
       ctx.issues.push({
@@ -1534,7 +1540,6 @@ export function validateDeclarations(
           templateScope,
           segName,
         );
-        checkKeyOwner(ctx, `segments.${segName}.vars.${vName}`, vDecl);
       }
     }
     // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs

@@ -41,6 +41,7 @@ import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
+import { notInstalledTheme } from "../src/themes/policy";
 const SID = sessionIdOf("s1");
 const PIN = "nord";
 const BAR_A = "gruvbox";
@@ -186,7 +187,7 @@ describe("load errors", () => {
         ),
       ),
     ).toContain(
-      `sets "theme" to "nope", but "nope" is not an installed theme, and not "bar" (the bar's own theme)`,
+      `sets "theme" to "nope", but ${notInstalledTheme("nope")}, and not "bar" (the bar's own theme)`,
     );
   });
 

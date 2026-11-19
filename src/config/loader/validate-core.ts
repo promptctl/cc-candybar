@@ -774,9 +774,9 @@ export function optionalNumberSpec(
 export function paletteSpec(): FieldSpec<string> {
   return {
     required: false,
-    // Palette NAME membership is semantic (the allowed set is resolved at load
-    // from installed palettes, not a closed compile-time enum), so the schema
-    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    // Palette NAME membership is semantic (a name is judged installed at load,
+    // not against a closed compile-time enum), so the schema checks only
+    // `type: string` — the same shape/meaning split the loader keeps.
     json: { type: "string" },
     parse: (ctx, path, _field, raw) => validatePaletteName(ctx, path, raw),
   };

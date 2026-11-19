@@ -47,10 +47,11 @@ const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ["light", "textual-light"],
 ]);
 
-// [LAW:single-enforcer] THE installed-theme authority: the loader, the session
-// gate, the fold over a stored pick, a rule's result and a placement's theme
-// all ask here. The registry's list is static for the life of the process, so
-// the set is built once.
+// [LAW:single-enforcer] THE installed-theme check for a check that needs no
+// palette: the loader, the session gate and a placement's theme ask here. It
+// reads the registry's names, as the palette lookup does
+// (src/themes/palette-resolvers.ts), and asks for no palette. The names are
+// static for the life of the process, so the set is built once.
 let installed: ReadonlySet<string> | undefined;
 export function isInstalledTheme(name: string): boolean {
   installed ??= new Set(listThemePalettes());
@@ -58,15 +59,15 @@ export function isInstalledTheme(name: string): boolean {
 }
 
 // [LAW:one-source-of-truth] THE wording of a name no installed theme answers
-// to, shared by every site that refuses or reports one, with the theme to
-// write instead when the name was retired.
+// to, shared by every site that refuses or reports one: the theme to write
+// instead when the name was retired, else the installed themes.
 export function notInstalledTheme(name: string): string {
   const to = RETIRED_THEMES.get(name);
-  const note =
+  const hint =
     to === undefined
-      ? ""
+      ? ` (installed: ${[...listThemePalettes()].sort().join(", ")})`
       : ` — "${name}" was retired; write "${to}", the same palette`;
-  return `"${name}" is not an installed theme${note}`;
+  return `"${name}" is not an installed theme${hint}`;
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
@@ -135,17 +136,6 @@ export type StoredPick<T> =
   | { readonly kind: "held"; readonly value: T }
   | { readonly kind: "stale"; readonly raw: string };
 
-// [LAW:parse-dont-validate] THE parse of a stored spelling, given its domain's
-// parse of one spelling.
-export function storedPick<T>(
-  raw: string | null,
-  parse: (raw: string) => T | null,
-): StoredPick<T> {
-  if (raw === null) return { kind: "unset" };
-  const value = parse(raw);
-  return value === null ? { kind: "stale", raw } : { kind: "held", value };
-}
-
 // [LAW:one-source-of-truth] The installed themes, the registry's names — no
 // alias, so every name is its palette's own and a label always names the
 // palette the bar wears.
@@ -207,16 +197,10 @@ export function effectiveMemberName(
 
 // [LAW:one-source-of-truth] The parse of a per-config domain's member: a name
 // the config declares, or nothing.
-const memberOf =
+export const memberOf =
   (declared: Readonly<Record<string, unknown>>) =>
   (raw: string): string | null =>
     Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
-
-// A stored pick of a per-config member (a preset).
-export const memberPick = (
-  raw: string | null,
-  declared: Readonly<Record<string, unknown>>,
-): StoredPick<string> => storedPick(raw, memberOf(declared));
 
 // --- A globals field that may hold a NAME or a RULE ---
 
@@ -346,7 +330,7 @@ export type DecidedStyle = Decided<ThemeKey>;
 // [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
 // `hasOwnProperty` first and then looking the key up would be the same question
 // twice, and the second answer could only ever restate the first.
-function namedStyle(
+export function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
@@ -384,13 +368,6 @@ export function decideStyleName(
     }
   );
 }
-
-// A stored style pick, parsed against the config's declared styles.
-export const stylePick = (
-  raw: string | null,
-  declaredStyles: Readonly<Record<string, ThemeKey>>,
-): StoredPick<DecidedStyle> =>
-  storedPick(raw, (name) => namedStyle(name, declaredStyles));
 
 // The style a render should use, as far as it can be known before the render runs
 // [LAW:one-type-per-behavior] — `resolveSelection` with the style's own two
@@ -484,7 +461,7 @@ export const PLACEMENT_EFFECTS: readonly PlacementEffect[] = Object.freeze([
 export type EffectSelection = Selection<EffectName>;
 export type DecidedEffect = Decided<EffectName>;
 
-function namedEffect(name: string): DecidedEffect | null {
+export function namedEffect(name: string): DecidedEffect | null {
   const value = EFFECT_NAMES.find((member) => member === name);
   return value === undefined ? null : { kind: "decided", name, value };
 }
@@ -501,10 +478,6 @@ export function decideEffectName(name: string): DecidedEffect {
     }
   );
 }
-
-// A stored effect pick, parsed against the catalogue.
-export const effectPick = (raw: string | null): StoredPick<DecidedEffect> =>
-  storedPick(raw, namedEffect);
 
 // The effect a render should wear, as far as it can be known before the render
 // runs [LAW:one-type-per-behavior] — `resolveSelection` with the effect's own two

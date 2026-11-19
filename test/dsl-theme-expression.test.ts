@@ -42,7 +42,11 @@ import {
   resolveThemeSelection,
   THEME_FLOOR,
 } from "../src/themes";
-import { themePick } from "../src/themes/palette-resolvers";
+import { globalSettings, pickOf } from "../src/config/setting-table";
+
+// A stored theme pick, through the theme setting's one parse.
+const themePick = (raw: string | null) =>
+  pickOf(globalSettings({ styles: {}, presets: {} }).theme, raw);
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
   EDIT_MODE_ARRANGE,

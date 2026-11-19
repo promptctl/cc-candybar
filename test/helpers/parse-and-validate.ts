@@ -50,7 +50,9 @@ function authoredOf(
   source: string,
   dflt: DslConfig,
 ): AuthoredConfig {
-  const raw = parseDslConfig(filePath, source, inheritableSegmentNames(dflt));
+  const raw = parseDslConfig(filePath, source, {
+    inheritedSegments: inheritableSegmentNames(dflt),
+  });
   return { config: mergeWithDefault(raw, dflt), raw, source };
 }
 

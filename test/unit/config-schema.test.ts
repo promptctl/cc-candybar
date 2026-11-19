@@ -287,11 +287,9 @@ function schemaAccepts(source: string): boolean {
 // this mirrors its body so the corpus stays inline.
 function loaderAccepts(source: string): boolean {
   try {
-    const raw = parseDslConfig(
-      "<test>",
-      source,
-      inheritableSegmentNames(DEFAULT_DSL_CONFIG),
-    );
+    const raw = parseDslConfig("<test>", source, {
+      inheritedSegments: inheritableSegmentNames(DEFAULT_DSL_CONFIG),
+    });
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     validateConfig({ config: merged, raw, source }, "<test>");
     return true;

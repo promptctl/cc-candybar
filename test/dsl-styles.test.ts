@@ -28,7 +28,12 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveStyleSelection } from "../src/themes";
-import { stylePick } from "../src/themes/policy";
+import { globalSettings, pickOf } from "../src/config/setting-table";
+import type { ThemeKey } from "@promptctl/rich-js";
+
+// A stored style pick, through the style setting's one parse over `styles`.
+const stylePick = (raw: string | null, styles: Record<string, ThemeKey>) =>
+  pickOf(globalSettings({ styles, presets: {} }).style, raw);
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-looks");

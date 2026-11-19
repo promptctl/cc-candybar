@@ -321,8 +321,8 @@ const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
 // shape the render declines to evaluate, nor reject one it would have settled.
 const paletteOrRuleSpec: FieldSpec<string> = {
   required: false,
-  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
-  // are resolved at load from installed palettes, and a rule is a string too.
+  // Shape-only, exactly as `paletteSpec`'s schema facet is: a name is judged
+  // installed at load, and a rule is a string too.
   json: { type: "string" },
   parse: (ctx, path, field, raw) => {
     const v = optionalStringField(ctx, path, raw, field);

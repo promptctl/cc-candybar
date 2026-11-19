@@ -91,8 +91,9 @@ A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
 default: "…" }`. Two exceptions: never declare state for a `{{ menu }}` —
 its state is synthesized, see below — and never for a setting's own key
-(`theme`, `style`, `padding`, …): the setting owns it, a variable over it is a
-load error, and its value reads back as `<setting>.effective`. That is what the
+(`theme`, `style`, `padding`, …, or a placement setting's): the setting owns
+it, a variable over it is a load error, and its value reads back as
+`<setting>.effective`. That is what the
 bar wears, even when the session's stored pick has left the setting's domain
 (an uninstalled theme, a style your config no longer declares): the bar draws
 the next value down, a ⚠ beside the settings door names the pick, and the pick
@@ -1762,10 +1763,10 @@ segment sits.
 The apply action must hold a value to step from: a `{ set, from }` action
 whose key a `state` variable reads back, or a `{ persist, from }` action. A settings key the daemon resolves every render — `theme`, `style`,
 `preset`, `endcaps`, `variation`, `shade`, `autoWrap`, `padding` —
-needs no `state` variable: it reads back through its `.effective` projection
-(`theme.effective`), which wins over a `state` variable on the same key, so the
-arrows step from the value the bar is rendering with even before the session picks
-one, and it agrees with the settings menu's control for that key. For any other
+takes no `state` variable — one on its key is a load error: it reads back
+through its `.effective` projection (`theme.effective`), so the arrows step
+from the value the bar is rendering with even before the session picks one,
+and it agrees with the settings menu's control for that key. For any other
 key, without the `state` variable the carousel could never see what its last
 click wrote, so it is a render error naming the variable to declare,
 `carousel references action "choose", whose key "pick" no variable reads

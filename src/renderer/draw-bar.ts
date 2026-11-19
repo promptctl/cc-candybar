@@ -38,8 +38,7 @@ import {
   instantFacts,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
-import type { StalePick } from "./setting-drafts.js";
-import { notInstalledTheme } from "../themes/policy.js";
+import { staleMessage, type StalePick } from "../config/setting-table.js";
 import { toString as varToString } from "../var-system/types.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
@@ -644,12 +643,19 @@ export function drawRender(
     : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
   // [LAW:no-silent-failure] Each stale pick beside what the walk could not
   // honour, naming what the bar wears instead: read from the variable the
-  // setting's own control reads, after the walk that read it.
+  // setting's own control reads, after the walk that read it. A placement
+  // this frame did not draw decides nothing, as a global setting a staged
+  // value outranks decides nothing.
   const drawnWarnings: readonly RenderWarning[] = [
     ...walked,
     ...view.source
       .stale()
-      .map((s) => staleWarning(s, varToString(view.store.read(s.wears)))),
+      .filter(
+        ({ setting }) => setting.kind === "global" || segments.has(setting.id),
+      )
+      .map((pick) =>
+        staleWarning(pick, varToString(view.store.read(pick.setting.wears))),
+      ),
   ];
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
@@ -829,22 +835,12 @@ const faultOf = (
   subject?: string,
 ): Fault<FaultKind> => ({ level, kind, subject, message });
 
-// [LAW:one-source-of-truth] THE sentence of a stale pick, composed once from
-// its data. A theme's says it in the one wording every installed-theme check
-// uses.
-function staleWarning(s: StalePick, wears: string): RenderWarning {
-  const why =
-    s.domain === "theme"
-      ? notInstalledTheme(s.stored)
-      : `"${s.stored}" is not a value it can hold`;
-  return {
-    kind: "stale",
-    setting: s.setting,
-    stored: s.stored,
-    wears,
-    message: `${s.setting}: ${why}, so the bar wears "${wears}" (the pick stays stored)`,
-  };
-}
+// A stale pick's warning: the key it is held at, and its one sentence.
+const staleWarning = (pick: StalePick, wears: string): RenderWarning => ({
+  kind: "stale",
+  key: pick.setting.key,
+  message: staleMessage(pick, wears),
+});
 
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {

@@ -22,6 +22,7 @@ import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { loadFile } from "./helpers/discovered-load";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
+import { placementDraftKey } from "../src/config/edit-chrome";
 import {
   Json5EditError,
   JSON5_DIALECT,
@@ -764,20 +765,32 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
   });
 
   test.each([
-    ["variables.t", `{ variables: { t: { kind: "state", key: "theme" } } }`],
+    [
+      "variables.t",
+      `{ variables: { t: { kind: "state", key: "theme" } } }`,
+      `variables.t: "theme" is the key of setting "theme", which owns it — read its value as "theme.effective", or give this variable a key of its own`,
+    ],
     [
       "segments.s.vars.t",
       `{ segments: { s: { template: "x", vars: { t: { kind: "state", key: "padding" } } } } }`,
+      `segments.s.vars.t: "padding" is the key of setting "padding", which owns it — read its value as "padding.effective", or give this variable a key of its own`,
     ],
-  ])("a state variable at %s may not take a setting's key", (at, source) => {
-    // A raw reader of a setting's key would show a stored pick the bar does
-    // not wear; the setting's own value is the one to read.
-    const setting = at === "variables.t" ? "theme" : "padding";
-    expectIssue(source, {
-      path: `${at}.key`,
-      message: `${at}: "${setting}" is the key of the "${setting}" setting, which owns it — read its value as "${setting}.effective", or give this variable a key of its own`,
-    });
-  });
+    [
+      "variables.t",
+      `{ variables: { t: { kind: "state", key: "${placementDraftKey("default", "s", "theme")}" } }, segments: { s: { template: "x" } }, root: { h: ["s"] } }`,
+      new RegExp(
+        `^variables\\.t: "${placementDraftKey("default", "s", "theme").replace(/\./g, "\\.")}" is the key of placement "s" setting "theme", which owns it — read its value as "edit\\.draft\\.[^"]+\\.theme", or give this variable a key of its own$`,
+      ),
+    ],
+  ])(
+    "a state variable at %s may not take a setting's key: %s",
+    (at, source, message) => {
+      // A raw reader of a setting's key would show a stored pick the bar does
+      // not wear; the setting's own value is the one to read. A placement's
+      // setting owns its key as a global setting does.
+      expectIssue(source, { path: `${at}.key`, message });
+    },
+  );
 
   test("a specific message about a key REPLACES the generic one", () => {
     // The retired top-level `regex:` names its replacement. One typo earns one
@@ -1126,7 +1139,7 @@ describe("loadDslConfig — segments", () => {
   // the inherited set may omit its template, any other name may not.
   test("a delta over an inherited name may omit its template; any other name may not", () => {
     const parse = (source: string) =>
-      parseDslConfig("<test>", source, new Set(["cwd"]));
+      parseDslConfig("<test>", source, { inheritedSegments: new Set(["cwd"]) });
     expect(
       parse(`{ segments: { cwd: { palette: "nord" } } }`).segments,
     ).toEqual({
@@ -1135,6 +1148,12 @@ describe("loadDslConfig — segments", () => {
     expect(() => parse(`{ segments: { mine: { palette: "nord" } } }`)).toThrow(
       /segments\.mine declares no template/,
     );
+    // The set is named at the call: a set of other names (themes, say) has
+    // no position it could bind to and pass as segment names.
+    // Checked by the typecheck, never run.
+    void (() =>
+      // @ts-expect-error a bare set is not the options object
+      parseDslConfig("<test>", "{}", new Set(["nord"])));
   });
 
   test("width: 'auto', 'fill', or positive int", () => {

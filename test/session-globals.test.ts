@@ -16,7 +16,13 @@ import { buildRig, type Rig } from "./helpers/rig";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection } from "../src/themes";
-import { memberPick, stylePick } from "../src/themes/policy";
+import { globalSettings, pickOf } from "../src/config/setting-table";
+
+// Stored picks, through each setting's one parse over the declared domain.
+const stylePick = (raw: string | null, styles: Record<string, ThemeKey>) =>
+  pickOf(globalSettings({ styles, presets: {} }).style, raw);
+const memberPick = (raw: string | null, presets: Record<string, PresetDecl>) =>
+  pickOf(globalSettings({ styles: {}, presets }).preset, raw);
 import { effectivePresetName } from "../src/config/presets";
 import type { Globals, PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";

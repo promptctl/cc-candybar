@@ -33,8 +33,6 @@ import {
   isPlacementThemeName,
   parseSessionInt,
   PLACEMENT_EFFECTS,
-  storedPick,
-  type StoredPick,
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -594,22 +592,26 @@ export interface DroppedVarDecl {
 // the view a session's declaration holds it for. Synthesized by the plugin
 // loader from a definition's `sources:`, never authored — the variable loader
 // accepts no `kind: "source"`.
-// [LAW:types-are-the-program] A placement setting's value: the session's pick
-// at `key` through the setting's one parse, else `saved`. Synthesis-only: edit
-// chrome mints one per placement setting and no config can write one, because
-// stale is a property of a setting and a plain `state` variable has no domain.
-export interface SettingVarDecl {
-  readonly kind: "setting";
-  readonly key: string;
-  readonly decl: SettingDecl;
-  readonly saved: SettingValue;
-}
-
 export interface SourceVarDecl {
   readonly kind: "source";
   // The folder the plugin's program writes its session files into: the
   // plugin folder's real path, then `session`.
   readonly storage: string;
+}
+
+// [LAW:types-are-the-program] One setting of one placement, held at `key`:
+// the variable reads the session's pick there through the setting's one parse
+// (src/config/setting-table.ts), else `saved`. Synthesis-only: edit chrome
+// mints one per placement setting and no config can write one, because stale
+// is a property of a setting and a plain `state` variable has no domain.
+export interface SettingVarDecl {
+  readonly kind: "setting";
+  readonly key: string;
+  readonly preset: string;
+  readonly id: string;
+  readonly setting: string;
+  readonly decl: SettingDecl;
+  readonly saved: SettingValue;
 }
 
 export interface LiteralVarDecl {
@@ -911,14 +913,14 @@ export function* settingVarDecls(
   }
 }
 
-// [LAW:one-source-of-truth] What a placement setting variable holds for the
-// session's stored spelling `raw`: the variable's own read, and what a step
-// from it moves from.
-export function settingVarValue(
-  decl: SettingVarDecl,
-  raw: string | null,
+// [LAW:one-source-of-truth] What a placement's file gives one of its
+// settings: its own value, else the declaration's default.
+export function savedSetting(
+  node: SegmentNode,
+  name: string,
+  decl: SettingDecl,
 ): SettingValue {
-  return placementValue(placementPick(decl.decl, raw), decl.saved);
+  return node.settings?.[name] ?? decl.default;
 }
 
 // The settings every placement has without its segment declaring them.
@@ -1099,33 +1101,21 @@ export function parseSettingSpelling(
   return inSettingDomain(decl, value) ? value : undefined;
 }
 
-// [LAW:single-enforcer] THE parse of a session's pick for one placement
-// setting. The setting's variable, its draft, the order check and its stale
-// report all read this one parse, so no two of them disagree about the pick.
-export function placementPick(
-  decl: SettingDecl,
-  raw: string | null,
-): StoredPick<SettingValue> {
-  return storedPick(raw, (r) => parseSettingSpelling(decl, r) ?? null);
-}
-
-// What a placement setting holds: a pick its domain admits, else the
-// placement's saved value. A stale pick draws the saved value and stays stored.
-export function placementValue(
-  pick: StoredPick<SettingValue>,
-  saved: SettingValue,
-): SettingValue {
-  return pick.kind === "held" ? pick.value : saved;
-}
-
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or
 // `an integer from 0 to 9`.
 export function describeSettingDomain(decl: SettingDecl): string {
   const { domain } = decl;
+  return domain === "theme"
+    ? `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`
+    : describeValues(domain);
+}
+
+// [LAW:one-source-of-truth] How a closed set of values reads in a message,
+// for a placement's setting and a global one alike.
+export function describeValues(
+  domain: "bool" | SettingRange | readonly string[],
+): string {
   if (domain === "bool") return "true or false";
-  if (domain === "theme") {
-    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
-  }
   if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
   return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
 }

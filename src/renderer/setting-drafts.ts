@@ -13,23 +13,24 @@
 // so the button's count and the click's write cannot describe different sets.
 
 import {
-  placementPick,
-  placementValue,
   settingOrderProblems,
   settingSpelling,
-  settingsOf,
-  walkNodes,
   type DslConfig,
   type Globals,
   type RawDslConfig,
-  type SettingDecl,
   type SettingValue,
 } from "../config/dsl-types.js";
 import {
-  settingNameOf,
   THEME_DEFAULT_FIELDS,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
+import {
+  pickOf,
+  placementValue,
+  settingTable,
+  type PlacementSetting,
+  type StalePick,
+} from "../config/setting-table.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import {
   parsePersistTarget,
@@ -39,12 +40,7 @@ import {
   themeDefaultKey,
   type ConfigPath,
 } from "../config/loader/persist-target.js";
-import {
-  presetByName,
-  presetGlobals,
-  presetNames,
-  presetRoot,
-} from "../config/presets.js";
+import { presetByName, presetGlobals } from "../config/presets.js";
 import { BUNDLED_PRESETS } from "./bundled-presets.js";
 import {
   SETTINGS,
@@ -274,74 +270,34 @@ export function placementDrafts(
   sessionPick: (key: string) => string | null,
 ): readonly PlacementDraft[] {
   const { preset } = sessionGlobals(config, sessionPick);
-  return slotsOf(config, preset).flatMap(
-    ({ id, setting, key, decl, saved }) => {
-      const pick = placementPick(decl, sessionPick(key));
-      return pick.kind !== "held" ||
-        settingSpelling(pick.value) === settingSpelling(saved)
-        ? []
-        : [{ preset, id, setting, key, value: pick.value }];
-    },
-  );
+  return settingTable(config).placements.flatMap((s) => {
+    const pick = pickOf(s, sessionPick(s.key));
+    return s.preset !== preset ||
+      pick.kind !== "held" ||
+      settingSpelling(pick.value) === settingSpelling(s.saved)
+      ? []
+      : [{ preset, id: s.id, setting: s.name, key: s.key, value: pick.value }];
+  });
 }
 
-// [LAW:one-source-of-truth] A stored pick the bar does not wear, where it
-// would have decided: the setting as a warning names it, the spelling held,
-// and the variable holding what the bar wears instead — the variable its
-// control reads, so the warning and the control name one value.
-export interface StalePick {
-  readonly setting: string;
-  readonly stored: string;
-  readonly wears: string;
-  readonly domain: "theme" | "value";
-}
-
-// Every stale pick of the session: each global setting `effective` reports
-// (it alone knows which a staged value outranks), and each placement setting
-// of the preset the session renders.
+// Every stale pick of the session that decides what it renders: each global
+// setting `effective` reports (it alone knows which a staged value outranks),
+// and each placement setting of the preset the session renders. The draw
+// keeps the placements it drew.
 export function stalePicks(
   config: DslConfig,
   effective: EffectiveGlobals,
   sessionPick: (key: string) => string | null,
 ): readonly StalePick[] {
   return [
-    ...effective.stale.map(
-      ({ setting, stored }): StalePick => ({
-        setting: `setting "${setting}"`,
-        stored,
-        wears: SETTINGS[setting].effectiveVar,
-        domain: setting === settingNameOf("palette") ? "theme" : "value",
-      }),
-    ),
-    ...slotsOf(config, effective.preset).flatMap(
-      ({ id, setting, key, decl, variable }): StalePick[] => {
-        const pick = placementPick(decl, sessionPick(key));
-        return pick.kind === "stale"
-          ? [
-              {
-                setting: `placement "${id}" setting "${setting}"`,
-                stored: pick.raw,
-                wears: variable,
-                domain: decl.domain === "theme" ? "theme" : "value",
-              },
-            ]
-          : [];
-      },
-    ),
+    ...effective.stale,
+    ...settingTable(config).placements.flatMap((setting): StalePick[] => {
+      const pick = pickOf(setting, sessionPick(setting.key));
+      return setting.preset === effective.preset && pick.kind === "stale"
+        ? [{ setting, stored: pick.raw }]
+        : [];
+    }),
   ];
-}
-
-// The session keys of the global settings whose stored pick is stale: a save
-// leaves each stored, so it comes back when its domain does.
-export function staleSettingKeys(
-  config: DslConfig,
-  sessionPick: (key: string) => string | null,
-): ReadonlySet<string> {
-  return new Set(
-    sessionGlobals(config, sessionPick).stale.map(
-      ({ setting }) => SETTINGS[setting].sessionKey,
-    ),
-  );
 }
 
 // [LAW:single-enforcer] What unsaved picks about to land would break between
@@ -355,72 +311,26 @@ export function placementPickProblems(
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): readonly string[] {
   const written = new Map(writes.map((w) => [w.key, w.value]));
-  return presetNames(config.presets).flatMap((preset) => {
-    const slots = slotsOf(config, preset);
-    const touched = new Set(
-      slots.filter((s) => written.has(s.key)).map((s) => s.id),
-    );
-    return [...touched].flatMap((id) => {
-      const own = slots.filter((s) => s.id === id);
-      const decls = Object.fromEntries(own.map((s) => [s.setting, s.decl]));
-      const values = Object.fromEntries(
-        own.map((s) => [
-          s.setting,
-          placementValue(
-            placementPick(s.decl, written.get(s.key) ?? sessionPick(s.key)),
-            s.saved,
-          ),
-        ]),
-      );
-      return settingOrderProblems(decls, values).map(
-        ({ message }) => `placement "${id}": ${message}`,
-      );
-    });
-  });
-}
-
-// Every draft slot in one preset's layout, with what the file gives it. A
-// fact of the config alone, which never changes under a config object — so
-// it is read once per (config, preset), and a render's count reads only the
-// session. [LAW:one-source-of-truth] Derived from the compiled tree, never
-// stored beside it: the memo is keyed by the config it was derived from.
-interface DraftSlotFact {
-  readonly id: string;
-  readonly setting: string;
-  readonly key: string;
-  readonly variable: string;
-  readonly decl: SettingDecl;
-  readonly saved: SettingValue;
-}
-const SLOTS = new WeakMap<DslConfig, Map<string, readonly DraftSlotFact[]>>();
-function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
-  const byPreset = SLOTS.get(config) ?? new Map();
-  SLOTS.set(config, byPreset);
-  const known = byPreset.get(preset);
-  if (known !== undefined) return known;
-  // One fact per slot: a name label reads its placement's `theme` slot, so a
-  // slot can be held by two nodes, which resolve it identically.
-  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
-    (node) =>
-      node.kind !== "segment" || node.drafts === undefined
-        ? []
-        : Object.entries(node.drafts).map(
-            ([setting, { id, key, variable }]) => {
-              const decl = settingsOf(config.segments[node.name]!)[setting]!;
-              return {
-                id,
-                setting,
-                key,
-                variable,
-                decl,
-                saved: node.settings?.[setting] ?? decl.default,
-              };
-            },
-          ),
+  const { placements } = settingTable(config);
+  const samePlacement = (a: PlacementSetting) => (b: PlacementSetting) =>
+    a.preset === b.preset && a.id === b.id;
+  const touched = placements.filter((s) => written.has(s.key));
+  const firstOfEach = touched.filter(
+    (s, i) => touched.findIndex(samePlacement(s)) === i,
   );
-  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
-  byPreset.set(preset, slots);
-  return slots;
+  return firstOfEach.flatMap((first) => {
+    const own = placements.filter(samePlacement(first));
+    const decls = Object.fromEntries(own.map((s) => [s.name, s.decl]));
+    const values = Object.fromEntries(
+      own.map((s) => [
+        s.name,
+        placementValue(s, written.get(s.key) ?? sessionPick(s.key)),
+      ]),
+    );
+    return settingOrderProblems(decls, values).map(
+      ({ message }) => `placement "${first.id}": ${message}`,
+    );
+  });
 }
 
 // Save as preset (brandon-save-undo-bwi.o6u): the bar the session renders, as

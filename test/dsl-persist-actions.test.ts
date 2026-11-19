@@ -39,10 +39,12 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
-import {
-  resolveThemeSelection,
-  themePick,
-} from "../src/themes/palette-resolvers";
+import { resolveThemeSelection } from "../src/themes/palette-resolvers";
+import { globalSettings, pickOf } from "../src/config/setting-table";
+
+// A stored theme pick, through the theme setting's one parse.
+const themePick = (raw: string | null) =>
+  pickOf(globalSettings({ styles: {}, presets: {} }).theme, raw);
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { linkClick } from "./helpers/click";

@@ -28,7 +28,7 @@
 // loader's own synthesis pass (see the bottom of this file) — a `DslConfig`,
 // the same effective shape every user config resolves to.
 
-import type { DslConfig, SegmentDecl, SettingDecl } from "./dsl-types.js";
+import type { DslConfig, SettingDecl } from "./dsl-types.js";
 import type { ActionDecl } from "./action.js";
 import { confirmStep } from "./confirm-step.js";
 import { parseDslConfig } from "./dsl-loader.js";
@@ -1659,28 +1659,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   },
 } satisfies DslConfig;
 
-// [LAW:locality-or-seam] The palette names this module-level parse is allowed
-// to accept — DERIVED from RAW_DEFAULT_DSL_CONFIG itself (globals.palette +
-// every theme a bundled theme default is keyed by + every per-segment
-// palette: pin), never from the live theme registry
-// (listResolvablePaletteNames()). A real user file must validate against the
-// live registry (an author can type any name); this file validates against
-// ITSELF (every name here is a literal we wrote and every render test below
-// exercises against the real registry already). This is what keeps the
-// module-load parse below from ever depending on the registry being healthy
-// at import time — a registry-loading bug elsewhere would surface where it
-// actually matters (a real render failing), never as an uncatchable crash on
-// every importer of this file before any daemon/CLI error handling runs.
-const AUTHORED_PALETTE_NAMES = new Set(
-  [
-    RAW_DEFAULT_DSL_CONFIG.globals.palette,
-    ...Object.keys(RAW_DEFAULT_DSL_CONFIG.themeDefaults),
-    ...(Object.values(RAW_DEFAULT_DSL_CONFIG.segments) as SegmentDecl[]).map(
-      (s) => s.palette,
-    ),
-  ].filter((name): name is string => name !== undefined),
-);
-
 // [LAW:single-enforcer] Run the authored literal through the SAME parse
 // pipeline every user config goes through (JSON5 stage + group synthesis and
 // the parse-time checks) instead of hand-duplicating that logic here. Without
@@ -1692,10 +1670,6 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
 // so this is the same well-tested path, run once here instead of skipped.
 export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
-  parseDslConfig(
-    "<default>",
-    JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
-    AUTHORED_PALETTE_NAMES,
-  ),
+  parseDslConfig("<default>", JSON.stringify(RAW_DEFAULT_DSL_CONFIG)),
   RAW_DEFAULT_DSL_CONFIG,
 );

@@ -7,30 +7,29 @@ import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
 import type { DslConfig, Globals } from "./dsl-types.js";
 import {
-  settingNameOf,
   VALUED_FIELDS,
   valuedRow,
-  type ControlledField,
-  type SessionField,
   type SettingName,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
+import { SETTINGS, SETTING_NAMES } from "./setting-projections.js";
+import {
+  pickOf,
+  settingTable,
+  type GlobalValue,
+  type StalePick,
+} from "./setting-table.js";
 import {
   resolveStyleSelection,
   type StyleSelection,
   resolveEffectSelection,
   type EffectSelection,
   effectiveGlobal,
-  effectPick,
-  memberPick,
-  storedPick,
-  stylePick,
   type StoredPick,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
-  themePick,
   type ThemeSelection,
 } from "../themes/palette-resolvers.js";
 import { themeDefaultsOf, underThemeDefault } from "./theme-defaults.js";
@@ -89,7 +88,7 @@ export type EffectiveGlobals = ValuedGlobals & {
   readonly separator: string | undefined;
   // Each setting whose stored pick would have decided the bar and that its
   // domain no longer holds.
-  readonly stale: readonly StaleSetting[];
+  readonly stale: readonly StalePick[];
 };
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
@@ -125,17 +124,31 @@ function resolveValued<K extends ValuedField>(
   );
 }
 
-// [LAW:parse-dont-validate] A valued field's stored pick, parsed by its row. A
-// config-only field has no pick rung, so the session is not asked for one.
-function valuedPick<K extends ValuedField>(
-  field: K,
+// Each global setting's stored pick, parsed once by the config's table.
+type GlobalPicks = { readonly [N in SettingName]: StoredPick<GlobalValue<N>> };
+
+function globalPicks(
+  config: DslConfig,
   sessionPick: (key: string) => string | null,
-): StoredPick<ValuedGlobals[K]> {
-  const row = valuedRow(field);
-  return row.kind === "session"
-    ? storedPick(sessionPick(settingNameOf(field as SessionField)), row.parse)
-    : { kind: "unset" };
+): GlobalPicks {
+  const { global } = settingTable(config);
+  return Object.fromEntries(
+    SETTING_NAMES.map((name) => [
+      name,
+      pickOf<unknown>(global[name], sessionPick(global[name].key)),
+    ]),
+  ) as GlobalPicks;
 }
+
+// A valued field's pick: a config-only field has no pick rung.
+const UNSET: StoredPick<never> = { kind: "unset" };
+const valuedPickOf = <K extends ValuedField>(
+  picks: GlobalPicks,
+  field: K,
+): StoredPick<ValuedGlobals[K]> =>
+  (picks as Partial<Record<ValuedField, StoredPick<ValuedGlobals[K]>>>)[
+    field
+  ] ?? UNSET;
 
 // [LAW:one-source-of-truth] The active preset a session's picks resolve to —
 // the first rung of the resolution below.
@@ -143,26 +156,12 @@ export function presetOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): string {
+  const { preset } = settingTable(config).global;
   return effectivePresetName(
-    presetPick(config, sessionPick),
+    pickOf(preset, sessionPick(preset.key)),
     config.globals.preset,
     config.presets,
   );
-}
-
-// [LAW:one-source-of-truth] Read under the key a preset pick is written under.
-const presetPick = (
-  config: DslConfig,
-  sessionPick: (key: string) => string | null,
-): StoredPick<string> =>
-  memberPick(sessionPick(settingNameOf("preset")), config.presets);
-
-// A setting whose stored pick its domain no longer holds, where that pick
-// would have decided the bar: the setting and the spelling it holds. The draw
-// names what the bar wears instead.
-export interface StaleSetting {
-  readonly setting: SettingName;
-  readonly stored: string;
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -175,12 +174,7 @@ export function resolveEffectiveGlobals(
 ): EffectiveGlobals {
   // The preset resolves FIRST: every field below reads globals, and which
   // globals is exactly what the preset decides.
-  const presetPicked = presetPick(config, sessionPick);
-  const preset = effectivePresetName(
-    presetPicked,
-    config.globals.preset,
-    config.presets,
-  );
+  const preset = presetOf(config, sessionPick);
   const declared = presetGlobals(config, preset);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as
@@ -195,17 +189,10 @@ export function resolveEffectiveGlobals(
   // [LAW:one-source-of-truth] Every pick is read under the key the settings
   // write it under, and parsed once, here: the value below and the report of a
   // stale one are the same parse.
-  const picks = {
-    palette: themePick(sessionPick(settingNameOf("palette"))),
-    style: stylePick(sessionPick(settingNameOf("style")), config.styles),
-    effect: effectPick(sessionPick(settingNameOf("effect"))),
-    ...(Object.fromEntries(
-      VALUED_FIELDS.map((field) => [field, valuedPick(field, sessionPick)]),
-    ) as { [K in ValuedField]: StoredPick<ValuedGlobals[K]> }),
-  };
+  const picks = globalPicks(config, sessionPick);
   const theme = resolveThemeSelection(
     staged.palette,
-    picks.palette,
+    picks.theme,
     declared.palette,
   );
   const globals = underThemeDefault(
@@ -214,25 +201,19 @@ export function resolveEffectiveGlobals(
   );
   // [LAW:no-silent-failure] A stale pick is reported only where it would have
   // decided: a staged value outranks the session's pick, so it hides the miss.
-  const stale = (
-    Object.entries({ ...picks, preset: presetPicked }) as ReadonlyArray<
-      [ControlledField | ValuedField, StoredPick<unknown>]
-    >
-  ).flatMap(([field, pick]) =>
-    pick.kind === "stale" && staged[field] === undefined
-      ? [
-          {
-            setting: settingNameOf(field as ControlledField),
-            stored: pick.raw,
-          },
-        ]
-      : [],
-  );
+  const { global } = settingTable(config);
+  const stale = SETTING_NAMES.flatMap((name): StalePick[] => {
+    const pick = picks[name];
+    return pick.kind === "stale" &&
+      staged[SETTINGS[name].configKey] === undefined
+      ? [{ setting: global[name], stored: pick.raw }]
+      : [];
+  });
   return {
     ...(Object.fromEntries(
       VALUED_FIELDS.map((field) => [
         field,
-        resolveValued(field, staged, picks[field], globals),
+        resolveValued(field, staged, valuedPickOf(picks, field), globals),
       ]),
     ) as ValuedGlobals),
     preset,

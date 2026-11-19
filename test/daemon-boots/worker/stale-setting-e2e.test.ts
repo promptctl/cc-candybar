@@ -36,6 +36,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { notInstalledTheme } from "../../../src/themes/policy";
 
 jest.setTimeout(30_000);
 
@@ -43,6 +44,9 @@ const STALE = "stale-session";
 const FRESH = "fresh-session";
 const GONE_THEME = "no-such-theme";
 const THEME_MENU = menuStateKey("pickers", "applyTheme", undefined);
+// The bundled styles merge under the file's own, so the domain names both.
+const STALE_STYLE =
+  '"vapor" is not one of "none", "vivid", "muted", "dim", "bright", "inverted", "washed"';
 
 // Every reader of each global setting: a label, the theme's carousel and its
 // picker, a padding stepper, the three saves, and a placement with a setting
@@ -72,8 +76,13 @@ const CONFIG = (styles: string): string => `{
         mode: { label: "Mode", domain: ["a", "b"], default: "a" },
       },
     },
+    ghost: {
+      template: 'G={{ .settings.mode }}',
+      when: '{{ eq .ring "open" }}',
+      settings: { mode: { label: "Mode", domain: ["a", "b"], default: "a" } },
+    },
   },
-  root: { v: [{ h: ["probe"] }, { h: ["pickers", "controls"] }, { h: ["knob"] }] },
+  root: { v: [{ h: ["probe"] }, { h: ["pickers", "controls"] }, { h: ["knob", "ghost"] }] },
 }`;
 
 interface StaleBar {
@@ -185,29 +194,31 @@ const stale = (setting: string, why: string, wears: string): string =>
 
 describe("a stored setting its domain no longer holds", () => {
   test.each([
+    ["theme", "nord", "T=nord", notInstalledTheme(GONE_THEME), GONE_THEME],
+    // A retired theme's name says which theme to write instead.
     [
       "theme",
       "nord",
       "T=nord",
-      `"${GONE_THEME}" is not an installed theme`,
-      GONE_THEME,
+      `"dark" is not an installed theme — "dark" was retired; write "textual-dark", the same palette`,
+      "dark",
     ],
-    [
-      "style",
-      "washed",
-      "S=washed",
-      `"vapor" is not a value it can hold`,
-      "vapor",
-    ],
+    ["style", "washed", "S=washed", STALE_STYLE, "vapor"],
     [
       "preset",
       "default",
       "P=default",
-      `"gone" is not a value it can hold`,
+      '"gone" is not one of "default", "compact", "verbose", "zen", "git", "usage", "dense", "roomy"',
       "gone",
     ],
-    ["effect", "none", "E=none", `"gone" is not a value it can hold`, "gone"],
-    ["padding", "1", "PAD=1", `"99" is not a value it can hold`, "99"],
+    [
+      "effect",
+      "none",
+      "E=none",
+      '"gone" is not one of "none", "shimmer", "pulse", "sparkle", "wheel"',
+      "gone",
+    ],
+    ["padding", "1", "PAD=1", '"99" is not an integer from 0 to 16', "99"],
   ])(
     "a stale %s draws the fallback %s under a ⚠ naming the setting, the stored value and what the bar wears",
     async (setting, wears, shown, why, stored) => {
@@ -232,21 +243,38 @@ describe("a stored setting its domain no longer holds", () => {
       [
         stale(
           `placement "knob" setting "mode"`,
-          `"c" is not a value it can hold`,
+          '"c" is not one of "a", "b"',
           "a",
         ),
         stale(
           `placement "knob" setting "n"`,
-          `"9" is not a value it can hold`,
+          '"9" is not an integer from 1 to 5',
           "2",
         ),
         stale(
           `placement "knob" setting "theme"`,
-          `"${GONE_THEME}" is not an installed theme`,
+          `${notInstalledTheme(GONE_THEME)}, and not "bar" (the bar's own theme)`,
           "bar",
         ),
       ].sort(),
     );
+  });
+
+  test("a placement the bar does not draw reports no stale pick until it is drawn", async () => {
+    const bar = staleBar({
+      [STALE]: { [placementDraftKey("default", "ghost", "mode")]: "c" },
+    });
+    expect(textOf(await bar.draw())).not.toContain("G=");
+    expect(await bar.messages()).toEqual([]);
+    const shown = await bar.clickWhere(writes("set-state", "ring", "open"));
+    expect(textOf(shown)).toContain("G=a");
+    expect(await bar.messages()).toEqual([
+      stale(
+        `placement "ghost" setting "mode"`,
+        '"c" is not one of "a", "b"',
+        "a",
+      ),
+    ]);
   });
 
   test("every reader of a stale theme draws what a session wearing that theme draws", async () => {
@@ -316,11 +344,7 @@ describe("a stored setting its domain no longer holds", () => {
       await bar.draw();
       await bar.clickWhere(writes(verb));
       expect(await bar.messages()).toEqual([
-        stale(
-          `setting "style"`,
-          `"vapor" is not a value it can hold`,
-          "washed",
-        ),
+        stale(`setting "style"`, STALE_STYLE, "washed"),
       ]);
     },
   );
