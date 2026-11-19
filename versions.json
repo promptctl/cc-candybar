@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-876",
+      "ref": "refs/pull/876/merge",
+      "sha": "be72c4ad3b9c5d41e81e32b0c8a26c36678b544b",
+      "timestamp": "2026-11-19T14:47:25.194Z",
+      "commits": [
+        {
+          "sha": "be72c4ad3b9c5d41e81e32b0c8a26c36678b544b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:46:08Z",
+          "message": "Merge fabbec0adc82e7183752ff7440c1749bc75b3ad1 into 59578c03d8f8e1de16a341adf4e70d2c1a550472\n"
+        },
+        {
+          "sha": "fabbec0adc82e7183752ff7440c1749bc75b3ad1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:48:34-07:00",
+          "message": "fix(watchers): follow the revision config discovery read (ibyq.ds5)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "59578c03d8f8e1de16a341adf4e70d2c1a550472",
@@ -13,28 +35,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T14:43:46Z",
           "message": "chore(release): set `package.json` to 1.234.3\n\n## [1.234.3](https://github.com/promptctl/cc-candybar/compare/v1.234.2...v1.234.3) (2026-11-19)\n\n### Performance Improvements\n\n* **host:** share each session environment across statusline ticks ([#872](https://github.com/promptctl/cc-candybar/issues/872)) ([481101f](https://github.com/promptctl/cc-candybar/commit/481101f839d97ef1ae569bddbf9336ec8cfe52b5))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-876",
-      "ref": "refs/pull/876/merge",
-      "sha": "2dac759806b09a8c4c38ca92a5e0046cb65518d9",
-      "timestamp": "2026-11-19T14:40:33.524Z",
-      "commits": [
-        {
-          "sha": "2dac759806b09a8c4c38ca92a5e0046cb65518d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:39:26Z",
-          "message": "Merge 11d4ba06e8351b6470c538527d09bf5c97d57325 into 481101f839d97ef1ae569bddbf9336ec8cfe52b5\n"
-        },
-        {
-          "sha": "11d4ba06e8351b6470c538527d09bf5c97d57325",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:48:34-07:00",
-          "message": "fix(watchers): follow the revision config discovery read (ibyq.ds5)\n"
         }
       ]
     },
