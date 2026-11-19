@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] Which disclosures sit inside which, and the rule
 // that closes them together (brandon-menus-sjhy.9p6): when a disclosure
 // closes — by its trigger, its body's ✕, an accordion sibling opening, a pick
-// that closes, the door, ◁ back — everything open inside it goes back to how a
+// that closes, the door — everything open inside it goes back to how a
 // fresh session finds it, so reopening the parent never reopens what was left
 // open under it. The nesting is read off the config, so a disclosure added
 // later closes with its parent with no list to keep.
