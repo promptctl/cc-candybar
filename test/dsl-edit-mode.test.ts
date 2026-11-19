@@ -51,7 +51,6 @@ import {
 } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {

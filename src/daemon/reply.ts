@@ -29,7 +29,7 @@ import {
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
-import { clickSessionOf } from "../click/wire";
+import type { AdmittedClick } from "../click/wire";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import {
@@ -680,9 +680,8 @@ function urlClick(
   };
 }
 
-// [LAW:types-are-the-program] A click as the host read it, run: a refusal is
-// its outcome, a range runs the link the status line drew there, and a link
-// runs through its verb.
+// [LAW:types-are-the-program] A refused click has an outcome already.
+// An admitted click enters the renderer mailbox.
 async function ranClick(
   parts: DaemonParts,
   read: ReadClick,
@@ -691,13 +690,13 @@ async function ranClick(
 ): Promise<RequestOutcome> {
   switch (read.kind) {
     case "refused":
+      if (read.signed !== undefined) noteFacts(facts, read.signed);
       return badRequest(read.problem);
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
         parts,
-        read.verb,
-        read.value,
+        read.click,
         { via: "link", delivery: read.delivery },
         facts,
         click,
@@ -715,23 +714,15 @@ async function ranClick(
 // daemon's failure.
 async function handleClick(
   parts: DaemonParts,
-  verb: string,
-  value: string,
+  admitted: AdmittedClick,
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
-  // [LAW:nothing-unseen] What the host knows of the click is recorded before
-  // anything about it can fail: the verb it runs, then its session as it
-  // crossed the one session-id checkpoint. One that failed is never recorded,
-  // and a click naming none records `sid=-`.
-  noteFacts(facts, { verb });
-  const session = clickSessionOf(verb, value);
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    parts.collector.clicked(session.id);
-  }
+  const { verb } = admitted;
+  const session = admitted.scope === "session" ? admitted.session : null;
+  noteFacts(facts, { verb, sid: session ?? "-" });
+  if (session !== null) parts.collector.clicked(session);
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
   // again cannot revert a toggle.
@@ -742,16 +733,15 @@ async function handleClick(
           kind: "event",
           event: {
             kind: "click",
-            verb,
-            value,
-            session,
+            click: admitted,
             arrival,
-            context: session?.ok
-              ? parts.sessionBook.contextOf(
-                  session.id,
-                  parts.frameFeeds.latest(session.id),
-                )
-              : null,
+            context:
+              session === null
+                ? null
+                : parts.sessionBook.contextOf(
+                    session,
+                    parts.frameFeeds.latest(session),
+                  ),
           },
         },
   );

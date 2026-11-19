@@ -873,9 +873,7 @@ describe("a click", () => {
     live: CheckedRenderRequest | null = null,
   ): Event => ({
     kind: "click",
-    verb,
-    value: "",
-    session: { ok: true, id: SESSION },
+    click: { scope: "session", verb, session: SESSION, steps: [] },
     arrival: { via: "link", delivery: { kind: "cli" } },
     context: live === null ? null : heardContextOf(live),
   });
@@ -886,7 +884,7 @@ describe("a click", () => {
     let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      click: () => act(),
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -907,7 +905,7 @@ describe("a click", () => {
     let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) => (verb === "act" ? () => act() : undefined),
+      click: () => act(),
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -927,12 +925,9 @@ describe("a click", () => {
     let seen: SessionContext | null | undefined;
     const t = renderer({
       ...NO_VERBS,
-      handler: (verb) =>
-        verb === "act"
-          ? (_value, facts) => {
-              seen = facts.context;
-            }
-          : undefined,
+      click: (_click, facts) => {
+        seen = facts.context;
+      },
       closeIdle: () => {
         throw new Error("no idle close here");
       },
@@ -946,14 +941,7 @@ describe("a click", () => {
     expect(seen).toEqual(heardContextOf(latest));
   });
 
-  test("of a verb the renderer does not have is its bad request", async () => {
-    const t = renderer();
-    const { failure } = threw(await handIn(t.r, click("nope")));
-    expect(failure).toMatchObject({
-      kind: "bad-request",
-      message: "unknown click verb: nope",
-    });
-  });
+
 });
 
 describe("the idle close", () => {
@@ -961,7 +949,6 @@ describe("the idle close", () => {
     const closed: Array<[string, number]> = [];
     const t = renderer({
       ...NO_VERBS,
-      handler: () => undefined,
       closeIdle: (sessionId, _latest, { idleS }) => {
         closed.push([sessionId, idleS]);
       },

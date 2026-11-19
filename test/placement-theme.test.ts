@@ -29,7 +29,7 @@ import { settingsOf } from "../src/config/dsl-types";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SAVE } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,

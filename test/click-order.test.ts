@@ -11,7 +11,6 @@ import { signedClick } from "./helpers/link-signer";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/renderer/session-state";
 import {
-  VERBS,
   type VerbContext,
   type VerbHandler,
 } from "../src/renderer/verbs";
@@ -28,6 +27,7 @@ import { tickAt, type Tick } from "../src/utils/instant";
 import { fieldOf, fieldsOf } from "../src/utils/logfmt";
 import {
   recordRender,
+  linkClick,
   testVerbContext,
   verbContextWith,
   CLICK_VERBS,
@@ -351,6 +351,28 @@ describe("the click path", () => {
     expect(holds.get(A)).toBe(0);
     await write("nord", () => true);
     expect(taken).toBe(1);
+  });
+
+  test("a signed batch naming two sessions reaches no renderer turn", async () => {
+    const clicked = jest.fn();
+    const { send, theme, events } = setup({
+      collector: { holding: () => () => {}, clicked },
+    });
+    const { verb, value } = linkClick(effectsUrl([
+      { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
+      { verb: VERB_SET_STATE, args: [S, "theme", "dracula"] },
+    ]));
+
+    const { resp } = await send(verb, value);
+
+    expect(resp).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringContaining("more than one session"),
+    });
+    expect(clicked).not.toHaveBeenCalled();
+    expect(theme()).toBeNull();
+    expect(events[0]).not.toContain(" mailbox=");
   });
 
   test("a click whose session will not decode is a bad request whose event still names its verb", async () => {

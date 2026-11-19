@@ -77,7 +77,6 @@ import {
   VERB_DISPATCH,
   VERB_RESET_CONFIG,
 } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";

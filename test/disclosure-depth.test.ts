@@ -59,7 +59,6 @@ import {
 
 // The decor the bundled config renders under.
 const BAR = DEFAULT_DECOR;
-import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import {
   recordRender,

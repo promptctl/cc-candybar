@@ -32,7 +32,7 @@ import {
   VERB_SAVE_PRESET,
   VERB_UNDO,
 } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,

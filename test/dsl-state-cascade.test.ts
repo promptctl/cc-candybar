@@ -12,7 +12,6 @@ import { CLICK_VERBS } from "./helpers/click";
 import { textOf } from "../src/render/frame";
 import { feedInputs } from "./helpers/inputs";
 import { autorun } from "mobx";
-import { VERBS } from "../src/renderer/verbs";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
