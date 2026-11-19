@@ -34,7 +34,7 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { loadDiscovered } from "./helpers/config-host";
+import { loadDiscovered, originOf } from "./helpers/config-host";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 
 const SID_1 = sessionIdOf("sid-1");
@@ -263,9 +263,7 @@ const NO_SNAPSHOT: ConfigSnapshot = {
 };
 
 const loadedEntry: ReloadedEntry = {
-  projectDir: "/p",
-  cwd: "/p",
-  configFile: undefined,
+  origin: originOf("/p", "/p", undefined),
   configLayers: [],
   snapshot: NO_SNAPSHOT,
   lastError: null,
@@ -285,8 +283,7 @@ test.each<[LoadCause, string]>([
 test("the config loaded event names the repository's standing, and why its worktree is unproven", () => {
   const entry: ReloadedEntry = {
     ...loadedEntry,
-    projectDir: project,
-    cwd: project,
+    origin: originOf(project, project, undefined),
     snapshot: {
       ...NO_SNAPSHOT,
       repo: { dir: "/a", standing: "awaiting", unproven: "/x is not there" },

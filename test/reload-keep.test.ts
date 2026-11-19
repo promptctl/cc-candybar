@@ -83,8 +83,8 @@ function rig(
         onReload: (entry, _s, cause, settled) => {
           loads.push(settled);
           causes.push(cause);
-          reloaded.push(entry.projectDir);
-          opts.onReload?.(entry.projectDir);
+          reloaded.push(entry.origin.projectDir);
+          opts.onReload?.(entry.origin.projectDir);
         },
       },
     },

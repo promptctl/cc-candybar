@@ -373,7 +373,7 @@ describe("RenderCache", () => {
     const { dir: bare, cleanup: cleanupBare } = mkConfigDir();
     const { cache, originAt, cleanups, reloads } = makeCache();
     try {
-      const cfg = join(dir, ".cc-candybar.json5");
+      const cfg = join(dir, "explicit.json5");
       writeFileSync(
         cfg,
         JSON.stringify({
@@ -388,14 +388,18 @@ describe("RenderCache", () => {
           root: { h: ["t"] },
         }),
       );
-      const entry = cache.getOrCreate(originAt(dir, dir, undefined));
+      const entry = cache.getOrCreate(originAt(dir, dir, cfg));
       // The error is loud AND names the file...
       expect(entry.lastError).toMatch(/trigger needs a display/);
       expect(entry.configLayers).toEqual([cfg]);
+      expect(entry.state.configPath).toBeNull();
+      expect(entry.state.writable).toEqual([]);
       // ...while the state is the bundled default's: the same tree a
       // no-file entry builds, settings menu included — one synthesis, not a
       // second "safe mode" config.
       const fallback = cache.getOrCreate(originAt(bare, bare, undefined));
+      expect(fallback.state.configPath).toBeNull();
+      expect(fallback.state.writable).toContain("user");
       const menuOf = (root: LayoutNode): string[] =>
         layoutSegments(root).filter((n) => n.startsWith(SETTINGS_NS));
       const floor = presetRoot(entry.state.config, PRESET_FLOOR).node;
@@ -418,6 +422,8 @@ describe("RenderCache", () => {
       );
       expect(entry.lastError).toBeNull();
       expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
+      expect(entry.state.configPath).toBe(cfg);
+      expect(entry.state.writable).toContain("user");
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1555,7 +1561,7 @@ describe("RenderCache frames and pins", () => {
       for (let i = 0; i < 5; i++) {
         using hold = cache.holdView(S1);
         expect(hold?.view).toBe(view);
-        expect(hold?.entry.cwd).toBe(dirs[0]);
+        expect(hold?.entry.origin.cwd).toBe(dirs[0]);
       }
       // A frame wrote no line: it opened no view, built no entry, declared
       // nothing.
@@ -1581,7 +1587,7 @@ describe("RenderCache frames and pins", () => {
       {
         using hold = cache.holdView(S1);
         expect(hold?.view).toBe(view);
-        expect(hold?.entry.cwd).toBe(dirs[0]);
+        expect(hold?.entry.origin.cwd).toBe(dirs[0]);
       }
       // The feed closed, and the host retired the session.
       unpin();
