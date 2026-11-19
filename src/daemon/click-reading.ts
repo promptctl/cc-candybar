@@ -1,17 +1,10 @@
 // [LAW:single-enforcer] The host's one reading of a click, whoever delivered
 // it: the URL handler app's frame, or `cc-candybar url-handle`. Any web page
 // can open a `cc-candybar://` link, so no link reaches a renderer until its
-// signature is opened here. A range of the tmux status line carries none,
-// because tmux expands it and nothing signs it, so the host reads it as its own
-// arm before any key is asked for.
+// signature is opened here.
 
 import type { LinkSigner } from "../click/link-signer.js";
-import {
-  isBarLink,
-  parseHandlerUrl,
-  STATUS_LINE_CLICK_PREFIX,
-  URL_SCHEME,
-} from "../click/wire.js";
+import { isBarLink, parseHandlerUrl, URL_SCHEME } from "../click/wire.js";
 import type { Delivery } from "../doctor/sightings.js";
 
 interface Refused {
@@ -34,8 +27,6 @@ export type OpenedLink =
 // delivered it where that is a fact of what it does.
 export type ReadClick =
   | (Extract<OpenedLink, { kind: "link" }> & { readonly delivery: Delivery })
-  // A status-line range: `[socket, pane, range]` as segments.
-  | { readonly kind: "status-line"; readonly value: string }
   | Refused;
 
 export function parseClick(
@@ -43,19 +34,6 @@ export function parseClick(
   delivery: Delivery,
   links: LinkSigner,
 ): ReadClick {
-  if (url.startsWith(STATUS_LINE_CLICK_PREFIX)) {
-    // [LAW:no-silent-failure] Only the tmux binding runs a range, and it runs
-    // the CLI; one through the URL handler came from a page.
-    return delivery.kind === "cli"
-      ? {
-          kind: "status-line",
-          value: url.slice(STATUS_LINE_CLICK_PREFIX.length),
-        }
-      : {
-          kind: "refused",
-          problem: "a status-line click comes only from tmux's own binding",
-        };
-  }
   if (!isBarLink(url))
     return {
       kind: "refused",
@@ -66,7 +44,7 @@ export function parseClick(
 }
 
 // A link a frame drew, opened by its signature and split as a click: what a
-// clicked link is, and what a status-line range resolves to.
+// clicked link is.
 export function openClick(signed: string, links: LinkSigner): OpenedLink {
   const opened = links.openLink(signed);
   if (opened.kind === "failed")

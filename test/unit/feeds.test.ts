@@ -35,7 +35,7 @@ const tick = (s: number) => s as Tick;
 // A session watched on `lanes`, each with one subscriber drawing it.
 const watched = (
   shown = true,
-  lanes: readonly Lane[] = ["band"],
+  lanes: readonly Lane[] = ["pane"],
 ): SessionViewers => ({
   lanes: Object.fromEntries(
     lanes.map((lane) => [lane, { subscribers: 1, drawing: true }]),
@@ -138,7 +138,7 @@ describe("a feed's life", () => {
     expect(r.pins).toEqual([`pin ${S}`, `unpin ${S}`]);
     expect(r.feeds.next()).toBeNull();
     expect(r.logged.at(-1)).toMatch(
-      /^info feed sid="s" closed lanes=band:1 for=2s drawn=1 .*latenessHistogram=/,
+      /^info feed sid="s" closed lanes=pane:1 for=2s drawn=1 .*latenessHistogram=/,
     );
   });
 
@@ -164,12 +164,12 @@ describe("a feed's life", () => {
 
   test("a frame is drawn with the lanes that follow the session, and its answers handed on as the session's frame", () => {
     const r = rig();
-    view({ [S]: watched(true, ["band", "statusline"]) })(r.feeds);
+    view({ [S]: watched(true, ["pane", "statusline"]) })(r.feeds);
     const frames = r.turn(0);
     expect(frames).toEqual([
-      { session: S, bar: expect.anything(), answers: r.script.answers },
+      { session: S, answers: r.script.answers },
     ]);
-    expect(r.draws[0]!.following.sort()).toEqual(["band", "statusline"]);
+    expect(r.draws[0]!.following.sort()).toEqual(["pane", "statusline"]);
     expect(r.feeds.drawn()).toBe(1);
   });
 
@@ -320,11 +320,11 @@ describe("a wake", () => {
 
   test("viewers that changed only in who follows wake the feed for its viewers; the same viewers again wake nothing", () => {
     const r = rig();
-    view({ [S]: watched(true, ["band"]) })(r.feeds);
+    view({ [S]: watched(true, ["pane"]) })(r.feeds);
     r.turn(0);
-    r.feeds.view({ [S]: watched(true, ["band"]) }, tick(0.5));
+    r.feeds.view({ [S]: watched(true, ["pane"]) }, tick(0.5));
     expect(r.feeds.next()).toBe(1);
-    r.feeds.view({ [S]: watched(true, ["band", "pane"]) }, tick(0.5));
+    r.feeds.view({ [S]: watched(true, ["pane", "statusline"]) }, tick(0.5));
     expect(r.feeds.next()).toBe(0.5);
   });
 });
@@ -359,45 +359,45 @@ describe("a frame that failed", () => {
 describe("feedsOf: what each lane was sent of late", () => {
   test("a session nobody follows is unfollowed on every lane", () => {
     const r = rig();
-    expect(r.feeds.feedsOf(S, tick(0)).band).toEqual(UNFOLLOWED);
+    expect(r.feeds.feedsOf(S, tick(0)).pane).toEqual(UNFOLLOWED);
   });
 
   test("counts a lane's subscribers and the frames whose answer changed for it in the last second", () => {
     const r = rig();
     r.script.changeIn = 0.001;
-    view({ [S]: watched(true, ["band", "statusline"]) })(r.feeds);
+    view({ [S]: watched(true, ["pane", "statusline"]) })(r.feeds);
     let n = 0;
     let next = r.feeds.next();
     while (next !== null && next <= 2) {
-      // The band's answer moves every frame; the statusline's never.
+      // The pane's answer moves every frame; the statusline's never.
       r.script.answers = { resp: `r${n++}`, statusline: "s" };
       r.turn(next);
       next = r.feeds.next();
     }
     const feeds = r.feeds.feedsOf(S, tick(2));
     // Ten frames a second, give or take the one on the window's edge.
-    expect(feeds.band.fps + feeds.statusline.fps).toBeGreaterThanOrEqual(9);
-    expect(Math.min(feeds.band.fps, feeds.statusline.fps)).toBe(0);
-    expect(feeds.band.subscribers).toBe(1);
-    expect(feeds.band.shown).toBe(true);
-    expect(feeds.pane).toEqual(UNFOLLOWED);
+    expect(feeds.pane.fps + feeds.statusline.fps).toBeGreaterThanOrEqual(9);
+    expect(Math.min(feeds.pane.fps, feeds.statusline.fps)).toBe(0);
+    expect(feeds.pane.subscribers).toBe(1);
+    expect(feeds.pane.shown).toBe(true);
+
   });
 
   test("a lane's count starts again when its last subscriber leaves", () => {
     const r = rig();
-    view({ [S]: watched(true, ["band"]) })(r.feeds);
+    view({ [S]: watched(true, ["pane"]) })(r.feeds);
     r.turn(0);
-    expect(r.feeds.feedsOf(S, tick(0.5)).band.fps).toBe(1);
+    expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(1);
+    r.feeds.view({ [S]: watched(true, ["statusline"]) }, tick(0.5));
     r.feeds.view({ [S]: watched(true, ["pane"]) }, tick(0.5));
-    r.feeds.view({ [S]: watched(true, ["band"]) }, tick(0.5));
-    expect(r.feeds.feedsOf(S, tick(0.5)).band.fps).toBe(0);
+    expect(r.feeds.feedsOf(S, tick(0.5)).pane.fps).toBe(0);
   });
 
   test("a frame is drawn with what its own session's lanes were sent before it, never another session's", () => {
     const r = rig();
     view({ [S]: watched(), [T]: watched(false) })(r.feeds);
     r.turn(0);
-    expect(r.draws.map((d) => [d.session, d.feeds.band.shown])).toEqual([
+    expect(r.draws.map((d) => [d.session, d.feeds.pane.shown])).toEqual([
       [S, true],
       [T, false],
     ]);

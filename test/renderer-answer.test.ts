@@ -463,7 +463,7 @@ describe("a feed's frame", () => {
       SESSION,
       30,
       READ,
-      new Set(["band"]),
+      new Set(["pane"]),
       UNFOLLOWED_FEEDS,
     )!;
     expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));

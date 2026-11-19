@@ -11,8 +11,7 @@ import {
 import { LANES, LANE_NAMES, type Lane } from "./config/lanes";
 import { SETTINGS } from "./config/setting-projections";
 
-// Where the lanes' switches are, each place once: the 🧪 toggles, and the
-// renderer that switches the tmux status line.
+// Where the pushed displays' switches are.
 const LANE_PLACES = [
   ...new Set(
     Object.values(LANES).map((l) => settingMenuPath(l.switch.setting)),
@@ -53,10 +52,6 @@ export const EDIT_MODE_HELP = [
 // "Animation lanes". Each lane draws the bar faster than Claude Code reruns
 // its statusline (once a second at best), from frames the daemon pushes.
 export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
-  band: [
-    "animates the bar in the band above the prompt, through a Claude Code mod",
-    "requires the candybar-band mod to be installed and loaded in Claude Code",
-  ],
   statusline: [
     "animates the statusline itself, through the attach launcher shipped with cc-candybar",
     "launch Claude Code with the command printed by cc-candybar --help",
@@ -64,10 +59,6 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
   pane: [
     "animates the bar in a tmux pane under this session's",
     "on: opens that pane · off: closes it",
-  ],
-  tmuxStatus: [
-    "draws the bar in the tmux status line, while this session's pane is the one it shows",
-    "tmux: the daemon draws it there · claude: puts the status line back as it was",
   ],
 };
 
@@ -126,10 +117,8 @@ Subcommands:
                            ~/.claude/settings.json. Re-run to update.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
-  url-handle URL           Internal — the tmux status line's click binding
-                           runs it. Sends a cc-candybar:// link to the daemon
-                           as a click. A link clicked in a terminal goes
-                           through the URL handler app instead.
+  url-handle URL           Send a cc-candybar:// link to the daemon as a
+                           click. Terminal links use the URL handler app.
   plugin install SOURCE    Install a repository's plugins into
                            $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
                            local path, a GitHub slug (owner/repo) or a git URL,

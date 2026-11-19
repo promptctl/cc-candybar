@@ -63,13 +63,13 @@ From the state `createDaemon` builds in `src/daemon/daemon.ts`:
 | Goes to | State |
 |---|---|
 | Gather | `payloadProviders` and its services, `watcherRegistry` for sources, `fileEvents`, `refreshLedger`, source registries, plugin storage, the tmux connections that replace `paneVisibility` |
-| Renderer | `sessionState`, `settingsHistory`, `navigationHistory`, `effectSessions`, `renderWarnings`, `menuIdle`, `linkSigner`, `frameFeeds`, `tmuxStatusLines`, `laneSetups`, `runs`, `renderSightings`, doctor stores |
+| Renderer | `sessionState`, `settingsHistory`, `navigationHistory`, `effectSessions`, `renderWarnings`, `menuIdle`, `linkSigner`, `frameFeeds`, `runs`, `renderSightings`, doctor stores |
 | Split | `renderCache`: config, compile and views go to the renderer, source registries and storage to Gather. It's the hardest piece |
 | One per process | `stats`, `limits`, `binaryWatch`, shutdown state |
 
 Today's daemon is therefore closer to a renderer than to Gather, and most of its code stays where it is. Every surface still connects to a renderer. Feeds, surfaces and surface setup keep working as they do, because they stay together in one process with the requests that feed them.
 
-The tmux status line is one more surface of a renderer. A request takes it, so the renderer that answers Claude Code's client holds it, and the restore record tmux itself keeps already covers that renderer's death. It differs from other surfaces only in how a click travels, covered in [areas/clicks.md](areas/clicks.md).
+The host maintains the tmux pane from effective settings. The ordinary statusline and tmux pane both deliver clicks through the link handler.
 
 `docs/design/inventory/verbs.md` classifies some of this differently, because it was written for an earlier cut. This table overrides it.
 

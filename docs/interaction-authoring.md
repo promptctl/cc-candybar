@@ -2476,7 +2476,7 @@ Give the second its own id and each copy's menu opens on its own:
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 `variation`, `shade`, `autoWrap`, `padding`, `menuTimeout`,
-`transitions`, `animationSpeed`, `renderer`, `experimentalBand`, `experimentalStatusline`,
+`transitions`, `animationSpeed`, `experimentalStatusline`,
 `experimentalPane`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a

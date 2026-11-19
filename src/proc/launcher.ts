@@ -86,14 +86,8 @@ export const LAUNCH_CATEGORIES = [
   // session's pane sits, twice a second, and the pane's height when the frame's
   // changes. Never in the daemon.
   "bar-pane.tmux",
-  // What a lane's toggle starts (src/daemon/lane-edge.ts), on the click: the
-  // bar pane's tmux calls and the typing of the restart into a shell; the
-  // `claude plugin` commands that install the band mod; and the process table
-  // a restart under cc-attach reads the session's Claude Code from. Clicks a
-  // person makes, each one a handful of spawns, so no rate limit.
+  // The host lifecycle of a tmux bar pane.
   "lane.tmux",
-  "lane.claude",
-  "lane.process",
   // A renderer's own process (src/daemon/renderer-process.ts): one channel at
   // a time, started as its daemon arms and again after one ends, paced by the
   // supervisor's backoff, so no rate limit.
@@ -102,12 +96,7 @@ export const LAUNCH_CATEGORIES = [
   // more each time a lost one is replaced. Metered for its spawn alone, so
   // every replacement counts in daemon-stats.
   "lifeline",
-  // The tmux status line lane (src/daemon/tmux-status.ts): the daemon's own
-  // writes of a shown bar into its tmux status line, one per frame pushed
-  // while the pane is the one a status line shows, and the reads and writes
-  // that lay the status line out and put it back. Paced by the frames, so no
-  // rate limit.
-  "tmux-status",
+  "tmux-status-migration",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

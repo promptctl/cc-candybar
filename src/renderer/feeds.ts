@@ -395,7 +395,6 @@ export class Feeds {
     this.schedule(feed, drawn.bar, drawAt, tick);
     return {
       session: feed.sessionId,
-      bar: drawn.bar,
       answers: drawn.answers,
     };
   }

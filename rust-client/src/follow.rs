@@ -1,9 +1,9 @@
 // `cc-candybar follow --lane <lane> --session <id>`: a named session's frames,
 // relayed for whatever draws them faster than Claude Code reruns a statusline
-// — the band mod's per-session child (mod/hooks/register.tsx), a whole Node
+// — the native stream client, so a whole Node
 // process before this. Each message the daemon sends the lane's subscriber is
 // one line on stdout, as it was sent: the daemon encodes each lane's frames
-// (src/daemon/lane-frames.ts), so this relays bytes and decides only what a
+// (src/daemon/frame-feed.ts), so this relays bytes and decides only what a
 // stream's end calls for.
 //
 // It mirrors the Node follower (src/daemon/frame-follow.ts,
@@ -23,7 +23,7 @@ use serde::Deserialize;
 use crate::{obtain_daemon_kick, read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
-const LANE_NAMES: [&str; 4] = ["band", "statusline", "pane", "tmuxStatus"];
+const LANE_NAMES: [&str; 2] = ["statusline", "pane"];
 // [LAW:one-source-of-truth] Mirror src/daemon/frame-follow.ts.
 const RECONNECT_FIRST_MS: u64 = 250;
 const RECONNECT_MAX_MS: u64 = 2000;
@@ -177,8 +177,8 @@ enum Said {
 // [LAW:types-are-the-program] Mirrors worthSaying in src/frames-cli.ts: every
 // frame, and any other event that differs from the last thing said. So a state
 // that persists across retries is said once, and every change is said — a
-// refusal after a fault is written again, so the band, which clears what
-// stderr said at the next stdout line, always gets that line.
+// refusal after a fault is written again, so a consumer clearing stderr
+// on the next stdout line sees the changed state.
 fn worth_saying(last: &Said, next: &Said) -> bool {
     match (last, next) {
         (_, Said::Frame) => true,
@@ -445,23 +445,23 @@ mod tests {
     #[test]
     fn a_well_formed_subscription_parses_in_either_spelling() {
         for args in [
-            argv(&["--lane", "band", "--session", "s-1"]),
-            argv(&["--lane=band", "--session=s-1"]),
+            argv(&["--lane", "statusline", "--session", "s-1"]),
+            argv(&["--lane=statusline", "--session=s-1"]),
         ] {
             let parsed = parse_args(&args).unwrap();
-            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("band", "s-1"));
+            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("statusline", "s-1"));
         }
     }
 
     #[test]
     fn a_subscription_this_client_could_not_send_well_formed_is_refused() {
-        let lanes = "--lane needs one of band, statusline, pane, tmuxStatus";
+        let lanes = "--lane needs one of statusline, pane";
         for (args, why) in [
             (argv(&["--session", "s"]), lanes),
             (argv(&["--lane", "everywhere", "--session", "s"]), lanes),
-            (argv(&["--lane", "band"]), "--session needs a session id"),
-            (argv(&["--lane", "band", "--session", ""]), "--session needs a session id"),
-            (argv(&["--lane", "band", "--session", "s", "--format", "band"]), "unknown option \"--format\""),
+            (argv(&["--lane", "statusline"]), "--session needs a session id"),
+            (argv(&["--lane", "statusline", "--session", ""]), "--session needs a session id"),
+            (argv(&["--lane", "statusline", "--session", "s", "--format", "ansi"]), "unknown option \"--format\""),
         ] {
             assert_eq!(parse_args(&args).err().as_deref(), Some(why), "{args:?}");
         }
@@ -469,6 +469,6 @@ mod tests {
 
     #[test]
     fn usage_names_every_lane() {
-        assert!(usage().starts_with(&format!("{USAGE_HEAD} <band|statusline|pane|tmuxStatus> --session <id>")));
+        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane> --session <id>")));
     }
 }

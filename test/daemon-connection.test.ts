@@ -32,10 +32,8 @@ import {
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { barOf } from "./helpers/drawn-frame";
-import { LANE_FRAMES } from "../src/daemon/lane-frames";
 import { LANE_NAMES } from "../src/config/lanes";
 import { renderFailed } from "../src/daemon/foundations/render-answers";
-import { renderFailedFrame, type Frame } from "../src/render/frame";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";
 import { openedOn, type Opened } from "./helpers/opened-connection";
@@ -683,8 +681,8 @@ describe("a connection over a stream", () => {
       expect(daemon.stats.requestsTimedOut).toBe(0);
       expect(ended()).toBe(false);
 
-      subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
-      subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
+      subscriptions[0]!.frame(JSON.stringify(ANSWER));
+      subscriptions[0]!.frame(JSON.stringify(ANSWER));
       await settled();
       expect(received).toEqual([ANSWER, ANSWER]);
     });
@@ -731,8 +729,7 @@ describe("a connection over a stream", () => {
     });
 
     // [LAW:no-silent-failure] On a stream a render failure is a frame, which
-    // a follower draws in its lane's shape (the band's mod reads anything
-    // else as a daemon of another build): ending the stream on it would read
+    // the follower can draw. Ending the stream on it would read
     // as a restart, and the follower would resubscribe into the same failure.
     test.each(LANE_NAMES)(
       "a frame past the cap on the %s lane is pushed as that lane draws a render that failed, and the stream goes on",
@@ -745,27 +742,21 @@ describe("a connection over a stream", () => {
         send({ ...SUBSCRIBE, lane });
         await settled();
         const huge = "x".repeat(MAX_FRAME_BYTES);
-        const bar = barOf([{ text: huge }]);
         const json = JSON.stringify({ ok: true, output: huge });
-        subscriptions[0]!.frame(bar, json);
-        subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
+        subscriptions[0]!.frame(json);
+        subscriptions[0]!.frame(JSON.stringify(ANSWER));
         await settled();
         // The renderer's own render failure (src/renderer/draw-bar.ts): its
         // bar, and its RENDER_FAILED answer, naming why.
         let failed!: ReturnType<typeof renderFailed>;
         try {
-          encodeJsonFrame(LANE_FRAMES[lane](bar, json));
+          encodeJsonFrame(json);
         } catch (e) {
           failed = renderFailed(e);
         }
-        const drawn = (frame: Frame, answer: Response): unknown =>
-          JSON.parse(LANE_FRAMES[lane](frame, JSON.stringify(answer)));
         expect(failed.error).toContain("byte cap");
         expect({ received, ended: ended() }).toEqual({
-          received: [
-            drawn(renderFailedFrame(failed.error), failed),
-            drawn(barOf(), ANSWER),
-          ],
+          received: [failed, ANSWER],
           ended: false,
         });
         expect(unsubscribe).not.toHaveBeenCalled();
@@ -887,7 +878,7 @@ describe("a connection over a stream", () => {
       // first frame fills the stream.
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(barOf(), JSON.stringify(resp));
+        subscriptions[0]!.frame(JSON.stringify(resp));
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();

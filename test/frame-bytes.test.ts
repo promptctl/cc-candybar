@@ -20,8 +20,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { LANE_FRAMES } from "../src/daemon/lane-frames";
-import { textOf, ansiOf, renderFailedFrame, type Frame } from "../src/render/frame";
+import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
@@ -53,16 +52,11 @@ const PAYLOAD = {
   },
 };
 
-// What a subscriber of each lane that draws runs receives for a bar, beside the
-// bar's bytes. `json` is the response the daemon sends: a bar and its newline
-// (`composeBar`).
+// The ANSI shared by the streamed displays.
 function lanes(frame: Frame) {
   const ansi = ansiOf(frame);
-  const json = JSON.stringify({ ok: true, output: `${ansi}\n` });
   return {
     ansi,
-    band: LANE_FRAMES.band(frame, json),
-    tmuxStatus: LANE_FRAMES.tmuxStatus(frame, json),
   };
 }
 
@@ -234,19 +228,5 @@ describe.each(DEPTHS)("the bytes of every lane at %s", (depth) => {
     for (const { seconds, drawn } of reachFrames(depth)) {
       expect(lanes(drawn)).toMatchSnapshot(`+${seconds}s`);
     }
-  });
-});
-
-describe("a render that failed", () => {
-  const error = "the draw threw";
-  const bar = renderFailedFrame(error);
-  const json = JSON.stringify({ ok: false, error, code: "RENDER_FAILED" });
-
-  test("the band draws the statusline's error glyph", () => {
-    expect(LANE_FRAMES.band(bar, json)).toMatchSnapshot();
-  });
-
-  test("the tmux status line draws it too", () => {
-    expect(LANE_FRAMES.tmuxStatus(bar, json)).toMatchSnapshot();
   });
 });

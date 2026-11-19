@@ -1,6 +1,4 @@
-// While a lane draws a session's bar somewhere other than its statusline —
-// the band above the prompt (A), a tmux pane or the tmux status line (C) — the
-// statusline shows one small row instead of a second copy of the bar: a button
+// While the tmux pane draws the bar, Claude Code shows a handoff row: a button
 // that draws the bar back in Claude Code's statusline, in case the place the
 // lane draws it has broken, and the diagnostics indicator beside it, so an
 // error is seen even where the lane's bar is not.

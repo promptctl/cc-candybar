@@ -658,7 +658,7 @@ Every other bundled segment (`directory`, `model`, `version`, `sessionId`, `sess
 
 ## Diagnostics
 
-Every error, warning and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline, in every lane, and in the tmux status line. `src/render/diagnostics.ts`.
+Every error, warning and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline or the tmux pane. `src/render/diagnostics.ts`.
 
 ```
  🍫 ⚠ 2  polled  ~/c/cc-candybar  ⎇ main

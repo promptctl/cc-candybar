@@ -176,12 +176,12 @@ describe("every {{ menu }} the bundled default renders", () => {
     const rig = await openConfigMenu();
     await rig.clickLabel(rig.render(), "🧪 toggles");
     const out = rig.render();
-    for (const label of ["🧪 band (A)", "🧪 statusline (B)", "🧪 tmux pane (C)"]) {
+    for (const label of ["🧪 statusline (B)", "🧪 tmux pane (C)"]) {
       expect(textOf(out)).toContain(`☐ ${label}`);
     }
     expect(ansiOf(out)).toMatchSnapshot("toggles open");
-    await rig.clickLabel(out, "🧪 band (A)");
-    expect(rig.sessionState.get(SID, "experimentalBand")).toBe("true");
+    await rig.clickLabel(out, "🧪 statusline (B)");
+    expect(rig.sessionState.get(SID, "experimentalStatusline")).toBe("true");
   });
 
   // [LAW:verifiable-goals] The affordance the ticket is about. These bytes

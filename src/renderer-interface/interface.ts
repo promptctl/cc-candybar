@@ -27,9 +27,7 @@ import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
-import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
-import type { Answered } from "../daemon/foundations/sighting-roles";
 import type { RenderOrigin } from "../config-hint";
 import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
@@ -240,7 +238,7 @@ export type Event =
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
 // derives it from its own sources: each lane's subscribers and whether any of
-// them draws the bar now (a tmux status line showing the session's pane), and
+// them draws the bar now, and
 // whether the session's pane is on a screen.
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
@@ -327,21 +325,7 @@ export interface RunRefresh {
   readonly folder: string;
 }
 
-// A session as a lane's setup needs it, beyond its pane: its config's
-// directory and its Claude Code directory, which the `claude` CLI runs under;
-// its conversation, as Claude Code names it in the statusline JSON, which a
-// restart resumes from and which a session has none of until its first
-// message; and whether Claude Code has answered in it, by the one mark it
-// leaves (`answeredOf`).
-export interface LaneSession {
-  readonly projectDir: string;
-  // Null for the default directory: the hint names one only when set.
-  readonly claudeConfigDir: string | null;
-  readonly transcript: string;
-  readonly answered: Answered;
-}
-
-// [LAW:types-are-the-program] What a click or a lane switch asks done in the
+// [LAW:types-are-the-program] What a click asks done in the
 // world, each named by its operation and carrying exactly what that operation
 // needs: no free-form command, so the safety of a slash line or a run is the
 // type's. An act's session is the bar its failure shows on; a copy or an open
@@ -390,36 +374,6 @@ export type Act = { readonly id: EffectId } & (
       readonly origin: RenderOrigin;
       readonly dir: string;
       readonly answer: RepoAnswer;
-    }
-  | {
-      // Claude Code in the pane ended and started again under the attach
-      // launcher, on the same session.
-      readonly kind: "restart-claude";
-      readonly session: SessionId;
-      readonly pane: TmuxHint;
-      readonly at: LaneSession;
-    }
-  | {
-      // A pushed surface turned on or off: the bar pane split under the
-      // session's pane, or closed.
-      readonly kind: "surface";
-      readonly session: SessionId;
-      readonly surface: "pane";
-      readonly on: boolean;
-      readonly pane: TmuxHint;
-    }
-  | {
-      // The band mod installed and loaded into the session's Claude Code.
-      // Off, it draws nothing, so turning it off asks nothing. Only its
-      // `/reload-plugins` is typed into a pane, so it carries the session's
-      // pane or why it has none: outside tmux, the mod still installs, and
-      // the session is told to type that line itself.
-      readonly kind: "surface";
-      readonly session: SessionId;
-      readonly surface: "band";
-      readonly on: true;
-      readonly pane: SessionPane;
-      readonly at: LaneSession;
     }
 );
 
@@ -484,14 +438,11 @@ export interface Answers {
   readonly statusline: string;
 }
 
-// A frame a feed drew, for the session's subscribers: the bar, which a lane
-// drawing it in tmux encodes, and its answers.
+// A frame a feed drew, for the session's subscribers.
 // [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
 // is the host's to judge, per subscriber, against what that one was sent.
 export interface PushedFrame {
   readonly session: SessionId;
-  // Read through `parseFrame`: its Infinity crosses as null.
-  readonly bar: WireFrame;
   readonly answers: Answers;
 }
 

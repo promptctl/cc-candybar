@@ -351,16 +351,12 @@ export function viewedIndex(
 }
 
 // [LAW:one-source-of-truth] The viewer's ceiling: a bar that eats the screen
-// is its own failure, so the viewer is at most this many rows, at most the
-// client's reported rows, and at most what the surface drawing it shows (a
-// lane's own ceiling, for a feed's frame). Rows absent (an older client, or no
+// is its own failure, so the viewer is at most this many rows and at most
+// the client's reported rows. Rows absent (an older client, or no
 // TTY on stderr) reads as "no client ceiling", not as a guess.
 export const MAX_VIEWER_ROWS = 20;
-export function viewerRowCap(
-  termRows: number | undefined,
-  surfaceRows: readonly number[],
-): number {
-  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
+export function viewerRowCap(termRows: number | undefined): number {
+  return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS);
 }
 
 export interface DiagnosticGeometry {

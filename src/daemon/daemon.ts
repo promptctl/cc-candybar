@@ -21,9 +21,7 @@ import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import type { Gates } from "./foundations/gates";
-import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
-import { stableAttachPreload } from "../install/index.js";
 import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
@@ -38,18 +36,16 @@ import type { DoctorMachineEdge } from "../doctor/ports";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
 import { FrameFeeds } from "./frame-feed.js";
-import { type Lane, type LaneSwitches } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
   LIST_PANES_FORMAT,
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
-import { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
-import { shellWord } from "../shell-word.js";
+import { RetiredTmuxStatus } from "./retired-tmux-status.js";
+import type { BarPaneEdge } from "./lane-setup.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
-import type { LaneEdge } from "./lane-setup.js";
 import { Acts } from "./acts.js";
 import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
@@ -74,9 +70,6 @@ import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
-import { followingOf } from "../renderer-interface/interface.js";
-import type { SessionId } from "./foundations/session-id.js";
-import type { SessionEnvironment } from "./foundations/session-env.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -85,8 +78,7 @@ export interface RunningBundle {
   readonly digest: string | null;
   // The file the daemon loaded, used to identify its installation.
   readonly path: string;
-  // What a bar pane runs, and what a click in a tmux status line runs to hand
-  // the click back.
+  // What a bar pane runs.
   readonly node: readonly string[];
   // The files the binary watch stats: a change to any of them restarts the
   // daemon.
@@ -121,18 +113,7 @@ export interface DaemonAdapters {
     stateDir: string,
   ) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
-  // What the daemon asks the machine about a pid: whether a process is there, and
-  // when it started.
-  readonly probe: (launcher: Launcher) => ProcessProbe;
-  // What turning an animation lane on or off does to the machine: it is told
-  // which lanes a session's feed follows, and ends its waits with the daemon.
-  readonly laneEdge: (
-    launcher: Launcher,
-    following: (sessionId: SessionId) => ReadonlySet<Lane>,
-    closing: AbortSignal,
-    probe: ProcessProbe,
-    environmentOf: (session: SessionId) => SessionEnvironment,
-  ) => LaneEdge;
+  readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   // [LAW:one-source-of-truth] The link key, asked for at each use: every
   // click is opened with it and every renderer draws with it.
   readonly linkKey: () => Asked<Buffer>;
@@ -315,8 +296,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       restateFaults();
     },
   });
-  // The lane edge's process probe is supplied by the host.
-  const probe = inputs.probe(launcher);
   const linkSigner = linkSignerOver(inputs.linkKey);
   // [LAW:single-enforcer] The renderer's stored state, held here: every
   // renderer is built from what it holds then, and every turn's stored writes
@@ -437,57 +416,25 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     launch: clickLaunchVia(launcher),
     claudeInput: inputs.claudeInput(launcher),
     run: (run) => runs.start(run),
-    lanes: {
-      edge: inputs.laneEdge(
-        launcher,
-        // [LAW:one-source-of-truth] The lanes following a session, read as the
-        // viewers the renderer is handed are.
-        (sessionId) => followingOf(frameFeeds.viewersOf(sessionId)),
-        closing.signal,
-        probe,
-        (session) => sessionBook.environmentOf(session),
-      ),
+    barPane: {
+      edge: inputs.barPaneEdge(launcher),
       // A bar pane runs this bundle under the node running it now, with the
       // flags it runs with (tsx's loader, under the test harness).
       host: {
         bundle: bundle.path,
         node: bundle.node,
         socket: paths.socket,
-        preload: stableAttachPreload(bundle.path, host),
       },
     },
     closing: () => closing.signal.aborted,
     log,
   });
-  // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
-  // state (src/daemon/tmux-status.ts).
-  const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
-    edge: {
-      run: (socket, args, stdin) =>
-        runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
-    },
-    subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
-    sessionInPane: (socket, pane) =>
-      frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
-    handler: [
-      `CC_CANDYBAR_SOCKET=${shellWord(paths.socket)}`,
-      ...[...bundle.node, bundle.path].map(shellWord),
-      "url-handle",
-    ].join(" "),
-    owner: paths.socket,
+  const retiredTmuxStatus = new RetiredTmuxStatus(
+    paths.socket,
+    (socket, args, stdin) =>
+      runTmuxAsync(launcher, { socket }, "tmux-status-migration", args, stdin),
+    clock,
     log,
-  });
-  // [LAW:single-enforcer] The rows the renderer declares on, followed to each
-  // session's newest pane.
-  const declaredStatusLines = new DeclaredStatusLines(
-    tmuxStatusLines,
-    (sessionId) => frameFeeds.latest(sessionId)?.hints.tmux,
   );
   const declaredBarPanes = new DeclaredBarPanes(
     (sessionId) => {
@@ -535,11 +482,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       ]),
     // The servers of the sessions someone is watching.
     sockets: () => new Set(frameFeeds.watchedRequests().flatMap(tmuxServersOf)),
-    // A status line's view moves which held pane draws its session.
-    onAnswer: (socket, status) => {
-      tmuxStatusLines.answered(socket, status);
-      frameFeeds.announce();
-    },
     onChange: () => frameFeeds.announce(),
     intervalMs: 1000,
     log,
@@ -683,7 +625,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const parts: DaemonParts = {
     closing: closing.signal,
     home: host.home,
-    tmp: host.tmp,
     launcher,
     log,
     clock,
@@ -699,8 +640,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     payloadProviders,
     runs,
     sourceRuns,
-    tmuxStatusLines,
-    declaredStatusLines,
+    retiredTmuxStatus,
     frameFeeds,
     limits,
     collector,
@@ -714,17 +654,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           collector.subscribed(subscriptions);
           frameFeeds.switched(subscriptions.lanes);
           declaredBarPanes.declare(subscriptions.lanes);
-          // [LAW:one-source-of-truth] The rows held are the sessions whose
-          // view switches the tmux status line on.
-          declaredStatusLines.declare(
-            (
-              Object.entries(subscriptions.lanes) as Array<
-                [SessionId, LaneSwitches]
-              >
-            ).flatMap(([session, lanes]) =>
-              lanes.tmuxStatus ? [session] : [],
-            ),
-          );
         },
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
@@ -800,12 +729,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // close's.
         ["renderer wake close", () => parts.renderer.closeWake()],
         ["renderer close begins", () => link.beginClose()],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        // [LAW:no-ambient-temporal-coupling] Before any of the renderer's turns:
-        // one waits behind whatever turn the renderer is in, which can outlast
-        // shutdown's backstop, while this waits only on its own tmux calls.
-        ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
         // every click ahead of it lands whole, and none behind it begins.
         ["renderer journal close", rendererStep("close-journal")],

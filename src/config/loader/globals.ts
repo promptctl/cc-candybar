@@ -16,6 +16,7 @@ import {
   describeType,
   isPlainObject,
   optionalBooleanSpec,
+  optionalEnumSpec,
   record,
   recordJson,
   type FieldSpec,
@@ -26,7 +27,6 @@ import {
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
 import type { ControlDomain } from "../setting-control.js";
-import { settingMenuPath } from "../menu-places.js";
 
 // [LAW:one-source-of-truth] THE globals field specs, read off the globals
 // rows (src/config/globals-fields.ts). Both the top-level `globals:` schema and
@@ -37,24 +37,36 @@ const LIVE_GLOBALS_FIELDS = Object.fromEntries(
   Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec]),
 ) as FieldSpecMap<Globals>;
 
-// [LAW:parse-dont-validate] Accept the retired field in old configs and discard
-// it at the config boundary. It cannot enter the Globals used by the renderer.
-const legacyUpdateNotice = optionalBooleanSpec();
-const ignoredUpdateNotice: FieldSpec<never> = {
-  ...legacyUpdateNotice,
-  json: {
-    ...legacyUpdateNotice.json,
-    deprecated: true,
-    description: "Obsolete. Candybar no longer offers updates in the bar.",
-  },
-  parse(ctx, path, field, raw) {
-    legacyUpdateNotice.parse(ctx, path, field, raw);
-    return undefined;
-  },
-};
+// [LAW:parse-dont-validate] Accept retired fields where installed configs
+// declare them. Their values never enter the renderer's Globals.
+function retired<T>(spec: FieldSpec<T>, description: string): FieldSpec<never> {
+  return {
+    ...spec,
+    json: { ...spec.json, deprecated: true, description },
+    parse(ctx, path, field, raw) {
+      spec.parse(ctx, path, field, raw);
+      return undefined;
+    },
+  };
+}
 const GLOBALS_FIELDS = {
   ...LIVE_GLOBALS_FIELDS,
-  updateNotice: ignoredUpdateNotice,
+  updateNotice: retired(
+    optionalBooleanSpec(),
+    "Obsolete in-bar update notice.",
+  ),
+  experimentalBand: retired(
+    optionalBooleanSpec(),
+    "Obsolete Claude Code band mod.",
+  ),
+  experimentalTmuxStatus: retired(
+    optionalBooleanSpec(),
+    "Obsolete tmux status renderer.",
+  ),
+  renderer: retired(
+    optionalEnumSpec(["claude", "tmux"]),
+    "Obsolete tmux status renderer.",
+  ),
 };
 
 // The domain a control changing `field` from the bar ranges, as its row
@@ -195,10 +207,6 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
   look: 'it was renamed "style" — write the same name as style: "<name>"',
   progression:
     'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  // The tmux status line became a renderer the bar fully supports, so its
-  // experimental toggle is a value of the renderer setting.
-  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
-  experimentalTmuxStatus: `it became the renderer setting — write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} › renderer, from a session inside tmux)`,
   // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
   // nerdFont check names the font that lacks them.
   charset:

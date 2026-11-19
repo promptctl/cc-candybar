@@ -9,11 +9,10 @@ import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
-import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
-import { productionLaneEdge } from "./lane-edge.js";
+import { productionBarPaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
@@ -40,16 +39,7 @@ export function productionAdapters(
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
-    probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe, environmentOf) =>
-      productionLaneEdge(
-        launcher,
-        following,
-        closing,
-        machine,
-        probe,
-        environmentOf,
-      ),
+    barPaneEdge: productionBarPaneEdge,
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,

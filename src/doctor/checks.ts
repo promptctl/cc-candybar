@@ -881,15 +881,6 @@ function handlerAppProblems(opener: Asked<HandlerApp | null>): string[] {
       ];
 }
 
-// What a run asked without a link leaves unjudged of the handler.
-const UNDELIVERED: Readonly<
-  Record<Extract<UrlHandlerFacts, { kind: "registered" }>["via"], string>
-> = {
-  "tmux-status":
-    "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler, so whether a clicked link reaches the daemon is not judged — click 🩺 doctor in the bar itself to judge it",
-  command: notJudged("whether a clicked link reaches the daemon"),
-};
-
 // "The URL handler works" (brandon-doctor-v62x.a1z): a `cc-candybar://` link
 // comes back through the forwarder app. In the bar the doctor's own click is
 // that link; a run asked without one judges what is registered for the
@@ -907,7 +898,7 @@ const urlHandler: Check = {
         return verdict.ok
           ? {
               ok: true,
-              note: `the forwarder app opens cc-candybar://; ${UNDELIVERED[urlHandler.via]}`,
+              note: `the forwarder app opens cc-candybar://; ${notJudged("whether a clicked link reaches the daemon")}`,
             }
           : verdict;
       }
@@ -1301,9 +1292,7 @@ function linkProblems(
 // through. A click on the bar's 🩺 doctor is such a link, drawn and clicked,
 // so a run it asked for is its own proof — and the click files its terminal
 // (src/doctor/clicked-terminals.ts), where the command, which reasons from
-// what tmux and the terminal say about themselves, reads it. A click on the
-// tmux status line's 🩺 is tmux's own, no link, so it reasons as the command
-// does.
+// what tmux and the terminal say about themselves, reads it.
 const links: Check = {
   name: "links",
   label: "links",

@@ -189,17 +189,6 @@ export interface EvaluatedRun {
   readonly env: Readonly<Record<string, string>>;
 }
 
-// A click on one of the ranges the daemon draws in a tmux status line (lane
-// C, src/daemon/tmux-status.ts), as the server's MouseDown1Status binding
-// sends it. Args: `[socket, pane number, range]` — the daemon looks the range
-// up in the frame it drew there and runs the link it marks, so no link rides
-// the URL. Not a leaf verb: the link's own verb is the click's.
-export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
-// [LAW:one-source-of-truth] How every status-line click starts: the binding
-// writes it, and the host reads a click that starts so as a range, never a
-// link, which carries no signature because tmux expands it.
-export const STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
-
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.
@@ -249,8 +238,7 @@ function saidCopy(text: string): string {
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
-// list these ride in, and tmux-status-click arrives as a whole URL from
-// outside a draw, so neither is ever an effect.
+// list these ride in, so dispatch is never an effect.
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
     pairs.flatMap((key, i) =>
@@ -430,7 +418,7 @@ export function splitVerb(s: string): ParsedEffect {
 
 // [LAW:parse-dont-validate] A whole `cc-candybar://` link as a click, or why
 // it is not one: the daemon reads every link this way, whether the URL
-// handler app forwarded it raw or a tmux status line's range marked it.
+// handler app forwarded it raw.
 export type HandlerUrl =
   | { readonly ok: true; readonly verb: string; readonly value: string }
   | { readonly ok: false; readonly problem: string };

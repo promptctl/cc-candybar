@@ -1,6 +1,4 @@
-// A tmux server of a test's own: a socket in the test's directory, one session
-// whose status options a daemon lays out and puts back, and a config that draws
-// there. The daemon's status-line layout is only real on a real server.
+// A test-owned tmux server with one session and a private socket.
 
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -12,12 +10,13 @@ export const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
 
 export interface PrivateTmux {
   readonly socket: string;
-  // A config drawing one segment in the tmux status line.
+  // A config from before the tmux status surface was retired.
   readonly config: string;
   // What a client in the session's one pane reports.
   readonly hints: ClientHints;
   // The session's own options, as tmux shows them now.
   own(): string;
+  run(...args: string[]): string;
   // Ends the server: its one session was its last.
   kill(): void;
 }
@@ -36,7 +35,18 @@ export function privateTmux(dir: string): PrivateTmux {
     config,
     `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a mark' } }, root: { h: ['mark'] } }`,
   );
-  tmux("-f", "/dev/null", "new-session", "-d", "-s", "bar", "-x", "120", "-y", "40");
+  tmux(
+    "-f",
+    "/dev/null",
+    "new-session",
+    "-d",
+    "-s",
+    "bar",
+    "-x",
+    "120",
+    "-y",
+    "40",
+  );
   const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
   return {
     socket,
@@ -47,6 +57,7 @@ export function privateTmux(dir: string): PrivateTmux {
       tmux: { socket, pane, truecolor: null },
     },
     own: () => tmux("show-options", "-t", "bar"),
+    run: tmux,
     kill: () => {
       spawnSync("tmux", ["-S", socket, "kill-session", "-t", "bar"]);
     },

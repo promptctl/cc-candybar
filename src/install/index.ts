@@ -460,11 +460,8 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
 // dispatch and NO direct disk mutation. The daemon is the only writer of
 // click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
 // daemon on a transient failure is the only recovery, and it's
-// fire-and-forget so the next click hits a warm daemon. The tmux status
-// line's click binding runs it (src/daemon/tmux-status.ts), with a command
-// the daemon composes from its own bundle, so it cannot go stale; a link
-// click in a terminal never comes this way, since the URL handler app forwards
-// the raw link to the daemon itself.
+// fire-and-forget so the next click hits a warm daemon. Terminal links use
+// the URL handler app, which forwards them directly.
 //
 // A `permanent` daemon outcome (BAD_REQUEST for an unknown verb,
 // VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's

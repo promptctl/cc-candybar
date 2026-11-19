@@ -9,9 +9,8 @@ import type { SessionId } from "./foundations/session-id.js";
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
-import { renderFailed } from "./foundations/render-answers.js";
+import { framed, renderFailed } from "./foundations/render-answers.js";
 import { NOTHING_TO_SETTLE } from "./statusline-answer.js";
-import { laneFramed } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
   classifyInbound,
@@ -417,7 +416,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     }
   }
 
-  function framed(frame: unknown): "done" {
+  function receivedFrame(frame: unknown): "done" {
     const inbound = classifyInbound(frame);
     on({ kind: "read", frame: inbound.kind });
     // [LAW:single-enforcer] A handler that throws before its promise is one
@@ -498,12 +497,14 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
       // [LAW:no-silent-failure] A frame that cannot be pushed (past the cap)
-      // is pushed as the render failure naming why, in its lane's shape, a
-      // frame the follower draws as it draws any render that failed. Ending
-      // the stream instead would read to the follower as a daemon restart,
-      // and it would resubscribe into the same failure.
-      frame: (bar, json) => {
-        const { frame, unsent } = laneFramed(lane, bar, json);
+      // is pushed as the render failure naming why. Ending the stream
+      // would cause subscribers to reconnect into the same failure.
+      frame: (json) => {
+        const { frame, unsent } = framed(
+          json,
+          (answer) => answer,
+          JSON.stringify,
+        );
         if (unsent !== null)
           daemon.log("error", `pushed frame unsendable: ${inspect(unsent)}`);
         push(frame);
@@ -514,7 +515,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     on({ kind: "attached", unsubscribe });
   }
 
-  sock.on("data", makeFrameReader(framed, unparsed));
+  sock.on("data", makeFrameReader(receivedFrame, unparsed));
   sock.on("error", (err) => {
     daemon.log("warn", `socket error: ${err.message}`);
   });

@@ -233,9 +233,8 @@ export class DoctorRuns {
   // [LAW:one-source-of-truth] A click that arrived by a link is a link the
   // session's terminal drew and the user clicked, so it settles for good that
   // this terminal draws links: filed (src/doctor/clicked-terminals.ts) where
-  // `cc-candybar doctor` — which cannot click — reads it. Nothing is filed
-  // from a tmux status-line click (tmux ran it, no link), where nothing names
-  // the terminal, or over a list that does not read (the store answers that
+  // `cc-candybar doctor` reads it. Direct commands cannot prove the terminal
+  // delivered a link. A list that does not read also files nothing (the store answers that
   // failure, which the run reports as its own).
   // [LAW:no-silent-failure] The filing rides along with the click it came
   // with, so a write that fails is logged — and the event's `clicked=no`

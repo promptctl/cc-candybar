@@ -384,11 +384,9 @@ describe("the viewer", () => {
 
 describe("the viewer's row cap", () => {
   test("is the least of its own ceiling, the terminal's rows and every surface showing it", () => {
-    expect(viewerRowCap(undefined, [])).toBe(20);
-    expect(viewerRowCap(12, [])).toBe(12);
+    expect(viewerRowCap(undefined)).toBe(20);
+    expect(viewerRowCap(12)).toBe(12);
     // A feed's frame the tmux status line shows pages within its five rows.
-    expect(viewerRowCap(40, [5])).toBe(5);
-    expect(viewerRowCap(3, [5])).toBe(3);
   });
 });
 

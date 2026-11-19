@@ -110,15 +110,6 @@
           "minimum": 15,
           "maximum": 600
         },
-        "renderer": {
-          "enum": [
-            "claude",
-            "tmux"
-          ]
-        },
-        "experimentalBand": {
-          "type": "boolean"
-        },
         "experimentalStatusline": {
           "type": "boolean"
         },
@@ -149,7 +140,25 @@
         "updateNotice": {
           "type": "boolean",
           "deprecated": true,
-          "description": "Obsolete. Candybar no longer offers updates in the bar."
+          "description": "Obsolete in-bar update notice."
+        },
+        "experimentalBand": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete Claude Code band mod."
+        },
+        "experimentalTmuxStatus": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ],
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
         }
       },
       "additionalProperties": false
@@ -1523,15 +1532,6 @@
                 "minimum": 15,
                 "maximum": 600
               },
-              "renderer": {
-                "enum": [
-                  "claude",
-                  "tmux"
-                ]
-              },
-              "experimentalBand": {
-                "type": "boolean"
-              },
               "experimentalStatusline": {
                 "type": "boolean"
               },
@@ -1559,7 +1559,25 @@
               "updateNotice": {
                 "type": "boolean",
                 "deprecated": true,
-                "description": "Obsolete. Candybar no longer offers updates in the bar."
+                "description": "Obsolete in-bar update notice."
+              },
+              "experimentalBand": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete Claude Code band mod."
+              },
+              "experimentalTmuxStatus": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete tmux status renderer."
+              },
+              "renderer": {
+                "enum": [
+                  "claude",
+                  "tmux"
+                ],
+                "deprecated": true,
+                "description": "Obsolete tmux status renderer."
               }
             },
             "additionalProperties": false
@@ -1683,15 +1701,6 @@
           "minimum": 15,
           "maximum": 600
         },
-        "renderer": {
-          "enum": [
-            "claude",
-            "tmux"
-          ]
-        },
-        "experimentalBand": {
-          "type": "boolean"
-        },
         "experimentalStatusline": {
           "type": "boolean"
         },
@@ -1719,7 +1728,25 @@
         "updateNotice": {
           "type": "boolean",
           "deprecated": true,
-          "description": "Obsolete. Candybar no longer offers updates in the bar."
+          "description": "Obsolete in-bar update notice."
+        },
+        "experimentalBand": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete Claude Code band mod."
+        },
+        "experimentalTmuxStatus": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ],
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
         }
       },
       "additionalProperties": false
