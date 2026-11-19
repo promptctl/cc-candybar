@@ -93,7 +93,7 @@ import {
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import { signingFrames, type LinkSigner } from "../click/link-signer.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import { renderFailure } from "../daemon/foundations/render-answers";
 
@@ -109,8 +109,8 @@ export interface RendererState {
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
   readonly effectSessions: EffectSessions<RenderedLine>;
-  // [LAW:single-enforcer] The signer every link this renderer draws is
-  // signed with, over the state directory's key.
+  // [LAW:single-enforcer] The repository trust question's inner signature.
+  // The host publishes the drawn frames' clickable addresses.
   readonly linkSigner: LinkSigner;
   // Each session's idle period, which a draw reports what it showed to and
   // reads its flash from.
@@ -156,17 +156,14 @@ export function renderFrame(
       { by: "feed", fps },
       feeds,
     );
-    // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
-    // what the statusline shows alike, each link once.
-    const signed = signingFrames(parts.linkSigner);
-    const bar = signed(drawn.body);
+    const bar = drawn.body;
     const statusline = statuslineOf(
       sessionId,
       setup.state.writable,
       drawn,
       handedOffTo(lanes, following),
     );
-    const handoff = statusline === drawn.body ? null : signed(statusline);
+    const handoff = statusline === bar ? null : statusline;
     // Kept once nothing of the turn is left to throw: a frame that fails
     // part-way leaves the last frame's memory standing.
     keepDraw(parts, setup, kept);
@@ -1009,12 +1006,9 @@ export function answerRequest(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(client) === "statusline";
-  // [LAW:single-enforcer] Signed as it leaves the renderer, each link once.
-  const frame = signingFrames(parts.linkSigner)(
-    toStatusline
-      ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
-      : drawn.body,
-  );
+  const frame = toStatusline
+    ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
+    : drawn.body;
   // Kept once nothing of the turn is left to throw.
   keepDraw(parts, setup, kept);
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How

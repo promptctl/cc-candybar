@@ -22,6 +22,8 @@ import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
+import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
+import { TEST_SIGNER } from "../helpers/link-signer";
 import type { RequestFacts } from "../../src/daemon/foundations/request-event";
 import {
   BadVerbArgs,
@@ -181,6 +183,7 @@ async function answer(
       },
       NO_ACTS,
     ),
+    publishingFrames(TEST_SIGNER),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
@@ -540,6 +543,7 @@ describe("the request's wait, between its context and its request", () => {
     );
     const answering = answerStatusline(
       host,
+      publishingFrames(TEST_SIGNER),
       {
         requested: () => WORLD,
         holding: () => () => {},
