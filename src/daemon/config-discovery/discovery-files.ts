@@ -9,7 +9,7 @@ export type TextRead = Exclude<Layer["content"], { kind: "absent" }>;
 
 export interface DiscoveryFiles {
   readonly presence: typeof presence;
-  readonly directory: (path: string) => string | Unchecked;
+  readonly realpath: (path: string) => string | Unchecked;
   readonly folders: typeof listFolders;
   readonly text: (path: string) => TextRead;
   readonly worktree: typeof worktreeLink;
@@ -18,11 +18,11 @@ export interface DiscoveryFiles {
 
 export const diskFiles: DiscoveryFiles = {
   presence,
-  directory(dir) {
+  realpath(file) {
     try {
-      return fs.realpathSync.native(dir);
+      return fs.realpathSync.native(file);
     } catch (e) {
-      return { path: dir, error: (e as Error).message };
+      return { path: file, error: (e as Error).message };
     }
   },
   folders: listFolders,
@@ -48,7 +48,11 @@ export function readNamedText(
   directory: string,
   name: string,
 ): TextRead {
-  const physical = path.join(directory, path.basename(name));
+  const entry = path.join(directory, path.basename(name));
+  const resolved = files.realpath(entry);
+  // If the name cannot be resolved, the read retains its actual error. In
+  // particular a missing installed definition is reported as an open failure.
+  const physical = typeof resolved === "string" ? resolved : entry;
   const read = files.text(physical);
   return read.kind === "unreadable"
     ? { ...read, error: read.error.replace(`'${physical}'`, () => `'${name}'`) }
@@ -74,7 +78,7 @@ export function discoveryFiles(
 ): DiscoveryFiles {
   return {
     presence: oncePerPath(files.presence),
-    directory: oncePerPath(files.directory),
+    realpath: oncePerPath(files.realpath),
     folders: oncePerPath(files.folders),
     text: oncePerPath(files.text),
     worktree: oncePerPath(files.worktree),

@@ -479,7 +479,7 @@ describe("config collisions", () => {
     ]);
     const stated = observeConfigLocations(candidates, {
       presence: () => "present",
-      directory: (dir) => dir,
+      realpath: (file) => file,
     });
     expect(stated).toHaveLength(1);
     expect(stated[0]).toMatchObject({
