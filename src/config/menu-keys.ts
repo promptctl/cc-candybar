@@ -24,7 +24,7 @@
 //               the key" position magic: identity depends only on names a reader
 //               can see in the template, never on tree position.
 
-import { escapedIdent } from "./ident.js";
+import { escapedIdent, unescapedIdent } from "./ident.js";
 import {
   EDIT_NS,
   isEditModeKey,
@@ -59,10 +59,12 @@ export function menuMember(applyName: string): string {
 // [LAW:one-source-of-truth] A menu's state lives in its host's namespace: a
 // menu edit chrome hosts (its `✚` libraries, a configured placement's lists)
 // is edit mode's own, so it is minted under `edit.` and leaves with the edit.
-// No authored placement id or shared key sits there (the loader refuses both),
-// so the scope is a fact of the name alone.
-function scopeOf(name: string): string {
-  return isEditModeKey(name) ? EDIT_NS : "";
+// No authored placement id sits there and the loader refuses an authored
+// shared key that would, so the scope is a fact of the host's name, read once
+// per key and carried in it: a page cursor sits in its menu's scope.
+type MenuScope = typeof EDIT_NS | "";
+function menuScope(host: string): MenuScope {
+  return isEditModeKey(host) ? EDIT_NS : "";
 }
 
 // [LAW:single-enforcer] THE state key for a menu. Independent (no shared key):
@@ -84,14 +86,35 @@ export function menuStateKey(
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : `${scopeOf(placementId)}${MENU_NS}${escapedIdent(placementId)}.${escapedIdent(applyName)}`;
+    : `${menuScope(placementId)}${MENU_NS}${escapedIdent(placementId)}.${escapedIdent(applyName)}`;
 }
 
 // [LAW:decomposition] The shared arm of that derivation, named so the settings
 // menu and edit chrome can key an accordion of their own lists the way a
 // `{{ menu "x" (dict "key" …) }}` does.
 export function sharedMenuStateKey(sharedKey: string): string {
-  return `${scopeOf(sharedKey)}${MENU_NS}_${escapedIdent(sharedKey)}`;
+  return `${menuScope(sharedKey)}${MENU_NS}_${escapedIdent(sharedKey)}`;
+}
+
+// [LAW:one-source-of-truth] A menu's state or page key in words: the shared
+// key an accordion was named by, or the apply action and the placement a menu
+// sits on. Undefined for a key no menu derivation spells.
+export function menuOfKey(
+  key: string,
+): { readonly menu: string; readonly page: boolean } | undefined {
+  const scoped = key.slice(menuScope(key).length);
+  const page = scoped.startsWith(MENU_PAGE_NS);
+  const ns = page ? `${MENU_PAGE_NS}${MENU_NS}` : MENU_NS;
+  if (!scoped.startsWith(ns)) return undefined;
+  const rest = scoped.slice(ns.length);
+  if (rest.startsWith("_")) {
+    const shared = unescapedIdent(rest.slice(1));
+    return shared === undefined ? undefined : { menu: shared, page };
+  }
+  const [host, apply, ...more] = rest.split(".").map(unescapedIdent);
+  return host === undefined || apply === undefined || more.length > 0
+    ? undefined
+    : { menu: `${apply} on ${host}`, page };
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its
@@ -117,8 +140,9 @@ export function menuActionName(stateKey: string, member: string): string {
 // may nest under another (loader/nesting.ts), and in its menu's scope, so an
 // edit-mode list's page leaves with the edit.
 export function menuPageKey(stateKey: string): string {
-  const scope = scopeOf(stateKey);
-  return `${scope}${MENU_PAGE_NS}${stateKey.slice(scope.length)}`;
+  const at = stateKey.indexOf(MENU_NS);
+  if (at < 0) throw new Error(`"${stateKey}" is no menu's state key`);
+  return `${stateKey.slice(0, at)}${MENU_PAGE_NS}${stateKey.slice(at)}`;
 }
 
 // [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE

@@ -7,6 +7,8 @@ import { sessionIdOf, type SessionId } from "../daemon/foundations/session-id";
 import { isPlainObject } from "../config/loader/validate-core";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
+import type { DaemonLogger } from "../utils/logger";
+import { isEditModeKey } from "../config/reserved-names";
 import {
   parseSessionHistory,
   type HistoryState,
@@ -32,6 +34,32 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
         kind: "failed",
         reason: `has a ${JSON.stringify(bad)} that is not a string`,
       };
+}
+
+// [LAW:no-silent-failure] Edit mode's own keys live only in an open edit, and
+// no edit outlives the renderer, so a profile an older build stored one in
+// loads without it, and says which it dropped: one kept would reopen a panel
+// or a library on a bar with no edit.
+export function withoutEditModeKeys(
+  sessions: ReadonlyMap<SessionId, SessionPicks>,
+  log: DaemonLogger,
+): Map<SessionId, SessionPicks> {
+  return new Map(
+    [...sessions].map(([session, picks]) => {
+      const dropped = Object.keys(picks).filter(isEditModeKey);
+      if (dropped.length === 0) return [session, picks];
+      log(
+        "info",
+        `session-state load: dropped ${dropped.join(",")} — no edit outlives the renderer (session=${session})`,
+      );
+      return [
+        session,
+        Object.fromEntries(
+          Object.entries(picks).filter(([key]) => !isEditModeKey(key)),
+        ),
+      ];
+    }),
+  );
 }
 
 // [LAW:parse-dont-validate] A replacement can run a different build. A boot

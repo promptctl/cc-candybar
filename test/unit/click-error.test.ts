@@ -80,7 +80,7 @@ test("a session with no click error, or a value an older daemon wrote, holds non
   expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
     kind: "none",
   });
-  state.set(SID, "click.error", 'set-state: placement "block" refused');
+  state.set(SID, "candybar.clickError", 'set-state: placement "block" refused');
   expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
     kind: "none",
   });
@@ -97,7 +97,7 @@ test("a record an older daemon wrote with no answered mark is owed to the next r
   const state = new SessionState();
   state.set(
     SID,
-    "click.error",
+    "candybar.clickError",
     JSON.stringify({ text: "set-state: refused", at: 100 }),
   );
   expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({

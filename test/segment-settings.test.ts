@@ -325,8 +325,15 @@ describe("edit mode addresses placements by id", () => {
     children: ids.map(([name, id]) => ({ kind: "segment", name, ...(id && { id }) })),
   });
 
-  // A suffix source that hands out the given suffixes in order.
-  const suffixes = (...xs: string[]) => () => xs.shift()!;
+  // A suffix source that hands out the given suffixes in order, and fails
+  // loudly once it has none left.
+  const suffixes =
+    (...xs: string[]) =>
+    (): string => {
+      const next = xs.shift();
+      if (next === undefined) throw new Error("the test's suffixes ran out");
+      return next;
+    };
 
   test("an insertion always mints an explicit id — the segment's name and a fresh suffix — so a placement added after another went away never takes its id", () => {
     expect(mintPlacement("git", "dir", [tree(["dir"])], suffixes("a1"))).toEqual({

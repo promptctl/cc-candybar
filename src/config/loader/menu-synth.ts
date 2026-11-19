@@ -62,6 +62,7 @@ import type { ConfigIssue } from "./diagnostics.js";
 import { findKeyLine } from "./diagnostics.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 import { MENU_NS, MENU_PAGE_NS } from "../reserved-names.js";
+import type { AuthoredKey } from "./authored-keys.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -239,10 +240,13 @@ function menuIssue(ctx: ValidateCtx, path: string, message: string): void {
   ctx.issues.push({ path, message, line: findKeyLine(ctx.source, ["root"]) });
 }
 
+// Returns the accordion keys the file's `{{ menu }}` calls author, each at
+// the segment that writes it, for the load's one check of authored keys
+// (authored-keys.ts).
 export function checkMenuDecls(
   ctx: ValidateCtx,
   out: Readonly<RawDslConfig>,
-): void {
+): AuthoredKey[] {
   // [LAW:single-enforcer] The `menus.` namespace is reserved UNCONDITIONALLY — a
   // user name under it is rejected whether or not any menu is placed this load, so
   // the reservation is a stable contract ("you never author menus.*"), not a rule
@@ -333,6 +337,7 @@ export function checkMenuDecls(
   // it is checked here, where the author wrote it. The keys a call derives
   // are a fact about each PLACEMENT, so they are minted after merge
   // (synthesizePlacementMenus below), over the trees that render.
+  const keys: AuthoredKey[] = [];
   for (const [segName, { template }] of Object.entries(segments)) {
     // A delta inheriting its template declares no menus of its own: the
     // bundled template's were checked when the bundled default parsed.
@@ -340,6 +345,11 @@ export function checkMenuDecls(
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
+      if (call.kind === "ok" && call.options.key !== undefined)
+        keys.push({
+          path: `segments.${segName}.template`,
+          key: call.options.key,
+        });
       const message =
         call.kind === "issue" ? call.message : identityIssue(call.apply);
       if (message !== undefined) {
@@ -351,29 +361,7 @@ export function checkMenuDecls(
       }
     }
   }
-}
-
-// The accordion keys a file's `{{ menu }}` calls author, each at the segment
-// that writes it: the load's one check of authored keys (authored-keys.ts)
-// reads them beside the file's state keys.
-export function authoredMenuKeys(
-  out: Readonly<RawDslConfig>,
-): Array<{ readonly path: string; readonly key: string }> {
-  return Object.entries(out.segments ?? {}).flatMap(
-    ([segName, { template }]) => {
-      const calls =
-        template === undefined || !segmentReferencesMenu(template)
-          ? []
-          : parseCalls(template);
-      return calls === "parse-failed"
-        ? []
-        : calls.flatMap((call) =>
-            call.kind === "ok" && call.options.key !== undefined
-              ? [{ path: `segments.${segName}`, key: call.options.key }]
-              : [],
-          );
-    },
-  );
+  return keys;
 }
 
 // [LAW:types-are-the-program] The two apply names that cannot be a member. An

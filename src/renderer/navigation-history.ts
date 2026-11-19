@@ -5,7 +5,7 @@
 import { observable, runInAction } from "mobx";
 import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
 import { isConfirmKey } from "../config/confirm-step";
-import { isSettingKey } from "../renderer-interface/history-storage";
+import { isEditSettingKey } from "../renderer-interface/history-storage";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
 import type { StateWrite } from "../config/disclosure-nest";
 import type { SessionStateRW } from "../renderer-interface/session-state";
@@ -46,7 +46,7 @@ const MAX_SESSIONS = 32;
 // cannot be restored by visiting a prior menu.
 const isMenuKey = (key: string): boolean =>
   key !== EDIT_MODE_KEY &&
-  !isSettingKey(key) &&
+  !isEditSettingKey(key) &&
   !isConfirmKey(key) &&
   key !== DIAGNOSTICS_VIEWING;
 
@@ -75,10 +75,11 @@ function movedKeys(from: MenuView, to: MenuView): string[] {
   );
 }
 
+// [LAW:types-are-the-program] A closed edit's steps are never destinations,
+// by construction: edit mode's state lives only in its open edit, so no view
+// outside it holds the value such a step went to.
 // [LAW:single-enforcer] The search supplies both Back and its displayed
 // depth. An overwritten control or an invalid destination skips its visit.
-// A closed edit's own state is no value the session holds, so a step that
-// moved it is never one the session can go back to.
 function previous(
   timeline: Timeline,
   current: MenuView,

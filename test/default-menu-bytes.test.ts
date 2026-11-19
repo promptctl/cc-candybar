@@ -29,7 +29,7 @@ import { createEngine } from "@promptctl/go-template-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-glyphs";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
 import {
@@ -87,7 +87,8 @@ function menuOpeners(rendered: Frame): Opener[] {
       .filter(
         (e) =>
           e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
+          menuOfKey(e.args[1] ?? "")?.page === false &&
+          e.args[3] === menuPageKey(e.args[1]!) &&
           e.args[2] !== DISCLOSURE_CLOSED,
       )
       .map((e) => ({ url, text, member: e.args[2]! })),

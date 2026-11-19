@@ -148,11 +148,13 @@ export class SettingsHistory {
   private readonly moved = new Set<SessionId>();
 
   // `loaded` is what the profile holds, oldest first, as the host handed it
-  // in: held to the same bounds as every step that lands.
+  // in: held to the same bounds as every step that lands. `records` is the
+  // session keys a step holds.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     loaded: StoredState["history"] = {},
+    private readonly records: (key: string) => boolean = isSettingKey,
   ) {
     this.adopt(
       new Map(Object.entries(loaded) as Array<[SessionId, SessionHistory]>),
@@ -209,7 +211,7 @@ export class SettingsHistory {
     };
     const sessionState = recordingView(
       held,
-      isSettingKey,
+      this.records,
       (sessionId, key, before, after) => {
         note(sessionId, { kind: "session", key, before, after });
       },

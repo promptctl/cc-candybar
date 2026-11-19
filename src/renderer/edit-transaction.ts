@@ -3,7 +3,8 @@
 // [LAW:one-source-of-truth] The open edit holds every session write made
 // inside it, as it holds file changes: save commits what persists, and cancel
 // drops it all, so the menus a user opened or closed while editing return to
-// how they were. Edit mode's own keys live only here.
+// how they were. Edit mode's own keys live only here: the click that opens an
+// edit hands it its first writes, and no other route reaches the store.
 
 import { observable, runInAction } from "mobx";
 import {
@@ -20,16 +21,11 @@ import {
   applyChanges,
   diffChanges,
 } from "../config/config-changes.js";
-import {
-  EDIT_MODE_ARRANGE,
-  EDIT_MODE_KEY,
-} from "../config/loader/edit-mode.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
-import { isSettingKey } from "../renderer-interface/history-storage.js";
-import { isEditModeKey } from "../config/reserved-names.js";
-import type { StateWrite } from "../config/disclosure-nest.js";
+import { isEditSettingKey } from "../renderer-interface/history-storage.js";
+import { isEditModeKey, isReservedName } from "../config/reserved-names.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import {
@@ -48,14 +44,16 @@ export interface EditTurn {
   readonly journal: Journal;
   commit(): boolean;
   save(committed: Journal, files: ConfigFiles, latest: ConfigSnapshot): void;
-  // The click that leaves the edit without saving: its own writes outside
-  // edit mode (the door it closed) land; everything the edit held drops.
-  leave(): void;
+  // The click that leaves the edit without saving: `own`, its own writes,
+  // land outside edit mode (the door it closed); everything else the edit
+  // held drops.
+  leave(own: ReadonlyMap<string, string | null>): void;
 }
 
 class EditDraft {
-  // Every write this session made inside the edit, as the edit reads it.
-  private readonly writes = new Map<string, string | null>();
+  // Every write this session made inside the edit, as the edit reads it,
+  // from the writes of the click that opened it on.
+  private readonly writes: Map<string, string | null>;
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   private latest: ConfigSnapshot;
@@ -67,7 +65,9 @@ class EditDraft {
     private readonly base: ConfigSnapshot,
     private readonly committed: SessionStateRW,
     log: DaemonLogger,
+    first: ReadonlyMap<string, string | null>,
   ) {
+    this.writes = new Map(first);
     this.latest = this.snapshot = base;
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
     // draft. Only the journal's destination changes. A menu's state is no
@@ -85,6 +85,8 @@ class EditDraft {
         clear: (sid, key) => this.put(sid, key, null),
       },
       log,
+      {},
+      isEditSettingKey,
     );
   }
 
@@ -114,16 +116,20 @@ class EditDraft {
     };
   }
 
+  // Cancel drops every write the edit holds. The bar's own menus and
+  // chrome reopen as they were, but a setting, a draft or an author's own
+  // state is work, which the count shows and a timer must not abandon.
   depth(): HistoryDepth {
     return {
       ...this.history.depth(this.session),
       sinceEdit:
-        [...this.writes.keys()].filter(isSettingKey).length + this.files.size,
+        [...this.writes.keys()].filter(
+          (key) => isEditSettingKey(key) || !isReservedName(key),
+        ).length + this.files.size,
     };
   }
 
   read(key: string): string | null {
-    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
     if (this.writes.has(key)) return this.writes.get(key)!;
     return this.committed.get(this.session, key);
   }
@@ -159,14 +165,11 @@ class EditDraft {
       prove,
     };
     const journal = this.history.begin(files);
-    // The click's own writes, as it landed them in the edit.
-    let landed: ReadonlyMap<string, string | null> = new Map();
     return {
       files,
       journal,
       commit: () => {
-        landed = new Map(journal.writes(this.session));
-        const stateMoved = [...landed].some(
+        const stateMoved = [...journal.writes(this.session)].some(
           ([key, value]) => this.read(key) !== value,
         );
         journal.commit();
@@ -217,21 +220,62 @@ class EditDraft {
           new Map([...this.writes, ...journal.writes(this.session)]),
         );
       },
-      leave: () => this.land(this.committed, landed),
+      leave: (own) => this.land(this.committed, own),
     };
   }
 
-  // The edit's writes, landed past it. Edit mode's own keys among them end
-  // with the edit, at the store's one guard.
+  // [LAW:single-enforcer] The edit's writes, landed past it: edit mode's own
+  // keys end with the edit, and the rest persist.
   private land(
     into: SessionStateRW,
     writes: ReadonlyMap<string, string | null>,
   ): void {
     for (const [key, value] of writes) {
+      if (isEditModeKey(key)) continue;
       if (value === null) into.clear(this.session, key);
       else into.set(this.session, key, value);
     }
   }
+}
+
+// [LAW:single-enforcer] Where a click outside an edit writes: the store's
+// journal, but for edit mode's own keys, which it holds aside. They are the
+// first writes of the edit the click opens, or nothing, when it opens none,
+// so neither the store nor its undo history ever holds one.
+export function outsideEdit(journal: SessionStateRW): {
+  readonly sessionState: SessionStateRW;
+  readonly held: (sid: SessionId) => ReadonlyMap<string, string | null>;
+} {
+  const aside = new Map<SessionId, Map<string, string | null>>();
+  const write = (
+    sid: SessionId,
+    pairs: ReadonlyArray<{
+      readonly key: string;
+      readonly value: string | null;
+    }>,
+  ): void => {
+    const store: Array<{ key: string; value: string }> = [];
+    for (const { key, value } of pairs) {
+      if (isEditModeKey(key))
+        aside.set(sid, (aside.get(sid) ?? new Map()).set(key, value));
+      else if (value === null) journal.clear(sid, key);
+      else store.push({ key, value });
+    }
+    if (store.length > 0) journal.setBatch(sid, store);
+  };
+  return {
+    sessionState: {
+      get: (sid, key) =>
+        isEditModeKey(key)
+          ? (aside.get(sid)?.get(key) ?? null)
+          : journal.get(sid, key),
+      revision: (sid) => journal.revision(sid),
+      set: (sid, key, value) => write(sid, [{ key, value }]),
+      setBatch: write,
+      clear: (sid, key) => write(sid, [{ key, value: null }]),
+    },
+    held: (sid) => aside.get(sid) ?? new Map(),
+  };
 }
 
 function sameFiles(
@@ -256,59 +300,13 @@ export class EditTransactions {
     deep: false,
   });
 
-  // [LAW:single-enforcer] The session store as every writer reaches it: a
-  // write to one of edit mode's own keys goes to the session's open edit, and
-  // with none open it has no meaning, so it is dropped and said. No route
-  // stores such a key, so a restart finds none.
-  readonly committed: SessionStateRW;
-
   constructor(
-    store: SessionStateRW,
+    readonly committed: SessionStateRW,
     private readonly log: DaemonLogger,
-  ) {
-    const setBatch = (sid: SessionId, pairs: readonly StateWrite[]): void =>
-      runInAction(() => {
-        store.setBatch(
-          sid,
-          pairs.filter(({ key }) => !isEditModeKey(key)),
-        );
-        this.hold(
-          sid,
-          pairs.filter(({ key }) => isEditModeKey(key)),
-        );
-      });
-    this.committed = {
-      get: (sid, key) => store.get(sid, key),
-      revision: (sid) => store.revision(sid),
-      set: (sid, key, value) => setBatch(sid, [{ key, value }]),
-      setBatch,
-      clear: (sid, key) =>
-        isEditModeKey(key)
-          ? this.hold(sid, [{ key, value: null }])
-          : store.clear(sid, key),
-    };
-  }
+  ) {}
 
-  private hold(
-    sid: SessionId,
-    writes: ReadonlyArray<{
-      readonly key: string;
-      readonly value: string | null;
-    }>,
-  ): void {
-    if (writes.length === 0) return;
-    const draft = this.draft(sid);
-    if (draft === null) {
-      this.log(
-        "info",
-        `edit: dropped ${writes.map(({ key }) => key).join(",")} — no edit is open (session=${sid})`,
-      );
-      return;
-    }
-    for (const { key, value } of writes) draft.put(sid, key, value);
-    this.changed(sid);
-  }
-
+  // [LAW:one-source-of-truth] The session's state as every reader sees it:
+  // its open edit's, else the store's.
   readonly view: SessionStateRW = {
     get: (sid, key) => {
       const draft = this.draft(sid);
@@ -316,10 +314,29 @@ export class EditTransactions {
     },
     revision: (sid) =>
       this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
-    set: (sid, key, value) => this.committed.set(sid, key, value),
-    setBatch: (sid, pairs) => this.committed.setBatch(sid, pairs),
-    clear: (sid, key) => this.committed.clear(sid, key),
+    set: (sid, key, value) => this.write(sid, [{ key, value }]),
+    setBatch: (sid, pairs) => this.write(sid, pairs),
+    clear: (sid, key) => this.write(sid, [{ key, value: null }]),
   };
+
+  // A write outside a click (a failure the bar shows) lands where the session
+  // reads: its open edit, else the store.
+  private write(
+    sid: SessionId,
+    pairs: ReadonlyArray<{
+      readonly key: string;
+      readonly value: string | null;
+    }>,
+  ): void {
+    const draft = this.draft(sid);
+    runInAction(() => {
+      for (const { key, value } of pairs)
+        if (draft !== null) draft.put(sid, key, value);
+        else if (value === null) this.committed.clear(sid, key);
+        else this.committed.set(sid, key, value);
+    });
+    if (draft !== null) this.changed(sid);
+  }
 
   draft(sid: SessionId): EditDraft | null {
     return this.entries.get(sid)?.draft ?? null;
@@ -347,10 +364,16 @@ export class EditTransactions {
     return this.draft(sid)?.depth() ?? committed.depth(sid);
   }
 
-  open(sid: SessionId, origin: RenderOrigin, snapshot: ConfigSnapshot): void {
+  // `first` is what the click that opens it wrote to edit mode's keys.
+  open(
+    sid: SessionId,
+    origin: RenderOrigin,
+    snapshot: ConfigSnapshot,
+    first: ReadonlyMap<string, string | null>,
+  ): void {
     this.update(
       sid,
-      new EditDraft(sid, origin, snapshot, this.committed, this.log),
+      new EditDraft(sid, origin, snapshot, this.committed, this.log, first),
     );
   }
 

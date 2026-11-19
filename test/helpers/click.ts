@@ -263,19 +263,19 @@ export function verbContextWith(
 // (test/helpers/durable-config.ts hands in one under its own temp root).
 export function testVerbContext(
   store: SessionStateRW,
-  // Built over the store as every writer reaches it, as the renderer builds it.
-  historyOver: (sessionState: SessionStateRW) => SettingsHistory = (
-    sessionState,
-  ) => new SettingsHistory(sessionState, () => {}),
+  // Built over the store, as the renderer builds it.
+  historyOver: (store: SessionStateRW) => SettingsHistory = (store) =>
+    new SettingsHistory(store, () => {}),
   config?: DslConfig,
   host: Host = HOST,
 ): VerbContext {
-  // As the renderer wires it: every writer reaches the store through the edits.
+  // As the renderer wires it: every reader takes the session as its open
+  // edit shows it.
   const edits = new EditTransactions(store, () => {});
-  const sessionState = edits.committed;
+  const sessionState = edits.view;
   // One host book, whichever face of the store a caller holds.
   BOOKS.set(sessionState, bookOf(store));
-  const history = historyOver(sessionState);
+  const history = historyOver(store);
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const discovered = discoveryNow(host);

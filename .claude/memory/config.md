@@ -66,7 +66,9 @@ Edit mode holds a session draft with its own undo and redo. Preview uses the con
 
 An open edit holds every session write made inside it, as it holds its file changes: menus opened or closed, drafts, and edit mode's own keys. Save commits what persists in the save's one undo step, and cancel drops it all, so the menus a user touched while editing return as they were. The edit opens and closes at the one place every click's writes pass, so any control that enters or leaves edit mode needs no bookkeeping of its own.
 
-Edit mode's own keys sit in a namespace of their own and never persist, because no edit outlives the renderer: one stored would reopen a panel or a library on a bar that has no edit. With no edit open a write to one has no meaning, so a stale click's is dropped and logged rather than stored.
+Edit mode's own keys sit in a namespace of their own and never persist, because no edit outlives the renderer: one stored would reopen a panel or a library on a bar that has no edit, and one in the undo history would bring an edit's draft back with an undone save. So where a click's writes go is decided once, as its journal is chosen: a click outside an edit holds edit mode's keys aside, as the first writes of the edit it opens, or drops and logs them when it opens none (a stale click). A profile an older build stored them in loses them at load.
+
+Cancel drops every write the edit held, so the save count and the idle close treat a setting, a draft or an author's own state as work; the bar's own menus are not, because reopening them as they were is what cancel is for.
 
 ## Placements
 

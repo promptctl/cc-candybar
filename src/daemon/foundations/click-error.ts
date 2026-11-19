@@ -20,6 +20,7 @@ import type {
 } from "../../renderer-interface/session-state.js";
 import type { Instant } from "../../utils/instant.js";
 import type { Drawing } from "../../config/lanes.js";
+import { SETTINGS_NS } from "../../config/reserved-names.js";
 import {
   answeredBy,
   eventHoldAt,
@@ -27,7 +28,9 @@ import {
   type HeldEvent,
 } from "../../utils/event-hold.js";
 
-const KEY = "click.error";
+// [LAW:one-source-of-truth] In the bar's own namespace, as every key it
+// mints is, so no authored key reaches it.
+const KEY = `${SETTINGS_NS}clickError`;
 
 // Seconds every render shows a click's errors: several of Claude Code's
 // fastest reruns (`statusLine.refreshInterval: 1`), and long enough to read.

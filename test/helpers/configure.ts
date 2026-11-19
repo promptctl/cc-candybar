@@ -11,11 +11,14 @@ import { bookedContext } from "./click";
 // Edit mode on, as entering it leaves the session: an edit open over the
 // session's config, holding edit mode's own keys.
 export function arrange(ctx: VerbContext, sessionId: SessionId): void {
-  if (ctx.edits.draft(sessionId) === null) {
-    const origin = bookedContext(ctx.sessionState, sessionId)!.durable.origin;
-    ctx.edits.open(sessionId, origin, ctx.snapshotFor(origin));
-  }
-  ctx.sessionState.set(sessionId, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  if (ctx.edits.draft(sessionId) !== null) return;
+  const origin = bookedContext(ctx.sessionState, sessionId)!.durable.origin;
+  ctx.edits.open(
+    sessionId,
+    origin,
+    ctx.snapshotFor(origin),
+    new Map([[EDIT_MODE_KEY, EDIT_MODE_ARRANGE]]),
+  );
 }
 
 // Configuring is a level inside arranging: the configure key names the one

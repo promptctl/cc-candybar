@@ -16,7 +16,6 @@ import {
   type SettingOrderProblem,
   type SettingValue,
   type SettingDecl,
-  freePlacementId,
   placementId,
   placementIds,
   walkNodes,
@@ -78,6 +77,7 @@ import {
   SETTINGS_ANCHOR,
 } from "../settings-menu.js";
 import { findKeyLine } from "./diagnostics.js";
+import { mintPlacementId, randomSuffix } from "../layout-ops.js";
 import { RENAMED_SEGMENTS, renamedHint } from "./renamed-segments.js";
 import {
   otherScopeHint,
@@ -362,7 +362,7 @@ export function validateCrossReferences(
     for (const [id, nodes] of byId) {
       if (nodes.length < 2) continue;
       const seg = nodes[1]!.name;
-      const free = freePlacementId(seg, new Set(byId.keys()));
+      const free = mintPlacementId(seg, new Set(byId.keys()), randomSuffix);
       ctx.issues.push({
         path: layoutKey,
         message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg}", id: "${free}" }. A placement without an "id" takes its segment's name.`,

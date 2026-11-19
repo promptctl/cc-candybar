@@ -1517,7 +1517,7 @@ describe("a click", () => {
     const failure = threw(await handIn(t.r, configEvent));
     expect(failure.failure.message).toBe("config turn failed");
     expect(failure.record).toEqual([]);
-    expect(t.parts.sessionState.get(SESSION, "click.error")).toContain(
+    expect(t.parts.sessionState.get(SESSION, "candybar.clickError")).toContain(
       "config turn failed",
     );
     expect(
