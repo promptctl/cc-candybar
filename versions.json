@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e78e6ea53d92f3294c4769635d9d974fb47550ca",
+      "timestamp": "2026-11-19T18:05:18.659Z",
+      "commits": [
+        {
+          "sha": "e78e6ea53d92f3294c4769635d9d974fb47550ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:04:12-07:00",
+          "message": "test(daemon): assert source values in delivered pane frames (#889)"
+        }
+      ]
+    },
+    {
       "version": "pr-895",
       "ref": "refs/pull/895/merge",
       "sha": "fcb5d454e34dd519ce6f2786b7c7d00a310bd7c7",
@@ -135,21 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:49:05-07:00",
           "message": "fix(renderer): use one outcome for each config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "39d25534f33645fbb1e93f152dd556dfba425eb3",
-      "timestamp": "2026-11-19T17:55:48.008Z",
-      "commits": [
-        {
-          "sha": "39d25534f33645fbb1e93f152dd556dfba425eb3",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T17:54:38Z",
-          "message": "chore(release): set `package.json` to 1.235.5\n\n## [1.235.5](https://github.com/promptctl/cc-candybar/compare/v1.235.4...v1.235.5) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** recover pinned pane views on config delivery ([#891](https://github.com/promptctl/cc-candybar/issues/891)) ([da639d7](https://github.com/promptctl/cc-candybar/commit/da639d74bdb0798ffa62eec23cd0beee4614be6f))\n"
         }
       ]
     },
