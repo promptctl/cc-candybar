@@ -56,7 +56,7 @@ import {
 export interface SharedFacts {
   readonly locs: Locations;
   readonly answers: () => StateObservation<RepoConfigBook>;
-  readonly installed: ReadonlyArray<RootListing<PluginFile>>;
+  readonly installed: readonly RootListing[];
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
 }
@@ -91,42 +91,17 @@ export function readShared(
   };
 }
 
-// The installed roots, lowest precedence first, each listed and its
-// definitions read: origin-independent, as no repository's root is among
-// them.
+// Installed roots in ascending precedence. Every origin in the batch uses
+// the same directory listings.
 export function installedRoots(
   locs: Locations,
   files: DiscoveryFiles = discoveryFiles(),
-): ReadonlyArray<RootListing<PluginFile>> {
-  return installedPluginDirs(locs).map((root) =>
-    readDefinitions(
-      { root, scope: "plugins", listed: files.folders(root) },
-      files,
-    ),
-  );
-}
-
-function readDefinitions(
-  { root, scope, listed }: RootListing<string>,
-  files: DiscoveryFiles,
-): RootListing<PluginFile> {
-  return {
+): readonly RootListing[] {
+  return installedPluginDirs(locs).map((root) => ({
     root,
-    scope,
-    listed:
-      "error" in listed
-        ? listed
-        : {
-            folders: listed.folders.map((name) =>
-              readDefinition(
-                path.join(root, name, DEFINITION_FILE),
-                scope,
-                files,
-              ),
-            ),
-            files: listed.files,
-          },
-  };
+    scope: "plugins",
+    listed: files.folders(root),
+  }));
 }
 
 /**
@@ -175,15 +150,15 @@ export interface SessionPlugins {
   readonly checkout: Checkout | null;
 }
 
-// [LAW:single-enforcer] The one place plugin precedence applies: keyed by
-// scope and folder, a nearer root's plugin replaces a farther one's, so a
-// repository's `lit` and an installed `lit` both survive. A folder whose name
-// is no plugin's is keyed alike: it still loads, once, and drops naming why.
+// [LAW:single-enforcer] The scope and folder name select the definition
+// before it is opened. An unreadable winner keeps its own diagnostic.
+// A repository's `lit` and an installed `lit` belong to different scopes.
 export function sessionPlugins(
-  roots: ReadonlyArray<RootListing<PluginFile>>,
+  roots: readonly RootListing[],
   checkout: CheckoutRead,
+  files: DiscoveryFiles = discoveryFiles(),
 ): SessionPlugins {
-  const byNs = new Map<string, PluginFile>();
+  const byNs = new Map<string, Pick<PluginFile, "path" | "scope">>();
   const strays: Stray[] = [];
   const notices: string[] = [];
   for (const { root, scope, listed } of roots) {
@@ -195,10 +170,10 @@ export function sessionPlugins(
       );
       continue;
     }
-    for (const file of listed.folders) {
-      const key = `${scope}\0${path.basename(path.dirname(file.path))}`;
+    for (const name of listed.folders) {
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, file);
+      byNs.set(key, { scope, path: path.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
       strays.push({ path: path.join(root, name), scope });
@@ -208,7 +183,9 @@ export function sessionPlugins(
   if (checkout.kind === "failed")
     notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
-    plugins: [...byNs.values()],
+    plugins: [...byNs.values()].map((file) =>
+      readDefinition(file.path, file.scope, files),
+    ),
     strays,
     notices,
     checkout: checkout.kind === "ok" ? checkout.value : null,
@@ -316,12 +293,11 @@ export function discover(
   const { resolution, repoRoot, locations, watchedFiles } = search;
   const { project } = resolution;
   const session = sessionPlugins(
-    repoRoot === null
-      ? shared.installed
-      : [...shared.installed, readDefinitions(repoRoot, files)],
+    repoRoot === null ? shared.installed : [...shared.installed, repoRoot],
     // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
     // on its next pass. Watching every parent would add a watch per ancestor.
     files.checkout(query.cwd),
+    files,
   );
   const places = chainPlaces(resolution, locations).map((place) =>
     contentAt(search, place, files),

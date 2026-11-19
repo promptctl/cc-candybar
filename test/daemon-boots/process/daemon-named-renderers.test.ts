@@ -144,6 +144,10 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.mkdirSync(plugin, { recursive: true });
     const source = path.join(plugin, "marker.txt");
     const definition = path.join(plugin, "plugin.json5");
+    const packaged = path.join(root, "package-data");
+    const shadowed = path.join(packaged, "cc-candybar", "plugins", "shared", "plugin.json5");
+    fs.mkdirSync(path.dirname(shadowed), { recursive: true });
+    fs.writeFileSync(shadowed, '{ segments: { marker: { template: "package copy" } } }');
     const config = path.join(root, "config.json5");
     const transcriptOf = (session: string) =>
       path.join(root, `${session}.jsonl`);
@@ -190,6 +194,7 @@ test("two named renderer processes draw separately and share config, transcript 
     readProbe(probe, reads, {
       [config]: ["openSync", "payload"],
       [definition]: ["openSync", "payload"],
+      [shadowed]: ["openSync", "payload"],
       [source]: ["readFile"],
       [firstTranscript]: ["open", "openSync"],
       [secondTranscript]: ["open", "openSync"],
@@ -198,6 +203,7 @@ test("two named renderer processes draw separately and share config, transcript 
       {
         ...isolated.env,
         XDG_DATA_HOME: data,
+        XDG_DATA_DIRS: packaged,
         NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
           .filter(Boolean)
           .join(" "),
@@ -296,6 +302,7 @@ test("two named renderer processes draw separately and share config, transcript 
     expect(stillPrimary).toContain("one-shared-plugin-read");
     expect(stillPrimary).not.toContain(WORKTREE_MODEL);
     const both = readsOf(reads);
+    expect(both.filter((read) => read.file === shadowed)).toEqual([]);
     for (const file of shared) expect(count(both, file)).toBe(1);
     expect(count(both, firstTranscript)).toBe(count(before, firstTranscript));
     expect(count(both, secondTranscript)).toBeGreaterThan(0);
