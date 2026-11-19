@@ -2,7 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { types } from "node:util";
 import type { Layer } from "../../config/config-snapshot.js";
-import { checkoutOf, worktreeLink } from "../../utils/git-root.js";
+import {
+  checkoutOf,
+  worktreeLink,
+  type Checkout,
+  type WorktreeLink,
+} from "../../utils/git-root.js";
+import { oncePerPath } from "../../utils/once-per-path.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { readRegularTextSync } from "../../utils/regular-text.js";
 import { listFolders } from "./plugin-folders.js";
@@ -14,8 +20,8 @@ export interface DiscoveryFiles {
   readonly realpath: (path: string) => string | Unchecked;
   readonly folders: typeof listFolders;
   readonly text: (path: string) => TextRead;
-  readonly worktree: typeof worktreeLink;
-  readonly checkout: typeof checkoutOf;
+  readonly worktree: (dir: string) => WorktreeLink;
+  readonly checkout: (cwd: string) => Checkout;
 }
 
 export const diskFiles: DiscoveryFiles = {
@@ -58,17 +64,6 @@ export function readNamedText(
   return read.kind === "unreadable"
     ? { ...read, error: read.error.replace(`'${physical}'`, () => `'${name}'`) }
     : read;
-}
-
-function oncePerPath<T>(read: (file: string) => T): (file: string) => T {
-  const readings = new Map<string, T>();
-  return (file) => {
-    const held = readings.get(file);
-    if (held !== undefined) return held;
-    const observed = read(file);
-    readings.set(file, observed);
-    return observed;
-  };
 }
 
 // [LAW:one-source-of-truth] Origins rediscovered together share the first
