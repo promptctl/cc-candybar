@@ -34,6 +34,7 @@ import {
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
+  type TurnFailure,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
@@ -88,6 +89,18 @@ type TakenTurn = TurnOutcome & {
   // Failure preparing the origin this context will draw from.
   readonly configFailure?: Failure;
 };
+
+// [LAW:nothing-unseen] Give every secondary renderer failure its own field
+// in the diagnostic for the input that encountered it.
+const finalizationFields = (
+  outcome: { readonly kind: "answered" } | TurnFailure,
+): Array<TurnRecord[number]> | undefined =>
+  outcome.kind === "threw"
+    ? outcome.secondary?.map(({ stage, failure }) => [
+        `finalize.${stage}`,
+        `${failure.kind}: ${failure.detail}`,
+      ])
+    : undefined;
 
 // What a caller makes as its input's slot comes up: the event, or why there
 // is none to send, which is the turn's failure. The host stamps it with the
@@ -301,13 +314,19 @@ export function rendererHost(
       if (configs.has(key)) configs.set(key, "received");
     }
     const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
+    const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
+      record:
+        finalization === undefined
+          ? answer.record
+          : [...answer.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
+    recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
       output,
@@ -334,7 +353,6 @@ export function rendererHost(
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
-    recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect): effect is ConfigChange => effect.kind === "change",
     );
@@ -876,20 +894,28 @@ export function rendererHost(
           }
         return answered;
       } catch (thrown) {
-        return {
+        const unavailable: TurnFailure & { readonly turnMs: null } = {
           kind: "threw",
           failure: failureOf(thrown),
           turnMs: null,
-        } as const;
+        };
+        return unavailable;
       }
     });
     // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw") {
-      const took = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const fields = finalizationFields(output) ?? [];
+      if (output.turnMs !== null)
+        fields.unshift(["took", `${output.turnMs}ms`]);
+      fields.push(["error", output.failure.detail]);
+      const detail = eventLine(
+        `renderer ${name} push ${push.kind} threw`,
+        fields,
+      );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took}: ${output.failure.detail}`,
+        detail,
       });
     }
     if (output.reply.kind !== push.kind)
