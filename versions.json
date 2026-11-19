@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-879",
+      "ref": "refs/pull/879/merge",
+      "sha": "24a99fce9c7428199a15d60626331177298739f2",
+      "timestamp": "2026-11-19T16:59:35.620Z",
+      "commits": [
+        {
+          "sha": "24a99fce9c7428199a15d60626331177298739f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:58:06Z",
+          "message": "Merge 07395cee46201d0f3df0e72e1b90d03ec4c14564 into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
+        },
+        {
+          "sha": "07395cee46201d0f3df0e72e1b90d03ec4c14564",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:01:48-07:00",
+          "message": "fix(click): report desktop launch failures (ibyq.3pb)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-890",
       "ref": "refs/pull/890/merge",
       "sha": "a90fb10f30c7d74a7e3b10d837c9086ae64795a0",
@@ -208,28 +230,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-879",
-      "ref": "refs/pull/879/merge",
-      "sha": "2a6b6a2bd782aeaa90d1253a76fe55f626bc9e94",
-      "timestamp": "2026-11-19T14:03:26.599Z",
-      "commits": [
-        {
-          "sha": "2a6b6a2bd782aeaa90d1253a76fe55f626bc9e94",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:02:14-07:00",
-          "message": "Merge e0c657c14b8e4c2933fd352185345af56902d07e into 6b98f5c610697d392140c302f633044ebe7a2aac\n"
-        },
-        {
-          "sha": "e0c657c14b8e4c2933fd352185345af56902d07e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:01:48-07:00",
-          "message": "fix(click): report desktop launch failures (ibyq.3pb)\n"
         }
       ]
     }
