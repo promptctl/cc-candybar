@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-890",
+      "ref": "refs/pull/890/merge",
+      "sha": "a90fb10f30c7d74a7e3b10d837c9086ae64795a0",
+      "timestamp": "2026-11-19T16:59:29.469Z",
+      "commits": [
+        {
+          "sha": "a90fb10f30c7d74a7e3b10d837c9086ae64795a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:58:17Z",
+          "message": "Merge 71c4b6243621232c63447a497120de4efe1f4f3e into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
+        },
+        {
+          "sha": "71c4b6243621232c63447a497120de4efe1f4f3e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:49:37-07:00",
+          "message": "refactor(config): derive project layers and plugins from one decision\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d02a3142e7089783533bf3bcfb9a1f0025c1b8b7",
