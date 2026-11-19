@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-852",
+      "ref": "refs/pull/852/merge",
+      "sha": "4a1ebef405d975880d6439b4fd88479292c94d16",
+      "timestamp": "2026-11-19T10:46:10.390Z",
+      "commits": [
+        {
+          "sha": "4a1ebef405d975880d6439b4fd88479292c94d16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:44:51-07:00",
+          "message": "Merge 9b8443bf45320aaae697d5f6df0854b949fc237f into 4b760ab8b6060959917183e61c064a0fe897da97\n"
+        },
+        {
+          "sha": "9b8443bf45320aaae697d5f6df0854b949fc237f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:44:30-07:00",
+          "message": "fix(edit): release a removed placement's session state at the session's own render\n\nA session's ✚ libraries and their pages, its configure key and its drafts\nare keyed by preset and placement id, so they outlived the placement and\nlanded on the next placement to reuse the id, whatever removed it.\n\nBefore drawing, a session now releases the keys it holds for placements\nits config no longer places in any preset, inserts included. The placed\nset is built once per loaded config, and a tick skips with one comparison\nof that set and the session's revision. A clicker's release runs inside\nits click's journal, so undo restores its drafts. A render over a failed\nload releases nothing. Each release is logged with the session and keys.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-851",
       "ref": "refs/pull/851/merge",
       "sha": "aa1c311939364896da3aa8161a6839dbdaba553e",
