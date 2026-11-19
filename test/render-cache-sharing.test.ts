@@ -36,7 +36,6 @@ import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";

@@ -42,7 +42,6 @@ import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
 import { drawnDepth, listResolvablePaletteNames } from "../src/themes/policy";
 import type { ColorCompatibility, Endcaps } from "../src/themes/policy";
-import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick, CLICK_VERBS } from "./helpers/click";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";

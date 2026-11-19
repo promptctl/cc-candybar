@@ -9,7 +9,7 @@ import {
   sessionIdOf,
 } from "../src/daemon/foundations/session-id";
 import { SessionState } from "../src/renderer/session-state";
-import { BadVerbArgs, VERBS } from "../src/renderer/verbs";
+import { BadVerbArgs } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
 import { recordRender, testVerbContext, CLICK_VERBS } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";

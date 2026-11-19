@@ -20,7 +20,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS } from "../src/renderer/verbs";
 import { configureMember, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";

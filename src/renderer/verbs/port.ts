@@ -3,6 +3,7 @@
 // verb writes the session state and the config in its turn, and asks
 // everything else of the host as an act its turn returns.
 
+import type { AdmittedClick } from "../../click/wire.js";
 import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
 import type {
@@ -19,7 +20,7 @@ import type { ActsOnTheirWay } from "../acts.js";
 import {
   changeDone,
   closeIdleMenus,
-  VERBS,
+  runClick,
   type VerbContext,
 } from "./index.js";
 
@@ -36,10 +37,7 @@ export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;
 // [LAW:locality-or-seam] The renderer's port onto the verbs, so a renderer
 // test hands in the act it means to observe.
 export interface RendererVerbs {
-  // The handler for `verb`, or undefined for a verb the table does not have.
-  handler(
-    verb: string,
-  ): ((value: string, click: ClickFacts) => void) | undefined;
+  click(click: AdmittedClick, facts: ClickFacts): void;
   // The close of the session's menus when its idle period runs out: the
   // journaled write a ✕ makes, with the session's live context.
   closeIdle(
@@ -71,18 +69,10 @@ export type MainRendererParts = RendererParts & {
   readonly acts: Pick<ActsOnTheirWay, "done">;
 };
 
-// [LAW:single-enforcer] The verb table over the one verb context the daemon
-// builds. [LAW:dataflow-not-control-flow] The dispatch is a table lookup: the
-// verb table (src/renderer/verbs/index.ts) is the one list of supported verbs,
-// and their handlers live there.
+// The production port binds the verb table to the renderer's state owners.
 export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
   return {
-    handler: (verb) => {
-      const handler = VERBS.get(verb);
-      return (
-        handler && ((value, facts) => handler(value, { ...ctx, ...facts }))
-      );
-    },
+    click: (click, facts) => runClick(click, { ...ctx, ...facts }),
     closeIdle: (sessionId, context, idle, effects) =>
       closeIdleMenus(sessionId, context, idle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),

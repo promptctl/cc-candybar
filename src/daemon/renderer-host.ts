@@ -760,7 +760,7 @@ function sessionOf(event: Event): SessionId | null {
     case "world-state":
       return event.worldState.session;
     case "click":
-      return event.session?.ok ? event.session.id : null;
+      return event.click.scope === "session" ? event.click.session : null;
     case "retire":
     case "effect-done":
       return event.session;

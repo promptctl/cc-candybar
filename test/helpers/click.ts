@@ -11,7 +11,7 @@ import type { Host } from "../../src/host";
 import { TEST_SIGNER } from "./link-signer";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
 import { clickOf } from "../../src/click/read";
-import { changeDone, VERBS } from "../../src/renderer/verbs";
+import { changeDone, runClick } from "../../src/renderer/verbs";
 import {
   ConfigWrites,
   type Consequence,
@@ -50,7 +50,7 @@ import {
   type RenderRequest,
 } from "../../src/daemon/foundations/protocol";
 import type { ConfigTarget } from "../../src/config-hint";
-import { clickSessionOf } from "../../src/click/wire";
+import { admitClick, VERB_NAMES } from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -145,17 +145,6 @@ export const bookedContext = (
   sessionState: SessionStateRW,
   sessionId: SessionId,
 ): SessionContext | null => BOOKS.get(sessionState)?.get(sessionId) ?? null;
-
-// The context the host hands a click of `verb value`: its session's, as the
-// rig's book holds it.
-function clickContextOf(
-  sessionState: SessionStateRW,
-  verb: string,
-  value: string,
-): SessionContext | null {
-  const session = clickSessionOf(verb, value);
-  return session?.ok ? bookedContext(sessionState, session.id) : null;
-}
 
 // [LAW:locality-or-seam] The host's config discovery for a rig with no render
 // cache and no watch: each origin discovered as the disk stands when it is
@@ -331,24 +320,16 @@ export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   clickVerb(verb, value, ctx);
 }
 
-// [LAW:one-source-of-truth] Each verb as a click of it runs: handed its
-// session's context from the rig's book, as the host hands it.
-export const CLICK_VERBS: typeof VERBS = new Map(
-  [...VERBS].map(([verb, handler]) => [
-    verb,
-    (value: string, ctx: VerbContext) =>
-      handler(value, {
-        ...ctx,
-        context: clickContextOf(ctx.sessionState, verb, value),
-      }),
-  ]),
-);
+export const CLICK_VERBS: ReadonlyMap<string, (value: string, ctx: VerbContext) => void> =
+  new Map(VERB_NAMES.map((verb) => [verb, (value, ctx) => clickVerb(verb, value, ctx)]));
 
-// A click of `verb value` as the host hands it to the renderer.
+// Enter through the same admission and dispatch as the daemon.
 export function clickVerb(verb: string, value: string, ctx: VerbContext): void {
-  const handler = CLICK_VERBS.get(verb);
-  if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  handler(value, ctx);
+  const click = admitClick(verb, value);
+  runClick(click, {
+    ...ctx,
+    context: click.scope === "session" ? bookedContext(ctx.sessionState, click.session) : null,
+  });
 }
 
 // The host's act performer over `deps`; a part the test does not hand in

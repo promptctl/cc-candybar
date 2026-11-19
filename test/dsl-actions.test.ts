@@ -39,7 +39,6 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
