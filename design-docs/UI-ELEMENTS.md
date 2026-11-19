@@ -87,7 +87,7 @@ What a click does depends on the action's kind:
 | Persist | `{ persist: k, to \| from \| cycle \| min, max, by }` | the same four writes as `set`, into the config file instead of the session |
 | Save | `{ save: true }` | writes every session draft to the config file |
 | Reset | `{ reset: field }` | removes the setting from the session and from every config-file layer |
-| Undo / redo / back / rewind | `{ undo: true }` … | step the settings history; `back` steps the navigation history; `rewind` puts back everything edit mode changed |
+| Undo / redo / back / rewind | `{ undo: true }` … | step the edit draft or the committed settings history. `back` steps the navigation history, and `rewind` discards the edit draft |
 | Preset | `{ preset: "save" }` / `{ preset: "delete", name }` | writes or removes a preset in the config file |
 | Layout op | `{ persist: root, removeSegment }` / `insertSegment` / `insertSegmentFrom` | rewrites a preset's `root` in the config file |
 | Copy | `{ copy: template }` | copies the evaluated text |
@@ -540,16 +540,16 @@ After a change (here, `✖` on host), the edit row grows:
 
 | Region | Click |
 |---|---|
-| `✓ done` / `✓ save` | saves every unsaved setting (configure-mode drafts included) and leaves edit mode. Reads `✓ done` when there is nothing to save or cancel |
-| `↩ cancel` | `rewind`: puts back every config-file change made since edit mode opened, as one undo step, and leaves edit mode. Shown only after a change |
+| `✓ done` / `✓ save` | commits the draft's layout and unsaved settings, then leaves edit mode. Reads `✓ done` when there is nothing to save or cancel |
+| `↩ cancel` | `rewind` discards the draft and leaves edit mode. Shown only after a change |
 | `↺ reset layout` | removes the config file's own layout for this preset, restoring the bundled one. Shown only when the file has one |
 | `☐ live` / `☑ live` | shows each placement's live output instead of its name |
-| `✖` (red, inside a placement's cell) | removes that placement: rewrites `presets.<name>.root` in the config file at once |
+| `✖` (red, inside a placement's cell) | removes that placement from the draft's `presets.<name>.root` |
 | `✚` (green, no fill) | opens the [library](#library-pages) at that position; becomes `✕` while open. Picking a row inserts that segment there |
 | `🔧` | enters [configure mode](#configure-mode) for that placement |
 | `(?)` | opens the help body (below); becomes `✕` while open |
 
-Layout changes are not drafts: each `✖` and `✚` pick writes the config file at once. Opening edit mode takes a savepoint, which is what `↩ cancel` returns to.
+The bar previews each edit. Undo and redo step through that session's draft until it is saved or discarded.
 
 The `(?)` body:
 

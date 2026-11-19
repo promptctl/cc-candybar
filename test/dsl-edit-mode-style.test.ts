@@ -69,7 +69,7 @@ function editLookBar(source: string) {
   const effectiveNow = () =>
     resolveEffectiveGlobals(
       config,
-      (key) => sessionState.get(SID, key),
+      (key) => rig.ctx.edits.view.get(SID, key),
       () => false,
     );
 

@@ -10,7 +10,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf, bookedContext } from "./helpers/click";
+import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
@@ -196,7 +196,7 @@ function idleBar(src: string) {
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>
-    sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
+    ctx.edits.view.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, draw, clickWriting, held, logged, ctx };
 }
 
@@ -207,11 +207,12 @@ const BUNDLED = `{ root: { h: ['directory', 'model'] } }`;
 const IDLE = { idleS: 30, timeoutS: 30 };
 
 describe("the close is the write the door's ✕ makes, on a click's own path", () => {
-  test("edit mode exits with the door, and its savepoint goes with it", async () => {
+  test("idle closure preserves a changed draft; Back cannot restore a discarded transaction", async () => {
     const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    expect(rt.ctx.history.history(SID).savepoint).toBeDefined();
+    await CLICK_VERBS.get("set-state")!(`${SID}/theme/nord`, rt.ctx);
+    expect(rt.ctx.edits.draft(SID)).not.toBeNull();
     await closeIdleMenus(
       SID,
       bookedContext(rt.ctx.sessionState, SID),
@@ -219,8 +220,14 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       rt.ctx,
       rt.ctx.effects,
     );
+    expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
+    expect(rt.ctx.edits.draft(SID)).not.toBeNull();
+    await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
-    expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
+    expect(rt.ctx.edits.draft(SID)).toBeNull();
+    await CLICK_VERBS.get("back")!(SID, rt.ctx);
+    expect(rt.held(SETTINGS_ANCHOR)).toBe(SETTINGS_OPEN);
+    expect(rt.ctx.edits.draft(SID)).toBeNull();
   });
 
   test("a ✚ library open in edit mode with the door closed closes; edit mode, which drew no menu, stays", async () => {

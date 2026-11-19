@@ -87,6 +87,7 @@ export function clickParts(
         bookedContext(verbCtx.sessionState, session),
     },
     sessionState: verbCtx.sessionState,
+    edits: verbCtx.edits,
     // The renderer says what it does on the log its verbs write to.
     log: verbCtx.log,
     // No view is open, so no lane is read.

@@ -62,6 +62,9 @@ import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
+import { EditTransactions } from "./edit-transaction.js";
+import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
+import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
@@ -180,6 +183,13 @@ export function mainRenderer(
         ]);
         return;
       case "context":
+        if (
+          parts.edits.moved(
+            event.context.hookData.session_id,
+            event.context.requested,
+          )
+        )
+          parts.renderCache.retireSession(event.context.hookData.session_id);
         // [LAW:no-ambient-temporal-coupling] What needs no config lands now,
         // so the session's world states are taken in the order they came;
         // only the view's opening waits.
@@ -241,6 +251,7 @@ export function mainRenderer(
         // session the host has discarded.
         parts.doctorRuns.retire(event.session);
         menuIdle.retire(event.session);
+        parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -298,7 +309,12 @@ export function mainRenderer(
     // view closes stops being named, so its switches go.
     const lanes: Record<SessionId, LaneSwitches> = {};
     for (const session of Object.keys(views) as SessionId[]) {
-      const switches = viewLanes(parts, session);
+      const switches = viewLanes(
+        parts,
+        session,
+        parts.edits.committed,
+        parts.edits.draft(session) !== null,
+      );
       if (switches !== null) lanes[session] = switches;
     }
     // [LAW:one-source-of-truth] The origins whose config the renderer holds:
@@ -451,6 +467,10 @@ export function mainRendererOf(
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
+  // A legacy edit-mode flag has no draft after a restart.
+  for (const sid of Object.keys(inputs.stored.sessions))
+    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
+  const edits = new EditTransactions(sessionState, log);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -504,7 +524,8 @@ export function mainRendererOf(
     {
       clock: time.clock,
       locations: inputs.locations,
-      sessionState,
+      sessionState: edits.view,
+      editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       log,
       storage: host.storage,
       signer: linkSigner,
@@ -513,10 +534,10 @@ export function mainRendererOf(
       // composed over its world state, its request, its picks and its
       // histories' depths.
       source: sessionSource({
-        sessionState,
+        sessionState: edits.view,
         worldStates,
         home: inputs.home,
-        history: (sessionId) => settingsHistory.depth(sessionId),
+        history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
           navigationHistory.depth(
@@ -555,7 +576,7 @@ export function mainRendererOf(
   const pin = (sessionId: SessionId): (() => void) => {
     const unhold = renderCache.pin(sessionId);
     const unwatch = reaction(
-      () => sessionState.revision(sessionId),
+      () => edits.view.revision(sessionId),
       () => feeds.wake(sessionId, "state", time.tick),
     );
     return () => {
@@ -577,7 +598,7 @@ export function mainRendererOf(
     ...host,
     time,
     linkSigner,
-    sessionState,
+    sessionState: edits.view,
     renderCache,
     worldStates,
     renderWarnings,
@@ -613,16 +634,19 @@ export function mainRendererOf(
     },
     doctorStores: documents.documents,
     history: settingsHistory,
+    edits,
+    editViewChanged: (sid) => renderCache.refreshEditedView(sid),
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) => renderCache.getOrCreate(origin).state.config,
+    configFor: (origin, sid) =>
+      renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,
     lanes: {
       of: (origin, sessionId, latest) =>
-        lanesAt(parts, origin, sessionId, latest),
+        lanesAt(parts, origin, sessionId, latest, sessionState),
       clicked: (sessionId, latest, before, after, effects) =>
         laneActs.clicked(sessionId, latest, before, after, effects),
     },
@@ -671,6 +695,7 @@ export function mainRendererOf(
       menuIdle,
       feeds,
       verbs: verbsOver(verbCtx),
+      edits,
       mint,
       acts,
       doctorRuns,

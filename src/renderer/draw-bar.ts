@@ -96,7 +96,7 @@ import {
   type RequestFacts,
 } from "../daemon/foundations/request-event.js";
 
-import type { SessionState } from "./session-state";
+import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { signingFrames, type LinkSigner } from "../click/link-signer.js";
@@ -114,7 +114,7 @@ import {
 export interface RendererState {
   // The turn's time, handed in by the host: no draw reads a clock.
   readonly time: TurnTime;
-  readonly sessionState: SessionState;
+  readonly sessionState: SessionStateRW;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
@@ -232,8 +232,8 @@ function sessionGlobals(
   parts: RendererParts,
   sessionId: SessionId,
   state: DslRenderState,
+  sessionState = parts.sessionState,
 ): EffectiveGlobals {
-  const { sessionState } = parts;
   return resolveEffectiveGlobals(
     state.config,
     (key) => sessionState.get(sessionId, key),
@@ -247,13 +247,24 @@ function sessionGlobals(
 export function viewLanes(
   parts: RendererParts,
   sessionId: SessionId,
+  committed: SessionStateRW,
+  editing: boolean,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
   return hold === null
     ? null
     : laneSwitches(
-        hold.view.source.effective(),
+        // [LAW:effects-at-boundaries] A draft previews the bar, but only
+        // committed config declares which host-owned lane to hold.
+        editing
+          ? sessionGlobals(
+              parts,
+              sessionId,
+              renderCache.getOrCreate(hold.entry.origin).state,
+              committed,
+            )
+          : hold.view.source.effective(),
         inTmux(hold.view.facts().hints.tmux),
       );
 }
@@ -270,6 +281,7 @@ export function lanesAt(
   origin: RenderOrigin,
   sessionId: SessionId,
   live: CheckedRenderRequest | null,
+  committed: SessionStateRW,
 ): LaneSwitches {
   const { renderCache } = parts;
   using hold = renderCache.hold(origin);
@@ -278,7 +290,7 @@ export function lanesAt(
   // its setup; the owed setup is settled against the session's own hint when
   // its next request arrives.
   return laneSwitches(
-    sessionGlobals(parts, sessionId, hold.state),
+    sessionGlobals(parts, sessionId, hold.state, committed),
     live === null || inTmux(live.hints.tmux),
   );
 }

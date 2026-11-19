@@ -1197,16 +1197,12 @@ synthesizes:
   bar) puts the live output back; a segment with no cell right now —
   hidden, or rendering nothing — then has no `✖` either, so find it in the
   names view (a failing segment keeps its `✖` and `🔧` on its `⚠` cell).
-- A row above the bar, led by the ways out, so they are found without reopening
-  the menu edit mode was entered from: `✓ save` (`✓ done` while there is
-  nothing to keep) writes this session's unsaved settings — a placement's
-  configure-mode values among them — and leaves, `↩ cancel` (shown only while
-  something differs from when edit mode opened) puts everything back and
-  leaves, `↺ reset layout` (only while the config file authors this preset's
-  layout) restores the bundled layout, and `☐ live` is the view toggle. Every
-  layout click is written to the config file as it is made and is one step of
-  the session's undo history; opening edit mode records what each thing it
-  goes on to change held then, and cancel puts those values back in one step.
+- The row above the bar shows `✓ save`, or `✓ done` when there is nothing to
+  keep. Save commits the layout and unsaved settings, including placement settings,
+  and leaves edit mode. `↩ cancel` discards the draft. Undo and redo preview each
+  edit within the draft. `↺ reset layout` restores the bundled layout when the file
+  authors its own layout for the active preset. `☐ live` switches to the live view.
+  The menu's idle timeout leaves an edit draft with changes available.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
 its `✎ arrange` entry fires the same switch (through a `do` that also closes the

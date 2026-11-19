@@ -13,6 +13,7 @@ import type {
 import type { IdleSpan, MenuIdle } from "../menu-idle.js";
 import type { Feeds } from "../feeds.js";
 import type { SessionContext } from "../../renderer-interface/request-context.js";
+import type { EditTransactions } from "../edit-transaction.js";
 import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { DoctorRuns } from "../doctor.js";
@@ -63,6 +64,7 @@ export type MainRendererParts = RendererParts & {
   readonly menuIdle: MenuIdle;
   readonly feeds: Feeds;
   readonly verbs: RendererVerbs;
+  readonly edits: EditTransactions;
   // [LAW:one-source-of-truth] The one minter of this renderer's effect ids,
   // a present's, a change's and an act's alike.
   readonly mint: () => EffectId;
