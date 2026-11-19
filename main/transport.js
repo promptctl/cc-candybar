@@ -68621,7 +68621,7 @@ function performChanges(changes, book, layers) {
       written3.push(rewrite);
     }
     for (const line of answered) book.said(line);
-    return { kind: "ok" };
+    return { kind: "ok", files: written3.map(({ file }) => file) };
   } catch (e) {
     return { kind: "failed", reason: putBack(written3, e) };
   }
@@ -68715,38 +68715,45 @@ var RendererWake = class {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then(
-        (ended) => this.answered(tick, ended),
-        (thrown2) => this.answered(tick, {
-          kind: "threw",
-          failure: failureOf(thrown2),
-          turnMs: null
-        })
+      void this.deliverDue(tick).catch(
+        (thrown2) => this.deps.log(
+          `wake could not record its due: ${failureOf(thrown2).detail}`
+        )
       );
     });
+  }
+  async deliverDue(tick) {
+    let ended;
+    try {
+      ended = await this.deps.due();
+    } catch (thrown2) {
+      ended = { kind: "threw", failure: failureOf(thrown2), turnMs: null };
+    }
+    this.answered(tick, ended);
   }
   answered(tick, ended) {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
-    if (ended.turnMs !== null) {
-      this.dues++;
-      recordMs(this.took, ended.turnMs);
-    }
     const now2 = tickAt(this.deps.clock);
-    if (now2 - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
+    let problem = null;
     if (ended.kind === "answered") {
       this.failing = false;
       this.heldUntil = null;
       this.arm();
-      return;
+    } else if (ended.failure.kind !== "down") {
+      this.failed++;
+      if (!this.failing)
+        problem = `the renderer's due turn failed: ${ended.failure.detail}`;
+      this.failing = true;
+      this.heldUntil = this.declared !== null && this.declared <= tick ? now2 + FAILED_DUE_HOLD_S : null;
+      this.arm();
     }
-    if (ended.failure.kind === "down") return;
-    this.failed++;
-    if (!this.failing)
-      this.deps.said(`the renderer's due turn failed: ${ended.failure.detail}`);
-    this.failing = true;
-    this.heldUntil = this.declared !== null && this.declared <= tick ? now2 + FAILED_DUE_HOLD_S : null;
-    this.arm();
+    if (ended.turnMs !== null) {
+      this.dues++;
+      recordMs(this.took, ended.turnMs);
+    }
+    if (now2 - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
+    if (problem !== null) this.deps.said(problem);
   }
   // [LAW:one-source-of-truth] The closing summary alone writes the whole
   // histogram: it holds every `due` turn of the wake's life once.
@@ -68809,90 +68816,127 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const session = sessionOf(input.event);
     let release3 = () => {
     };
-    if (input.event.kind === "start") served = /* @__PURE__ */ new Set();
+    let output;
+    let sentAt;
     try {
-      release3 = session === null ? release3 : collector.holding(session);
-      const sentAt = clock.monotonic();
-      const { subscriptions, frames, stored, turnMs, ...output } = await renderer.answer(input);
-      const turn = {
-        ...output,
-        queuedMs,
-        turnMs,
-        hopMs: elapsedMs(clock, sentAt) - turnMs
-      };
-      collector.recorded(turn.record);
-      const changes = output.effects.filter(
-        (effect) => effect.kind === "change"
+      if (session !== null) release3 = collector.holding(session);
+      sentAt = clock.monotonic();
+      output = await renderer.answer(input);
+    } catch (thrown2) {
+      recordTaken("session release", release3);
+      return unanswered(failureOf(thrown2), queuedMs);
+    }
+    const { subscriptions, frames, stored, turnMs, ...answer3 } = output;
+    const turn = {
+      ...answer3,
+      queuedMs,
+      turnMs,
+      hopMs: elapsedMs(clock, sentAt) - turnMs
+    };
+    const { settled: settled3 } = await landInSlot(input.event, output);
+    return {
+      turn,
+      settled: settled3.finally(
+        () => void recordTaken("session release", release3)
+      )
+    };
+  };
+  const landInSlot = async (event, output) => {
+    recordTaken("turn record", () => collector.recorded(output.record));
+    const changes = output.effects.filter(
+      (effect) => effect.kind === "change"
+    );
+    const answers = output.effects.filter(
+      (effect) => effect.kind === "approve-repo"
+    );
+    const landed = landConfig(changes, answers);
+    const named2 = took(output.subscriptions, output.frames, output.stored);
+    const waited = [];
+    for (const origin of named2)
+      waited.push((await configInSlot(origin, "config-subscribed")).settled);
+    const moved3 = landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0) ? recordTaken(
+      "landed config discovery",
+      () => world.configs.landed(landed.files, answers.length > 0)
+    ) ?? [] : [];
+    const reloaded = [];
+    for (const origin of moved3)
+      reloaded.push((await configInSlot(origin, "config-landed")).settled);
+    const owed = [];
+    const acts = [];
+    for (const effect of output.effects) {
+      if (effect.kind === "present") {
+        if (event.kind !== "request")
+          owed.push(
+            (await settleInSlot(effect, {
+              kind: "failed",
+              reason: `a ${event.kind} turn answers no request`
+            })).settled
+          );
+      } else if (effect.kind === "change" || effect.kind === "approve-repo") {
+        const outcome = landed.kind === "ok" ? { kind: "ok" } : landed;
+        owed.push((await settleInSlot(effect, outcome)).settled);
+      } else acts.push(effect);
+    }
+    let before = Promise.resolve();
+    for (const act of acts) {
+      const acted = landed.kind === "ok" ? before.then(() => world.perform(act)).catch(
+        (error) => ({
+          kind: "failed",
+          reason: failureOf(error).detail
+        })
+      ) : Promise.resolve(
+        landed.kind === "closing" ? landed : {
+          kind: "skipped",
+          reason: `not performed: ${landed.reason}`
+        }
       );
-      const answers = output.effects.filter(
-        (effect) => effect.kind === "approve-repo"
-      );
-      const landed = world.closing() ? { kind: "closing", reason: "the daemon is closing" } : changes.length + answers.length === 0 ? { kind: "ok" } : performChanges(
+      const settled4 = acted.then((outcome) => settle3(act, outcome));
+      if (outlives(act)) unawaited("act", settled4);
+      else {
+        owed.push(settled4);
+        before = acted;
+      }
+    }
+    const settled3 = Promise.all([
+      Promise.all(waited),
+      Promise.all(reloaded),
+      Promise.all(owed)
+    ]).then(([caused, , own2]) => [...caused.flat(), ...own2]);
+    return { settled: settled3 };
+  };
+  const landConfig = (changes, answers) => {
+    try {
+      if (world.closing())
+        return { kind: "closing", reason: "the daemon is closing" };
+      if (changes.length + answers.length === 0)
+        return { kind: "ok", files: [] };
+      return performChanges(
         changes,
         {
           stateDir: world.stateDir,
           answers,
-          said: (line) => log("info", line)
+          said: (line) => void recordTaken("trust book record", () => log("info", line))
         },
         world.configs
       );
-      const named2 = took(subscriptions, frames, stored);
-      const waited = [];
-      for (const origin of named2)
-        waited.push((await configInSlot(origin, "config-subscribed")).settled);
-      const reloaded = [];
-      const moved3 = landed.kind === "ok" && changes.length + answers.length > 0 ? world.configs.landed(
-        // A landed layer's origin was followed and its chain held the
-        // role, or the landing was refused.
-        changes.flatMap(({ target }) => {
-          const file = world.configs.path(target.origin, target.role);
-          return file === null || file === void 0 ? [] : [file];
-        }),
-        answers.length > 0
-      ) : [];
-      for (const origin of moved3)
-        reloaded.push((await configInSlot(origin, "config-landed")).settled);
-      const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
-      const owed = [];
-      const acts = [];
-      for (const effect of output.effects) {
-        if (effect.kind === "present") {
-          if (input.event.kind !== "request")
-            owed.push(
-              (await settleInSlot(effect, {
-                kind: "failed",
-                reason: `a ${input.event.kind} turn answers no request`
-              })).settled
-            );
-        } else if (effect.kind === "change" || effect.kind === "approve-repo")
-          owed.push((await settleInSlot(effect, landed)).settled);
-        else acts.push(effect);
-      }
-      let before = Promise.resolve();
-      for (const act of acts) {
-        const acted = landed.kind === "ok" ? before.then(() => world.perform(act)) : Promise.resolve(unperformed);
-        const settled4 = acted.then((outcome) => settle3(act, outcome));
-        if (outlives(act)) unawaited("act", settled4);
-        else {
-          owed.push(settled4);
-          before = acted;
-        }
-      }
-      const settled3 = Promise.all([
-        Promise.all(waited),
-        Promise.all(reloaded),
-        Promise.all(owed)
-      ]).then(([caused, , own2]) => [...caused.flat(), ...own2]).finally(release3);
-      return { turn, settled: settled3 };
     } catch (thrown2) {
-      release3();
-      return unanswered(failureOf(thrown2), queuedMs);
+      return { kind: "failed", reason: failureOf(thrown2).detail };
+    }
+  };
+  const recordTaken = (what, operation) => {
+    try {
+      return operation();
+    } catch (thrown2) {
+      const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
+      log("error", text4);
+      world.unheard(text4);
+      return null;
     }
   };
   const took = (subscriptions, frames, stored) => {
-    wake.declare(subscriptions.wake);
+    recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
     let named2 = [];
-    for (const [what, take] of [
+    for (const [what, apply] of [
       ["stored writes", () => collector.stored(stored)],
       ["subscriptions", () => collector.subscribed(subscriptions)],
       ["frames", () => collector.frames(frames)],
@@ -68907,13 +68951,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         }
       ]
     ]) {
-      try {
-        take();
-      } catch (thrown2) {
-        const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
-        log("error", text4);
-        world.unheard(text4);
-      }
+      recordTaken(what, apply);
     }
     return named2;
   };
@@ -68926,7 +68964,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     } : { kind: "event", event: { kind: "config", origin, config } };
   };
   const configInSlot = async (origin, why2) => {
-    const made = configMade(origin)();
+    let made;
+    try {
+      made = configMade(origin)();
+    } catch (thrown2) {
+      made = failureOf(thrown2);
+      record2(null, [["why", why2]], unanswered(made, 0).turn);
+    }
     if (made.kind !== "event")
       return {
         settled: Promise.resolve([{ kind: "failed", reason: made.message }])
@@ -69001,6 +69045,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     } catch (thrown2) {
       made = failureOf(thrown2);
     }
+    if (at === "first" || made.kind === "event" && made.event.kind === "start")
+      served.clear();
     if (made.kind !== "event")
       return { event: null, slotted: unanswered(made, queuedMs) };
     holds2(made.event.kind);
@@ -88000,8 +88046,9 @@ var ConfigDiscovery = class {
   // answer, every origin with a repository to ask about, is discovered again.
   // Answers those whose snapshot moved.
   landed(files, answered) {
+    const changed = new Set(files);
     const touched = [...this.followed].filter(
-      ([, { snapshot }]) => answered && snapshot.repo !== null || snapshot.chain.some((l) => files.includes(l.path))
+      ([, { snapshot, filePaths }]) => answered && snapshot.repo !== null || filePaths.some((file) => changed.has(file))
     ).map(([key]) => key);
     return this.rediscovered(touched, "landed");
   }
@@ -88076,7 +88123,13 @@ var ConfigDiscovery = class {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
     };
-    return { origin, snapshot, digest: digestOf(snapshot), watch: watch2 };
+    return {
+      origin,
+      snapshot,
+      digest: digestOf(snapshot),
+      watch: watch2,
+      filePaths: paths2.targets.polled
+    };
   }
   // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
   // candidate appeared, a link was re-pointed), and which directories the
@@ -88366,7 +88419,7 @@ function createDaemon(inputs) {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      const { kind } = await parts.renderer.start(() => {
+      const started2 = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         return {
@@ -88383,7 +88436,10 @@ function createDaemon(inputs) {
           }
         };
       }, [["why", "renderer-start"]]);
-      if (kind !== "answered") frameFeeds.handedIn(null);
+      if (started2.kind === "threw") {
+        frameFeeds.handedIn(null);
+        throw new CrossedFailure(started2.failure);
+      }
     },
     ended: (event) => {
       rendererEnded = event;

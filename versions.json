@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "30d7a34587b836199bfd5c0bb320894e7119c63e",
+      "timestamp": "2026-11-19T10:48:30.467Z",
+      "commits": [
+        {
+          "sha": "30d7a34587b836199bfd5c0bb320894e7119c63e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:46:45-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0) (#844)\n\n* fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n\n* test(daemon): cover failed starts and wake reporting\n\n* fix(daemon): reset config coverage for either start entry\n\n* test(daemon): exercise settlement after Doctor removal\n\n* test(daemon): distinguish a landed write from a refresh failure"
+        }
+      ]
+    },
+    {
       "version": "pr-850",
       "ref": "refs/pull/850/merge",
       "sha": "53956f47501be3addae8d0fc4a220953d4aeeb93",
@@ -120,21 +135,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:06-07:00",
           "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4b760ab8b6060959917183e61c064a0fe897da97",
-      "timestamp": "2026-11-19T10:41:04.672Z",
-      "commits": [
-        {
-          "sha": "4b760ab8b6060959917183e61c064a0fe897da97",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:39:55-07:00",
-          "message": "refactor: simplify runtime surfaces and daemon startup (#849)\n\n* refactor: remove in-bar update offers and workers\n\n* fix(config): exclude retired update settings from writable targets\n\n* refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n\n* fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n\n* fix(client): make native reconnect consume the passive outcome\n\n* refactor: remove the old Doctor implementation (ibyq.dzq)\n\n* fix(integration): use the retained statusline in daemon checks\n\n* test: verify picker contrast with the retained segment catalogue"
         }
       ]
     },
