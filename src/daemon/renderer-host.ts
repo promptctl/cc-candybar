@@ -29,6 +29,7 @@ import {
   sessionOfEvent,
   type ConfigChange,
   type Command,
+  type CommandReply,
   type ReplyTo,
   type Effect,
   type EffectOutcome,
@@ -187,6 +188,9 @@ const COMMAND_KINDS = {
   "close-journal": true,
   "close-views": true,
 } satisfies Record<Command["kind"], true>;
+
+const isCommand = (event: Event): event is Command =>
+  Object.hasOwn(COMMAND_KINDS, event.kind);
 
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
@@ -363,6 +367,29 @@ export function rendererHost(
     settled: Promise.resolve([]),
   });
 
+  const commandLabel = (event: Command): string =>
+    `renderer ${name} command ${event.kind}`;
+
+  // [LAW:parse-dont-validate] Check correlation before the host can accept
+  // a successful command's stores or declarations.
+  const requireReply = (
+    event: Command,
+    reply: CommandReply | undefined,
+  ): void => {
+    const label = commandLabel(event);
+    if (reply == null) throw new Error(`${label} returned no reply`);
+    if (reply.kind !== event.kind)
+      throw new Error(`${label} returned a ${reply.kind} reply`);
+    if (
+      event.kind === "debug" &&
+      reply.kind === "debug" &&
+      reply.snapshot?.what !== event.what
+    )
+      throw new Error(`${label} returned no ${event.what} snapshot`);
+    if (reply.kind === "stats" && reply.stats == null)
+      throw new Error(`${label} returned no stats snapshot`);
+  };
+
   // [LAW:single-enforcer] The transport owns whether the renderer
   // answered. Host failures during landing cannot replace that answer.
   const inSlot = async (
@@ -386,6 +413,23 @@ export function rendererHost(
       if (input.event.kind === "start") endedStart({ kind: "threw", failure });
       return unanswered(failure, queuedMs);
     }
+    recordDiagnostics(output.diagnostics);
+    if (isCommand(input.event)) {
+      if (output.kind === "answered") requireReply(input.event, output.reply);
+      if (output.frames.length > 0 || output.effects.length > 0) {
+        // [LAW:effects-at-boundaries] Commands can finalize stores and
+        // declarations. Their replies cannot publish a frame or act.
+        const problem = `${commandLabel(input.event)} returned a frame or effect`;
+        if (output.kind === "answered") throw new Error(problem);
+        log("error", problem);
+        output = { ...output, frames: [], effects: [] };
+      }
+    } else if (output.kind === "answered" && output.reply !== undefined) {
+      log(
+        "error",
+        `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
+      );
+    }
     if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
       if (configs.has(key))
@@ -396,22 +440,10 @@ export function rendererHost(
       wake,
       frames,
       stored,
-      diagnostics,
+      diagnostics: _diagnostics,
       turnMs,
       ...answer
     } = output;
-    recordDiagnostics(diagnostics);
-    // [LAW:single-enforcer] An ordinary turn has no caller awaiting a
-    // command reply. Report a worker that supplied one without a command.
-    if (
-      answer.kind === "answered" &&
-      answer.reply !== undefined &&
-      !Object.hasOwn(COMMAND_KINDS, input.event.kind)
-    )
-      log(
-        "error",
-        `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
-      );
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -1033,8 +1065,8 @@ export function rendererHost(
     event: C,
   ): Promise<ReplyTo<C["kind"]>> => {
     const { turn } = await taken(() => ({ kind: "event", event }));
-    const label = `renderer ${name} command ${event.kind}`;
     if (turn.kind === "threw") {
+      const label = commandLabel(event);
       const fields = finalizationFields(turn) ?? [];
       if (turn.turnMs !== null) fields.unshift(["took", `${turn.turnMs}ms`]);
       fields.push(["error", turn.failure.detail]);
@@ -1044,21 +1076,9 @@ export function rendererHost(
         detail: eventLine(`${label} threw`, fields),
       });
     }
-    const { reply } = turn;
-    if (reply == null) throw new Error(`${label} returned no reply`);
-    if (reply.kind !== event.kind)
-      throw new Error(`${label} returned a ${reply.kind} reply`);
-    if (
-      event.kind === "debug" &&
-      reply.kind === "debug" &&
-      reply.snapshot?.what !== event.what
-    )
-      throw new Error(`${label} returned no ${event.what} snapshot`);
-    if (reply.kind === "stats" && reply.stats == null)
-      throw new Error(`${label} returned no stats snapshot`);
-    // [LAW:types-are-the-program] exception: the compiler cannot connect the
-    // checked reply kind to the caller's generic event kind.
-    return reply as ReplyTo<C["kind"]>;
+    // [LAW:types-are-the-program] exception: inSlot admits the corresponding
+    // reply before landing. The shared turn type cannot carry that correlation.
+    return turn.reply as ReplyTo<C["kind"]>;
   };
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)

@@ -2,6 +2,7 @@
 // own replies, and a taker's failure cannot undo a completed turn.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
+import type { HostAct } from "../../src/daemon/acts";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
@@ -13,6 +14,7 @@ import {
 } from "../../src/daemon/foundations/verb-error";
 import {
   type CommandReply,
+  type Effect,
   type EffectId,
   type Event,
   type PushedFrame,
@@ -49,47 +51,104 @@ type Ended =
   | { readonly kind: "answered"; readonly reply?: CommandReply }
   | { readonly kind: "threw"; readonly failure: Failure };
 
-function hostOver(output: Ended) {
+function hostOver(
+  output: Ended &
+    Partial<
+      Pick<RendererOutput, "diagnostics" | "effects" | "frames" | "stored">
+    >,
+) {
   const taken: Subscriptions[] = [];
   const logged: string[] = [];
+  const framed: PushedFrame[] = [];
+  const stored: StoreWrite[] = [];
+  const acted: HostAct[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
-    held({ answer: async () => ({ ...answered(), ...output }) }),
+    held({
+      answer: async ({ event }) =>
+        event.kind === "effect-done" ? answered() : { ...answered(), ...output },
+    }),
     (_level, line) => void logged.push(line),
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
-      frames: () => {},
-      stored: () => {},
+      frames: (frames) => void framed.push(...frames),
+      stored: (writes) => void stored.push(...writes),
       recorded: () => {},
       holding: () => {
         throw new Error("a command holds no session");
       },
     },
-    NO_ACTS,
+    {
+      ...NO_ACTS,
+      perform: async (effect) => {
+        acted.push(effect);
+        return { kind: "ok" };
+      },
+    },
   );
-  return { host, taken, logged };
+  return { host, taken, logged, framed, stored, acted };
 }
 
-test("a command takes its own reply and lands its subscriptions", async () => {
-  const { host, taken } = hostOver({
+const commandSession = sessionIdOf("command-session");
+const offeredFrame: PushedFrame = {
+  session: commandSession,
+  frame: { kind: "failed", message: "an unrelated frame" },
+};
+const offeredEffect: Effect = {
+  kind: "copy",
+  session: null,
+  id: 1 as EffectId,
+  text: "an unrelated effect",
+};
+const offeredWrite: StoreWrite = {
+  store: "session-state",
+  key: commandSession,
+  value: { menu: "closed" },
+};
+
+test("a command takes its own reply, writes and subscriptions", async () => {
+  const { host, taken, stored } = hostOver({
     kind: "answered",
     reply: { kind: "close-journal" },
+    stored: [offeredWrite],
   });
   expect(await host.command({ kind: "close-journal" })).toEqual({
     kind: "close-journal",
   });
   expect(taken).toEqual([NONE]);
+  expect(stored).toEqual([offeredWrite]);
 });
 
 test("a command with another command's reply rejects, naming both", async () => {
-  const { host } = hostOver({
+  const { host, taken, framed, stored, acted, logged } = hostOver({
     kind: "answered",
     reply: { kind: "close-views" },
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+    stored: [offeredWrite],
+    diagnostics: [{ level: "warn", line: "the command returned the wrong reply" }],
   });
   await expect(host.command({ kind: "close-journal" })).rejects.toThrow(
     "renderer main command close-journal returned a close-views reply",
   );
+  expect({ taken, framed, stored, acted }).toEqual({
+    taken: [], framed: [], stored: [], acted: [],
+  });
+  expect(logged).toContain("the command returned the wrong reply");
+});
+
+test("a matching inspection cannot publish a frame or perform an effect", async () => {
+  const { host, taken, framed, acted } = hostOver({
+    kind: "answered",
+    reply: { kind: "debug", snapshot: { what: "config", config: null } },
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+  });
+  await expect(host.command({ kind: "debug", what: "config" })).rejects.toThrow(
+    "renderer main command debug returned a frame or effect",
+  );
+  expect({ taken, framed, acted }).toEqual({ taken: [], framed: [], acted: [] });
 });
 
 test("an answered command with no reply rejects", async () => {
@@ -115,9 +174,13 @@ test("a reply on an ordinary turn is reported and its declaration still lands", 
 
 test("a failed command preserves the renderer's failure and turn time", async () => {
   const failure = failureOf(new Error("the view broke"));
-  const { host } = hostOver({
+  const { host, taken, logged, framed, stored, acted } = hostOver({
     kind: "threw",
     failure,
+    diagnostics: [{ level: "warn", line: "first write completed" }],
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+    stored: [offeredWrite],
   });
   const reported = await host.command({ kind: "stats" }).then(() => {
     throw new Error("expected this command to fail");
@@ -126,6 +189,10 @@ test("a failed command preserves the renderer's failure and turn time", async ()
   expect(fieldsOf(reported.detail)).toEqual(
     new Map([["took", "0ms"], ["error", failure.detail]]),
   );
+  expect(logged).toContain("first write completed");
+  expect({ taken, framed, stored, acted }).toEqual({
+    taken: [NONE], framed: [], stored: [offeredWrite], acted: [],
+  });
 });
 
 // Every promise chain a turn starts settles on microtasks alone: these
