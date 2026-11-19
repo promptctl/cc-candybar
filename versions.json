@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-877",
-      "ref": "refs/pull/877/merge",
-      "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
-      "timestamp": "2026-11-19T15:42:41.705Z",
-      "commits": [
-        {
-          "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:41:26Z",
-          "message": "Merge 4f2bb5513ff17eaa9d15382699ba3c507f827cb2 into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
-        },
-        {
-          "sha": "4f2bb5513ff17eaa9d15382699ba3c507f827cb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:52:22-07:00",
-          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-878",
       "ref": "refs/pull/878/merge",
-      "sha": "341e4fe4895b633fe2126f1d7eb8d4ddc917559d",
-      "timestamp": "2026-11-19T15:42:12.111Z",
+      "sha": "54156f4bf805854e71dc6b684e13071f1e461525",
+      "timestamp": "2026-11-19T15:51:48.049Z",
       "commits": [
         {
-          "sha": "341e4fe4895b633fe2126f1d7eb8d4ddc917559d",
+          "sha": "54156f4bf805854e71dc6b684e13071f1e461525",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:41:09-07:00",
-          "message": "Merge bd8cebab55341cbe109363b5e14859d36074951d into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+          "timestamp": "2026-11-19T15:50:53Z",
+          "message": "Merge ff5b26fff50a3b8b1c96afcb3ccdbeea219c0c0c into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+        },
+        {
+          "sha": "ff5b26fff50a3b8b1c96afcb3ccdbeea219c0c0c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:50:36-07:00",
+          "message": "test(plugin): sweep again when a frame receipt holds the session\n"
         },
         {
           "sha": "bd8cebab55341cbe109363b5e14859d36074951d",
@@ -91,6 +76,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:00:18-07:00",
           "message": "fix(renderer): commit request frame memory on delivery\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-877",
+      "ref": "refs/pull/877/merge",
+      "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
+      "timestamp": "2026-11-19T15:42:41.705Z",
+      "commits": [
+        {
+          "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:41:26Z",
+          "message": "Merge 4f2bb5513ff17eaa9d15382699ba3c507f827cb2 into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+        },
+        {
+          "sha": "4f2bb5513ff17eaa9d15382699ba3c507f827cb2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:52:22-07:00",
+          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
         }
       ]
     },
