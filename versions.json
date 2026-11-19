@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b572777cc8c9de4ce37090fcea33fb72d08cf127",
+      "timestamp": "2026-11-19T13:23:27.973Z",
+      "commits": [
+        {
+          "sha": "b572777cc8c9de4ce37090fcea33fb72d08cf127",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T13:22:06Z",
+          "message": "chore(release): set `package.json` to 1.234.0\n\n## [1.234.0](https://github.com/promptctl/cc-candybar/compare/v1.233.2...v1.234.0) (2026-11-19)\n\n### Features\n\n* **daemon:** route named renderers through one shared host ([#864](https://github.com/promptctl/cc-candybar/issues/864)) ([9df2afa](https://github.com/promptctl/cc-candybar/commit/9df2afa5338a7144c675bbd4ff228c85f32fe868))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-866",
       "ref": "refs/pull/866/merge",
       "sha": "594a29a02311bb893da7b78f48367b38479f91bb",
@@ -56,21 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:29:09-07:00",
           "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "00c851de7fe99a7e286a1d9a0b9a61e03b7b6ac3",
-      "timestamp": "2026-11-19T13:16:30.014Z",
-      "commits": [
-        {
-          "sha": "00c851de7fe99a7e286a1d9a0b9a61e03b7b6ac3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:15:18-07:00",
-          "message": "refactor(click): publish and admit repository decisions in the host (#863)\n\nrefactor(click): publish and admit repository decisions in the host (ibyq.vne)"
         }
       ]
     },
