@@ -301,7 +301,7 @@ export function validateCrossReferences(
   // walk, not a reduced copy. The only thing that varies between the config's
   // own tree and a preset's is the diagnostic key + line — data threaded in,
   // never a second traversal that could learn a different idea of what a valid
-  // layout is. This is what makes `cc-candybar check` catch a preset staging a
+  // layout is. This catches a preset staging a
   // segment nobody declared.
 
   // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION

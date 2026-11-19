@@ -206,7 +206,7 @@ export function parseRepoConfigBook(doc: unknown): RepoAnswers {
 }
 
 // [LAW:no-silent-failure] A book that cannot be read is said wherever the
-// gate is: the bar's strip and `check`.
+// gate is presented on the bar.
 export function repoUnreadNotice(gate: RepoGate): string | null {
   return gate.unread === null
     ? null
@@ -222,17 +222,7 @@ const declinedLine = (dir: string): string =>
 const unprovenLine = (dir: string, reason: string): string =>
   `not proven a worktree: ${dir} — it answers for itself, because ${reason}`;
 
-// What `check` says of every repository the gate ruled. A book that could not
-// be read is discovery's notice (`repoUnreadNotice`), said beside these.
-export function repoGateLines(gate: RepoGate): readonly string[] {
-  return [
-    ...gate.awaiting.map(awaitingLine),
-    ...gate.declined.map(declinedLine),
-    ...gate.unproven.map((u) => unprovenLine(u.dir, u.reason)),
-  ];
-}
-
-// What the doctor says of the one repository the bar asks about: where it
+// Current notices for the one repository the bar asks about: where it
 // stands, and a worktree link that could not be proven. An approved one, and
 // an answers book that could not be read (the load's own warning), add
 // nothing.

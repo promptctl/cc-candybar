@@ -207,7 +207,7 @@ describe("edit mode's (?)", () => {
     const open = textOf(rt.render(200));
     // The trigger now wears ✕ instead of (?) — the open state is readable in
     // plain text, which matters to a colourless client (colorCompatibility
-    // "none", `cc-candybar check`) that never sees the band's state colour.
+    // "none") that never sees the band's state colour.
     // Asserted as the ABSENCE of the unique "(?)": edit mode's insert chrome
     // wears ✕ too, so its presence alone identifies nothing.
     expect(open).not.toContain(HELP_GLYPH_CLOSED);

@@ -47,7 +47,7 @@ import {
   type Registration,
 } from "../dsl/render.js";
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
-import type { Gates } from "../daemon/foundations/gates.js";
+import { deriveActionGates, type Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
@@ -784,8 +784,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // table that cannot gate — a built-in key re-claimed, two actions that
     // contradict each other on one key — fails this load, never the first
     // click.
-    deps.gates.state.gateFor(config);
-    deps.gates.config.gateFor(config);
+    deriveActionGates(deps.gates, config);
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);

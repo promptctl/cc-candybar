@@ -1,5 +1,5 @@
 // [LAW:behavior-not-structure] A plugin, end to end, as the two programs that
-// meet it see it: `cc-candybar check` (the verdict an authoring agent reads)
+// meet it see it: the load and render diagnostics
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
@@ -10,7 +10,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, type CheckOutcome } from "../src/check";
+import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
 import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
@@ -39,7 +39,6 @@ import { bindSelf } from "../src/config/loader/refs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { createGates } from "../src/daemon/foundations/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "./helpers/held-runs";
@@ -102,7 +101,7 @@ function config(definition = DEFINITION): string {
   );
 }
 
-function clean(o: CheckOutcome): {
+function clean(o: ConfigDraw): {
   rendered: string;
   warnings: readonly string[];
 } {
@@ -111,7 +110,7 @@ function clean(o: CheckOutcome): {
   return { rendered: textOf(o.rendered), warnings: o.warnings };
 }
 
-function fatal(o: CheckOutcome): string {
+function fatal(o: ConfigDraw): string {
   if (o.kind !== "fatal")
     throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
   return [o.message, ...o.warnings].join("\n");
@@ -122,7 +121,7 @@ describe("a listed plugin", () => {
     const p = config();
     write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("⇪ prod live");
     expect(warnings).toEqual([]);
@@ -130,15 +129,15 @@ describe("a listed plugin", () => {
 
   test("a missing data file reads as no fields, so a `when` hides the segment", async () => {
     const { rendered } = clean(
-      await checkConfig(world, createGates(), config(), dir),
+      await renderConfig(world, config(), dir),
     );
     expect(rendered).not.toContain("⇪");
   });
 
-  test("malformed data is the segment's ⚠ and fails check", async () => {
+  test("malformed data is the segment's ⚠ and identifies the error", async () => {
     const p = config();
     write("deploy/state.json", `{ "env": `);
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain('segment "plugins.deploy.status"');
     expect(message).toContain("JSON parse failed");
   });
@@ -223,7 +222,7 @@ describe("a plugin segment's partials", () => {
     const p = config(PARTIAL_DEFINITION);
     write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("⇪ prod live");
     expect(warnings).toEqual([]);
@@ -243,7 +242,7 @@ describe("a plugin that does not load is dropped alone", () => {
       "config.json5",
       `{ plugins: ["./${folder}/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, folder, "plugin.json5")} was not loaded`,
     );
@@ -369,7 +368,7 @@ test("a plugin named like the bar's own namespaces lives under plugins., beside 
     `{ plugins: ["./candybar/plugin.json5"], root: { h: ["plugins.candybar.s"] } }`,
   );
   expect(
-    clean(await checkConfig(world, createGates(), p, dir)).rendered,
+    clean(await renderConfig(world, p, dir)).rendered,
   ).toContain("mine");
 });
 
@@ -412,14 +411,13 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
     expect(await placed(null)).toContain(notice());
   });
 
-  test("and check still fails, naming the drop", async () => {
+  test("the diagnostic identifies the missing definition", async () => {
     const p = write(
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
-    expect(message).toContain("1 plugin did not load");
-    expect(message).not.toContain("render error");
+    const message = fatal(await renderConfig(world, p, dir));
+    expect(message).toContain(`plugin ${path.join(dir, "deploy/plugin.json5")} was not loaded`);
   });
 
   test("a by-field retune and placement settings still load", async () => {
@@ -477,7 +475,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.statsu"] } }`,
     );
-    expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+    expect(fatal(await renderConfig(world, p, dir))).toContain(
       `"plugins.deploy.statsu" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${path.join(dir, "deploy", "plugin.json5")} declares: plugins.deploy.status (no settings)`,
     );
   });
@@ -576,7 +574,7 @@ test("a plugin whose names another layer already declares is dropped; the first 
 
 test("plugins must be a list of paths", async () => {
   const p = write("config.json5", `{ plugins: "./p.json5" }`);
-  expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+  expect(fatal(await renderConfig(world, p, dir))).toContain(
     `"plugins" must be a list`,
   );
 });
@@ -645,7 +643,7 @@ describe("a plugin's own variables", () => {
   test("a definition without data loads, and declares no data variable", async () => {
     const p = listing(`{ segments: { s: { template: "no data here" } } }`);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
@@ -685,14 +683,14 @@ describe("a plugin's own variables", () => {
       `{ plugins: ["./hello/plugin.json5"], root: { h: ["model"] } }`,
     );
     expect(
-      clean(await checkConfig(world, createGates(), p, dir)).warnings,
+      clean(await renderConfig(world, p, dir)).warnings,
     ).toEqual([]);
   });
 
   test("are named under the plugin, and its segment's vars of any kind load and draw", async () => {
     const p = listing(HELLO);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
@@ -730,7 +728,7 @@ describe("a plugin's own variables", () => {
       variables: { who: { kind: "literal", value: "world" } },
       segments: { s: { template: "{{ .who }}" } },
     }`);
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "hello/plugin.json5")} was not loaded`,
     );
@@ -849,9 +847,8 @@ describe("an installed plugin", () => {
       `{ "env": "prod", "state": "live" }`,
     );
     const { rendered, warnings } = clean(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         placing("plugins.deploy.status"),
         dir,
       ),
@@ -900,16 +897,15 @@ describe("an installed plugin", () => {
     const p = placing("plugins.lit.ticket");
     expect(
       clean(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           p,
           path.join(dir, "a/deep/sub"),
         ),
       ).rendered,
     ).toContain("#a-1");
     expect(
-      clean(await checkConfig(world, createGates(), p, path.join(dir, "b")))
+      clean(await renderConfig(world, p, path.join(dir, "b")))
         .rendered,
     ).toContain("#b-2");
   });
@@ -1073,7 +1069,7 @@ describe("an installed plugin", () => {
     write("loose/.lit/state.json", `{ "id": "l-3" }`);
     const p = placing("plugins.lit.ticket");
     expect(
-      clean(await checkConfig(world, createGates(), p, path.join(dir, "loose")))
+      clean(await renderConfig(world, p, path.join(dir, "loose")))
         .rendered,
     ).toContain("#l-3");
   });
@@ -1120,9 +1116,8 @@ describe("an installed plugin", () => {
     );
     expect(
       clean(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           placing("plugins.deploy.status"),
           dir,
         ),
@@ -1149,9 +1144,8 @@ describe("an installed plugin", () => {
     ]);
     expect(
       clean(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           placing("plugins.deploy.status"),
           repo,
         ),
@@ -1159,9 +1153,8 @@ describe("an installed plugin", () => {
     ).toContain("user");
     expect(
       clean(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           placing("repo.deploy.status"),
           repo,
         ),
@@ -1187,11 +1180,11 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "elsewhere"));
     const p = home("repo.lit.ticket");
     expect(
-      clean(await checkConfig(world, createGates(), p, path.join(dir, "repo")))
+      clean(await renderConfig(world, p, path.join(dir, "repo")))
         .rendered,
     ).toContain("TICKET");
     const outside = clean(
-      await checkConfig(world, createGates(), p, path.join(dir, "elsewhere")),
+      await renderConfig(world, p, path.join(dir, "elsewhere")),
     );
     expect(outside.rendered).toContain("MINE");
     expect(outside.rendered).not.toContain("TICKET");
@@ -1204,9 +1197,8 @@ describe("an installed plugin", () => {
       `{ segments: { ticket: { template: "TICKET" } } }`,
     );
     const { rendered } = clean(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         home("repo.lit.ticket"),
         path.join(dir, "unasked"),
       ),
@@ -1217,9 +1209,8 @@ describe("an installed plugin", () => {
 
   test("a cell of a plugin that is not installed draws nothing, and is no error", async () => {
     const { rendered, warnings } = clean(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         home("plugins.deploy.ticket"),
         dir,
       ),
@@ -1234,7 +1225,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "repo.lit.ticket", after: "mine" }] }`,
     );
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("MINE");
     expect(warnings).toEqual([]);
@@ -1248,9 +1239,8 @@ describe("an installed plugin", () => {
       `{ segments: { status: { template: "s", settings: { compact: { label: "c", domain: "bool", default: false }, wide: { label: "w", domain: "bool", default: true } } }, phase: { template: "p" } } }`,
     );
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         home("plugins.deploy.statsu"),
         dir,
       ),
@@ -1275,7 +1265,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const { rendered } = clean(await checkConfig(world, createGates(), p, dir));
+    const { rendered } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("listed");
     expect(rendered).not.toContain("installed");
   });
@@ -1332,19 +1322,13 @@ describe("an installed plugin", () => {
       `{ plugins: ["./deploy/plugin.json5"] }`,
     );
     const warnings: string[] = [];
-    // `check` refuses the drop, naming the placement — never the plugin.
-    await expect(
-      prepareConfig(
-        world,
-        [user, project].map(homeLayer),
-        NO_REPO,
-        dir,
-        warnings,
-        instantOf(new Date()),
-      ),
-    ).rejects.toThrow(
-      /user\.json5[\s\S]*"gti" does not match any declared segment/,
+    using prepared = await prepareConfig(
+      world, [user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()),
     );
+    expect(prepared.droppedPlacements).toEqual([
+      expect.stringMatching(/user\.json5[\s\S]*"gti" does not match any declared segment/),
+    ]);
+    expect(prepared.droppedPlugins).toEqual([]);
     expect(warnings.join("\n")).not.toContain("was not loaded");
   });
 
@@ -1392,9 +1376,8 @@ describe("an installed plugin", () => {
         root: { h: ["mine", "reads", "binds", "plugins.lit.ticket"] },
       }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} was not loaded`;
-    expect(message).toContain("1 plugin did not load");
     expect(message).toContain(`segment "reads"`);
     expect(message).toContain(`segment "binds"`);
     expect(message).not.toContain(`segment "mine"`);
@@ -1426,9 +1409,8 @@ describe("an installed plugin", () => {
     });
     const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/empty/plugin.json5")} was not loaded`;
     const message = fatal(
-      await checkConfig(world, createGates(), placing("plugins.empty.s"), dir),
+      await renderConfig(world, placing("plugins.empty.s"), dir),
     );
-    expect(message).toContain("1 plugin did not load");
     expect(message).toContain(notice);
   });
 
@@ -1443,8 +1425,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] }, insert: [{ seg: "plugins.lit.ticket", after: "mine" }] }`,
     );
     const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} was not loaded`;
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
-    expect(message).toContain("1 plugin did not load");
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain(notice);
     const prepared = await prepareConfig(
       world,
@@ -1470,7 +1451,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }] }`,
     );
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("TWO");
@@ -1484,7 +1465,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", { seg: "repo.lit.ticket", id: "ticket" }] }, insert: [{ seg: "two", after: "ticket" }] }`,
     );
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("TWO");
@@ -1498,7 +1479,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" }, three: { template: "THREE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }, { seg: "three", after: "two" }] }`,
     );
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), p, dir),
+      await renderConfig(world, p, dir),
     );
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("THREE");
@@ -1511,7 +1492,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "nope", after: "repo.lit.ticket" }] }`,
     );
-    expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+    expect(fatal(await renderConfig(world, p, dir))).toContain(
       `"nope" does not match any declared segment`,
     );
   });
@@ -1521,7 +1502,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "${SETTINGS_ANCHOR}", after: "mine" }] }`,
     );
-    expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+    expect(fatal(await renderConfig(world, p, dir))).toContain(
       `an insert cell places a segment, and "${SETTINGS_ANCHOR}" is the bar's own chrome`,
     );
   });
@@ -1554,7 +1535,7 @@ describe("an installed plugin", () => {
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     expect(
-      clean(await checkConfig(world, createGates(), p, dir)).warnings,
+      clean(await renderConfig(world, p, dir)).warnings,
     ).toEqual([]);
   });
 
@@ -1568,7 +1549,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { calls: { template: '{{ template "plugins.deploy.state" .session }}' } }, root: { h: ["calls"] } }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     const line = message.split("\n").find((l) => l.includes(`segment "calls"`));
     expect(line).toContain(
       `plugin ${path.join(dir, "data/cc-candybar/plugins/deploy/plugin.json5")} was not loaded`,
@@ -1603,9 +1584,8 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { s: { template: "x" } } }`,
     );
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         placing("plugins.myplugin.s"),
         dir,
       ),
@@ -1825,7 +1805,7 @@ describe("an installed plugin", () => {
     async (rel) => {
       write("x/plugin.json5", `{ data: { checkout: "${rel}" }, segments: {} }`);
       const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
-      expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+      expect(fatal(await renderConfig(world, p, dir))).toContain(
         "must be a path inside the checkout",
       );
     },
@@ -1837,7 +1817,7 @@ describe("an installed plugin", () => {
       `{ data: { project: ".lit/candybar.json" }, segments: {} }`,
     );
     const p = write("config.json5", `{ plugins: ["./x/plugin.json5"] }`);
-    expect(fatal(await checkConfig(world, createGates(), p, dir))).toContain(
+    expect(fatal(await renderConfig(world, p, dir))).toContain(
       "data: { project } is now data: { checkout }",
     );
   });
@@ -1846,7 +1826,7 @@ describe("an installed plugin", () => {
     write("data/cc-candybar/plugins/deploy.json5", "{}");
     write("data/cc-candybar/plugins/.DS_Store", "");
     const message = fatal(
-      await checkConfig(world, createGates(), placing("plugins.deploy.s"), dir),
+      await renderConfig(world, placing("plugins.deploy.s"), dir),
     );
     expect(message).toContain(
       `move this file to ${path.join(dir, "data/cc-candybar/plugins/<name>/plugin.json5")}`,
@@ -1917,7 +1897,7 @@ test("a listed definition that is not a folder's plugin.json5 is refused, naming
     "config.json5",
     `{ plugins: ["./plugins/deploy.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
   );
-  const message = fatal(await checkConfig(world, createGates(), p, dir));
+  const message = fatal(await renderConfig(world, p, dir));
   expect(message).toContain(`move this file to <dir>/<name>/plugin.json5`);
 });
 
@@ -1930,7 +1910,7 @@ test("a placement under a refused loose definition's folder stands in naming the
     "config.json5",
     `{ plugins: ["./deploy/state.json5"], root: { h: ["plugins.deploy.s"] } }`,
   );
-  const message = fatal(await checkConfig(world, createGates(), p, dir));
+  const message = fatal(await renderConfig(world, p, dir));
   expect(message).not.toContain("unknown segment");
   const prepared = await prepareConfig(
     world,
@@ -2001,9 +1981,8 @@ describe("a repo's plugin beside an installed one of its name", () => {
     write("repo/.cc-candybar.json5", `{}`);
     answerRepo(repo);
     const message = fatal(
-      await checkConfig(world, createGates(), undefined, repo),
+      await renderConfig(world, undefined, repo),
     );
-    expect(message).toContain("1 plugin did not load");
     expect(message).toContain(
       `plugin ${path.join(repo, ".cc-candybar/plugins/lit/plugin.json5")} was not loaded`,
     );
@@ -2012,7 +1991,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   test("approved, both load and all three cells draw with no warning", async () => {
     answerRepo(repo);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), undefined, repo),
+      await renderConfig(world, undefined, repo),
     );
     expect(warnings).toEqual([]);
     expect(rendered).not.toContain("⚠");
@@ -2054,7 +2033,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
   test("unapproved, only the installed one loads and the user's placements draw", async () => {
     answerRepo(repo, "declined");
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), undefined, repo),
+      await renderConfig(world, undefined, repo),
     );
     // Only the gate's own line: the repo's config does not run.
     expect(warnings).toEqual([
@@ -2080,7 +2059,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
     );
     answerRepo(repo);
     const { rendered, warnings } = clean(
-      await checkConfig(world, createGates(), undefined, repo),
+      await renderConfig(world, undefined, repo),
     );
     expect(warnings).toEqual([]);
     expect(rendered).toContain("user-phase");
@@ -2094,7 +2073,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       "repo/.cc-candybar.json5",
       `{ insert: [{ seg: "repo.lit.phase", after: "plugins.lit.phase" }] }`,
     );
-    const outcome = await checkConfig(world, createGates(), undefined, repo);
+    const outcome = await renderConfig(world, undefined, repo);
     expect(outcome.kind).not.toBe("clean");
     expect(JSON.stringify(outcome)).toContain("repo.lit.phase");
   });
@@ -2133,7 +2112,7 @@ describe("a plugin names itself without its scope", () => {
   const STATE = `{ "env": "prod", "state": "live" }`;
   const userRoot = path.join("data", "cc-candybar", "plugins", "deploy");
 
-  function cells(o: CheckOutcome): string {
+  function cells(o: ConfigDraw): string {
     const { rendered, warnings } = clean(o);
     expect(warnings).toEqual([]);
     expect(rendered).not.toContain("⚠");
@@ -2143,9 +2122,8 @@ describe("a plugin names itself without its scope", () => {
   async function asInstalled(): Promise<string> {
     write(path.join(userRoot, "state.json"), STATE);
     return cells(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         write("config.json5", `{ root: { h: ["plugins.deploy.status"] } }`),
         dir,
       ),
@@ -2164,9 +2142,8 @@ describe("a plugin names itself without its scope", () => {
     answerRepo(path.join(dir, "repo"));
     expect(
       cells(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           undefined,
           path.join(dir, "repo"),
         ),
@@ -2193,9 +2170,8 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.ticket"] } }`);
     answerRepo(path.join(dir, "repo"));
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         undefined,
         path.join(dir, "repo"),
       ),
@@ -2216,9 +2192,8 @@ describe("a plugin names itself without its scope", () => {
     );
     expect(
       cells(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           write("config.json5", `{ root: { h: ["plugins.deploy.s"] } }`),
           dir,
         ),
@@ -2233,9 +2208,8 @@ describe("a plugin names itself without its scope", () => {
     );
     expect(
       cells(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           write("config.json5", `{ root: { h: ["plugins.deploy.s"] } }`),
           dir,
         ),
@@ -2251,9 +2225,8 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.t"] } }`);
     answerRepo(path.join(dir, "repo"));
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         undefined,
         path.join(dir, "repo"),
       ),
@@ -2273,13 +2246,13 @@ describe("a plugin names itself without its scope", () => {
       "elsewhere/.cc-candybar.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    expect(cells(await checkConfig(world, createGates(), explicit, dir))).toBe(
+    expect(cells(await renderConfig(world, explicit, dir))).toBe(
       "⇪ prod! live [go]",
     );
   });
 
   // The bar's cells, with no warning and no ⚠ beside them.
-  function drawn(o: CheckOutcome): string {
+  function drawn(o: ConfigDraw): string {
     const { rendered, warnings } = clean(o);
     expect(warnings).toEqual([]);
     expect(rendered).not.toContain("⚠");
@@ -2298,9 +2271,8 @@ describe("a plugin names itself without its scope", () => {
     answerRepo(path.join(dir, "repo"));
     expect(
       drawn(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           undefined,
           path.join(dir, "repo"),
         ),
@@ -2316,9 +2288,8 @@ describe("a plugin names itself without its scope", () => {
     );
     expect(
       drawn(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           undefined,
           path.join(dir, "repo"),
         ),
@@ -2342,9 +2313,8 @@ describe("a plugin names itself without its scope", () => {
     answerRepo(path.join(dir, "repo"));
     expect(
       fatal(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           undefined,
           path.join(dir, "repo"),
         ),
@@ -2367,9 +2337,8 @@ describe("a plugin names itself without its scope", () => {
     const placed = async (seg: string): Promise<string> => {
       write("repo/.cc-candybar.json5", `{ root: { h: ["${seg}"] } }`);
       return fatal(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           undefined,
           path.join(dir, "repo"),
         ),
@@ -2413,9 +2382,8 @@ describe("a plugin names itself without its scope", () => {
   ])("a config file's own %s is refused", async (decl, message) => {
     expect(
       fatal(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           write("config.json5", `{ ${decl} }`),
           dir,
         ),

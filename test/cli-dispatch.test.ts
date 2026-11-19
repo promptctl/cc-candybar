@@ -14,10 +14,10 @@ const run = (args: readonly string[]) =>
   // NODE_OPTIONS; the default would be the worker's own, which does not.
   spawnSync(TSX, [ENTRY, ...args], { encoding: "utf8", input: "", env: process.env });
 
-test("an unknown subcommand is refused with exit 2, naming it", () => {
-  const r = run(["nope"]);
+test.each(["nope", "check", "lint"])("unknown subcommand %s is refused with exit 2", (name) => {
+  const r = run([name]);
   expect(r.status).toBe(2);
-  expect(r.stderr).toBe('cc-candybar: unknown subcommand "nope" — see --help\n');
+  expect(r.stderr).toBe(`cc-candybar: unknown subcommand "${name}" — see --help\n`);
 });
 
 test("an unknown subcommand is refused before --help, so the help it would print never hides the mistake", () => {

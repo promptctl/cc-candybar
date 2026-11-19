@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`\`check\`'s representative payload preset compact: the payload and its day 1`] = `
+exports[`a sample session payload preset compact: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -100,6 +100,12 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,
@@ -200,7 +206,7 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
 }
 `;
 
-exports[`\`check\`'s representative payload preset default: the payload and its day 1`] = `
+exports[`a sample session payload preset default: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -300,6 +306,12 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,
@@ -400,7 +412,7 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
 }
 `;
 
-exports[`\`check\`'s representative payload preset dense: the payload and its day 1`] = `
+exports[`a sample session payload preset dense: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -500,6 +512,12 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,
@@ -600,7 +618,7 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
 }
 `;
 
-exports[`\`check\`'s representative payload preset git: the payload and its day 1`] = `
+exports[`a sample session payload preset git: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -700,6 +718,12 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,
@@ -800,7 +824,7 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
 }
 `;
 
-exports[`\`check\`'s representative payload preset usage: the payload and its day 1`] = `
+exports[`a sample session payload preset usage: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -900,6 +924,12 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,
@@ -1000,7 +1030,7 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
 }
 `;
 
-exports[`\`check\`'s representative payload preset verbose: the payload and its day 1`] = `
+exports[`a sample session payload preset verbose: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -1101,6 +1131,12 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "project": true,
       "user": true,
     },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
+    },
     "menuTimeout": {
       "effective": 120,
     },
@@ -1200,7 +1236,7 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
 }
 `;
 
-exports[`\`check\`'s representative payload preset zen: the payload and its day 1`] = `
+exports[`a sample session payload preset zen: the payload and its day 1`] = `
 {
   "payload": {
     "animationSpeed": {
@@ -1300,6 +1336,12 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "local": true,
       "project": true,
       "user": true,
+    },
+    "location": {
+      "main": "/home/tester/code/cc-candybar",
+      "noRepo": false,
+      "subpath": "/src",
+      "worktree": "",
     },
     "menuTimeout": {
       "effective": 120,

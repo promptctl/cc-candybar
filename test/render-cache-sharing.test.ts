@@ -80,13 +80,14 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
+  const gates = bareGates();
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
       locations: locs(),
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
-      gates: bareGates(),
+      gates,
       sessionState,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
@@ -104,6 +105,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => configs.close());
   return {
     cache,
+    gates,
     originAt: configs.at,
     configs,
     lines,
@@ -293,6 +295,18 @@ test("a load that fails after compiling leaves no compile behind", () => {
   expect(entry.lastError).toMatch(/key "k" is an integer spec/);
   // The entry draws the bundled default: its compile is the only one held.
   expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
+});
+
+test("a load reports an action that claims a daemon-held key before its first click", () => {
+  const { cache, gates, originAt } = makeCache(Number.POSITIVE_INFINITY);
+  const release = gates.state.register("daemon.example", []);
+  try {
+    const config = file("held.json5", `{ actions: { page: { set: 'daemon.example', int: true } } }`);
+    const entry = cache.getOrCreate(originAt(dir, dir, config));
+    expect(entry.lastError).toContain('key "daemon.example" is written by the daemon\'s own links');
+  } finally {
+    release();
+  }
 });
 
 describe("the cache is bounded by bytes", () => {

@@ -9,9 +9,7 @@
 // deleted `layout:` sugar for a release cycle, brandon-docs-3vl), and a
 // drifted error quote teaches it to expect text the loader no longer prints.
 // This suite extracts every annotated snippet from every listed doc and
-// drives it through checkConfig — the same entry function `cc-candybar check`
-// runs — so the docs, the CLI, and the daemon cannot disagree about what loads
-// or what an error says.
+// draws it through the loader and renderer and compares their actual diagnostics.
 //
 // [LAW:one-type-per-behavior] One snippet contract, N docs: a doc is a row in
 // DOCS carrying only what differs — its path and the floor each snippet family
@@ -19,13 +17,12 @@
 // nothing and lets the suite pass vacuously.
 //
 // Snippet contract (stated in each doc's header comment):
-//   ```json5 check:pass  — a complete config; must be clean (exit 0, no warnings)
-//   ```json5 check:fail  — a complete config; must be fatal (exit 1), and the
+//   ```json5 check:pass  — a complete config; must be draw without warnings
+//   ```json5 check:fail  — a complete config; must be produce a diagnostic, and the
 //                          IMMEDIATELY FOLLOWING fenced block, tagged `error`,
 //                          must quote a substring of the actual fatal message.
 //   ```render            — the bar the IMMEDIATELY PRECEDING check:pass config
-//                          renders, as the text of the frame `cc-candybar check
-//                          --render` prints (a doc cannot hold escape bytes).
+//                          renders, compared as plain text (docs cannot hold escape bytes).
 //                          Trailing spaces and edge blank lines are normalised
 //                          on both sides; every other character is exact.
 //   ```sh stub:<name>    — an executable the doc's `shell` snippets may run:
@@ -46,9 +43,8 @@ import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, checkPlan } from "../src/check";
+import { renderConfig } from "./helpers/config-fixture";
 import { textOf } from "../src/render/frame";
-import { createGates } from "../src/daemon/foundations/gates";
 
 const ROOT = path.join(__dirname, "..");
 
@@ -182,7 +178,7 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// checkConfig's collision scan reads the cwd/XDG candidate paths; the world
+// renderConfig's collision scan reads the cwd/XDG candidate paths; the world
 // below pins XDG so a developer's real ~/.config/cc-candybar can never leak a
 // warning into a pass-snippet assertion.
 let world: World;
@@ -219,10 +215,10 @@ afterAll(() => {
   else process.env.PATH = SAVED_PATH;
 });
 
-function checkSnippet(f: Fence): ReturnType<typeof checkConfig> {
+function checkSnippet(f: Fence): ReturnType<typeof renderConfig> {
   const p = path.join(dir, `${path.basename(f.doc)}-L${f.line}.json5`);
   fs.writeFileSync(p, f.body);
-  return checkConfig(world, createGates(), p, dir);
+  return renderConfig(world, p, dir);
 }
 
 const ofKind =
@@ -285,7 +281,7 @@ describe("doc snippet contract", () => {
   });
 
   test.each(passSnippets.map((f) => [f.doc, f.line, f] as const))(
-    "pass snippet at %s line %d is clean under check (exit 0, no warnings)",
+    "pass snippet at %s line %d renders without warnings",
     async (_doc, _line, f) => {
       const outcome = await checkSnippet(f);
       if (outcome.kind !== "clean") {
@@ -295,7 +291,6 @@ describe("doc snippet contract", () => {
           }`,
         );
       }
-      expect(checkPlan(outcome).code).toBe(0);
       expect(outcome.warnings).toEqual([]);
       expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
     },
@@ -319,10 +314,7 @@ describe("doc snippet contract", () => {
           }`,
         );
       }
-      // The bar `--render` prints IS `outcome.rendered` (pinned in
-      // test/cli-check.test.ts), so asserting against it pins the doc to the
-      // command's own stdout without putting this machine's temp path in the
-      // fence.
+      // Compare what a reader sees at the documented width.
       expect(previewText(textOf(outcome.rendered))).toBe(
         previewText(f.body),
       );
@@ -350,16 +342,10 @@ describe("doc snippet contract", () => {
           `${f.doc} line ${f.line}: expected fatal, got ${outcome.kind}`,
         );
       }
-      const plan = checkPlan(outcome);
-      expect(plan.code).toBe(1);
-      // [LAW:one-source-of-truth] The doc's stated contract is "a substring of
-      // check's actual stderr" — assert against exactly that surface (the full
-      // fatal stderr checkPlan emits, which carries the message), so the doc's
-      // sentence and this assertion are one contract, not a stricter shadow.
-      if (!plan.stderr.includes(quoted)) {
+      if (!outcome.message.includes(quoted)) {
         throw new Error(
-          `${f.doc} line ${next.line}: quoted error text does not match check's actual stderr.\n` +
-            `quoted:\n${quoted}\n\nactual stderr:\n${plan.stderr}`,
+          `${f.doc} line ${next.line}: quoted error text does not match the render diagnostic.\n` +
+            `quoted:\n${quoted}\n\nactual diagnostic:\n${outcome.message}`,
         );
       }
     },

@@ -268,7 +268,7 @@ export interface NodeRenderCtx {
   readonly segments: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] A placement that could not draw: its ⚠ cell shows
   // one line of the message, and this reports the whole of it as the draw's
-  // `segment` warning, which the bar's diagnostics list and `check` fails on.
+  // `segment` warning in the bar's diagnostics.
   readonly brokenPlacement: (placementId: string, message: string) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only names a

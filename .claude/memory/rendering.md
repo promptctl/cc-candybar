@@ -2,7 +2,7 @@
 
 ## One path
 
-The daemon draws every bar. The check command and the doctor command draw through the renderer's own turns in their own process, over the daemon's own collector and host, so what they show is what the daemon draws. There is no parallel renderer and no fallback computation. A turn's record notes every fault its frame met in full only when the list moved since the session's last record, so `check` draws each preset as a session of its own, whose first record always carries the whole list.
+The daemon delivers statusline requests to the renderer and publishes the frames it returns. The setup wizard sends a sample session through this same route. A turn records the full list of frame faults when that list changes for the session.
 
 ## One instant per render
 
@@ -37,7 +37,7 @@ A session view's payload is composed from its session's world state, the hook, t
 
 ## Failures draw; they don't throw
 
-Nothing a config authors can make a render throw. A failing rule falls back to its slot's floor and warns. A failing placement draws ⚠. A placement of a segment nothing declares is dropped at load and reported as an error against the file that wrote it, so one bad name costs one cell, not the whole bar, and owns no placement id (two of one typo are two drops, not a duplicate); the check command still refuses it, since the author has to fix it. A container whose `when` throws hides its children and warns, naming them. Warnings go to the bar's diagnostics and the render event. The check command handles warning kinds in an exhaustive switch, so a new kind is a compile error there until someone decides what it means.
+A failing globals rule falls back to its slot's default and warns. A failing placement draws ⚠. At load, an undeclared segment drops that placement and reports its source file. Two placements of the same missing segment produce two diagnostics. A container whose condition throws hides its children and names them in the warning. The bar's diagnostics viewer and render event carry the messages.
 
 ## Diagnostics
 
@@ -49,7 +49,7 @@ The indicator wears the list's worst level, and the list runs worst first, so it
 
 The viewer's clicks write a message's identity, never a position: a list that shifts under an open viewer would show another message at the same position. The identity is the severity and what the message is about, named by its producer (its source, and the file or repository it concerns), never its text: a load error's issue count changes while it stays the same message. The viewer closes once its message leaves the list. It is bounded by the terminal's rows and by the shortest surface showing it (a feed's one frame reaches every lane, and the tmux status line shows five rows), its header measured as drawn, and pages within a message whose key names every page.
 
-The indicator and viewer depend on the `cc-candybar://` handler, and that is accepted: a broken handler breaks every click on the bar, the doctor probes and reports it, and `cc-candybar check` prints a config's errors and warnings in full without it. A `file://` fallback on the bar would be a second path for the same text.
+The indicator and viewer depend on the `cc-candybar://` handler, and that is accepted: a broken handler breaks every click on the bar.
 
 ## Effects
 

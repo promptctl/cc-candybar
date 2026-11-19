@@ -89,9 +89,9 @@ function drawnClean(
   what: string,
 ): number {
   const bytes = ansiOf(drew.rendered).length;
-  if (drew.failures.size > 0 || bytes === 0) {
+  if (drew.failures.length > 0 || drew.pending.length > 0 || bytes === 0) {
     throw new Error(
-      `${what} drew a broken bar (${bytes} bytes): ${[...drew.failures].map(([k, v]) => `${k}: ${v}`).join("; ") || "nothing"}`,
+      `${what} drew a broken bar (${bytes} bytes): ${[...drew.failures, ...drew.pending.map((name) => `pending source: ${name}`)].join("\n") || "nothing"}`,
     );
   }
   return bytes;

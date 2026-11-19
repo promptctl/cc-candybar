@@ -41,9 +41,7 @@ interface ViewInputs {
 }
 
 // A source that answers one payload and one resolution for good, and its
-// caller's readings: what a caller drawing a fixed payload binds
-// (`cc-candybar check`, a test), so its draws read the same seam a session's
-// do.
+// caller's readings, for a view drawing a fixed payload.
 export function fixedSource(
   payload: unknown,
   selections: Selections,

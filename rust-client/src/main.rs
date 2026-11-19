@@ -172,7 +172,7 @@ fn native_subcommand(argv: &[String]) -> Option<NativeSubcommand> {
 // Every other subcommand is Node's: a subcommand is structurally a positional
 // first arg (a word, not a flag); the render path is invoked with no args, or
 // flags only, so it never has one. Discriminating on that shape — rather than a
-// hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
+// hand-maintained name list — means a subcommand Node adds (schema/vars/…)
 // works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
 // is injected so this is a pure, testable function.
 //
@@ -1434,7 +1434,7 @@ mod tests {
     // [LAW:one-source-of-truth] Every Node subcommand — including the ones added
     // long after this client was written — must route to Node from the shipped
     // binary, regardless of whether stdin is a TTY. This is the regression that
-    // a hand-maintained name list silently broke for lint/schema/vars/segments/
+    // a hand-maintained name list silently broke for schema/vars/segments/
     // config: they failed with "no input on stdin" under redirected stdin.
     #[test]
     fn dispatch_routes_every_subcommand_to_node() {
@@ -1444,7 +1444,6 @@ mod tests {
             "url-handle",
             "daemon",
             "daemon-stats",
-            "lint",
             "schema",
             "vars",
             "segments",

@@ -5,7 +5,7 @@
 // per-segment palette override, and width/justify/truncate controls.
 //
 // Render it once, from its path:
-//   cc-candybar check --render examples/demo-variables.json5
+//   ./plugin/bin/preview.sh --config-only=examples/demo-variables.json5
 //
 // NOTE: kind:"file" and watch_file paths must be ABSOLUTE — ~ is not
 // expanded at runtime. Adjust paths to match your system before use.

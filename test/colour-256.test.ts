@@ -4,8 +4,7 @@
 //
 // [LAW:verifiable-goals] The floors (TEXT_MIN_CONTRAST, the quiet git floor)
 // are chosen on truecolor values; the terminal draws what the 256 downgrade
-// hands it. So every bundled theme's bar is rendered twice through `check`'s
-// own pipeline — once truecolor, once at 256 — and each text character is
+// hands it. So every bundled theme's bar is drawn twice through the same DSL renderer — once truecolor, once at 256 — and each text character is
 // measured on the colours the terminal will actually draw: a palette index read
 // through the fixed xterm cube and grey ramp. A character may not land on
 // ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
@@ -50,7 +49,7 @@ import {
   type Chars,
 } from "./helpers/colour-depth";
 
-// The closed bar, as `check` renders it, for a theme at a depth. Every render
+// The closed bar on the sample session, for a theme at a depth. Every render
 // is drawn at one instant, so two depths of one theme are the same bar in the
 // same state, glyph for glyph, whatever the bar draws over time.
 async function closedBars(): Promise<{

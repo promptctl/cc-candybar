@@ -41,7 +41,6 @@ import {
   editabilityNotice,
   findKeyLine,
   keyLocator,
-  DroppedPlacements,
   DroppedFileError,
   type ConfigIssue,
   parseJson5Syntax,
@@ -569,8 +568,7 @@ export interface LoadedFile {
   readonly source: string;
   readonly warnings: readonly string[];
   // The plugin definitions the file listed: those merged, and those dropped
-  // with why. A drop is also a `warnings` line (the bar shows it); `check`
-  // reads this to fail its verdict.
+  // with why. The bar surfaces the drop in its warnings.
   readonly plugins: {
     readonly loaded: readonly PluginDefinition[];
     readonly dropped: readonly DroppedPlugin[];
@@ -668,7 +666,7 @@ const NO_FILE: LoadedFile = {
 export interface Renderable {
   readonly config: ValidatedConfig;
   // [LAW:no-silent-failure] Each placement of an undeclared segment, as one
-  // error per file that wrote one; empty for none. `check` refuses them.
+  // error per file that wrote one; empty for none.
   readonly dropped: readonly DroppedFileError[];
   // [LAW:one-source-of-truth] The merged config with every layer's insert
   // cells placed, before the load drops or synthesizes anything: the trees
@@ -943,12 +941,6 @@ function layerInserts(
       }));
     }),
   };
-}
-
-// [LAW:single-enforcer] What `check` refuses that the bar draws
-// past: every dropped placement, each file's error in turn.
-export function refuseDrops(dropped: readonly DroppedFileError[]): void {
-  if (dropped.length > 0) throw new DroppedPlacements(dropped);
 }
 
 // [LAW:no-silent-failure] Each dropped placement reported against the file

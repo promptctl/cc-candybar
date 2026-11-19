@@ -1,6 +1,5 @@
 // [LAW:single-enforcer] The one rule for which facts a request's draw waits
-// on before it draws: the host's wait asks it over a session's world state,
-// and `check`'s over its own.
+// on before it draws: the host's wait asks it over a session's world state.
 
 import type { Reading } from "../utils/outcome.js";
 import {

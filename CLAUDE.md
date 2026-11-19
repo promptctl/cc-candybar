@@ -34,10 +34,10 @@ The code cites laws inline, such as `[LAW:one-source-of-truth]`, `[LAW:dataflow-
 
 How they show up here:
 
-- **One render path.** The daemon, the check command and the tests all draw through the same functions. There is no parallel renderer and no fallback computation.
+- **One render path.** The ordinary statusline, tmux pane and setup preview draw through the shared daemon. Renderer tests exercise the same drawing functions.
 - **One store.** The variable store (MobX) is the single source of truth for derived values. Don't add a cache beside it.
 - **Variability lives in data.** The payload carries every value a template reads. Segments show and hide by `when` over values, not by branches in code.
-- **Errors are loud.** Every error and warning shows as a `⚠ N` indicator beside the settings door, red or amber, whose click opens a viewer with the message in full. A list with nothing wrong in it (an update offer, a repository question) shows as `ℹ N` in blue. Nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
+- **Errors are loud.** Every error and warning shows as a `⚠ N` indicator beside the settings door, red or amber, whose click opens a viewer with the message in full. A list with nothing wrong in it (a repository question) shows as `ℹ N` in blue. Nothing a config authors can make a render throw. Don't add a silent default that hides a broken state.
 
 ## Memory
 
@@ -51,7 +51,7 @@ How they show up here:
 - `.claude/memory/config.md`: resolution and merge, the config file as the durable store, settings rows, drafts, save, reset, undo, edit mode and placements. Read before you touch the loader, a setting, or a click that writes the config.
 - `.claude/memory/interaction.md`: actions and gates, pickers, disclosures, the settings menu, slash commands. Read before you add an action, a menu or a control.
 - `.claude/memory/frames-and-lanes.md`: pushed frames, the animation lanes, relaunching Claude Code, the tmux status line. Read before you touch feeds, lanes or tmux.
-- `.claude/memory/doctor.md`: the doctor's checks and the traps behind its probes. Read before you change a check.
+- `.claude/memory/doctor.md` records the retired Doctor’s probe history for the planned rebuild.
 - `.claude/memory/testing.md`: test isolation and the traps in reading a draw. Read before you write a test.
 
 If you're authoring a config or a custom segment, read `docs/interaction-authoring.md` and `docs/segment-authoring.md`. Their snippets are tested against the live loader, so they stay current.

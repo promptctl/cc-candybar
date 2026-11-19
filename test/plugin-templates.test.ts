@@ -3,15 +3,13 @@
 // renders the same template, and the wizard prompt that names the placeholders
 // and drives the script. Three files in three media — JSON, bash, markdown —
 // cannot share a type, so this suite is the enforcer that keeps them one
-// system: every config the wizard can produce loads under `cc-candybar check`,
+// system: the renderer can draw every config the wizard can produce,
 // every option name the preview offers is one the daemon accepts, and all
 // three files agree on the placeholder set. Before it existed, every shipped
 // template had silently rotted to a config model the loader retired
 // (brandon-plugin-templates-irq).
 //
-// [LAW:single-enforcer] The pipeline driven here IS `cc-candybar check` — the
-// same entry function the CLI runs and the daemon's own load+render path — so
-// "the wizard's config passes check" and "the bar renders it" are one fact.
+// [LAW:single-enforcer] The fixture exercises the daemon's load and draw path.
 //
 // [LAW:one-source-of-truth] The value domains come from the SOURCE the loader
 // validates against (palette registry, ENDCAPS_SHAPES, the bundled
@@ -27,7 +25,7 @@ import {
   ENDCAPS_SHAPES,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
-import { checkText } from "./helpers/check-config";
+import { checkText } from "./helpers/config-fixture";
 
 const pluginDir = path.join(__dirname, "..", "plugin");
 const templatesDir = path.join(pluginDir, "templates");
@@ -112,7 +110,7 @@ describe("plugin config templates (plugin/templates/*.json)", () => {
     );
 
     test.each(fills)(
-      "filled with %s is clean under `cc-candybar check` and renders",
+      "filled with %s loads and renders in the sample session",
       async (label, values) => {
         const filled = fill(template, values);
         expect(placeholdersIn(filled)).toEqual([]);

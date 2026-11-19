@@ -53,7 +53,7 @@ import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { buildRig, type RigFrame } from "./helpers/rig";
-import { checkPayload } from "./helpers/check-payload";
+import { samplePayload } from "./helpers/sample-payload";
 import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";
@@ -261,7 +261,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const NAME = "Opus 4.8 ";
 
     // [LAW:one-source-of-truth] The theme resolved as a session's pick is,
-    // by the daemon's own resolution, over `check`'s fixture with Claude Code
+    // by the daemon's own resolution, over the sample session with Claude Code
     // sending `effort` (or none). Returns the row holding the model cell.
     function modelRows(
       theme: string,
@@ -288,7 +288,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         effort: { level: string } | undefined,
         when: Instant = at,
       ): Row => {
-        const { effort: _fixtureEffort, ...payload } = checkPayload(
+        const { effort: _fixtureEffort, ...payload } = samplePayload(
           config,
           effective,
           null,
@@ -1599,24 +1599,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 });
 
-// [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "every bundled
-// preset renders without error cells at 80, 120, and 200 columns" — the
-// compact one is pointless if it does not actually fit. Drives the exact
-// pipeline the daemon and `cc-candybar check` drive (registerDslConfig +
-// drawDsl, its segment warnings as check.ts reads them) against the
-// SAME rich fixture payload check.ts ships (checkPayload) — a minimal payload
-// would let a field-name typo in a gated branch (git worktree counts, the
-// burnrate/speed telemetry verbose surfaces) slip through untested, because
-// those branches only run when their data is present.
-//
-// [LAW:single-enforcer] Resolves through resolveEffectiveGlobals — the one
-// function draw-bar.ts and check.ts both call — so EffectiveGlobals here cannot
-// diverge from what a real render would compute for that preset.
+// [LAW:verifiable-goals] Draw every bundled preset at three terminal widths.
+// [LAW:single-enforcer] Each preset uses the same effective-globals resolver as a session draw.
+// The sample session populates the git, usage and telemetry fields their gates read.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];
   // [LAW:single-enforcer] The real validated shape registerDslConfig/drawDsl
   // require (the `ValidatedConfig` brand `validateConfig` stamps) — the same
-  // gate every production caller (daemon, check.ts) passes through, run once
+  // gate the renderer passes through, run once
   // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
   const VALIDATED = validateConfig(unauthored(DEFAULT_DSL_CONFIG));
 
@@ -1631,7 +1621,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   function renderPreset(
     name: string,
     width: number,
-    // A transform over checkPayload's own fixture — an escape hatch for the
+    // A transform over samplePayload's own fixture — an escape hatch for the
     // one test below that needs gitPr/tokenSparkline's gated content to
     // actually appear, without mutating the shared production fixture every
     // other suite (test/example-configs.test.ts included) asserts literal
@@ -1674,7 +1664,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         compiled,
         store,
         registry,
-        withPayload(checkPayload(VALIDATED, effective, null, drawnAt)),
+        withPayload(samplePayload(VALIDATED, effective, null, drawnAt)),
         drawnAt,
         {
           endcaps: effective.endcaps,
@@ -1738,7 +1728,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
 
   // [LAW:verifiable-goals] Every bar says how it is redrawn, right after the
   // door, whatever the preset arranges — and edit mode offers no way to
-  // remove it, as it offers none for the door. checkPayload's render is a
+  // remove it, as it offers none for the door. samplePayload's render is a
   // request's answer, so the readout is the polled one.
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     'preset "%s" carries the frame rate right after the door, in edit mode too',
@@ -1771,7 +1761,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   const POWERLINE_ARROW = "\uE0B0";
   const visibleLines = (rendered: Frame): string[] =>
     textOf(rendered).split("\n");
-  // gitPr and tokenSparkline gate on data checkPayload's bundled fixture
+  // gitPr and tokenSparkline gate on data samplePayload's bundled fixture
   // doesn't carry (no live PR, no speed history yet); the tests that promise
   // their content supply both through `withPayload`.
   const payloadWithPrAndHistory = (
@@ -1799,7 +1789,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // [LAW:carrying-cost] The verbose preset's whole reason to exist is
   // surfacing the segments the default deliberately leaves opt-in — pin that
   // each one's own content actually appears, not merely that no segment threw.
-  // gitPr and tokenSparkline both gate on data checkPayload's bundled fixture
+  // gitPr and tokenSparkline both gate on data samplePayload's bundled fixture
   // doesn't carry (no live PR, no speed history yet), so this test supplies
   // both via `withPayload` rather than either skipping the assertion or
   // mutating the shared fixture other suites assert literal values against.
@@ -1843,9 +1833,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
       renderPreset("git", 200, payloadWithPrAndHistory).rendered,
     );
     const prLine = lines.find((l) => l.includes("⇆ #181"));
-    expect(prLine).toContain("~/c/c/src");
+    expect(prLine).toContain("~/c/cc-candybar/src");
     expect(prLine).toContain("⎇ main");
-    expect(prLine!.indexOf("~/c/c/src")).toBeLessThan(prLine!.indexOf("⎇ main"));
+    expect(prLine!.indexOf("~/c/cc-candybar/src")).toBeLessThan(prLine!.indexOf("⎇ main"));
     // What sets it apart from verbose, which also stages gitPr: the status
     // row drops the rate-limit windows the default shows.
     expect(textOf(renderPreset("default", 200).rendered)).toContain("◑ ");

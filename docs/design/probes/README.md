@@ -2,7 +2,7 @@
 
 Throwaway scripts behind the evidence in the design docs. None of them ships. Results are recorded in the docs, so rerun one only to change a question.
 
-To rerun, copy `src`, `scripts`, `test/helpers`, `test/fixtures`, `package.json` and `tsconfig.json` to `/tmp/ccb-probe/wt`, symlink `node_modules`, apply `instrumentation.patch` there, and copy this folder's scripts to `/tmp/ccb-probe`. Paths are hard-coded to that layout and to this worktree. Set `XDG_STATE_HOME=/tmp/ccb-probe/state`. Nothing touches the repo or the real daemon, except where noted.
+To reproduce the recorded measurements, use the source tree that accompanied the probes at [e441e0b2b](https://github.com/promptctl/cc-candybar/tree/e441e0b2b811339c5e3219670b1f0688f08132e1). Copy `src`, `scripts`, `test/helpers`, `test/fixtures`, `package.json` and `tsconfig.json` to `/tmp/ccb-probe/wt`, symlink `node_modules`, apply `instrumentation.patch` there, and copy this folder's scripts to `/tmp/ccb-probe`. Paths are hard-coded to that layout and to this worktree. Set `XDG_STATE_HOME=/tmp/ccb-probe/state`. Nothing touches the repo or the real daemon, except where noted.
 
 | Script | Question |
 |---|---|

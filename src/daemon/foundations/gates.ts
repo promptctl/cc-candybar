@@ -1,4 +1,4 @@
-// [LAW:no-shared-mutable-globals] The gates a daemon (or a `check`) holds, as
+// [LAW:no-shared-mutable-globals] The gates a daemon holds, as
 // one value its root builds and passes down. A registration changes only
 // this value, so what a load accepts is visible in its inputs.
 
@@ -24,6 +24,13 @@ export interface Gates {
   readonly state: Keyspace<DslConfig>;
   // The config-file writes (`persist`) a config's sessions may make.
   readonly config: Keyspace<DslConfig>;
+}
+
+// [LAW:single-enforcer] Derive both write gates when a config loads. A
+// conflicting action is a config diagnostic before a user ever clicks it.
+export function deriveActionGates(gates: Gates, config: DslConfig): void {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
 }
 
 // [LAW:one-source-of-truth] `held` is the whole daemon-wide contribution at

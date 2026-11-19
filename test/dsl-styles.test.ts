@@ -48,7 +48,7 @@ const bgOf = ({ rows }: Frame, marker: string): string => {
 // ─── Loader validation ────────────────────────────────────────────────────────
 
 // The loader's real error text — the same strings docs/interaction-authoring.md
-// quotes and `cc-candybar check` prints.
+// quotes from the loader.
 describe("styles block — loader validation", () => {
   const parseIssues = (src: string): string => {
     try {

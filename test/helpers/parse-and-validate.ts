@@ -31,8 +31,8 @@ export const EMPTY_DEFAULT: DslConfig = {
   themeDefaults: {},
 };
 
-// The judgment `check` makes: the bar's own validation, refusing every
-// placement it would drop rather than drawing past it.
+// [LAW:verifiable-goals] A fixture requesting a complete config should fail
+// at the authored placement that production would drop and diagnose.
 export function validateConfig(
   authored: AuthoredConfig,
   filePath = "<config>",

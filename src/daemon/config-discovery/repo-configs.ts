@@ -42,7 +42,7 @@ export function repoConfigsPath(dir: string): string {
 // directly in the state directory, where the book used to live, is read
 // only while the folder holds none, and the first answer recorded writes it
 // into the folder with that answer: nothing is moved, so no answer is lost
-// to a move, and every reader — the daemon and `check` — reads the
+// to a move, and every reader sees the
 // same answers.
 export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
   const book = stateFile(

@@ -38,13 +38,9 @@ describe("HELP_TEXT", () => {
     );
   });
 
-  // brandon-check-m2a. A flag nobody is told about is a flag nobody uses: the
-  // preview exists for an author reading `--help`, so its absence here is a
-  // shipped feature with no way in.
-  test("documents check's --render preview beside the command", () => {
-    expect(HELP_TEXT).toContain("check [--render] [file]");
-    expect(HELP_TEXT).toMatch(
-      /--render also prints the bar a fresh\n\s+session opens on/,
-    );
+  test("documents both config scopes and the editor schema", () => {
+    expect(HELP_TEXT).toMatch(/--config PATH\s+Use PATH as the user layer/);
+    expect(HELP_TEXT).toMatch(/--config-only PATH\s+Load only PATH over the bundled base/);
+    expect(HELP_TEXT).toMatch(/^\s+schema\s+Print the JSON Schema/m);
   });
 });

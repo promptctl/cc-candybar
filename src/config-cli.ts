@@ -1,10 +1,3 @@
-// [LAW:single-enforcer] Config-tooling CLI entry point for `schema`. It carries
-// no schema LOGIC — it serves the committed artifact (derived from the
-// loader's declarations), so it is a binding, not a reimplementation
-// [LAW:one-source-of-truth]. Config *validation* lives in `cc-candybar check`
-// (src/check.ts) — the full-pipeline verdict command; the old `lint` is its
-// alias.
-
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -13,7 +6,7 @@ import type { CliPlan } from "./cli-plan.js";
 const EXIT_VALID = 0;
 const EXIT_USAGE = 2;
 
-// Read the committed JSON Schema for the config file shape (RawDslConfig),
+// [LAW:one-source-of-truth] Read the committed JSON Schema for the config file shape (RawDslConfig),
 // or null when the artifact is absent. Pure read, folded by `schemaPlan` into a
 // plan that src/cli-plan.ts delivers, so the locate-and-read path is testable.
 export function loadSchemaText(): string | null {
