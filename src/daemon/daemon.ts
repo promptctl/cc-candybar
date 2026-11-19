@@ -240,8 +240,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     phase.kind === "serving" || phase.kind === "armed";
   const cancelling = (): boolean =>
     phase.kind === "closing" || phase.kind === "closed";
-  // [LAW:effects-at-boundaries] Cancellation for launch and wait adapters is
-  // emitted by the phase change at the journal barrier.
+  // [LAW:effects-at-boundaries] Render waits end with admission. Launches
+  // already in flight can finish through the journal barrier.
+  const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
   const log: DaemonLogger = (level, msg) =>
     inputs.daemonLog.log(
@@ -431,7 +432,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         socket: paths.socket,
       },
     },
-    closing: cancelling,
+    // [LAW:single-enforcer] The pane queue reads the same phase as ingress
+    // before any new operation reaches tmux.
+    closing: () => !serving(),
     log,
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -808,7 +811,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
 
   const parts: DaemonParts = {
     accountHome: inputs.accountHome,
-    closing: cancelWork.signal,
+    closing: cancelRenders.signal,
     home: host.home,
     launcher,
     log,
@@ -939,6 +942,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       tearDown(done),
     );
     phase = { kind: "draining", done };
+    cancelRenders.abort(new DaemonClosing("render"));
     return done;
   }
 

@@ -62,7 +62,7 @@ export interface DaemonParts {
     environment: SessionEnvironment,
     order: RequestId,
   ) => RendererHost;
-  // The daemon's close, which ends a request's wait.
+  // The daemon's admission close, which ends a render request's wait.
   readonly closing: AbortSignal;
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).

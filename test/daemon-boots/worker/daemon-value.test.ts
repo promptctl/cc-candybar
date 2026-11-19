@@ -7,6 +7,7 @@ import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
+import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
 import { createHook } from "node:async_hooks";
 import {
   existsSync,
@@ -19,7 +20,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
+import { effectsUrl, VERB_SET_STATE, VERB_SLASH } from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { ServedDaemon } from "../../../src/daemon/daemon";
@@ -53,7 +54,7 @@ import {
 } from "../../../src/daemon/foundations/protocol";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
-import { clickBody, hookData } from "../../helpers/daemon-e2e";
+import { clickBody, findUrl, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
 import {
   buildDaemon,
@@ -183,6 +184,7 @@ describe("the daemon is a value", () => {
       digest?: string;
       profile?: () => never;
       renderer?: RendererPort;
+      claudeInput?: () => ClaudeInputEdge;
     } = {},
   ): ServedDaemon => {
     const { profile } = inputs;
@@ -196,6 +198,7 @@ describe("the daemon is a value", () => {
       ...(inputs.clock && { clock: inputs.clock }),
       ...(profile && { profile }),
       ...(inputs.renderer && { renderer: inputs.renderer }),
+      ...(inputs.claudeInput && { claudeInput: inputs.claudeInput }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -225,6 +228,16 @@ describe("the daemon is a value", () => {
     // The environment it runs in now, as a client started by Claude Code
     // reports its own.
     env: plainEnvironment(process.env),
+  });
+
+  const worktreeRequest = (session: string): ReaderRenderRequest => ({
+    ...renderRequest(session),
+    env: plainEnvironment({ ...process.env, CC_CANDYBAR_NAME: WORKTREE }),
+    client: {
+      kind: "node",
+      bundle: path.join(root, "checkout", "dist", "index.mjs"),
+      source: null,
+    },
   });
 
   const reply = async (
@@ -388,15 +401,7 @@ describe("the daemon is a value", () => {
     daemon.arm();
     await answer(daemon, renderRequest("live-primary"));
     const requested = daemon.handle(
-      classifyInbound({
-        ...renderRequest("down-worktree"),
-        env: plainEnvironment({ ...process.env, CC_CANDYBAR_NAME: WORKTREE }),
-        client: {
-          kind: "node",
-          bundle: path.join(root, "checkout", "dist", "index.mjs"),
-          source: null,
-        },
-      }),
+      classifyInbound(worktreeRequest("down-worktree")),
       () => false,
       daemon.stats.accept(),
       () => false,
@@ -430,6 +435,158 @@ describe("the daemon is a value", () => {
     await Promise.all(openLogs.map((log) => log.drained()));
     const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
     expect(log).not.toMatch(/worktree close-(journal|views) failed/);
+  });
+
+  test("the drain refuses pending work while another renderer flushes its journal", async () => {
+    const pause = () => {
+      let entered!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return {
+        reached,
+        release,
+        wait: () => {
+          entered();
+          return released;
+        },
+      };
+    };
+    const context = pause();
+    const journal = pause();
+    const firstAct = pause();
+    let paneReads = 0;
+    const linesTyped: string[] = [];
+    const session = "render-during-drain";
+    const local = inProcessRenderer();
+    const port: RendererPort = (prepared) => ({
+      start: (own) => {
+        const link = local(prepared).start(own);
+        return {
+          ...link,
+          renderer: rendererOf({
+            event: async (input) => {
+              if (
+                input.event.kind === "context" &&
+                input.event.context.hookData.session_id === session
+              )
+                await context.wait();
+              return link.renderer.answer(input);
+            },
+            adapter: async (input) => {
+              if (
+                prepared.name === WORKTREE &&
+                input.push.kind === "close-journal"
+              )
+                await journal.wait();
+              return link.renderer.answer(input);
+            },
+          }),
+        };
+      },
+    });
+    writeConfig(`{
+      actions: { compact: { slash: '/compact' }, clear: { slash: '/clear' } },
+      segments: {
+        commands: { template: '{{ action "compact" "compact" }} {{ action "clear" "clear" }}' },
+      },
+      root: { h: ['commands'] },
+    }`);
+    const daemon = construct({
+      renderer: port,
+      claudeInput: () => ({
+        read: async () => {
+          paneReads++;
+          return {
+            inMode: false,
+            screen: ["─".repeat(30), "❯ ", "─".repeat(30)],
+          };
+        },
+        type: async (_pane, line) => {
+          linesTyped.push(line);
+          if (line === "/compact") await firstAct.wait();
+          return { kind: "typed" };
+        },
+      }),
+    });
+    await answer(daemon, worktreeRequest("worktree-drains"));
+    const pane = await answer(daemon, {
+      ...renderRequest("pane-during-drain"),
+      tmux: {
+        socket: path.join(root, "tmux.sock"),
+        pane: "%7",
+        truecolor: null,
+      },
+    });
+    const slashLink = (line: string) =>
+      findUrl(linkUrls(pane), (effects) =>
+        effects.some(({ verb, args }) => verb === VERB_SLASH && args[1] === line),
+      );
+    const compact = slashLink("/compact");
+    const clear = slashLink("/clear");
+    if (compact === undefined || clear === undefined)
+      throw new Error("the pane actions did not draw their links");
+    const request = (req: ReaderRenderRequest | ReturnType<typeof clickBody>) =>
+      daemon.handle(
+        classifyInbound(req),
+        () => false,
+        daemon.stats.accept(),
+        () => false,
+      );
+    try {
+      const first = request(clickBody(compact));
+      await Promise.race([
+        firstAct.reached,
+        first.then((reply) => {
+          throw new Error(
+            `the first click did not type: ${JSON.stringify(reply)}`,
+          );
+        }),
+      ]);
+      const second = request(clickBody(clear));
+      // The context uses the same mailbox. Once it reaches the renderer,
+      // the second click has already handed its act to the pane queue.
+      const pending = request(renderRequest(session, 20_000));
+      await context.reached;
+      expect(linesTyped).toEqual(["/compact"]);
+      void daemon.close();
+      context.release();
+      await journal.reached;
+      const handled = await pending;
+      if (handled.kind !== "reply") throw new Error("expected a render reply");
+      handled.settled(true);
+      expect(handled.resp).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("the daemon closed"),
+      });
+      firstAct.release();
+      for (const clicked of await Promise.all([first, second])) {
+        if (clicked.kind !== "reply") throw new Error("expected a click reply");
+        clicked.settled(true);
+      }
+      expect(paneReads).toBe(1);
+      expect(linesTyped).toEqual(["/compact"]);
+    } finally {
+      firstAct.release();
+      context.release();
+      journal.release();
+      await close(daemon);
+    }
+    await Promise.all(openLogs.map((log) => log.drained()));
+    const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
+    expect(log).toMatch(
+      /\[info\] render .*sid=render-during-drain .*outcome=closing/,
+    );
+    expect(log).toMatch(
+      /\[info\] act kind=type-slash .*outcome=ok — \/compact: typed/,
+    );
+    expect(log).toMatch(
+      /\[info\] act kind=type-slash .*outcome=closing — \/clear:/,
+    );
   });
 
   test("closing refuses requests and subscriptions without throwing or writing a click", async () => {
