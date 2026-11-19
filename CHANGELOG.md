@@ -1,3 +1,9 @@
+## [1.235.11](https://github.com/promptctl/cc-candybar/compare/v1.235.10...v1.235.11) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** check render workspace directories at ingress ([#895](https://github.com/promptctl/cc-candybar/issues/895)) ([c2d97e8](https://github.com/promptctl/cc-candybar/commit/c2d97e8387a54fe5bcd2ce30580d704c3d509943))
+
 ## [1.235.10](https://github.com/promptctl/cc-candybar/compare/v1.235.9...v1.235.10) (2026-11-19)
 
 ### Bug Fixes
