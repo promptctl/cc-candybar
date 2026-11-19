@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-867",
+      "ref": "refs/pull/867/merge",
+      "sha": "5e0cbfd6557396743e30d70db9de696c5b63f892",
+      "timestamp": "2026-11-19T12:52:24.658Z",
+      "commits": [
+        {
+          "sha": "5e0cbfd6557396743e30d70db9de696c5b63f892",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:51:17Z",
+          "message": "Merge 763884679256011f0c8b192bf7472e6d35f3ca6d into 23c326f89ca153631c98d23faf4844e8803a63d5\n"
+        },
+        {
+          "sha": "763884679256011f0c8b192bf7472e6d35f3ca6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:51:02-07:00",
+          "message": "fix(preview): retain real config diagnostics and isolate sample sessions\n"
+        },
+        {
+          "sha": "9a46c4c79baefd53158c059db763d5c3b503028e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:28:42-07:00",
+          "message": "refactor(cli): retire the standalone config check (ibyq.9lr)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-864",
       "ref": "refs/pull/864/merge",
       "sha": "cea9415b703e0c5e918773f0d99f7adeffd54918",
@@ -85,28 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:10:16-07:00",
           "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-867",
-      "ref": "refs/pull/867/merge",
-      "sha": "870632928099f4280f8115ccd22bd8a1c0e2d521",
-      "timestamp": "2026-11-19T12:32:11.094Z",
-      "commits": [
-        {
-          "sha": "870632928099f4280f8115ccd22bd8a1c0e2d521",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:30:28-07:00",
-          "message": "Merge fccab855a45eb17692eae3e8e95ff3dc66a4d6a1 into 2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8\n"
-        },
-        {
-          "sha": "fccab855a45eb17692eae3e8e95ff3dc66a4d6a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:28:42-07:00",
-          "message": "refactor(cli): retire the standalone config check (ibyq.9lr)\n"
         }
       ]
     },

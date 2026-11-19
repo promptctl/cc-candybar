@@ -50135,44 +50135,6 @@ async function readTail(path31, maxBytes) {
     }
   });
 }
-function readTailSync(path31, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code: code2 } = e;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
 
 // src/daemon/foundations/debug-types.ts
 init_globals();
@@ -55273,31 +55235,44 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
+// src/utils/regular-text.ts
+init_globals();
+function readRegularTextSync(path31) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error("not a file");
+    return readFileSync(fd, "utf8");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+
 // src/claude-settings-read.ts
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
+  try {
+    return readRegularTextSync(settingsPath);
+  } catch (e) {
+    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
       return "";
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return read2.value.buf.toString("utf8");
+    throw cannotRead(settingsPath, e);
   }
 }
 function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
   let text4;
   try {
     text4 = readClaudeSettingsText(settingsPath);
   } catch (e) {
-    return failed(reason(e), "read");
+    return failed(messageOf(e), "read");
   }
   try {
     return ok(parseSettings(settingsPath, text4));
   } catch (e) {
-    return failed(reason(e), "parse");
+    return failed(messageOf(e), "parse");
   }
 }
 function parseSettings(settingsPath, text4) {
@@ -55313,7 +55288,7 @@ function parseSettings(settingsPath, text4) {
   }
   return parsed2;
 }
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
+var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
 // src/segments/autocompact.ts
 init_globals();
@@ -65980,7 +65955,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.0";
+var PACKAGE_VERSION = "1.233.1";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -71284,7 +71259,7 @@ var SourceRegistry = class _SourceRegistry {
   runSources() {
     return this.runSourcesNow.get();
   }
-  // The runs the request waits on, by variable name.
+  // The named runs declared by this registry, including aliases for a shared run.
   namedRuns() {
     return this.namedNow.get();
   }
@@ -77871,7 +77846,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const root = compiled.roots.get(preset);
     if (root === void 0) {
       throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+        `Preset "${preset}" has no compiled layout \u2014 the config compiler builds one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
       );
     }
     const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
@@ -86496,6 +86471,397 @@ function sessionSource(deps) {
 // src/renderer/render-cache.ts
 init_globals();
 
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
+  }
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min3, max3, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min3 = Math.min(...ranges.map((r) => r.min));
+    const max3 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min3 || n > max3;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min3, max: max3 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
+  }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config) {
+      const held = gates.get(config);
+      if (held?.epoch === epoch) return held.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
+      gates.set(config, { epoch, gate: gate2 });
+      return gate2;
+    }
+  };
+}
+
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
+}
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return [
+    ...clearableContributions(config),
+    ...Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config) {
+  return mergeContributions(actionContributions(config), "config");
+}
+
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return dropBaselineAllowLists(
+    Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config) {
+  return mergeContributions(actionContributions2(config));
+}
+
+// src/daemon/foundations/gates.ts
+function deriveActionGates(gates, config) {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
+}
+function createGates(held = { state: [], config: [] }) {
+  const state = makeStateKeyspace();
+  const config = makeConfigKeyspace();
+  for (const { key, allowed } of held.state) state.register(key, allowed);
+  for (const { key, allowed } of held.config) config.register(key, allowed);
+  return { state, config };
+}
+
 // src/config/unused.ts
 init_globals();
 function* variablesOf(cfg) {
@@ -86770,8 +87136,7 @@ function buildRenderState(load, deps) {
     const probe2 = registry.view();
     warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
-    deps.gates.state.gateFor(config);
-    deps.gates.config.gateFor(config);
+    deriveActionGates(deps.gates, config);
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
@@ -88424,12 +88789,11 @@ var diskFiles = {
   folders: listFolders,
   text(file) {
     try {
-      return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
+      return { kind: "text", text: readRegularTextSync(file) };
     } catch (e) {
-      const err = e;
       return {
         kind: "unreadable",
-        error: err.code === "EISDIR" ? "not a file" : err.message
+        error: types.isNativeError(e) ? e.message : String(e)
       };
     }
   },
@@ -89459,393 +89823,6 @@ function createDaemon(inputs) {
     return { settled: launcher.settled() };
   }
   return { launcher, close, serve };
-}
-
-// src/daemon/foundations/gates.ts
-init_globals();
-
-// src/daemon/foundations/config-validators.ts
-init_globals();
-
-// src/daemon/foundations/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min3, max3, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min3 = Math.min(...ranges.map((r) => r.min));
-    const max3 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min3 || n > max3;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min3, max: max3 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config) {
-      const held = gates.get(config);
-      if (held?.epoch === epoch) return held.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
-      gates.set(config, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/foundations/config-validators.ts
-function makeConfigKeyspace() {
-  return createKeyspace({}, "config", deriveConfigActionValidators);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function clearableContributions(config) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return [
-    ...clearableContributions(config),
-    ...Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config) {
-  return mergeContributions(actionContributions(config), "config");
-}
-
-// src/daemon/foundations/state-validators.ts
-init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme
-};
-function makeStateKeyspace() {
-  return createKeyspace(BASELINE, "state", deriveActionValidators);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
-function actionContributions2(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config) {
-  return mergeContributions(actionContributions2(config));
-}
-
-// src/daemon/foundations/gates.ts
-function createGates(held = { state: [], config: [] }) {
-  const state = makeStateKeyspace();
-  const config = makeConfigKeyspace();
-  for (const { key, allowed } of held.state) state.register(key, allowed);
-  for (const { key, allowed } of held.config) config.register(key, allowed);
-  return { state, config };
 }
 
 // src/daemon/log.ts
