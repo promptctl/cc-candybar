@@ -28477,6 +28477,84 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
+// src/config/loader/repo-gate.ts
+init_globals();
+var REPO_ANSWERS = ["approved", "declined"];
+function answerDir(d) {
+  return d.link.kind === "linked" ? d.link.main : d.dir;
+}
+var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
+function ruling(answers, d) {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo2 = answerOf(answers.value, key);
+  const own2 = answerOf(answers.value, d.dir);
+  if (repo2 === null) {
+    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
+  }
+  return {
+    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
+    under: key
+  };
+}
+function gateRepos(answers, dirs, project) {
+  const reached = reachedDirs(dirs, project);
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing2 = (s) => ruled.filter((r) => r.standing === s);
+  const repos = (s) => [
+    ...new Set(standing2(s).map((r) => r.under))
+  ];
+  return {
+    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
+    approved: standing2("approved").map((r) => r.dir),
+    awaiting: repos("awaiting"),
+    declined: repos("declined"),
+    unproven: reached.flatMap(
+      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
+    ),
+    unread: answers.kind === "failed" ? answers.reason : null
+  };
+}
+function reachedDirs(dirs, project) {
+  return [
+    ...new Map(
+      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
+    ).values()
+  ];
+}
+function repoQuestion(answers, dirs, project) {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === void 0) return null;
+  const { standing: standing2, under: under2 } = ruling(answers, reached);
+  return {
+    dir: under2,
+    standing: standing2,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+  };
+}
+function withAnswer(book, dir, answer2, superseded) {
+  if (book[dir] === answer2 && superseded.length === 0) return book;
+  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
+  return { ...Object.fromEntries(rest2), [dir]: answer2 };
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  for (const [dir, answer2] of Object.entries(doc)) {
+    if (!REPO_ANSWERS.includes(answer2)) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function repoUnreadNotice(gate2) {
+  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+}
+
 // src/daemon/foundations/verb-error.ts
 init_globals();
 
@@ -28602,6 +28680,14 @@ var VERB_REWIND = "rewind";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
@@ -28757,7 +28843,7 @@ var VERB_NAMES = Object.freeze([
 function isEffectVerb(verb) {
   return Object.hasOwn(SAYS, verb);
 }
-function admitClick(verb, value) {
+function admitClick(verb, value, signer) {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
@@ -28804,13 +28890,24 @@ function admitClick(verb, value) {
       const args = separator === -1 ? [] : decodeWire(
         () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
       );
-      scoped.steps.push({ kind: "session", verb: name, args });
+      scoped.steps.push(
+        name === VERB_REPO_CONFIG ? admitRepoAnswer(scoped.id, args, signer) : { kind: "session", verb: name, args }
+      );
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
   return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+}
+function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
+  const answer2 = REPO_ANSWERS.find((known) => known === value);
+  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
 }
 
 // src/host.ts
@@ -30014,7 +30111,13 @@ init_globals();
 function hrefOfDrawnLink(link) {
   if (typeof link === "string") return link;
   if (link.kind === "href") return link.url;
+  if (link.kind === "repo-answer") return repoAnswerUrl(link, "");
   return effectsUrl([link.effect]);
+}
+function repoAnswerUrl({ session, dir, answer: answer2 }, proof) {
+  return effectsUrl([
+    { verb: VERB_REPO_CONFIG, args: [session, dir, answer2, proof] }
+  ]);
 }
 
 // src/click/link-signer.ts
@@ -39707,10 +39810,10 @@ function anchored(timeline, host, time, rate) {
 }
 function played(animation, { origin, time, rate }) {
   const mapped = (host) => time + rate * (host - origin);
-  const forward = rate > 0;
-  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
-  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
-  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
+  const forward2 = rate > 0;
+  const ahead = forward2 ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
+  const behind = forward2 ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
+  const past = forward2 ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
     const sum2 = origin + (edge - time) / rate;
     return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
@@ -41087,14 +41190,14 @@ var CellJoiner = class {
         const hasLeft = left !== null && (!reads.seam.left || leftBg !== void 0);
         const hasRight = right !== null && (!reads.seam.right || rightBg !== void 0);
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
-        const tails = hasLeft && (!reads.tail || leftBg !== void 0);
+        const tails2 = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
         const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
           const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
           return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
-          if (leads || tails)
+          if (leads || tails2)
             yield* styled(leads ? "lead" : "tail");
           return;
         }
@@ -47146,7 +47249,7 @@ var LinkProof = class {
         verb: target.effect.verb,
         args: Object.freeze([...target.effect.args])
       })
-    }) : Object.freeze({ kind: "href", url: target.url });
+    }) : Object.freeze({ ...target });
     this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
   }
 };
@@ -49809,7 +49912,7 @@ function parseClick(url, delivery, links) {
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value),
+      click: admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery
     };
@@ -49874,14 +49977,42 @@ var Limiter = class {
   }
 };
 
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
 // src/utils/transcript-fs.ts
 function statStamp(filePath2) {
   if (!filePath2) return "";
   try {
-    return stampOf(statSync(filePath2));
+    const stat3 = statSync(filePath2, { bigint: true });
+    return stat3.isFile() ? transcriptVersion(stat3) : "";
   } catch {
     return "";
   }
+}
+function transcriptVersion(stat3) {
+  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
 }
 function stampOf(st) {
   return `${st.mtimeMs}:${st.size}`;
@@ -49920,24 +50051,84 @@ async function readAppended(path31, prior, until2) {
     });
   });
 }
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
+var Observations = class {
+  pending = new SingleFlight();
+  recent = /* @__PURE__ */ new Map();
+  async read(path31, range, read2) {
+    const stamp2 = statStamp(path31);
+    if (stamp2 === "") return observedValue(await read2());
+    const key = `${stamp2}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== void 0) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed: observed2, originalPath } = await this.pending.run(key, async () => {
+      const observed3 = await read2();
+      if (observed3.kind === "ok" && observed3.value.stamp === stamp2 && observed3.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed3.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed: observed3, originalPath: path31 };
+    });
+    return observedValue(
+      originalPath === path31 || observed2.kind === "ok" && observed2.value.stamp === stamp2 ? observed2 : await read2()
+    );
   }
+};
+function observedValue(found2) {
+  return found2.kind === "ok" ? ok(found2.value.value) : found2;
+}
+var forward = new Observations();
+var tails = new Observations();
+function readAppendedText(path31, prior, until2) {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
+  return forward.read(path31, range, async () => {
+    var _stack = [];
+    try {
+      const read2 = await readAppended(path31, prior, until2);
+      if (read2.kind !== "ok") return read2;
+      const lent = __using(_stack, read2.value);
+      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
+      const bytes = lines2.length;
+      return ok({
+        stamp: info.stamp,
+        bytes,
+        value: { ...info, bytes, text: lines2.toString("utf8") }
+      });
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  });
+}
+function readTailText(path31, maxBytes) {
+  return tails.read(path31, String(maxBytes), async () => {
+    const read2 = await readTail(path31, maxBytes);
+    if (read2.kind !== "ok") return read2;
+    const { stamp: stamp2, fromStart, buf } = read2.value;
+    return ok({
+      stamp: stamp2,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart }
+    });
+  });
 }
 async function readWholeLines(path31, prior, until2, window2) {
   let fh = null;
   try {
-    fh = await open(path31, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
+    fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path31}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp2 = transcriptVersion(st);
     const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
     const start = reset || prior === void 0 ? 0 : prior.offset;
     const end = reset || until2 === void 0 ? size : Math.min(size, until2);
@@ -50012,12 +50203,16 @@ async function readTail(path31, maxBytes) {
   return gate.run(async () => {
     let fh = null;
     try {
-      fh = await open(path31, "r");
-      const { size } = await fh.stat();
+      fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat3 = await fh.stat({ bigint: true });
+      if (!stat3.isFile())
+        return failed(`readTail ${path31}: not a regular file`, "read");
+      const size = Number(stat3.size);
       const start = Math.max(0, size - maxBytes);
       return ok({
         buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
+        fromStart: start === 0,
+        stamp: transcriptVersion(stat3)
       });
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT;
@@ -50073,7 +50268,7 @@ function perLane(value) {
   );
 }
 var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 function parseLane(raw) {
   return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
 }
@@ -52134,18 +52329,14 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
         paths2.push(filePath2);
         continue;
       }
-      const read2 = await readAppended(filePath2, void 0, void 0);
+      const read2 = await readAppendedText(filePath2, void 0, void 0);
       if (read2.kind !== "ok") {
         debug(`Failed to check agent file ${filePath2}`);
         continue;
       }
       longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
+      const { text: text4 } = read2.value;
+      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
       if (line.kind === "object" && line.value.sessionId === sessionId2) {
         paths2.push(filePath2);
       }
@@ -52268,7 +52459,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
   let value = prior?.value ?? empty2;
   let end;
   for (; ; ) {
-    const read2 = await readAppended(
+    const read2 = await readAppendedText(
       filePath2,
       cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
       end?.size
@@ -52280,11 +52471,8 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next2 = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
+    const next2 = window2.start + window2.bytes;
+    value = await step4(value, parseJsonlLines(window2.text));
     cursor = {
       offset: next2,
       stamp: end.stamp,
@@ -52293,30 +52481,6 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
 }
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
 
 // src/var-system/store.ts
 init_globals();
@@ -53417,8 +53581,8 @@ var SessionUsageStore = class {
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath2 = (0, import_node_path15.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(stat2(filePath2, { bigint: true }));
+          if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
           if (!id2.ok) {
             this.log(
@@ -53430,7 +53594,7 @@ var SessionUsageStore = class {
           candidates.push({
             sessionId: id2.id,
             path: filePath2,
-            stamp: stampOf(st)
+            stamp: transcriptVersion(st)
           });
         }
       }
@@ -55484,18 +55648,17 @@ async function cacheExpiresAt(transcriptPath) {
 }
 async function findLastCacheActivityTs(transcriptPath) {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
+    const tail = await readTailText(transcriptPath, maxBytes);
     if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    const ts = scanLastCacheTs(tail.value.text, tail.value.fromStart);
     if (ts != null) return ok(ts);
     if (tail.value.fromStart) return ABSENT;
   }
   return ABSENT;
 }
-function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text4 = buf.toString("utf8");
+function scanLastCacheTs(text4, fromStart) {
   const lines2 = text4.split("\n");
-  const start = bufStartsAtFileBeginning ? 0 : 1;
+  const start = fromStart ? 0 : 1;
   for (let i2 = lines2.length - 1; i2 >= start; i2--) {
     const line = lines2[i2];
     if (!line || !CACHE_HIT_RE.test(line)) continue;
@@ -65990,7 +66153,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.2";
+var PACKAGE_VERSION = "1.234.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -67648,7 +67811,7 @@ var FrameFeeds = class {
   send(watched, sub2) {
     const follower = watched.followers.get(sub2);
     if (watched.last === null || follower === void 0) return;
-    const json2 = answerOf(watched.last, sub2.lane);
+    const json2 = answerOf2(watched.last, sub2.lane);
     if (follower.sent === json2) return;
     follower.sent = json2;
     this.pushed++;
@@ -68406,7 +68569,12 @@ function publishingFrames(signer) {
         ...row,
         runs: row.runs.map(({ link, ...run3 }) => {
           if (link === void 0) return run3;
-          const href = hrefOfDrawnLink(link);
+          const href = typeof link !== "string" && link.kind === "repo-answer" ? repoAnswerUrl(
+            link,
+            signer.sign(
+              repoAnswerFields(link.session, link.dir, link.answer)
+            )
+          ) : hrefOfDrawnLink(link);
           return {
             ...run3,
             link: isBarLink(href) ? signer.signLink(href) : href
@@ -68599,84 +68767,6 @@ function addressText(at) {
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
 var import_node_path24 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/repo-gate.ts
-init_globals();
-var REPO_ANSWERS = ["approved", "declined"];
-function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
-}
-var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
-function ruling(answers, d) {
-  const key = answerDir(d);
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf2(answers.value, key);
-  const own2 = answerOf2(answers.value, d.dir);
-  if (repo2 === null) {
-    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
-  }
-  return {
-    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
-    under: key
-  };
-}
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
-  return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
-  };
-}
-function withAnswer(book, dir, answer2, superseded) {
-  if (book[dir] === answer2 && superseded.length === 0) return book;
-  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
-  return { ...Object.fromEntries(rest2), [dir]: answer2 };
-}
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
-}
 
 // src/utils/presence.ts
 init_globals();
@@ -70231,7 +70321,7 @@ var ISSUE_INDENT = " ";
 function channelRows(message2, opts, trailing) {
   const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link) => link === null ? base : base.withLink(link);
+  const styled = (link) => link === null ? base : styleWithLink(base, link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message2.lines.flatMap((line, i2) => {
     const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
@@ -70244,33 +70334,17 @@ function channelRows(message2, opts, trailing) {
 }
 
 // src/config/repo-question.ts
-function repoAnswerFields(sessionId2, dir, answer2) {
-  return {
-    sessionId: sessionId2,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer2
-  };
-}
-function repoQuestions(question, sessionId2, signer) {
+function repoQuestions(question, sessionId2) {
   const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
   return awaiting.map((dir) => {
     const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
-      (answer2) => diagnosticSpan(
-        `[${answer2 === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
-          {
-            verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId2,
-              dir,
-              answer2,
-              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
-            ]
-          }
-        ])
-      )
+      (answer2) => diagnosticSpan(`[${answer2 === "approved" ? "approve" : "decline"}]`, {
+        kind: "repo-answer",
+        session: sessionId2,
+        dir,
+        answer: answer2
+      })
     );
     const line = [diagnosticSpan(message2, null), ...answers];
     return {
@@ -82594,7 +82668,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds, inspect2) {
-  const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
+  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
   const idleSince = menuIdle.since(sessionId2, readings);
@@ -82614,7 +82688,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const questions = repoQuestions(entry.snapshot.repo, sessionId2, linkSigner2);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const errors2 = [
@@ -83170,7 +83244,7 @@ function sameDraw(previous2, next2, lane) {
   if (next2.kind === "failed")
     return previous2?.kind === "failed" && previous2.message === next2.message;
   if (previous2?.kind !== "drawn") return false;
-  const forLane = ({ bar, handoff }) => answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const forLane = ({ bar, handoff }) => answerOf2({ resp: bar, statusline: handoff ?? bar }, lane);
   const before = forLane(previous2);
   const after = forLane(next2);
   return before.depth === after.depth && before.rows.length === after.rows.length && before.rows.every(
@@ -85694,17 +85768,6 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
   };
 }
 var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
-var repoConfig = (args, ctx) => {
-  const [dir = "", answer2 = "", mac = ""] = args;
-  const sid = ctx.session;
-  const answered = REPO_ANSWERS.find((known) => known === answer2);
-  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  ctx.configWrites.answer(dir, answered);
-};
 var SESSION_HANDLERS = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
@@ -85722,7 +85785,6 @@ var SESSION_HANDLERS = {
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
   [VERB_RUN]: run2,
-  [VERB_REPO_CONFIG]: repoConfig,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 function foldEffects(steps2, log, perform, recordErrors) {
@@ -85877,8 +85939,17 @@ function runClick(click2, ctx) {
         click2.steps,
         c.log,
         (step4) => {
-          if (step4.kind === "global") globalAct(step4, c, sid);
-          else SESSION_HANDLERS[step4.verb](step4.args, c);
+          switch (step4.kind) {
+            case "global":
+              globalAct(step4, c, sid);
+              break;
+            case "session":
+              SESSION_HANDLERS[step4.verb](step4.args, c);
+              break;
+            case "repo-answer":
+              c.configWrites.answer(step4.dir, step4.answer);
+              break;
+          }
         },
         (message2) => holdClickError(c.sessionState, sid, message2, c.now())
       );
@@ -88217,7 +88288,6 @@ function mainRendererOf(inputs, host) {
   const parts = {
     ...host,
     time,
-    linkSigner: linkSigner2,
     sessionState: edits.view,
     renderCache,
     worldStates,
