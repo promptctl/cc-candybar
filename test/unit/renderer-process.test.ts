@@ -4,6 +4,7 @@
 // silent renderer is ended, and whose ids cross.
 
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -43,7 +44,11 @@ import {
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
-import { inertHost } from "../helpers/renderer-parts";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../helpers/oversized-renderer-history";
+import type { LogLine } from "../../src/utils/logger";
 
 // One renderer process as the test plays it: what the host wrote to it, and
 // what it says back.
@@ -120,7 +125,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
-    reaches: inertHost(),
     log: (level, msg) => {
       logs.push(msg);
       levels.push(level);
@@ -177,6 +181,38 @@ const PINNED: Timed<AdapterOutput> = {
 };
 
 describe("a renderer process's start", () => {
+  test.each(["started", "refused"] as const)(
+    "takes %s boot diagnostics before the boot record, once",
+    (kind) => {
+      const { link, children, logs, levels } = rig();
+      const diagnostic: LogLine = { level: "warn", line: "construction warning" };
+      link.arm();
+      const child = children[0]!;
+      const boot: RendererLine =
+        kind === "started"
+          ? {
+              kind,
+              pid: 9001,
+              wireVersion: RENDERER_WIRE_VERSION,
+              diagnostics: [diagnostic],
+            }
+          : {
+              kind,
+              wireVersion: RENDERER_WIRE_VERSION,
+              failure: failureOf(new Error("refused by fixture")),
+              diagnostics: [diagnostic],
+            };
+      child.say(boot);
+      child.say(boot);
+      const index = logs.indexOf(diagnostic.line);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(levels[index]).toBe(diagnostic.level);
+      expect(logs[index + 1]).toContain(
+        kind === "started" ? "started pid=" : "refused its boot:",
+      );
+      expect(logs.filter((line) => line === diagnostic.line)).toHaveLength(1);
+    },
+  );
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the wire version", () => {
     const { link, children } = rig();
     link.arm();
@@ -225,8 +261,9 @@ describe("a renderer process's start", () => {
       const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
         "renderer wire version mismatch",
       );
+      const diagnostics = [{ level: "warn", line: "diagnostics in an unaccepted protocol" }];
       child.opts.heard.stdout(
-        `${JSON.stringify({ kind: "started", pid: 9001, ...fields })}\n`,
+        `${JSON.stringify({ kind: "started", pid: 9001, diagnostics, ...fields })}\n`,
       );
       // A later acknowledgment cannot rescue the rejected process during teardown.
       child.say(startedLine(9001));
@@ -235,6 +272,7 @@ describe("a renderer process's start", () => {
       expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
       const mismatch = `renderer wire version mismatch (renderer sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`;
       expect(logs).toContainEqual(expect.stringContaining(mismatch));
+      expect(logs).not.toContain(diagnostics[0]?.line);
       expect(ends[0]?.text).toContain(mismatch);
       clock.advance(BACKOFF_FIRST_MS - 1);
       expect(children).toHaveLength(1);
@@ -282,6 +320,7 @@ describe("a renderer process's start", () => {
     link.arm();
     children[0]!.say({
       kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
       failure: failureOf(new Error("the session state cannot be read")),
     });
     children[0]!.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
@@ -293,6 +332,100 @@ describe("a renderer process's start", () => {
     ]);
   });
 
+  test.each([
+    ["boot", null],
+    ["output", "not a diagnostic batch"],
+    ["output", [{ level: "verbose", line: "discard this" }]],
+    ["output", [{ level: "info", line: 12 }]],
+  ])(
+    "a malformed %s diagnostic leaves the valid answer usable",
+    async (at, diagnostics) => {
+      const { link, children, inputs, logs } = rig();
+      link.arm();
+      const child = children[0]!;
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          ...startedLine(9001),
+          ...(at === "boot" ? { diagnostics } : {}),
+        })}\n`,
+      );
+      const answered = link.renderer.answer(pin);
+      const [sent] = inputs(child);
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          kind: "output",
+          n: sent!.n,
+          output: { ...PINNED, ...(at === "output" ? { diagnostics } : {}) },
+        })}\n`,
+      );
+      await expect(answered).resolves.toEqual(PINNED);
+      expect(
+        logs.filter((line) => line.includes("invalid diagnostics")),
+      ).toHaveLength(1);
+      expect(logs).not.toContain("discard this");
+    },
+  );
+
+  test("a refused boot after readiness cannot change this link or write its diagnostics", async () => {
+    const { link, children, inputs, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say(startedLine(9001));
+    child.say({
+      kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
+      failure: failureOf(new Error("obsolete refusal")),
+      diagnostics: [{ level: "warn", line: "obsolete log" }],
+    });
+    const answered = link.renderer.answer(pin);
+    child.say({ kind: "output", n: inputs(child)[0]!.n, output: PINNED });
+    await expect(answered).resolves.toEqual(PINNED);
+    expect(child.opts.signal?.aborted).toBe(false);
+    expect(logs.join("\n")).not.toContain("obsolete");
+  });
+
+  test.each([
+    [
+      { kind: "started", pid: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid pid",
+    ],
+    [
+      { kind: "refused", failure: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid refusal",
+    ],
+  ])(
+    "a malformed required boot field refuses the worker immediately",
+    async (raw, why) => {
+      const { link, children } = rig();
+      link.arm();
+      const child = children[0]!;
+      const refused = expect(link.renderer.answer(pin)).rejects.toThrow(why);
+      child.opts.heard.stdout(`${JSON.stringify(raw)}\n`);
+      await refused;
+      expect(child.opts.signal?.aborted).toBe(true);
+      expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
+    },
+  );
+
+  test("an incompatible refusal can explain the version without publishing its diagnostics", async () => {
+    const { link, children, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
+      "incompatible boot",
+    );
+    child.opts.heard.stdout(
+      `${JSON.stringify({
+        kind: "refused",
+        wireVersion: RENDERER_WIRE_VERSION - 1,
+        failure: failureOf(new Error("incompatible boot")),
+        diagnostics: [{ level: "info", line: "foreign diagnostic" }],
+      })}\n`,
+    );
+    child.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
+    await refused;
+    expect(logs.join("\n")).not.toContain("foreign diagnostic");
+  });
   test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
     const { link } = rig();
     link.arm();
@@ -329,6 +462,34 @@ describe("a renderer process's start", () => {
     ]);
     expect(children[0]!.opts.signal?.aborted).toBe(true);
   });
+});
+
+test("the in-process link logs construction diagnostics once before its first answer", async () => {
+  const logs: LogLine[] = [];
+  const link = inProcessRenderer()({
+    name: MAIN_RENDERER,
+    boot: () => ({ ...RENDERER_BOOT, stored: oversizedRendererHistory() }),
+    entry: "/app/index.mjs",
+    node: ["/bin/node"],
+  }).start({
+    log: (level, line) => void logs.push({ level, line }),
+    clock: heldClock(new Date(0)),
+    start: async () => {},
+    ended: () => {},
+  });
+  link.serve();
+  link.serve();
+  expect(logs).toEqual([
+    {
+      level: "info",
+      line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+    },
+  ]);
+  const answered = await link.renderer.answer(pin);
+  expect(answered).not.toHaveProperty("diagnostics");
+  expect(answered.stored).toEqual([
+    { store: "settings-history", key: oversizedSession, value: null },
+  ]);
 });
 
 describe("a renderer process's end", () => {

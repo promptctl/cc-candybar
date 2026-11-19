@@ -13,11 +13,14 @@ import { streamedToFile } from "./streamed-file.js";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import { writeLogLines, type DaemonLogger } from "../utils/logger.js";
+import { isPlainObject } from "../config/loader/validate-core.js";
+import { eventLine, type Field } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
   rendererOf,
+  sessionOfEvent,
   type AdapterInput,
   type AdapterOutput,
   type EffectId,
@@ -27,10 +30,10 @@ import {
   type TimedRenderer,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
+  rendererDiagnosticsFrom,
   rendererOverLines,
   rendererWireVersionProblem,
   RENDERER_WIRE_VERSION,
@@ -97,8 +100,7 @@ export function processPort(
   });
 }
 
-// What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `context` and who
+// What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
 // watches each session through the host's one path to the renderer,
 // resolving once its turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
@@ -106,7 +108,6 @@ export function processPort(
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
 export interface LinkOwner {
-  readonly reaches: AdapterToHost;
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
@@ -180,6 +181,9 @@ interface Link {
   readonly spawnedAt: number;
   // That the supervisor ended it for not answering.
   hung: boolean;
+  // Admission belongs to the connection and survives close while its
+  // remaining stdout is drained. It makes no lifecycle decision.
+  compatible: boolean;
   // A failed boot or restoration ends this generation with its original reason.
   failure: string | null;
   // Each host receipt is meaningful only to the renderer that produced the effect.
@@ -301,13 +305,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       kill,
       spawnedAt: clock.monotonic(),
       hung: false,
+      compatible: false,
       failure: null,
       effects: new Map(),
       usage: null,
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
-        host: own.reaches,
         fault: (message) =>
           log("error", `renderer ${name}[${generationOf}]: ${message}`),
       }),
@@ -337,47 +341,83 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   const heard = (link: Link, text: string): void => {
     if (link.failure !== null) return;
-    let line: RendererLine;
+    let raw: unknown;
     try {
-      line = JSON.parse(text) as RendererLine;
+      raw = JSON.parse(text);
     } catch {
       // [LAW:no-silent-failure] A line that is not the wire's is said.
       log("warn", `renderer ${name}[${link.generation}]: ${text}`);
       return;
     }
-    switch (line.kind) {
-      case "started":
-        started(link, line.wireVersion);
-        return;
-      case "refused":
-        refusedBoot(link, line.failure.message, line.failure.detail);
-        return;
-      default:
-        link.lines.heard(line);
-    }
-  };
-
-  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
-  // The stack is the log's alone, and the first refusal owns the reason.
-  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
-    link.failure = `refused its boot: ${reason}`;
-    log(
-      "error",
-      `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
-    );
-  };
-
-  const started = (link: Link, version: unknown): void => {
-    if (phase.kind !== "starting" || phase.link !== link) return;
-    // [LAW:parse-dont-validate] The wire's attestation admits this link.
-    // Queued input and pings wait for that agreement.
-    const mismatch = rendererWireVersionProblem("renderer", version);
-    if (mismatch !== null) {
-      refusedBoot(link, mismatch);
-      link.kill.abort(new Error(mismatch));
+    if (!isPlainObject(raw)) {
+      log(
+        "warn",
+        `renderer ${name}[${link.generation}] sent a non-object line`,
+      );
       return;
     }
-    const { queued } = phase;
+    if (phase.kind === "starting" && phase.link === link) {
+      // The peer may speak an older protocol. Only the boot answer is
+      // considered before the worker attests to this connection's version.
+      if (raw.kind === "started" || raw.kind === "refused")
+        acceptBoot(phase, raw);
+      return;
+    }
+    if (link.compatible && raw.kind !== "started" && raw.kind !== "refused")
+      link.lines.heard(raw as RendererLine);
+  };
+
+  const acceptBoot = (
+    starting: Extract<Phase, { kind: "starting" }>,
+    raw: Readonly<Record<string, unknown>>,
+  ): void => {
+    const { link, queued } = starting;
+    let refusal: { readonly message: string; readonly detail: string } | null =
+      null;
+    if (raw.kind === "started") {
+      // [LAW:parse-dont-validate] Inspect only the version until this peer
+      // attests to the private protocol. Other versions' fields are opaque.
+      const mismatch = rendererWireVersionProblem("renderer", raw.wireVersion);
+      if (mismatch !== null) {
+        rejectBoot(link, mismatch);
+        return;
+      }
+      if (
+        typeof raw.pid !== "number" ||
+        !Number.isSafeInteger(raw.pid) ||
+        raw.pid <= 0
+      ) {
+        rejectBoot(link, "renderer boot has an invalid pid");
+        return;
+      }
+    } else {
+      const failure = raw.failure;
+      // A refusal can be from a different protocol version. Its reason is
+      // the stable part of the envelope, including across version mismatch.
+      if (
+        !isPlainObject(failure) ||
+        typeof failure.message !== "string" ||
+        typeof failure.detail !== "string"
+      ) {
+        rejectBoot(link, "renderer boot has an invalid refusal");
+        return;
+      }
+      refusal = { message: failure.message, detail: failure.detail };
+    }
+    const diagnostics = rendererDiagnosticsFrom(
+      raw.wireVersion === RENDERER_WIRE_VERSION ? raw.diagnostics : undefined,
+      () =>
+        log(
+          "warn",
+          `renderer ${name}[${link.generation}] boot has invalid diagnostics`,
+        ),
+    );
+    if (diagnostics !== undefined) writeLogLines(log, diagnostics);
+    if (refusal !== null) {
+      refusedBoot(link, refusal.message, refusal.detail);
+      return;
+    }
+    link.compatible = true;
     phase = { kind: "live", link };
     // [LAW:nothing-unseen] The start, with what was refused while none ran.
     log(
@@ -390,8 +430,42 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     ping(link);
   };
 
+  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
+  // The stack is the log's alone, and the first refusal owns the reason.
+  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
+    link.failure = `refused its boot: ${reason}`;
+    log(
+      "error",
+      `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
+    );
+  };
+
+  const rejectBoot = (link: Link, reason: string): void => {
+    refusedBoot(link, reason);
+    link.kill.abort(new Error(reason));
+  };
+
   const ended = (link: Link, how: string): void => {
-    link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
+    const interrupted = link.lines.ended(
+      new RendererDown(`renderer ${name} ${how}`),
+    );
+    for (const { n, input } of interrupted) {
+      const fields: Field[] = [
+        ["renderer", name],
+        ["generation", String(link.generation)],
+        ["wire", String(n)],
+      ];
+      if (input.kind === "adapter") fields.push(["push", input.push.kind]);
+      else {
+        const session = sessionOfEvent(input.event);
+        fields.push(["input", input.event.kind]);
+        if (session !== null) fields.push(["sid", session]);
+        if (input.event.kind === "request")
+          fields.push(["request", String(input.event.id)]);
+      }
+      fields.push(["error", how]);
+      log("warn", eventLine("renderer input interrupted", fields));
+    }
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
     // remaining steps would wait on its boot.

@@ -120,7 +120,9 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 
 A live session has one renderer record containing its current context and its latest world document. Only a context turn opens that record. World updates apply during its lifetime, and retirement ends it along with any waiting work. When config arrives, a waiting view or click uses the session's current origin and context. A statusline request draws from that same record and returns its present in its own turn.
 
-A draw returns frame observations. The host confirms request replies when their writes complete and pushed frames once a subscriber confirms delivery. A subscriber already showing the same bytes can confirm without another write. The renderer keeps accepted layout, cells and diagnostics by surface, with one motion and menu baseline per session. An older completion can fill its surface without changing newer session motion. View replacement and feed closure retire the matching presentation targets, so their pending receipts can settle without restoring the old layout. The successor view can still serve the copy text from a frame that remains visible.
+A draw returns frame observations and the daemon events its diagnostics show. A completed statusline reply or pane write acknowledges the corresponding event at the host, even if the renderer has since restarted. Cached feed frames keep their event identities. Equal bytes can reuse a confirmed write for the same occurrences. The host compares each acknowledged occurrence with the latest event from its owner.
+
+The renderer's `effect-done` records accepted layout, cells and diagnostics by surface, with one motion and menu baseline per session. An older completion can fill its surface without changing newer session motion. View replacement and feed closure retire the matching presentation targets, so their pending receipts can settle without restoring the old layout. The successor view can still serve the copy text from a frame that remains visible.
 
 An open pane feed keeps its config entry pinned when its view fails to open. A successful changed config delivery can reopen the view using the session's current context. Frame ticks read the ready view or show its opening error.
 
@@ -128,64 +130,13 @@ An open pane feed keeps its config entry pinned when its view fails to open. A s
 
 ### The renderer interface
 
+The in-process and child-process transports use the same renderer contract. The host constructs each renderer with resolved locations, its memory limit and stored values. Construction can succeed or refuse and can produce diagnostics in either case. The host keeps the session environment and the link-signing key. [Renderer contract](../../src/renderer-interface/interface.ts)
+
+The first event is `start`. It carries the live session contexts, their world states, their viewers, and config snapshots by origin. A replacement can receive the authorized revision its predecessor selected alongside the latest observation. Subsequent inputs deliver requests, admitted clicks, world or config changes, scheduled draws, viewer changes, effect completions and session retirement. Inspection and shutdown use the same mailbox and turn clock.
+
+Every completed event returns its outcome, frames, effects, record, store writes, subscriptions, next wake and any diagnostics. A failed turn can still have writes or effects from work it completed. Inspection and shutdown answer with a typed reply or failure and their resulting declarations. The host times each turn and performs the effects. The host records an interrupted input when a worker exits before answering.
+
 ```ts
-// [LAW:one-type-per-behavior] One interface over two transports: the
-// renderer's own process, or in-process for the site and tests.
-interface Renderer {
-  answer(input: RendererInput): Promise<RendererOutput>;
-}
-
-// Every input carries two readings the host made as its mailbox slot came:
-// the wall instant a frame shows, and a monotonic tick, which everything the
-// renderer schedules is measured on, so a stepped wall moves no schedule.
-type RendererInput =
-  | { kind: "start"; start: Start; at: Instant; tick: Tick }
-  | { kind: "event"; event: Event; at: Instant; tick: Tick };
-
-// [LAW:one-source-of-truth] Complete, like a world state: a renderer that
-// (re)starts holds everything it would hold had it never stopped, except the
-// unsaved state its own process kept.
-interface Start {
-  readonly name: RendererName;
-  readonly cause: "first" | "crashed" | "bundle-changed";
-  readonly linkKey: LinkKey;
-  readonly stored: StoredState;
-  readonly sessions: readonly SessionSnapshot[];
-  readonly viewers: Viewers;                 // who watches each session, whole
-}
-
-interface SessionSnapshot {
-  readonly session: SessionId;
-  readonly worldState: WorldState;
-  readonly surfaces: readonly Surface[];   // the ones with viewers
-}
-
-type Event =
-  | { kind: "request"; id: RequestId; session: SessionId; hook: ClaudeHookData; context: RendererContext }   // the session context a renderer reads; the environment stays in the host
-  | { kind: "click"; click: VerifiedClick; arrival: ClickArrival }
-  | { kind: "world-state"; worldState: WorldState }
-  | { kind: "context"; context: RendererContext; worldState: WorldState }   // a request's opening turn (Router)
-  | { kind: "config"; origin: RenderOrigin; config: ConfigSnapshot }   // what discovery found at an origin the renderer subscribes
-  | { kind: "effect-done"; of: EffectId; outcome: Outcome<EffectResult> }
-  | { kind: "due" }                          // the tick the last output declared has come
-  | { kind: "viewers"; viewers: Viewers }    // who watches each session, whole
-  | { kind: "retire"; session: SessionId };
-
-interface RendererOutput {
-  readonly effects: readonly Effect[];
-  // [LAW:one-source-of-truth] The current declaration. Its identity changes
-  // when the open views, their sources, their lanes or their config needs do.
-  readonly subscriptions: Subscriptions;
-  // The host's one timer. A wake can move while all subscriptions stand.
-  readonly wake: Tick | null;
-  // [LAW:nothing-unseen] The turn's own record. A renderer writes no log;
-  // the host writes this one.
-  readonly record: TurnRecord;
-  // The frames this turn's feeds drew. The host encodes the bar and any
-  // statusline handoff, then sends each subscriber whose lane's bytes changed.
-  readonly frames: readonly PushedFrame[];
-}
-
 interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
   // Managed storage folders named by retained configs, including idle configs.
@@ -197,6 +148,8 @@ interface Subscriptions {
   // each a parked event waits on. The host discovers an origin as it is first
   // named, follows its files while it is named, and lets it go when it is not.
   readonly configs: readonly RenderOrigin[];
+  // Authored revisions this renderer successfully retained at those origins.
+  readonly configSelections: readonly ConfigSelection[];
 }
 
 // Where a declaration came from is what repository trust is judged on. A layer
@@ -374,6 +327,7 @@ interface Program {
 - **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. Ordinary Claude Code statusline ticks currently activate and recover it. Other clients and renderers connect to the available host. A future launchd owner (A-4) must preserve that ordinary statusline cold-start path.
 - **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
 - **Renderer startup checks the private wire version.** The host advertises it in `boot` and the renderer declares its own in `started`. Both sides require a match before the worker can take inputs. Separate worktree builds can share a host when they speak that version. The daemon still uses its bundle identity for binary currency.
+- **Diagnostic lines belong to their answers.** The private renderer wire carries lines from completed event and push turns, including answers with a classified failure. The host writes them in order at their original level before landing the turn. Construction diagnostics travel with the compatible `started` or `refused` boot answer. The supervisor writes them before its boot record, and the in-process adapter writes them before accepting inputs. A malformed diagnostic batch is reported and discarded while the rest of the answer remains usable. A rejected transport input carries its failure without a completed turn. When a worker dies, the supervisor identifies any input it sent and whose answer never arrived. Lines held inside that abandoned turn cannot be recovered.
 - In private v8, a host can opt in to subscription updates in `boot`. The first output on each child connection includes the whole declaration, even when empty. Later outputs omit an unchanged declaration and still carry each wake, frame, effect and store write. A change replaces the whole per-renderer declaration. Peers using the original v8 exchange continue to carry the complete declaration and its wake in each output. The in-process renderer and child link both hand the host the same declaration identity while it holds, so static draws repeat neither source aggregation nor config following.
 - **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
 - **Renderer startup.** The host resolves home and XDG config and data locations once. At each worker start it supplies those locations, the current stored values for the renderer, and the memory limit. The site and test roots select an in-process adapter that consumes the same inputs and constructs the same config validators. The production host selects the subprocess adapter. A replacement validates its startup data before reporting ready.
@@ -425,7 +379,7 @@ Every renderer's panel is the same, because there is one kind of renderer. Watch
 
 ## 11. Testing
 
-- The production build follows the renderer entry’s runtime imports, including shared modules and packages, and fails if they reach the Node filesystem. The host owns the transcript reader and its cache. The renderer combines the supplied context and metrics with the hook values reported by Claude Code.
+- The production build follows runtime imports from the renderer process entry, including its transport, core, shared modules and packages. It fails if an import reaches the Node filesystem or the bundler cannot account for a module in that graph. The host owns the transcript reader and its cache. The renderer combines the supplied context and metrics with the hook values reported by Claude Code.
 - **The seam test.** The recorder captures a renderer's whole input stream. Replaying it into a fresh renderer gives byte-identical outputs, frames, effects, subscriptions and records, with zero filesystem reads, zero clock reads and zero spawned processes over the entire run, not only over draws. This is the acceptance test for the split, and it holds forever. [LAW:verifiable-goals]
 - **Renderer tests** feed inputs and assert outputs. They need no mocks, because the renderer has nothing to mock.
 - **Host part tests** run each part over fake ports for the world.

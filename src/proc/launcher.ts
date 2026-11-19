@@ -361,6 +361,7 @@ export interface Launcher {
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
   // What the launcher stands behind now (`launcherWarningsAt` judges it).
   standing(): LauncherFact[];
-  // An answer carrying `event` reached its client.
-  answeredPipeEvent(event: HeldEvent): void;
+  // An answer carrying `event` reached its client. True when it answered
+  // the still-outstanding occurrence.
+  answeredPipeEvent(event: HeldEvent): boolean;
 }

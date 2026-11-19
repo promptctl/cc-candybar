@@ -1,9 +1,7 @@
 // [LAW:one-type-per-behavior] The lines are a transport, not a second
-// renderer: one renderer answers the same inputs the same way, and reaches the
-// host the same way, in this process as over the lines a process speaks.
+// renderer: it answers the same inputs in process and over lines.
 
 import {
-  hostOverLines,
   lineSplitter,
   rendererBootFrom,
   rendererOverLines,
@@ -17,23 +15,23 @@ import {
   timed,
   type AdapterInput,
   type AdapterOutput,
+  type EffectId,
+  type RendererOutput,
+  type RequestId,
   type Subscriptions,
   type TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { Instant, Tick } from "../../src/utils/instant";
-import { joinedEvent, type HeldEvent } from "../../src/utils/event-hold";
+import { joinedEvent, type DisplayedEvent } from "../../src/utils/event-hold";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
   CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
-import { inertHost } from "../helpers/renderer-parts";
 
-const EVENT: HeldEvent = { text: "e", at: 7 as Instant, answered: false };
-
-// A renderer that tells the host two notices and answers; and one push that
-// throws. Its turns take no time, so both ends time them alike.
-function talkingRenderer(host: AdapterToHost): TimedRenderer {
+// A renderer that answers with a diagnostic. Its turns
+// take no time, so both ends time them alike.
+function talkingRenderer(): TimedRenderer {
   return timed(
     rendererOf({
       event: async () => {
@@ -41,13 +39,18 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
       },
       adapter: async (input) => {
         if (input.push.kind === "close-views") throw new Error("close refused");
-        host.log("info", "closed");
-        host.eventAnswered(EVENT);
         return {
           kind: "replied",
+          diagnostics: [{ level: "info", line: "closed" }],
           stored: [],
           reply: { kind: "close-journal" },
-          subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+          subscriptions: {
+            sources: {},
+            lanes: {},
+            managedFolders: [],
+            configSelections: [],
+            configs: [],
+          },
           wake: null,
         };
       },
@@ -56,23 +59,9 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
   );
 }
 
-// What the host saw of the renderer, whichever way it ran.
-function recordingHost(): { host: AdapterToHost; saw: string[] } {
-  const saw: string[] = [];
-  return {
-    saw,
-    host: {
-      ...inertHost(),
-      log: (_level, msg) => saw.push(`log ${msg}`),
-      eventAnswered: (event) => saw.push(`answered ${event.text} ${event.at}`),
-    },
-  };
-}
-
 // Each line crosses as JSON does, and on a later turn, as a pipe carries it.
 // The renderer's heap is `heap`, its text in pieces.
 function linesOver(
-  host: AdapterToHost,
   heap: Parameters<typeof serveRenderer>[0]["heapSnapshot"] = async () => {},
   options: {
     readonly renderer?: TimedRenderer;
@@ -83,16 +72,12 @@ function linesOver(
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
     send: (line) => queueMicrotask(() => toRenderer(crossed(line))),
-    host,
     fault: (message) => {
       throw new Error(message);
     },
   });
-  const reaches = hostOverLines((line: RendererLine) =>
-    queueMicrotask(() => lines.heard(crossed(line))),
-  );
   toRenderer = serveRenderer({
-    renderer: options.renderer ?? talkingRenderer(reaches),
+    renderer: options.renderer ?? talkingRenderer(),
     send: (line) => {
       const received = crossed(line);
       options.heard?.push(received);
@@ -104,26 +89,6 @@ function linesOver(
   return lines;
 }
 
-const overLines = (host: AdapterToHost): TimedRenderer =>
-  linesOver(host).renderer;
-
-test("renderer notices carry legacy and revised held event identities through JSON", () => {
-  const heard: HeldEvent[] = [];
-  const lines = rendererOverLines({
-    send: () => {},
-    host: { ...inertHost(), eventAnswered: (event) => void heard.push(event) },
-    fault: (message) => { throw new Error(message); },
-  });
-  const toHost = hostOverLines((line) => {
-    lines.heard(JSON.parse(JSON.stringify(line)) as RendererLine);
-  });
-  const revised = joinedEvent(EVENT, "a later failure", EVENT.at);
-  toHost.eventAnswered(EVENT);
-  toHost.eventAnswered(revised);
-  expect(heard).toEqual([EVENT, revised]);
-  expect(heard[1]?.revision).toBe(1);
-});
-
 const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   kind: "adapter",
   push: { kind },
@@ -131,12 +96,84 @@ const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   tick: 0 as Tick,
 });
 
-const empty: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] };
+const empty: Subscriptions = {
+  sources: {},
+  lanes: {},
+  managedFolders: [],
+  configSelections: [],
+  configs: [],
+};
 const opened: Subscriptions = {
   ...empty,
   managedFolders: ["/p/plugin/session"],
   configs: [{ projectDir: "/p", cwd: "/p", target: { source: "search" } }],
 };
+
+test("both presentation paths carry the displayed event in their turn's answer", async () => {
+  const session = sessionIdOf("wire-events");
+  const frame = {
+    depth: "none",
+    rows: [],
+    nextChange: null,
+    motion: "still",
+    pending: [],
+  } as const;
+  const displayedEvents: readonly DisplayedEvent[] = [
+    {
+      kind: "act-failed",
+      event: joinedEvent(null, "a daemon failure", 7 as Instant),
+    },
+  ];
+  const output: RendererOutput = {
+    kind: "answered",
+    record: [],
+    effects: [
+      {
+        kind: "present",
+        id: 1 as EffectId,
+        session,
+        request: 1 as RequestId,
+        surface: "statusline",
+        frame,
+        displayedEvents,
+      },
+    ],
+    frames: [
+      {
+        session,
+        frame: {
+          kind: "drawn",
+          receipt: 2 as EffectId,
+          bar: frame,
+          handoff: null,
+          displayedEvents,
+        },
+      },
+    ],
+    subscriptions: empty,
+    wake: null,
+    stored: [],
+  };
+  const renderer = timed(
+    rendererOf({
+      event: async () => output,
+      adapter: async () => {
+        throw new Error("only ordinary events expected");
+      },
+    }),
+    () => 0,
+  );
+  const heard: RendererLine[] = [];
+  const transport = linesOver(undefined, { renderer, heard });
+  const answer = await transport.renderer.answer({
+    kind: "event",
+    event: { kind: "due" },
+    at: 7 as Instant,
+    tick: 0 as Tick,
+  });
+  expect(answer).toEqual({ ...output, turnMs: 0 });
+  expect(heard).toMatchObject([{ kind: "output", output }]);
+});
 
 function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
   let step = 0;
@@ -163,7 +200,7 @@ function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
 
 test("a renderer pipe carries changes to the declaration independently of wakes", async () => {
   const heard: RendererLine[] = [];
-  const wire = linesOver(inertHost(), undefined, {
+  const wire = linesOver(undefined, {
     heard,
     renderer: declaring([empty, empty, opened, opened, empty]),
   });
@@ -184,7 +221,11 @@ test("a renderer pipe carries changes to the declaration independently of wakes"
     line.kind === "output" ? [line.output] : [],
   );
   expect(outputs.map((value) => "subscriptions" in value)).toEqual([
-    true, false, true, false, true,
+    true,
+    false,
+    true,
+    false,
+    true,
   ]);
   expect(outputs[0]).toMatchObject({ subscriptions: empty, wake: 1 });
   expect(outputs[4]).toMatchObject({ subscriptions: empty });
@@ -196,7 +237,7 @@ test("a selection change crosses the wire without republishing unchanged resourc
     ...opened,
     configSelections: [{ origin, digest: null }],
   };
-  const { renderer } = linesOver(inertHost(), undefined, {
+  const { renderer } = linesOver(undefined, {
     renderer: declaring([opened, selected, selected]),
   });
   const before = (await renderer.answer(push("close-journal"))).subscriptions;
@@ -211,7 +252,7 @@ test("a selection change crosses the wire without republishing unchanged resourc
 test("a replacement process sends the same nonempty declaration on its first answer", async () => {
   for (let generation = 0; generation < 2; generation++) {
     const heard: RendererLine[] = [];
-    const { renderer } = linesOver(inertHost(), undefined, {
+    const { renderer } = linesOver(undefined, {
       heard,
       renderer: declaring([opened]),
     });
@@ -230,7 +271,6 @@ test("reusing a declaration before the first replacement rejects the turn", asyn
   let asked: HostLine | undefined;
   const wire = rendererOverLines({
     send: (line) => (asked = line),
-    host: inertHost(),
     fault: (message) => {
       throw new Error(message);
     },
@@ -319,21 +359,16 @@ describe("a renderer's boot line", () => {
 });
 
 describe("the renderer over lines", () => {
-  test("answers as it does in this process, reaching the host in the same order", async () => {
-    const here = recordingHost();
-    const there = recordingHost();
-    const inProcess = await talkingRenderer(here.host).answer(
-      push("close-journal"),
-    );
-    const crossed = await overLines(there.host).answer(push("close-journal"));
+  test("answers as it does in this process", async () => {
+    const inProcess = await talkingRenderer().answer(push("close-journal"));
+    const crossed = await linesOver().renderer.answer(push("close-journal"));
     expect(crossed).toEqual(inProcess);
-    expect(there.saw).toEqual(here.saw);
-    expect(there.saw).toEqual(["log closed", "answered e 7"]);
+    expect(crossed.diagnostics).toEqual([{ level: "info", line: "closed" }]);
   });
 
   test("a heap snapshot reaches the host as its text, in order, and settles once it has all come", async () => {
     const written: string[] = [];
-    const lines = linesOver(recordingHost().host, async (chunk) => {
+    const lines = linesOver(async (chunk) => {
       chunk('{"snap');
       await Promise.resolve();
       chunk('shot":1}');
@@ -344,7 +379,7 @@ describe("the renderer over lines", () => {
 
   test("a heap snapshot the renderer could not take fails with its failure, after the chunks it sent", async () => {
     const written: string[] = [];
-    const lines = linesOver(recordingHost().host, async (chunk) => {
+    const lines = linesOver(async (chunk) => {
       chunk("{");
       throw new Error("out of memory");
     });
@@ -354,41 +389,22 @@ describe("the renderer over lines", () => {
     expect(written).toEqual(["{"]);
   });
 
-  test("two notices heard in one chunk reach the host in the order sent", () => {
-    const { host, saw } = recordingHost();
-    const lines = rendererOverLines({
-      send: () => {},
-      host,
-      fault: (message) => {
-        throw new Error(message);
-      },
-    });
-    lines.heard({ kind: "notice", reach: "eventAnswered", args: [EVENT] });
-    lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
-    expect(saw).toEqual(["answered e 7", "log after"]);
-  });
-
   test("a line heard after the renderer's end reaches nothing, and is said", () => {
-    const { host, saw } = recordingHost();
     const faults: string[] = [];
     const lines = rendererOverLines({
       send: () => {},
-      host,
       fault: (message) => faults.push(message),
     });
     lines.ended(new Error("renderer main exited"));
-    lines.heard({ kind: "notice", reach: "log", args: ["info", "late"] });
-    expect(saw).toEqual([]);
+    lines.heard({ kind: "ping", n: 1, usage: { rss: 1, heapTotal: 1 } });
     expect(faults).toEqual([
-      "renderer said notice after its end (renderer main exited)",
+      "renderer said ping after its end (renderer main exited)",
     ]);
   });
 
   test("a push that threw fails as it does in this process, its failure kept", async () => {
-    const here = talkingRenderer(recordingHost().host).answer(
-      push("close-views"),
-    );
-    const there = overLines(recordingHost().host).answer(push("close-views"));
+    const here = talkingRenderer().answer(push("close-views"));
+    const there = linesOver().renderer.answer(push("close-views"));
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);

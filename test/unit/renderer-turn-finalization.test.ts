@@ -17,6 +17,7 @@ import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import {
   rendererOverLines,
   serveRenderer,
+  type RendererLine,
 } from "../../src/renderer-interface/wire";
 import { mainRenderer } from "../../src/renderer/main";
 import { RenderCache, SOURCES_NOTHING } from "../../src/renderer/render-cache";
@@ -25,9 +26,10 @@ import { SettingsHistory } from "../../src/renderer/settings-history";
 import { WorldStates } from "../../src/renderer/world-states";
 import { readingsAt } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
+import type { DaemonLogger, LogLine } from "../../src/utils/logger";
 import { heldClock } from "../helpers/held-clock";
 import { NO_LAYERS } from "../helpers/history-step";
-import { inertHost, rendererParts } from "../helpers/renderer-parts";
+import { rendererParts } from "../helpers/renderer-parts";
 import { NO_ACTS } from "../helpers/renderers";
 
 const SESSION = sessionIdOf("session");
@@ -38,16 +40,16 @@ const SOURCES: Subscriptions["sources"] = {
 function rig(
   fault: {
     readonly state?: () => void;
-    readonly history?: () => void;
+    readonly history?: (say: DaemonLogger) => void;
     readonly subscriptions?: () => void;
     readonly prune?: () => void;
-    readonly push?: () => void;
+    readonly push?: (say: DaemonLogger) => void;
+    readonly rendererClock?: () => number;
   } = {},
 ) {
   const clock = heldClock(new Date(0));
   const state = new SessionState();
   const history = new SettingsHistory(state, () => {});
-  const adapter = inertHost();
   const cache = new (class extends RenderCache {
     override subscriptions() {
       fault.subscriptions?.();
@@ -77,10 +79,11 @@ function rig(
     sessionState: state,
     worldStates: new WorldStates(),
   });
+  const say = parts.turnLog.add;
   const renderer = mainRenderer(
     parts,
     () => {
-      fault.push?.();
+      fault.push?.(say);
       return { kind: "close-journal" };
     },
     {
@@ -89,7 +92,7 @@ function rig(
         return state.drain();
       },
       "settings-history": () => {
-        fault.history?.();
+        fault.history?.(say);
         return history.drain();
       },
     },
@@ -98,14 +101,18 @@ function rig(
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
-    host: adapter,
     fault: (message) => {
       throw new Error(message);
     },
   });
+  const lines: RendererLine[] = [];
   const receive = serveRenderer({
-    renderer: timed(renderer, clock.monotonic),
-    send: (line) => pipe.heard(JSON.parse(JSON.stringify(line))),
+    renderer: timed(renderer, fault.rendererClock ?? clock.monotonic),
+    send: (line) => {
+      const crossed = JSON.parse(JSON.stringify(line)) as RendererLine;
+      lines.push(crossed);
+      pipe.heard(crossed);
+    },
     memory: () => {
       throw new Error("unexpected memory probe");
     },
@@ -115,12 +122,12 @@ function rig(
   });
   const stored: Array<readonly StoreWrite[]> = [];
   const subscriptions: Subscriptions[] = [];
-  const logged: string[] = [];
+  const logged: LogLine[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clock,
     pipe.renderer,
-    (_level, line) => logged.push(line),
+    (level, line) => logged.push({ level, line }),
     {
       subscribed: (next) => subscriptions.push(next),
       stored: (writes) => stored.push(writes),
@@ -146,7 +153,10 @@ function rig(
     due,
     host,
     journalTheme,
+    lines,
     logged,
+    renderer,
+    say,
     setTheme,
     stored,
     subscriptions,
@@ -180,7 +190,7 @@ test("a failed body keeps its classification and the writes already drained", as
     ],
   });
   expect(
-    fixture.logged.map((line) =>
+    fixture.logged.map(({ line }) =>
       fieldsOf(line).get("finalize.settings-history"),
     ),
   ).toEqual([expect.stringContaining("history drain failed")]);
@@ -191,6 +201,100 @@ test("a failed body keeps its classification and the writes already drained", as
     [{ store: "session-state", key: SESSION, value: { theme: "dracula" } }],
     [],
   ]);
+});
+
+test("a failed end-clock read leaves the completed answer and its diagnostics intact", async () => {
+  let reads = 0;
+  const fixture = rig({
+    rendererClock: () => {
+      if (++reads === 2) throw new Error("end clock failed");
+      return 0;
+    },
+  });
+  const result = await fixture.due(() => {
+    fixture.say("info", "menu opened");
+    fixture.setTheme("nord");
+  });
+  expect(result).toMatchObject({ kind: "answered", turnMs: null });
+  expect(fixture.stored).toEqual([
+    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+  ]);
+  expect(fixture.logged).toEqual([
+    { level: "info", line: "menu opened" },
+    { level: "warn", line: expect.stringContaining("end clock failed") },
+  ]);
+  expect(await fixture.due()).toMatchObject({ kind: "answered", turnMs: 0 });
+  expect(fixture.logged).toHaveLength(2);
+});
+
+test("a nested input refusal preserves the active turn's clock and diagnostics", async () => {
+  const fixture = rig();
+  let nested: Promise<void> | undefined;
+  const result = await fixture.due(() => {
+    const readings = readingsAt(fixture.clock);
+    fixture.say("info", "outer work began");
+    nested = expect(
+      fixture.renderer.answer({
+        ...readings,
+        kind: "event",
+        event: { kind: "due" },
+      }),
+    ).rejects.toThrow("renderer diagnostics already in scope");
+    expect(fixture.time.at).toBe(readings.at);
+    expect(fixture.time.tick).toBe(readings.tick);
+    fixture.say("info", "outer work ended");
+  });
+  await nested;
+  expect(result).toMatchObject({ kind: "answered" });
+  expect(fixture.logged).toEqual([
+    { level: "info", line: "outer work began" },
+    { level: "info", line: "outer work ended" },
+  ]);
+});
+
+test("turn diagnostics cross only with their answer and land once in order", async () => {
+  const opened: LogLine = { level: "info", line: "menu opened" };
+  const refused: LogLine = { level: "warn", line: "menu choice refused" };
+  const drained: LogLine = {
+    level: "info",
+    line: "history drained after refusal",
+  };
+  const closing: LogLine = { level: "error", line: "view remained held" };
+  let badClick = false;
+  const fixture = rig({
+    history: (say) => {
+      if (badClick) say(drained.level, drained.line);
+    },
+    push: (say) => {
+      say(closing.level, closing.line);
+      throw new Error("close failed");
+    },
+  });
+  await fixture.due(() => fixture.say(opened.level, opened.line));
+  badClick = true;
+  expect(
+    await fixture.due(() => {
+      fixture.say(refused.level, refused.line);
+      throw new BadVerbArgs("invalid menu choice");
+    }),
+  ).toMatchObject({ kind: "threw", failure: { kind: "bad-request" } });
+  badClick = false;
+  await fixture.due();
+  await expect(fixture.host.ask({ kind: "close-journal" })).rejects.toThrow(
+    "close failed",
+  );
+
+  expect(fixture.lines.map(({ kind }) => kind)).toEqual(
+    Array(4).fill("output"),
+  );
+  expect(
+    fixture.lines.flatMap((line) =>
+      line.kind === "output" ? [line.output.diagnostics] : [],
+    ),
+  ).toEqual([[opened], [refused, drained], undefined, [closing]]);
+  expect(
+    fixture.logged.filter(({ line }) => !line.startsWith("turn ")),
+  ).toEqual([opened, refused, drained, closing]);
 });
 
 test("the first failure in collection still lands history, holds subscriptions, and arms the wake", async () => {

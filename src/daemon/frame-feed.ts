@@ -30,7 +30,8 @@ import {
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
-import type { Level } from "../renderer-interface/adapter";
+import type { LogLevel } from "../utils/logger";
+import { sameOccurrence, type DisplayedEvent } from "../utils/event-hold.js";
 import type {
   FeedFrame,
   LaneViewers,
@@ -52,6 +53,7 @@ export interface Subscriber {
 
 export interface FeedDeps<Req> {
   readonly publishFrame: PublishFrame;
+  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   // Which accepted request changed independently of a renderer's declaration.
   readonly requestChanged: (
     session: SessionId,
@@ -67,7 +69,7 @@ export interface FeedDeps<Req> {
   // `make` reads them when the input's slot comes: one turn, which resolves
   // once it has ended.
   deliver(make: () => Viewers): Promise<{ readonly kind: string }>;
-  log(level: Level, line: string): void;
+  log(level: LogLevel, line: string): void;
 }
 
 // Sessions whose latest request is kept, least recently noted evicted first —
@@ -83,12 +85,12 @@ interface Noted<Req> {
 }
 
 interface PendingWrite {
-  readonly json: string;
+  readonly answer: EncodedAnswer;
   done: Delivered | undefined;
 }
 
 interface Follower {
-  confirmed: string | null;
+  confirmed: EncodedAnswer | null;
   // [LAW:single-enforcer] The transport bounds its outstanding writes. Each
   // carries at most one candidate, replaced when the latest draw is identical.
   readonly writes: Set<PendingWrite>;
@@ -104,15 +106,36 @@ interface Watched {
   pushed: number;
 }
 
+interface EncodedAnswer {
+  readonly json: string;
+  readonly displayedEvents?: readonly DisplayedEvent[];
+}
+
 interface EncodedFeed {
-  readonly resp: string;
-  readonly statusline: string;
+  readonly resp: EncodedAnswer;
+  readonly statusline: EncodedAnswer;
 }
 
 const failedFeed = (refusal: Refusal): EncodedFeed => {
-  const encoded = JSON.stringify(refusal);
+  const encoded = { json: JSON.stringify(refusal) };
   return { resp: encoded, statusline: encoded };
 };
+
+function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
+  if (prior.json !== offered.json) return false;
+  // [LAW:one-source-of-truth] Equal indicator bytes may stand for different
+  // events. A previous write covers the offer if it can confirm all of its
+  // still-unanswered occurrences as well as its bytes.
+  return (
+    offered.displayedEvents === undefined ||
+    offered.displayedEvents.every(
+      ({ kind, event }) =>
+        prior.displayedEvents?.some(
+          (seen) => seen.kind === kind && sameOccurrence(seen.event, event),
+        ) ?? false,
+    )
+  );
+}
 
 function settleWrite(write: PendingWrite, delivered: boolean): void {
   const done = write.done;
@@ -128,11 +151,12 @@ function encodeFeed(
   source: FrameSource,
 ): EncodedFeed {
   if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.bar, source)));
-  const statusline =
-    frame.handoff === null
-      ? resp
-      : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.handoff, source)));
+  const encode = (body: typeof frame.bar): EncodedAnswer => ({
+    json: JSON.stringify(RENDER_ANSWERS.ansi(publish(body, source))),
+    displayedEvents: frame.displayedEvents,
+  });
+  const resp = encode(frame.bar);
+  const statusline = frame.handoff === null ? resp : encode(frame.handoff);
   return { resp, statusline };
 }
 
@@ -379,7 +403,7 @@ export class FrameFeeds<Req> {
         // and leaves other sessions' frames deliverable.
         const refused = renderFailed(error);
         encoded = failedFeed(refused);
-        if (watched.last?.resp !== encoded.resp)
+        if (watched.last?.resp.json !== encoded.resp.json)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused.error)}`,
@@ -509,30 +533,39 @@ export class FrameFeeds<Req> {
       done?.(false);
       return;
     }
-    const json = answerOf(encoded, sub.lane);
+    const answer = answerOf(encoded, sub.lane);
     let latest: PendingWrite | undefined;
     for (const write of follower.writes) latest = write;
-    if (latest?.json === json) {
+    if (latest !== undefined && covers(latest.answer, answer)) {
       const superseded = latest.done;
       latest.done = done;
       superseded?.(false);
       return;
     }
-    if (latest === undefined && follower.confirmed === json) {
+    if (
+      latest === undefined &&
+      follower.confirmed !== null &&
+      covers(follower.confirmed, answer)
+    ) {
       done?.(true);
       return;
     }
-    const write: PendingWrite = { json, done };
+    const write: PendingWrite = { answer, done };
     follower.writes.add(write);
     this.pushed++;
     watched.pushed++;
     const finished: Delivered = (delivered) => {
+      // [LAW:effects-at-boundaries] A refusal can detach the subscription
+      // while the socket flushes its previous frame. That confirmed write
+      // still carried the daemon's event, even after the view receipt ended.
+      if (delivered && answer.displayedEvents !== undefined)
+        this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;
-      if (delivered) follower.confirmed = json;
+      if (delivered) follower.confirmed = answer;
       settleWrite(write, delivered);
     };
     try {
-      sub.frame(json, finished);
+      sub.frame(answer.json, finished);
     } catch (error) {
       this.deps.log(
         "error",

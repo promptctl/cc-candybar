@@ -26,6 +26,7 @@ import type {
   EventInput,
   Present,
   Renderer,
+  RendererDiagnostics,
   RendererOutput,
   RequestId,
 } from "../../src/renderer-interface/interface";
@@ -52,11 +53,9 @@ const CONFIG = `{
   root: { h: ["said"] },
 }`;
 
-// The renderer built from a profile whose sessions hold `recorded`, and every
-// line it hands the host's log.
+// The renderer built from a profile whose sessions hold `recorded`.
 function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
-  const logged: string[] = [];
-  const r = mainRendererOf(
+  const built = mainRendererOf(
     {
       stored: { ...EMPTY_STORED_STATE, sessions: Object.fromEntries(recorded) },
       locations: {
@@ -67,12 +66,9 @@ function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
       },
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
-    {
-      log: (level, message) => void logged.push(`${level} ${message}`),
-      eventAnswered: () => {},
-    },
   );
-  return { r, logged };
+  if (built.kind === "refused") throw new Error(built.failure.detail);
+  return built.renderer;
 }
 
 // A statusline request of `session` in the project, across the host's
@@ -163,8 +159,10 @@ const presentOf = (effects: readonly Effect[]): Present => {
 const indicatorOf = (frame: Pick<Frame, "rows">): string | undefined =>
   linksOf(frame).find(({ text }) => text.startsWith("⚠ "))?.text;
 
-const configLoads = (logged: readonly string[]): string[] =>
-  logged.filter((line) => line.startsWith("info config loaded "));
+const configLoads = ({ diagnostics }: RendererDiagnostics): string[] =>
+  (diagnostics ?? []).flatMap(({ level, line }) =>
+    level === "info" && line.startsWith("config loaded ") ? [line] : [],
+  );
 
 // A started renderer with the session's context in and its origin's config
 // handed in as `text`, then a request of it answered: the bar drawn.
@@ -172,26 +170,26 @@ async function drawn(text: string) {
   const t = renderer(new Map());
   const context = contextOf("s1");
   const origin: RenderOrigin = context.requested;
-  answered(await handIn(t.r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+  answered(await handIn(t, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   const named = answered(
-    await handIn(t.r, {
+    await handIn(t, {
       kind: "context",
       context,
       worldState: worldStateOf(context.hookData.session_id),
     }),
   );
   const config = (text: string) =>
-    handIn(t.r, { kind: "config", origin, config: snapshotOf(text) });
-  answered(await config(text));
+    handIn(t, { kind: "config", origin, config: snapshotOf(text) });
+  const opened = answered(await config(text));
   const request = answered(
-    await handIn(t.r, {
+    await handIn(t, {
       kind: "request",
       id: 1 as RequestId,
       context,
     }),
   );
   return {
-    ...t,
+    opened,
     named,
     config,
     bar: textOf(presentOf(request.effects).frame),
@@ -200,13 +198,13 @@ async function drawn(text: string) {
 }
 
 test("a session's bar draws from the layer text its origin's snapshot carries", async () => {
-  const { named, bar, frame, logged } = await drawn(CONFIG);
+  const { named, bar, frame, opened } = await drawn(CONFIG);
   // The context waited for its origin, and its output named it.
   expect(named.subscriptions.configs).toHaveLength(1);
   expect(bar).toContain(SAID);
   expect(indicatorOf(frame)).toBeUndefined();
   // The one load is the view's opening, from the layer the snapshot carries.
-  expect(configLoads(logged)).toEqual([
+  expect(configLoads(opened)).toEqual([
     expect.stringContaining(`cause=open state=built files=${USER_FILE} `),
   ]);
 });
@@ -230,11 +228,11 @@ test("a fresh renderer replays a drawn bar, a click, a scheduled draw and a conf
       event,
     };
     recording.push(structuredClone(input));
-    const result = answered(await live.r.answer(input));
+    const result = answered(await live.answer(input));
     outputs.push(structuredClone(result));
     return result;
   };
-  await turn(
+  const started = await turn(
     {
       kind: "start",
       viewers: {
@@ -249,6 +247,9 @@ test("a fresh renderer replays a drawn bar, a click, a scheduled draw and a conf
     },
     0,
   );
+  expect(configLoads(started)).toEqual([
+    expect.stringContaining("cause=open state=built"),
+  ]);
   const first = await turn(
     { kind: "request", id: 1 as RequestId, context },
     10,
@@ -290,8 +291,7 @@ test("a fresh renderer replays a drawn bar, a click, a scheduled draw and a conf
 
   const replay = renderer(new Map());
   for (const [index, input] of recording.entries())
-    expect(await replay.r.answer(input)).toEqual(outputs[index]);
-  expect(replay.logged).toEqual(live.logged);
+    expect(await replay.answer(input)).toEqual(outputs[index]);
 });
 
 test("a snapshot whose layer will not parse draws the bundled bar, with its error on the indicator", async () => {
@@ -302,17 +302,13 @@ test("a snapshot whose layer will not parse draws the bundled bar, with its erro
 });
 
 test("a config turn with an equal snapshot loads nothing again", async () => {
-  const { config, logged } = await drawn(CONFIG);
-  const opened = configLoads(logged).length;
-  answered(await config(CONFIG));
-  expect(configLoads(logged).slice(opened)).toEqual([]);
+  const { config } = await drawn(CONFIG);
+  expect(configLoads(answered(await config(CONFIG)))).toEqual([]);
 });
 
 test("a config turn whose text moved only by a comment keeps the state it serves", async () => {
-  const { config, logged } = await drawn(CONFIG);
-  const opened = configLoads(logged).length;
-  answered(await config(`// a note\n${CONFIG}`));
-  expect(configLoads(logged).slice(opened)).toEqual([
+  const { config } = await drawn(CONFIG);
+  expect(configLoads(answered(await config(`// a note\n${CONFIG}`)))).toEqual([
     expect.stringContaining("cause=config state=kept"),
   ]);
 });
@@ -320,7 +316,7 @@ test("a config turn whose text moved only by a comment keeps the state it serves
 test("a click on a session with no live context waits for the config of the origin the host's book holds, and runs in that config's turn", async () => {
   const session = sessionIdOf("idle-one");
   const origin = contextOf("idle-one").requested;
-  const { r } = renderer(new Map());
+  const r = renderer(new Map());
   answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   const palette = [...listResolvablePaletteNames()][0]!;
   const parked = answered(

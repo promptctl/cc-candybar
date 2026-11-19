@@ -26,14 +26,17 @@
 // landing left.
 
 import {
+  sessionOfEvent,
   type ConfigChange,
   type Effect,
   type EffectOutcome,
   type Event,
   type EventInput,
+  type Present,
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
+  type Timed,
   type TurnFailure,
   type TurnOutcome,
   type Subscriptions,
@@ -41,10 +44,11 @@ import {
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
+import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
-import type { DaemonLogger } from "../utils/logger";
+import { writeLogLines, type DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
@@ -79,7 +83,7 @@ export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
 type SettlePresentation = (
-  effect: Pick<Effect, "id" | "session">,
+  effect: Pick<Present, "id" | "session" | "displayedEvents">,
   reason: string | null,
 ) => void;
 type TakenTurn = TurnOutcome & {
@@ -130,6 +134,7 @@ export interface HostWorld {
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly closing: () => boolean;
+  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string) => void;
 }
 
@@ -182,6 +187,7 @@ const THREW_AS = {
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
 interface Slotted {
+  readonly received: boolean;
   readonly turn: TakenTurn;
   readonly settled: Promise<readonly EffectOutcome[]>;
 }
@@ -339,6 +345,7 @@ export function rendererHost(
   // A turn no renderer answered: nothing of it was taken, so the
   // subscriptions last taken stand.
   const unanswered = (failure: Failure, queuedMs: number): Slotted => ({
+    received: false,
     turn: {
       kind: "threw",
       failure,
@@ -361,9 +368,9 @@ export function rendererHost(
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
-    const session = sessionOf(input.event);
+    const session = sessionOfEvent(input.event);
     let release = (): void => {};
-    let output: RendererOutput & { readonly turnMs: number };
+    let output: Timed<RendererOutput>;
     let sentAt: Monotonic;
     try {
       if (session !== null) release = collector.holding(session);
@@ -380,7 +387,16 @@ export function rendererHost(
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
-    const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
+    const {
+      subscriptions,
+      wake,
+      frames,
+      stored,
+      diagnostics,
+      turnMs,
+      ...answer
+    } = output;
+    recordDiagnostics(diagnostics);
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -391,7 +407,13 @@ export function rendererHost(
       settlePresentation: receipt,
       queuedMs,
       turnMs,
-      hopMs: elapsedMs(clock, sentAt) - turnMs,
+      hopMs:
+        turnMs === null
+          ? null
+          : recordTaken(
+              "renderer round-trip timing",
+              () => elapsedMs(clock, sentAt) - turnMs,
+            ),
     };
     if (input.event.kind === "start")
       endedStart(
@@ -405,6 +427,7 @@ export function rendererHost(
       receipt,
     );
     return {
+      received: true,
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled.finally(
         () => void recordTaken("session release", release),
@@ -581,6 +604,15 @@ export function rendererHost(
     }
   };
 
+  // [LAW:single-enforcer] The accepting slot writes each line once, at its
+  // original level, before the turn's effects can produce further input.
+  const recordDiagnostics = (
+    diagnostics: RendererOutput["diagnostics"],
+  ): void => {
+    if (diagnostics === undefined) return;
+    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
+  };
+
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
   // taker that throws leaves the renderer's next turn armed. Taking never
   // fails a turn that answered: its effects are still owed their
@@ -734,7 +766,7 @@ export function rendererHost(
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
-    const { turn, settled } = await inSlot(input, 0);
+    const { received, turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
     // A `config` turn that threw failed whatever waited on it, as its own
     // turn would have: a waiting click's bad request is still the user's.
@@ -748,7 +780,7 @@ export function rendererHost(
           ]
         : [];
     const outcomes = settled.then((outcomes) => [...threw, ...outcomes]);
-    return turn.kind === "threw" && turn.turnMs === null
+    return turn.kind === "threw" && !received
       ? { kind: "unreceived", failure: turn.failure, settled: outcomes }
       : {
           kind: "received",
@@ -779,6 +811,11 @@ export function rendererHost(
   const receiptFor =
     (issuer: number): SettlePresentation =>
     (effect, reason) => {
+      // [LAW:effects-at-boundaries] The write can acknowledge a daemon
+      // event after its renderer has gone. Only the local receipt needs
+      // the generation that issued it.
+      if (reason === null && effect.displayedEvents !== undefined)
+        world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       const retired = "the renderer that drew the frame has ended";
       unawaited(
@@ -837,7 +874,7 @@ export function rendererHost(
     about: TurnRecord,
     delivered: TakenTurn,
   ): void => {
-    const session = event === null ? null : sessionOf(event);
+    const session = event === null ? null : sessionOfEvent(event);
     const head: TurnRecord = [
       ["renderer", name],
       ["input", event?.kind ?? "-"],
@@ -853,8 +890,8 @@ export function rendererHost(
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
-        // [LAW:single-enforcer] No renderer was live to take it: the
-        // supervisor says that once, with the count it refused.
+        // [LAW:single-enforcer] The supervisor identifies interrupted
+        // inputs and counts those refused while no worker was live.
         if (delivered.failure.kind === "down") return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
@@ -986,12 +1023,13 @@ export function rendererHost(
       holds(`push:${push.kind}`);
       try {
         if (startFailure !== null) throw new CrossedFailure(startFailure);
-        const { subscriptions, wake, stored, ...answered } =
+        const { subscriptions, wake, stored, diagnostics, ...answered } =
           await renderer.answer({
             kind: "adapter",
             push,
             ...readingsAt(clock),
           });
+        recordDiagnostics(diagnostics);
         // [LAW:no-ambient-temporal-coupling] A push's newly named configs
         // enter before the next queued slot, as they do for an event.
         const followed = took(
@@ -1123,31 +1161,3 @@ const stampedOf =
     event: made.event,
     ...readingsAt(clock),
   });
-
-// [LAW:one-source-of-truth] The session an event names: what a turn holds,
-// and what its line's `sid` says. A click naming none, or one whose id failed
-// its checkpoint, names none.
-function sessionOf(event: Event): SessionId | null {
-  switch (event.kind) {
-    // A start is every session's: it holds none of them alone.
-    case "start":
-      return null;
-    case "context":
-    case "request":
-      return event.context.hookData.session_id;
-    // An origin's config is every session's there.
-    case "config":
-      return null;
-    case "world-state":
-      return event.worldState.session;
-    case "click":
-      return event.click.scope === "session" ? event.click.session : null;
-    case "retire":
-    case "effect-done":
-      return event.session;
-    // Every watched session's, or the renderer's own.
-    case "viewers":
-    case "due":
-      return null;
-  }
-}

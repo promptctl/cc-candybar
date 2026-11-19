@@ -54,17 +54,19 @@ export default defineConfig([{
 	plugins: [sourceDigestPlugin(), {
 		name: 'cc-candybar:renderer-filesystem',
 		// [LAW:effects-at-boundaries] The CLI and host in this same bundle need
-		// the filesystem. Follow only the renderer's runtime import graph,
-		// including shared modules, packages and dynamic imports.
+		// the filesystem. The renderer process includes its transport and the
+		// core. Follow their shared modules, packages and dynamic imports.
 		generateBundle() {
-			const entry = path.join(SRC, 'renderer', 'main.ts');
+			const entry = path.join(SRC, 'renderer-process.ts');
 			if (!this.getModuleInfo(entry)) {
 				this.error('Cannot check the renderer filesystem boundary: renderer entry is missing');
 			}
 			const paths = new Map([[entry, [path.relative(ROOT, entry)]]]);
 			for (const [module, chain] of paths) {
 				const info = this.getModuleInfo(module);
-				if (!info) continue;
+				if (!info) {
+					this.error(`Cannot check renderer import chain ${chain.join(' -> ')}: module information is missing`);
+				}
 				for (const id of [...info.importedIds, ...info.dynamicallyImportedIds]) {
 					if (paths.has(id)) continue;
 					const next = [...chain, path.isAbsolute(id) ? path.relative(ROOT, id) : id];

@@ -26,6 +26,7 @@ import {
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
+import { TurnLog } from "./turn-log.js";
 import { runEach } from "../utils/run-each.js";
 import { FEED_PERIODS, Feeds } from "./feeds.js";
 import type { LaneSwitches } from "../config/lanes.js";
@@ -51,7 +52,6 @@ import {
 import type {
   AdapterPush,
   AdapterReply,
-  AdapterToHost,
   RendererStats,
 } from "../renderer-interface/adapter.js";
 import type {
@@ -97,6 +97,7 @@ import {
   type PushedFrame,
   type Renderer,
   type RendererBoot,
+  type RendererConstruction,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
@@ -137,7 +138,7 @@ export function mainRenderer(
   // What each store moved since its last successful drain.
   drains: StoreDrains,
 ): Renderer {
-  const { time, feeds, menuIdle } = parts;
+  const { time, turnLog, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
@@ -387,7 +388,7 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery } = answerRequest(
+        const { frame, delivery, displayedEvents } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -400,6 +401,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          displayedEvents,
         });
         return;
       }
@@ -660,11 +662,14 @@ export function mainRenderer(
     return { outcome, subscriptions, wake, stored };
   };
 
+  const during = <T extends object>(input: RendererInput, answer: () => T) =>
+    turnLog.during(() => time.during(input, answer));
+
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) =>
-      time.during(input, () => {
+      during(input, () => {
         const { outcome, ...declaration } = ending(input, () =>
           pushed(input.push, {
             parked: opening.size + parked.get().length,
@@ -680,7 +685,7 @@ export function mainRenderer(
         };
       }),
     event: async (input) =>
-      time.during(input, () => {
+      during(input, () => {
         const record: RequestFacts = [];
         const effects: Effect[] = [];
         const frames: PushedFrame[] = [];
@@ -721,7 +726,7 @@ function closeIdleMenus(
     } catch (thrown) {
       const failure = failureOf(thrown);
       // A close the daemon's close cut off is a refusal, as a click's is.
-      parts.log(
+      parts.turnLog.add(
         failure.kind === "closing" ? "info" : "error",
         `menu-idle: close failed (session=${session}): ${failure.detail}`,
       );
@@ -729,20 +734,26 @@ function closeIdleMenus(
   }
 }
 
-// [LAW:single-enforcer] The main renderer, built over the host's parts it
-// reaches and the stored state it is handed.
-export function mainRendererOf(
-  inputs: RendererBoot,
-  host: AdapterToHost,
-): Renderer {
+// [LAW:single-enforcer] The main renderer is built from its supplied state.
+export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
+  const turnLog = new TurnLog();
+  return turnLog.during<RendererConstruction>(() => {
+    try {
+      return { kind: "built", renderer: build(inputs, turnLog) };
+    } catch (thrown) {
+      return { kind: "refused", failure: failureOf(thrown) };
+    }
+  });
+}
+
+function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
   const now = () => time.at;
-  // [LAW:single-enforcer] The renderer's lines go to the host's one log.
-  const { log } = host;
+  const log = turnLog.add;
   const sessionState = new SessionState(inputs.stored.sessions);
   // A legacy edit-mode flag has no draft after a restart.
   for (const sid of Object.keys(inputs.stored.sessions))
@@ -846,7 +857,6 @@ export function mainRendererOf(
     periods: FEED_PERIODS,
   });
   const parts: RendererParts = {
-    ...host,
     time,
     sessionState: edits.view,
     renderCache,
@@ -919,6 +929,7 @@ export function mainRendererOf(
   return mainRenderer(
     {
       ...parts,
+      turnLog,
       menuIdle,
       feeds,
       verbs: verbsOver(verbCtx),

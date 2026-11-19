@@ -1,21 +1,21 @@
 # Architecture: client, daemon, wire
 
-## Two processes, one renderer
+## One shared host and named renderers
 
-Claude Code spawns the client on every statusline tick. The client connects to the daemon's unix socket, sends the hook JSON and prints the answer. The daemon is the only renderer. The client has no render path of its own, on purpose: a second renderer is a second source of truth, and it drifts. [LAW:one-source-of-truth]
+Claude Code’s statusline client sends the hook to the host and prints the reply. Worktrees can run different renderer builds against the same host. The host shares filesystem observations and watches across them. Each renderer owns its interpretation of those observations, including the last authorized config it could compile. A second build must be able to restart without dropping the first build’s watch or rereading its data. [LAW:one-source-of-truth]
 
-Inside the daemon the renderer side is a directory, and a lint rule over a table of zones fails any import into it but its start and any import out of it but shared code. The contract between the two (the renderer interface and the adapter) is shared, because the host and the wire both name it, and every reach across the seam is an adapter entry. A zone is only what the rule checks, which is import direction: node's builtins and globals reach the world without a relative import, so a shared module may still open a file or write stderr, and the rule for each such effect lands with the change that removes the effect. The renderer's own files may not import the filesystem, but that rule sees only their own imports: a renderer reaching a shared module that opens a file still opens it, so a module that opens a config, plugin or `.git` file belongs to the host's side, where the zone rule keeps the renderer out of it. [LAW:one-way-deps]
+The host admits input, executes effects and owns delivery confirmation. A renderer receives data and answers with data. Its diagnostics belong to the construction or turn that produced them. A completed terminal write can acknowledge the daemon warning it displayed even after the renderer has been replaced. The renderer’s presentation state belongs to the generation that drew the frame. [LAW:effects-at-boundaries]
 
 The daemon speaks JSON lines over the renderer child’s standard input and output. The in-process renderer used by tests speaks the same contract. The setup preview uses the ordinary statusline client and daemon.
 
-- The renderer is spawned from the process's own entry, never the bundle path the daemon reports: under a test's loader the module's file is no entry, and a renderer spawned from it runs nothing.
+- The primary renderer runs the host’s executable entry. A worktree renderer runs its bound bundle. Both must speak the host’s private protocol.
 - It is launched through the process's launcher, not the daemon's, because the daemon's close aborts its own launches before the renderer's close steps have run.
 - It ends on its stdin's EOF, so it dies with a host killed with no cleanup; the launcher's lifeline is no part of that.
 - While no renderer is live an input fails at once rather than starting one, because a request per tick that spawns would be a fork storm under a crash loop.
 
 A request is answered by the frame its renderer presents. A request or feed keeps what its frame showed only when the host confirms it. The socket settles every receipt, including a buffered frame that was replaced and a write that threw. An exit that forgets leaks an otherwise unshown record. Surface layouts and shared session motion follow draw order, so a delayed receipt cannot restore an old view or rewind the animation clock.
 
-The shipped client is native (Rust) and handles only the render hot path. It hands every other subcommand to the Node entry. On a daemon miss it spawns a detached daemon and prints an empty line, so the next refresh finds the daemon running.
+The native statusline client can recover a cold host. It shows the session’s last good frame or a waiting indicator while the host starts. A timeout includes a command for inspecting the failure.
 
 A one-shot Node subcommand folds its outcome into a plan (what goes to each stream, the exit code) and ends through one delivery that waits for both streams' write callbacks before exiting. A piped stdout flushes asynchronously on macOS, so an exit right after the write drops everything past the first 64 KiB the pipe buffered, and the loss is invisible on Linux, where pipes are synchronous. [LAW:single-enforcer]
 

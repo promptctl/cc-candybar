@@ -80,7 +80,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import { joinedEvent, type HeldEvent } from "../src/utils/event-hold";
+import { joinedEvent } from "../src/utils/event-hold";
 import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { STORAGE_FOLDER } from "../src/config/loader/plugins";
@@ -119,12 +119,10 @@ function renderer(
   // Each session whose view told the cache its data moved, in order.
   readonly changed: string[];
   readonly logged: string[];
-  readonly pipesAnswered: HeldEvent[];
   readonly rig: SessionRig;
 } {
   const logged: string[] = [];
   const changed: string[] = [];
-  const pipesAnswered: HeldEvent[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
     observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
@@ -144,7 +142,6 @@ function renderer(
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
     }),
-    eventAnswered: (event) => pipesAnswered.push(event),
   };
   cleanups.push(() => parts.feeds.closeAll(READ.tick));
   // The cache's record of a delivered frame, heard on its way in.
@@ -161,7 +158,6 @@ function renderer(
     recorded,
     changed,
     logged,
-    pipesAnswered,
     rig,
   };
 }
@@ -728,7 +724,7 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("draws the daemon's own faults its world state carries, and an answer that carried the pipe event tells the host once it arrived", async () => {
+  test("reports which launcher event the statusline drew alongside the frame", async () => {
     const event = {
       text: "a launched program's pipe outlived its launch",
       ...READ,
@@ -748,12 +744,12 @@ describe("a statusline request", () => {
     const facts = new Map(record);
     expect(facts.get("warn")).toBe("lifeline,launch-pipes");
     expect(facts.get("pipeEvent")).toBe("held");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "launch-pipes", event },
+    ]);
   });
 
-  test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
+  test("reports which daemon act failure the statusline drew alongside the frame", async () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
@@ -761,9 +757,9 @@ describe("a statusline request", () => {
     }));
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "act-failed", event },
+    ]);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
@@ -865,6 +861,44 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
+  test.each([false, true])(
+    "a pane frame displays the daemon warning while its answered state is %s",
+    async (shown) => {
+      const event = {
+        ...joinedEvent(null, "a daemon act failed", READ.at),
+        answered: shown,
+      };
+      const t = renderer(undefined, () => ({
+        ...daemonFactsOf(),
+        actFailed: event,
+      }));
+      await configure(t, checked("%1"));
+      answered(
+        await handIn(t.r, {
+          kind: "viewers",
+          viewers: {
+            [SESSION]: {
+              lanes: { pane: { drawing: true, subscribers: 1 } },
+              shown: true,
+              joined: 1,
+            },
+          },
+        }),
+      );
+      const frame = await dueFrame(t.r);
+      expect(frame.displayedEvents).toEqual(
+        shown ? undefined : [{ kind: "act-failed", event }],
+      );
+      const confirmed = answered(
+        await done(t.r, { session: SESSION, id: frame.receipt }, true),
+      );
+      expect(confirmed.record).toContainEqual([
+        "faults",
+        expect.stringContaining(event.text),
+      ]);
+    },
+  );
+
   test("whose render threw names the failure for the host to publish", () => {
     const parts = {
       renderCache: {

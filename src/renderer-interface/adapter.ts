@@ -1,10 +1,6 @@
-// [LAW:one-way-deps] The adapter: every reach between the renderer and the
-// host, spelled in shared types. The host's parts satisfy `AdapterToHost`
-// structurally where it calls the renderer's start, so no renderer file names
-// a host type. The host reaches the renderer only by an `AdapterPush`, plain
-// data a process can carry, answered by its `AdapterReply`.
+// The host’s inspection and shutdown pushes, answered as plain data.
 
-import type { Crosses, Reaches } from "./crosses.js";
+import type { Crosses } from "./crosses.js";
 import type {
   MenuIdleStats,
   RenderCacheStats,
@@ -14,25 +10,6 @@ import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
-import type { HeldEvent } from "../utils/event-hold.js";
-
-export type Level = "info" | "warn" | "error";
-
-// [LAW:effects-at-boundaries] exception: what the renderer reaches in the
-// host that crosses a process: each a notice, which answers nothing, so a
-// turn never waits on the host.
-export interface AdapterToHost {
-  // A line into the host's one log, which rotates itself: two writers would
-  // each shift its generations.
-  readonly log: (level: Level, line: string) => void;
-  // An answer carrying a daemon-wide held event (the launcher's pipe event,
-  // the last renderer's end) reached its client.
-  readonly eventAnswered: (event: HeldEvent) => void;
-}
-
-// [LAW:types-are-the-program] Every reach crosses: the build fails on one a
-// process could not carry, naming it.
-export const REACHES_CROSS: Reaches<AdapterToHost> = true;
 
 // [LAW:effects-at-boundaries] exception: what the host reaches in the
 // renderer, each a push it hands in as an `adapter` input

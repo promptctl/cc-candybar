@@ -10,13 +10,15 @@
 
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
-import type { Failure } from "../daemon/foundations/verb-error";
+import { failureOf, type Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
+import type { LogLine } from "../utils/logger";
+import type { DisplayedEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
@@ -38,6 +40,12 @@ export interface RendererBoot {
   readonly locations: Locations;
   readonly memoryLimitBytes: number;
 }
+
+export type RendererConstruction = RendererDiagnostics &
+  (
+    | { readonly kind: "built"; readonly renderer: Renderer }
+    | { readonly kind: "refused"; readonly failure: Failure }
+  );
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -63,7 +71,8 @@ export type Renderer = Answering<RendererOutput, AdapterOutput>;
 // An output as its transport hands it to the host, with how long the turn
 // took, measured around `answer` on the clock of the process it ran in: the
 // renderer reads none, and the host tells the hop's cost from the turn's.
-export type Timed<O> = O & { readonly turnMs: number };
+// A completed answer whose timing read failed carries no duration.
+export type Timed<O> = O & { readonly turnMs: number | null };
 
 // What the host holds of a renderer: its answers, each timed by its transport.
 export type TimedRenderer = Answering<
@@ -95,10 +104,26 @@ export function timed(
   renderer: Renderer,
   monotonic: () => number,
 ): TimedRenderer {
-  const time = async <O>(answer: () => Promise<O>): Promise<Timed<O>> => {
+  const time = async <O extends RendererDiagnostics>(
+    answer: () => Promise<O>,
+  ): Promise<Timed<O>> => {
     const from = monotonic();
     const output = await answer();
-    return { ...output, turnMs: Math.round(monotonic() - from) };
+    try {
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    } catch (thrown) {
+      // [LAW:no-silent-failure] Measuring a completed turn must not discard
+      // its effects, writes or diagnostics.
+      const missed: LogLine = {
+        level: "warn",
+        line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
+      };
+      const diagnostics: [LogLine, ...LogLine[]] =
+        output.diagnostics === undefined
+          ? [missed]
+          : [...output.diagnostics, missed];
+      return { ...output, turnMs: null, diagnostics };
+    }
   };
   return rendererOf({
     event: (input) => time(() => renderer.answer(input)),
@@ -112,6 +137,28 @@ export function timed(
 export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
+}
+
+// [LAW:one-source-of-truth] The same event session is held while the turn
+// runs and named in the host's records, even if its worker never answers.
+export function sessionOfEvent(event: Event): SessionId | null {
+  switch (event.kind) {
+    case "context":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.click.scope === "session" ? event.click.session : null;
+    case "retire":
+    case "effect-done":
+      return event.session;
+    case "start":
+    case "config":
+    case "viewers":
+    case "due":
+      return null;
+  }
 }
 
 // A session's context as its newest request names it, and the world state read
@@ -298,6 +345,7 @@ export interface Present {
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
+  readonly displayedEvents?: readonly DisplayedEvent[];
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
@@ -390,6 +438,12 @@ export type Effect = Present | ConfigChange | Act;
 // the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
 
+export interface RendererDiagnostics {
+  // [LAW:nothing-unseen] Boot and completed answers carry diagnostic lines
+  // in order, including typed failures. Silence carries no payload.
+  readonly diagnostics?: readonly [LogLine, ...LogLine[]];
+}
+
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
 // that reads it; a `shell` or `file` run, named by its digest; or an
@@ -436,7 +490,7 @@ export interface Subscriptions {
   readonly configSelections: readonly ConfigSelection[];
 }
 
-interface RendererDeclaration {
+interface RendererDeclaration extends RendererDiagnostics {
   readonly subscriptions: Subscriptions;
   // [LAW:no-ambient-temporal-coupling] The host keeps one timer to this tick
   // and hands it in as a `due`. It can move while all subscriptions stand.
@@ -453,6 +507,8 @@ export type FeedFrame<Body = WireFrame> =
       readonly receipt: EffectId;
       readonly bar: Body;
       readonly handoff: Body | null;
+      // The bar and its statusline handoff share the draw's diagnostics.
+      readonly displayedEvents?: readonly DisplayedEvent[];
     }
   | { readonly kind: "failed"; readonly message: string };
 
