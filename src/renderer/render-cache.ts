@@ -19,6 +19,10 @@ import type {
   StorageHoldId,
 } from "../renderer-interface/adapter.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import {
+  CrossedFailure,
+  type Failure,
+} from "../daemon/foundations/verb-error.js";
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
   layerForRole,
@@ -420,6 +424,15 @@ interface HeldSnapshot {
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
 }
+
+// [LAW:types-are-the-program] A rejected delivery carries its classified
+// failure. A compiled entry keeps its last attempted input for diagnostics.
+type ArrivedConfig =
+  | ({ readonly kind: "received" } & HeldSnapshot)
+  | { readonly kind: "failed"; readonly failure: Failure };
+
+const CONFIG_PENDING = { kind: "pending" } as const;
+export type ConfigDelivery = ArrivedConfig | typeof CONFIG_PENDING;
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
 // the last error AND last warning from a reload attempt. A state is only
@@ -1140,14 +1153,12 @@ export class RenderCache<
   F extends ViewFacts = ViewFacts,
 > {
   private readonly entries = new Map<string, CacheEntry>();
-  // [LAW:one-source-of-truth] What discovery found at each origin the
-  // renderer subscribes, by `originKey`, as the host's latest `config` handed
-  // it in: the one source every entry loads from. An origin the renderer stops
-  // naming is pruned, so an entry made after loads only a snapshot the host
-  // still follows.
-  private readonly snapshots = observable.map<string, HeldSnapshot>(undefined, {
-    deep: false,
-  });
+  // [LAW:one-source-of-truth] The latest delivery of each retained origin
+  // gates admission and writes, including controls on an already live view.
+  private readonly configDeliveries = observable.map<string, ArrivedConfig>(
+    undefined,
+    { deep: false },
+  );
   // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
   // wait over one of its views ends at: one fact, so a render waiting as the
   // close drops its view ends then, not at its deadline.
@@ -1215,27 +1226,45 @@ export class RenderCache<
   configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = { snapshot, digest: digestOf(snapshot) };
+    const held = {
+      kind: "received",
+      snapshot,
+      digest: digestOf(snapshot),
+    } as const;
     runInAction(() => {
-      this.snapshots.set(key, held);
+      const recovering = this.configDeliveries.get(key)?.kind === "failed";
+      this.configDeliveries.set(key, held);
       const entry = this.entries.get(key);
-      if (entry !== undefined && entry.digest !== held.digest)
+      // [LAW:no-ambient-temporal-coupling] A rejected application may have
+      // reached the entry before it threw. Reapply it when delivery resumes.
+      if (entry !== undefined && (recovering || entry.digest !== held.digest))
         this.reloadInto(entry, held, { kind: "config" });
     });
+  }
+
+  rejectConfig(origin: RenderOrigin, failure: Failure): void {
+    if (this.closed) return;
+    runInAction(() => {
+      this.configDeliveries.set(originKey(origin), { kind: "failed", failure });
+    });
+  }
+
+  configDelivery(origin: RenderOrigin): ConfigDelivery {
+    return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
   }
 
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
   holdsConfig(origin: RenderOrigin): boolean {
-    return this.snapshots.has(originKey(origin));
+    return this.configDelivery(origin).kind === "received";
   }
 
-  // [LAW:one-source-of-truth] The snapshots the renderer still names, by
+  // [LAW:one-source-of-truth] The deliveries the renderer still names, by
   // `originKey`: every other one goes, as the host lets its origin go.
   prune(keep: ReadonlySet<string>): void {
     runInAction(() => {
-      for (const key of [...this.snapshots.keys()])
-        if (!keep.has(key)) this.snapshots.delete(key);
+      for (const key of [...this.configDeliveries.keys()])
+        if (!keep.has(key)) this.configDeliveries.delete(key);
     });
   }
 
@@ -1599,15 +1628,17 @@ export class RenderCache<
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   private accessTo(entry: CacheEntry, state: DslRenderState): ConfigAccess {
-    const key = originKey(entry.origin);
-    const error = entry.lastError ?? this.entries.get(key)?.lastError;
-    if (error != null) return { kind: "unavailable", error };
-    const held = this.snapshots.get(key);
-    if (held === undefined)
+    const held = this.configDelivery(entry.origin);
+    if (held.kind === "failed")
+      return { kind: "unavailable", error: held.failure.message };
+    if (held.kind === "pending")
       return {
         kind: "unavailable",
         error: "No current config is held for this session",
       };
+    const key = originKey(entry.origin);
+    const error = entry.lastError ?? this.entries.get(key)?.lastError;
+    if (error != null) return { kind: "unavailable", error };
     for (const { role, path, content } of held.snapshot.chain)
       if (content.kind === "unreadable")
         return {
@@ -1700,7 +1731,7 @@ export class RenderCache<
     this.lifetime.abort(new Error("the render cache closed"));
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
-    runInAction(() => this.snapshots.clear());
+    runInAction(() => this.configDeliveries.clear());
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
     // waits on a render, so `retired` is the count of teardowns deferred.
     this.log(
@@ -1733,8 +1764,9 @@ export class RenderCache<
 
   private held(origin: RenderOrigin): HeldSnapshot {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.snapshots.get(originKey(origin));
-    if (held === undefined)
+    const held = this.configDelivery(origin);
+    if (held.kind === "failed") throw new CrossedFailure(held.failure);
+    if (held.kind === "pending")
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
       );

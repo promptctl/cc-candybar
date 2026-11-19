@@ -1494,6 +1494,106 @@ describe("a click", () => {
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
+  test("a failed config delivery reaches the live frame, request, and click, and a later delivery restores them", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, click: acted });
+    const context = checked(undefined, "availability.json5");
+    fs.writeFileSync(
+      path.join(dir, "availability.json5"),
+      JSON.stringify({
+        globals: { experimentalStatusline: true },
+        variables: {
+          canWrite: {
+            kind: "input",
+            path: "layers.user",
+            type: "boolean",
+            default: false,
+          },
+        },
+        segments: {
+          access: {
+            template:
+              "{{ if .canWrite }}WRITABLE{{ else }}UNAVAILABLE{{ end }}",
+          },
+        },
+        root: { h: ["access"] },
+      }),
+    );
+    answered(await configure(t, context));
+    const event = { kind: "request", context, id: REQUEST } as const;
+    const ordinary = () => handIn(t.r, event);
+    const first = presentOf(answered(await ordinary()).effects);
+    expect(textOf(first.frame)).toContain("WRITABLE");
+    const live = viewOf(t.rig);
+    expect(live?.configAccess()).toEqual({
+      kind: "available",
+      roles: ["user"],
+    });
+    answered(await done(t.r, first, true));
+    answered(await followFeed(t.r));
+    const ready = await dueFrame(t.r);
+    expect(textOf(parseFrame(ready.bar))).toContain("WRITABLE");
+    answered(await done(t.r, { session: SESSION, id: ready.receipt }, true));
+
+    const origin = context.requested;
+    const config = t.rig.cache.configs.discovery.snapshotOf(origin)!;
+    const delivery = { kind: "config", origin, config } as const;
+    const apply = t.rig.cache.configure.bind(t.rig.cache);
+    t.rig.cache.configure = () => {
+      throw new Error("config stream interrupted");
+    };
+    const { failure } = threw(await handIn(t.r, delivery));
+    expect(failure.message).toBe("config stream interrupted");
+    expect(threw(await ordinary()).failure).toEqual(failure);
+    expect(threw(await handIn(t.r, click("act", context))).failure).toEqual(
+      failure,
+    );
+    expect(() => t.rig.cache.snapshotFor(origin)).toThrow(failure.message);
+    expect(acted).not.toHaveBeenCalled();
+
+    const frame = await dueFrame(t.r, 1);
+    expect(textOf(parseFrame(frame.bar))).toContain("UNAVAILABLE");
+    expect(viewOf(t.rig)?.configAccess()).toEqual({
+      kind: "unavailable",
+      error: "config stream interrupted",
+    });
+    answered(await done(t.r, { session: SESSION, id: frame.receipt }, true));
+
+    t.rig.cache.configure = apply;
+    answered(await handIn(t.r, delivery));
+    expect(viewOf(t.rig)).toBe(live);
+    const next = await dueFrame(t.r, 2);
+    expect(textOf(parseFrame(next.bar))).toContain("WRITABLE");
+    answered(await done(t.r, { session: SESSION, id: next.receipt }, true));
+    const recovered = presentOf(answered(await ordinary()).effects);
+    expect(textOf(recovered.frame)).toContain("WRITABLE");
+    answered(await done(t.r, recovered, true));
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
+    expect(acted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retiring an origin with no view releases its rejected config delivery", async () => {
+    const t = renderer();
+    const context = checked();
+    answered(await contextTurn(t, context));
+    const origin = context.requested;
+    t.rig.cache.configs.follow(origin);
+    const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+    if (config === null) throw new Error("expected the followed config");
+    t.rig.cache.configure = () => {
+      throw new Error("the origin's delivery failed");
+    };
+    await expect(
+      handIn(t.r, { kind: "config", origin, config }),
+    ).resolves.toMatchObject({
+      kind: "threw",
+    });
+    expect(t.rig.cache.configDelivery(origin).kind).toBe("failed");
+    answered(await handIn(t.r, { kind: "retire", session: SESSION }));
+    expect(t.rig.cache.configDelivery(origin).kind).toBe("pending");
+  });
+
   test("failed config settles parked clicks and a later config does not replay them", async () => {
     const acted = jest.fn();
     const t = renderer({ ...NO_VERBS, click: acted });
