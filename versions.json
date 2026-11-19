@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-842",
+      "ref": "refs/pull/842/merge",
+      "sha": "4e6ce433914c7534f055602ba563a5174e1848a4",
+      "timestamp": "2026-11-19T10:10:11.300Z",
+      "commits": [
+        {
+          "sha": "4e6ce433914c7534f055602ba563a5174e1848a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:09:07Z",
+          "message": "Merge 463655ae27a88da9080500efabb266a8a49e205f into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "463655ae27a88da9080500efabb266a8a49e205f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:00-07:00",
+          "message": "fix(client): make native reconnect consume the passive outcome\n"
+        },
+        {
+          "sha": "9f3b603644f93354d67f6a5d7702cc74846b02ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:16-07:00",
+          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9c3c4d50b83f048857e251023c9e60ea74e0a83d",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:59:02-07:00",
           "message": "refactor: remove in-bar update offers and workers\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-842",
-      "ref": "refs/pull/842/merge",
-      "sha": "588530ff5568bd938041aca13cfcfbcf98571958",
-      "timestamp": "2026-11-19T10:01:38.399Z",
-      "commits": [
-        {
-          "sha": "588530ff5568bd938041aca13cfcfbcf98571958",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:00:25-07:00",
-          "message": "Merge 9f3b603644f93354d67f6a5d7702cc74846b02ab into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "9f3b603644f93354d67f6a5d7702cc74846b02ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:16-07:00",
-          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
         }
       ]
     },
