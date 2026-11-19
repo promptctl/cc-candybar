@@ -22,7 +22,8 @@ import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
 import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
-import { jsonParser } from "../../var-system/parse";
+import { jsonDocumentParser } from "../../var-system/parse";
+import { SourceFiles } from "../source-files";
 import { sessionFileName } from "../../config/loader/plugins";
 import type { JsonValue } from "../../var-system/types";
 import type { StorageHoldId } from "../../renderer-interface/adapter";
@@ -219,6 +220,7 @@ type Trigger = "hold" | "period" | "caught-up";
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
 // folder's, read from that owner.
 export class ManagedStorage {
+  private readonly files: SourceFiles;
   private readonly sessions: KeyedSource<SessionFile, JsonValue>;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
   // a hold names.
@@ -252,6 +254,7 @@ export class ManagedStorage {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
     readonly fileEvents: FileEvents;
+    readonly files?: SourceFiles;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep period, the
     // age a file is judged against, and the source's timings.
     readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
@@ -262,6 +265,7 @@ export class ManagedStorage {
     this.logger = opts.logger;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.fileEvents = opts.fileEvents;
+    this.files = opts.files ?? new SourceFiles();
     this.clock = opts.clock;
     this.unsubscribe = opts.fileEvents.subscribe((notice) =>
       this.noticed(notice),
@@ -271,7 +275,7 @@ export class ManagedStorage {
       scope: "session",
       keyOf: (f) => JSON.stringify([f.folder, f.sessionId]),
       fields: (f) => `file=${valueOf(fileOf(f))}`,
-      read: (f) => this.read(f),
+      read: (f, signal) => this.read(f, signal),
       // [LAW:types-are-the-program] A plugin source has no period: its watch
       // is its trigger, and a hold's return re-reads a kept entry.
       every: () => null,
@@ -290,8 +294,9 @@ export class ManagedStorage {
   // between them.
   hold(id: StorageHoldId, folders: readonly string[]): void {
     this.holds.set(id, folders);
-    for (const folder of new Set(folders)) this.asked(folder, "hold");
-    this.closeUnheld();
+    const changed = this.reconcile(new Set(folders), "hold");
+    this.closeUnheld(changed);
+    this.refreshFolders(changed);
   }
 
   // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
@@ -301,7 +306,7 @@ export class ManagedStorage {
   // triggers. A folder found gone or replaced is lost, except at a hold, which
   // makes it again at once. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
-  private asked(folder: string, trigger: Trigger): void {
+  private asked(folder: string, trigger: Trigger): boolean {
     const was = this.folders.get(folder);
     if (was?.kind === "watching") {
       const read = this.readAt(folder);
@@ -313,20 +318,27 @@ export class ManagedStorage {
         this.watchers
           .acquire(watchKey(was.key), targetsOf(folder), () => {})
           .release();
-        this.settle(folder);
-        return;
+        return this.settle(folder);
       }
       // [LAW:nothing-unseen] Lost at every trigger; a hold makes it again.
       this.lostAt(was, read);
-      if (trigger !== "hold") return;
+      if (trigger === "hold") this.moved(folder, this.made(folder));
+      return true;
     }
-    this.moved(folder, this.made(folder));
+    return this.moved(folder, this.made(folder));
+  }
+
+  private reconcile(folders: Iterable<string>, trigger: Trigger): Set<string> {
+    const changed = new Set<string>();
+    for (const folder of folders)
+      if (this.asked(folder, trigger)) changed.add(folder);
+    return changed;
   }
 
   // A render state reclaimed: the folders only it named close.
   release(id: StorageHoldId): void {
     this.holds.delete(id);
-    this.closeUnheld();
+    this.refreshFolders(this.closeUnheld());
   }
 
   // A session's declaration of one session's file: held at (folder, session
@@ -404,10 +416,18 @@ export class ManagedStorage {
   }
 
   // Closes every folder no hold names.
-  private closeUnheld(): void {
+  private closeUnheld(changed = new Set<string>()): Set<string> {
     const named = new Set([...this.holds.values()].flat());
-    for (const folder of [...this.folders.keys()])
-      if (!named.has(folder)) this.moved(folder, undefined);
+    for (const folder of this.folders.keys()) {
+      if (named.has(folder)) continue;
+      this.moved(folder, undefined);
+      changed.add(folder);
+    }
+    return changed;
+  }
+
+  private refreshFolders(changed: ReadonlySet<string>): void {
+    if (changed.size > 0) this.sessions.changed((f) => changed.has(f.folder));
   }
 
   // Opens a folder's next generation on the folder a read found.
@@ -435,11 +455,10 @@ export class ManagedStorage {
     return watching;
   }
 
-  // A folder's state moves: a generation it ends closes, after any next one
-  // opened, and its held files are re-read, since what they read before came
-  // from another folder or from the path unwatched. `undefined`: no hold
-  // names it now.
-  private moved(folder: string, now: Folder | undefined): void {
+  // [LAW:single-enforcer] Each state or fault change makes the folder dirty,
+  // so the caller can refresh it once after reconciling the whole event.
+  // An ended generation closes after its successor opens.
+  private moved(folder: string, now: Folder | undefined): boolean {
     const was = this.folders.get(folder);
     if (now === undefined) this.folders.delete(folder);
     else this.folders.set(folder, now);
@@ -455,14 +474,13 @@ export class ManagedStorage {
     // A folder no hold names leaves its faults untold: nothing asked the OS or
     // the disk again, so none of them cleared.
     if (now === undefined) this.told.delete(folder);
-    this.settle(folder, !sameFolder(was, now));
+    return this.settle(folder) || !sameFolder(was, now);
   }
 
   // [LAW:no-silent-failure] Each fault a folder stands on is logged and
   // counted as it starts and as its reason changes, and logged as it clears,
-  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
-  // on a move of its state or its faults, which they read first.
-  private settle(folder: string, stateMoved = false): void {
+  // once each. Whether the faults changed is part of the refresh decision.
+  private settle(folder: string): boolean {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now = faultsOf(this.folders.get(folder));
     let moved = false;
@@ -487,7 +505,7 @@ export class ManagedStorage {
     if (SOURCES.every((source) => now[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now);
-    if (moved || stateMoved) this.sessions.changed((f) => f.folder === folder);
+    return moved;
   }
 
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
@@ -503,46 +521,36 @@ export class ManagedStorage {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f: SessionFile) => f.folder === folder;
-    switch (invalidation.kind) {
-      case "unknown":
-        if (this.judged(watching)) this.sessions.changed(inFolder);
-        return;
-      case "changed": {
-        const { paths } = invalidation;
-        if (paths.includes(path.join(folder, path.basename(folder)))) {
-          if (this.judged(watching)) this.sessions.changed(inFolder);
-        } else {
-          this.sessions.changed(
-            (f) => inFolder(f) && paths.includes(fileOf(f)),
-          );
-        }
-        return;
-      }
-      // The watch's fault is the handle's to say (`faultsOf`).
-      case "failed":
-        this.judged(watching);
-        return;
+    if (
+      invalidation.kind === "changed" &&
+      !invalidation.paths.includes(path.join(folder, path.basename(folder)))
+    ) {
+      const paths = new Set(invalidation.paths);
+      this.sessions.changed((f) => inFolder(f) && paths.has(fileOf(f)));
+      return;
     }
+    // [LAW:single-enforcer] The window may also have changed the folder's
+    // standing fault. Both reasons share one refresh.
+    if (this.judged(watching) || invalidation.kind !== "failed")
+      this.sessions.changed(inFolder);
   }
 
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // a stat that fails keeps the generation. True while it still watches.
+  // a stat that fails keeps the generation. True when readings should move.
   private judged(watching: Watching): boolean {
     const read = this.readAt(watching.key.folder);
     if (read.kind === "unreadable" || this.present(watching, read)) {
       watching.unread = read.kind === "unreadable" ? read.reason : null;
-      this.settle(watching.key.folder);
-      return true;
+      return this.settle(watching.key.folder);
     }
     this.lostAt(watching, read);
-    return false;
+    return true;
   }
 
-  // A generation's folder found gone or replaced: the generation ends, and
-  // its held files are re-read from the path, so no draw shows a value from a
-  // folder no longer there while the next trigger makes it again.
+  // A generation's folder found gone or replaced: the generation ends,
+  // and the event asks for another read from the path.
   private lostAt(watching: Watching, read: Read): void {
     const { key } = watching;
     this.lost++;
@@ -562,10 +570,12 @@ export class ManagedStorage {
   private noticed(notice: DeliveryNotice): void {
     switch (notice.kind) {
       case "period":
+        this.refreshFolders(this.reconcile(this.folders.keys(), "period"));
+        return;
       case "caught-up":
-        for (const folder of [...this.folders.keys()])
-          this.asked(folder, notice.kind);
-        if (notice.kind === "caught-up") this.sessions.changed(() => true);
+        for (const folder of this.folders.keys())
+          this.asked(folder, "caught-up");
+        this.sessions.changed(() => true);
         return;
       case "moved":
         this.sessions.changed(() => true);
@@ -594,23 +604,19 @@ export class ManagedStorage {
     return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
 
-  private async read(f: SessionFile): Promise<Outcome<JsonValue>> {
+  private async read(
+    f: SessionFile,
+    signal: AbortSignal,
+  ): Promise<Outcome<JsonValue>> {
     const fault = this.standing(f.folder);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
-    let text: string;
-    try {
-      text = await fs.promises.readFile(file, "utf8");
-    } catch (e) {
-      const err = e as NodeJS.ErrnoException;
-      return err.code === "ENOENT"
+    const read = await this.files.read(file, signal);
+    if (read.kind === "error")
+      return read.code === "ENOENT"
         ? ABSENT
-        : failed(`${file}: ${err.message}`, "read");
-    }
-    // A program writes the file whole, by rename, so blank text is a program
-    // that has nothing to say, never a torn write.
-    if (text.trim() === "") return ABSENT;
-    const parsed = jsonParser(text);
+        : failed(`${file}: ${read.message}`, "read");
+    const parsed = jsonDocumentParser(read.text);
     return parsed.kind === "failed"
       ? failed(`${file}: ${parsed.reason}`, parsed.failedAt)
       : parsed;

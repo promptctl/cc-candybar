@@ -14,7 +14,7 @@
 // disagree about their type (the loader's sourceDefaultSpec is the enforcer
 // of that pairing; declareOne lowers the authored pair into this union).
 
-import { ok, failed, type Outcome } from "../utils/outcome.js";
+import { ABSENT, ok, failed, type Outcome } from "../utils/outcome.js";
 import type { JsonValue } from "./types.js";
 
 export type SourceParse =
@@ -61,3 +61,7 @@ export const jsonParser: Parser<JsonValue> = (text) => {
     return failed(`JSON parse failed: ${(e as Error).message}`, "parse");
   }
 };
+
+// An empty document is an absent value for a daemon file or shell source.
+export const jsonDocumentParser: Parser<JsonValue> = (text) =>
+  text.trim() === "" ? ABSENT : jsonParser(text);

@@ -84,6 +84,8 @@ The session id in the path is the one Claude Code gave the session, parsed where
 
 Each source has exactly one owner that schedules its reads, whichever plugin declared it. Plugin sources are owned for the whole daemon, not per directory or per session view: their watches go through the daemon's one watch registry, held for as long as the folder matters, so views opening and closing never open and close a watch. A session's view reaches every source it reads through the same declaration, whether the source is a plugin's or the bar's, so the set of sources is open: it is the union of what the loaded plugins declare.
 
+File declarations for the same path share a filesystem read when they are ready together. Each declaration keeps its own refresh policy and interpretation of the file.
+
 ## Names
 
 A plugin's names live under `.plugins.<plugin>.`. A bundled plugin's live at the top level, so when one of the bar's own sources moves into a bundled plugin, `.git.branch` and `.session.cost` still mean what they meant and no user config changes.

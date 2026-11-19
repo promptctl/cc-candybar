@@ -892,11 +892,20 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     fs.rmSync(r.folder, { recursive: true });
     fs.mkdirSync(r.folder);
     r.write(A, '"in the new folder"');
+    const beforeLoss = reads(r).length;
     r.fileEvents.notify({ kind: "period" });
     await until(() => r.storage.stats().lost === 1, "the loss");
+    // Finish the loss refresh before counting the catch-up's reads.
+    await until(
+      () => reads(r).length > beforeLoss,
+      "the lost folder's refresh",
+    );
+    const before = reads(r).length;
     r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("in the new folder"));
+    await quiet();
+    expect(reads(r)).toHaveLength(before + 1);
   });
 
   // [LAW:no-ambient-temporal-coupling] The owner's own triggers ask the

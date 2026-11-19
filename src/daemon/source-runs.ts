@@ -21,7 +21,7 @@
 // The collector holds a session's runs across each whole set of
 // subscriptions, so a view reopened within a turn's output keeps its runs.
 
-import { readFile as fsReadFile } from "node:fs/promises";
+import { SourceFiles } from "./source-files.js";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launcher";
 import type { SourceRead, ReadMode } from "../facts/source-identity.js";
@@ -119,6 +119,7 @@ function shellReader(
 }
 
 function fileReader(
+  files: SourceFiles,
   filePath: string,
   readMode: ReadMode,
   signal: AbortSignal,
@@ -126,27 +127,27 @@ function fileReader(
   return {
     where: whereOf({ kind: "file", path: filePath, readMode }),
     read: async () => {
-      try {
-        const raw = await fsReadFile(filePath, { encoding: "utf8", signal });
+      const read = await files.read(filePath, signal);
+      if (read.kind === "text")
         return ok(
-          readMode === "first-line" ? (raw.split(/\r?\n/)[0] ?? "") : raw,
+          readMode === "first-line"
+            ? (read.text.split(/\r?\n/)[0] ?? "")
+            : read.text,
         );
-      } catch (e) {
-        // [LAW:no-silent-failure] The errno says which mistake: a file not
-        // there yet, a directory, a permission, a link loop.
-        const code = (e as NodeJS.ErrnoException).code ?? String(e);
-        return failed(
-          signal.aborted
-            ? `file read aborted: ${String(signal.reason)}`
-            : `file unreadable (${code}): ${filePath}`,
-          "read",
-        );
-      }
+      // [LAW:no-silent-failure] The errno distinguishes absence, permission
+      // failures, directories and link loops.
+      return failed(
+        signal.aborted
+          ? `file read aborted: ${String(signal.reason)}`
+          : `file unreadable (${read.code ?? read.message}): ${filePath}`,
+        "read",
+      );
     },
   };
 }
 
 function readerOf(
+  files: SourceFiles,
   launcher: Launcher,
   { run: { identity }, env }: SessionRun,
   signal: AbortSignal,
@@ -156,7 +157,7 @@ function readerOf(
     case "shell":
       return shellReader(launcher, read, env, signal);
     case "file":
-      return fileReader(read.path, read.readMode, signal);
+      return fileReader(files, read.path, read.readMode, signal);
   }
 }
 
@@ -354,6 +355,8 @@ export interface SourceRunsDeps {
 }
 
 export class SourceRuns {
+  // File-reading policies in the same host share this filesystem edge.
+  readonly files = new SourceFiles();
   private readonly byKind: Readonly<
     Record<SourceRead["kind"], KeyedSource<SessionRun, JsonValue>>
   >;
@@ -388,7 +391,7 @@ export class SourceRuns {
         // readers through this one function; text/regex/json are three
         // parsers through it.
         read: async (run, signal) => {
-          const reader = readerOf(deps.launcher, run, signal);
+          const reader = readerOf(this.files, deps.launcher, run, signal);
           return parsed(await reader.read(), run.run.parser, reader.where);
         },
         every: ({
