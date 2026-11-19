@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "dc88be0a53e0f57b2e2abbadf1c1b66c319b05ec",
+      "timestamp": "2026-11-19T11:01:34.472Z",
+      "commits": [
+        {
+          "sha": "dc88be0a53e0f57b2e2abbadf1c1b66c319b05ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:00:39Z",
+          "message": "Merge 138fa09be8f53cc25ac01fe270f2b4a69d11e8f0 into 19a035d767753cfdb962f8696891d8c5f54c8c6f\n"
+        },
+        {
+          "sha": "138fa09be8f53cc25ac01fe270f2b4a69d11e8f0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:56:20-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-851",
       "ref": "refs/pull/851/merge",
       "sha": "3c3153cb89e964a1718263d8df8a1aa9529990ac",
@@ -157,49 +179,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:44:30-07:00",
           "message": "fix(edit): release a removed placement's session state at the session's own render\n\nA session's ✚ libraries and their pages, its configure key and its drafts\nare keyed by preset and placement id, so they outlived the placement and\nlanded on the next placement to reuse the id, whatever removed it.\n\nBefore drawing, a session now releases the keys it holds for placements\nits config no longer places in any preset, inserts included. The placed\nset is built once per loaded config, and a tick skips with one comparison\nof that set and the session's revision. A clicker's release runs inside\nits click's journal, so undo restores its drafts. A render over a failed\nload releases nothing. Each release is logged with the session and keys.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "24400191560c5a4ce91477d058834a7b195f20f3",
-      "timestamp": "2026-11-19T10:37:51.466Z",
-      "commits": [
-        {
-          "sha": "24400191560c5a4ce91477d058834a7b195f20f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:36:42Z",
-          "message": "Merge f5db2cfe02f1da9df8e61015eeef02987a730ac4 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
-        },
-        {
-          "sha": "f5db2cfe02f1da9df8e61015eeef02987a730ac4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:35:53-07:00",
-          "message": "fix(test): a test daemon's slot has one release, its exit, and its cleanups wait for that exit (f6eo)\n\nTestDaemonProcess loses release() and spawnDaemonWithEnv loses its pool\nparameter; exit-only release is tested on a /bin/sh stand-in. Cleanups await\nthe daemon's exit before removing its directories, signalDaemon treats the\nEPERM macOS answers for an exited, unreaped group like ESRCH, a child error\nafter spawn is thrown, and the workflow check watches daemonCommand.\n"
-        },
-        {
-          "sha": "5b1fb07dff05930e916419c454d37164140a2f44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:10:47-07:00",
-          "message": "fix(test): a test daemon's pool slot is released by its exit alone, and its signal hears every refusal but ESRCH (f6eo)\n\nThe source entries share one constructor over production's daemonArgs and\ndaemonCommand. A signal no longer frees the machine-wide slot of a daemon it\nleaves alive, a spawn resolves only once the process has a pid, the frozen\ncase reads the daemon's pid from its lease, and the readiness refusal tests\nuse an unsafe socket parent under the default entry.\n"
-        },
-        {
-          "sha": "e656ae2280cbfbf0a220d1f253ccf6ab47e34fde",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:55:29-07:00",
-          "message": "fix(test): a test daemon runs on the arguments the client ships, and its signal is named for what it reaches (f6eo)\n\nThe source entry resolves tsx's loader through the package's exports and puts\nit in front of the client's own daemon arguments, heap cap included. Because\nthe client refuses to spawn on a malformed memory budget, the tests of the\ndaemon's own refusal run it by hand. killTree becomes signalDaemon.\n"
-        },
-        {
-          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:38:14-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
         }
       ]
     },
