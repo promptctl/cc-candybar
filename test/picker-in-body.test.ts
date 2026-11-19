@@ -45,6 +45,7 @@ function renderOf(
         pick: { set: 'zoom', from: ['low', 'mid', 'high'] },
         page: { set: 'zoom.page', int: true },
         hello: { copy: 'hi' },
+        keep: { save: true, layer: 'ask' },
       },
       segments: { s: { template: ${JSON.stringify(template)} } },
       root: { rows: { identity: { h: [${host}] }, status: { h: [] } } },
@@ -94,7 +95,7 @@ describe("{{ carousel }} names what it sets", () => {
   });
 
   test("an open action that writes a bound value is refused: the label binds none", () => {
-    for (const open of ["pick", "page"]) {
+    for (const open of ["pick", "page", "keep"]) {
       expect(
         textOf(renderOf(`{{ carousel "pick" "${open}" "zoom" }}`)),
       ).toMatch(/writes a value the template binds/);

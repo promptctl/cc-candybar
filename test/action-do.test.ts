@@ -94,6 +94,35 @@ describe("do: several declared actions, one click", () => {
     expect(textOf(next)).toContain("◉ unfocus");
   });
 
+  test.each([
+    ["an ask-save head", "ask", "project"],
+    ["a fixed-layer follower", "local", "local"],
+  ])("draws %s with the intended layer", (_label, layer, expected) => {
+    const members = layer === "ask" ? "'keep', 'close'" : "'close', 'keep'";
+    const bound = layer === "ask" ? ' "project"' : "";
+    const rt = runtime(
+      config(
+        `keep: { save: true, layer: '${layer}' },
+         close: { set: 'panel', to: 'closed' },
+         combined: { do: [${members}] },`,
+        `{{ action "combined" "combine"${bound} }}`,
+      ),
+    );
+    const actions = linkUrls(rt.render()).map(effectsOf);
+    const combined = actions.find((steps) => steps.some(({ verb }) => verb === "save"));
+    expect(combined).toEqual(
+      layer === "ask"
+        ? [
+            { verb: "save", args: ["s1", expected] },
+            { verb: "set-state", args: ["s1", "panel", "closed"] },
+          ]
+        : [
+            { verb: "set-state", args: ["s1", "panel", "closed"] },
+            { verb: "save", args: ["s1", expected] },
+          ],
+    );
+  });
+
   test("a {{ menu }} over a do headed by an option action: each pick also fires the rest", async () => {
     const rt = runtime(
       config(
@@ -143,6 +172,7 @@ describe("do: load errors", () => {
     ["a nested do", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`, '"ab" is itself a do action'],
     ["a member listed twice", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`, '"a" is listed twice'],
     ["a template-bound follower", `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`, '"t" takes its value from the template'],
+    ["a follower that asks for a save layer", `a: { set: 'panel', to: 'closed' }, keep: { save: true, layer: 'ask' }, d: { do: ['a', 'keep'] },`, '"keep" takes its value from the template'],
     ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown key "to" on a do action'],
   ])("%s", (_label, actions, message) => {
     expect(loadError(actions)).toContain(message);

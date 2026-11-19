@@ -1361,7 +1361,7 @@ export function validateDeclarations(
             : a.do.indexOf(member) !== i
               ? `"${member}" is listed twice — each member fires once per click`
               : i > 0 && actionBindsTemplateValue(target)
-                ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member — only the first is bound the region's display`
+                ? `"${member}" takes its value from the template, so it can only be the first member — only the first receives the template's value`
                 : undefined;
       if (problem !== undefined) {
         ctx.issues.push({

@@ -388,11 +388,17 @@ export function mapActionTemplates(
 }
 
 // [LAW:types-are-the-program] Does this action take the value it writes from
-// the TEMPLATE (a picker's bound option, a cursor's integer)? Such an action
+// the TEMPLATE (a picker's bound option, a cursor's integer, a save's
+// chosen layer)? Such an action
 // cannot ride behind a `do` head: only the head is bound a display, so a
 // follower would write the head's display as its own value. The loader asks
 // this of every follower (cross-ref.ts), so the case is a load error rather
 // than a wrong write.
 export function actionBindsTemplateValue(a: ActionDecl): boolean {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a;
+  return (
+    "from" in a ||
+    "int" in a ||
+    "insertSegmentFrom" in a ||
+    ("save" in a && a.layer === "ask")
+  );
 }
