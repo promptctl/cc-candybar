@@ -244,7 +244,9 @@ test("two named renderer processes draw separately and share config, transcript 
     );
 
     expect(textOf(await request("main-session"))).toContain("Opus 4.7");
-    const worktreePid = Number(children.find((match) => match[1] === "worktree")?.[2]);
+    const worktreePid = Number(
+      children.find((match) => match[1] === "worktree")?.[2],
+    );
     if (!Number.isSafeInteger(worktreePid) || worktreePid < 1)
       throw new Error("expected the worktree renderer's live child pid");
     process.kill(worktreePid, "SIGKILL");
@@ -258,10 +260,13 @@ test("two named renderer processes draw separately and share config, transcript 
           /renderer worktree\[2\] started pid=/.test(readLog())
         );
       },
-      () => `the primary did not keep drawing during worktree recovery: ${afterEnd}`,
+      () =>
+        `the primary did not keep drawing during worktree recovery: ${afterEnd}`,
       8000,
     );
-    expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(1);
+    expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(
+      1,
+    );
   } finally {
     await daemon?.stop();
     isolated.removeTmpDirs();
