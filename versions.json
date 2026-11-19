@@ -2,38 +2,38 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-866",
-      "ref": "refs/pull/866/merge",
-      "sha": "2143e80bb87daf4430cabab10c614bea0b3be865",
-      "timestamp": "2026-11-19T13:24:38.431Z",
+      "version": "pr-872",
+      "ref": "refs/pull/872/merge",
+      "sha": "03d493f21f8fd9b450a68a16357c696877a88040",
+      "timestamp": "2026-11-19T13:30:31.977Z",
       "commits": [
         {
-          "sha": "2143e80bb87daf4430cabab10c614bea0b3be865",
+          "sha": "03d493f21f8fd9b450a68a16357c696877a88040",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:23:39Z",
-          "message": "Merge b9d9002b0e9d68636bc8e2d1f9a0a11613219bac into b572777cc8c9de4ce37090fcea33fb72d08cf127\n"
+          "timestamp": "2026-11-19T06:29:32-07:00",
+          "message": "Merge 80ad584782eb93b4fdc747f70f9c619156e8853e into b572777cc8c9de4ce37090fcea33fb72d08cf127\n"
         },
         {
-          "sha": "b9d9002b0e9d68636bc8e2d1f9a0a11613219bac",
+          "sha": "80ad584782eb93b4fdc747f70f9c619156e8853e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:58:12-07:00",
-          "message": "test(cache): cover transcript replacement with unchanged mtime and size\n"
+          "timestamp": "2026-11-19T06:27:19-07:00",
+          "message": "perf(host): reuse the reported environment for each session\n"
         },
         {
-          "sha": "0649a1431f7bf7db0a91d47fbf1522fa1303a70c",
+          "sha": "b3547b454d8e366949ab687790a5b156360c5066",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:27:45-07:00",
-          "message": "test(host): prove two live feeds share source invalidation\n"
+          "timestamp": "2026-11-19T06:17:52-07:00",
+          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
         },
         {
-          "sha": "59f4c8ed4eeb8f25c01a27593a8b3b0067baca6f",
+          "sha": "8b05acce75279cf2cf471b09a951bd08fbdfcb4a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:15:51-07:00",
-          "message": "perf(host): share physical transcript observations across sessions\n"
+          "timestamp": "2026-11-19T06:10:17-07:00",
+          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
         }
       ]
     },
@@ -100,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:29:09-07:00",
           "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-871",
-      "ref": "refs/pull/871/merge",
-      "sha": "7a84c6ab3fd3cd372de3f88ce2f5fd8dadb99749",
-      "timestamp": "2026-11-19T13:14:39.095Z",
-      "commits": [
-        {
-          "sha": "7a84c6ab3fd3cd372de3f88ce2f5fd8dadb99749",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:13:42-07:00",
-          "message": "Merge 42e257b4c206f9d451df00810e94db64ff8e19f0 into 9df2afa5338a7144c675bbd4ff228c85f32fe868\n"
-        },
-        {
-          "sha": "42e257b4c206f9d451df00810e94db64ff8e19f0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:13:19-07:00",
-          "message": "fix(edit): edit chrome state belongs to the open edit\n\nEdit chrome's state (the insert libraries and their pages, the configure\npanel and its lists, the help pane, the live toggle) was kept in the\nsession store under the author's menus key space, through a lossy\nidentifier collapse, so a placement re-added under the same id opened with\nthe old state, and an edit's chrome outlived the edit.\n\n- The draft holds chrome state beside its picks, outside the undo history.\n  It is never written to the session store, so every way an edit ends\n  (save, cancel, the toggle, the door closing, idle, retire, an origin\n  move, a restart) leaves none behind. The keys it holds are read off the\n  config: every disclosure inside edit mode and its page cursor.\n- One release, where the draft's layout changes (a layout click, undo,\n  redo, reset, a preset deleted, a refresh of the edit's layers): the keys\n  the layout before declares and the layout after does not, plus keys open\n  on a member only the layout before hangs. Drafts are released inside the\n  click's step, so its undo brings them back. The verb-level release is\n  removed.\n- Save routes the save click's own writes through the draft's one write\n  routing, so chrome can't reach the store by that path either.\n- Menu state keys spell names with the injective escape, so two names never\n  share a key and no author name reaches a key chrome mints. The configure\n  list moves under edit's own namespace. Saved state for punctuated names\n  moves once.\n- The back control's depth reads the session's view, so the edit's chrome\n  counts as a step back.\n"
         }
       ]
     },
