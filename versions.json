@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-896",
+      "ref": "refs/pull/896/merge",
+      "sha": "0768980699d4a060aa59ecf52acfa2860ebaf69c",
+      "timestamp": "2026-11-19T20:05:09.788Z",
+      "commits": [
+        {
+          "sha": "0768980699d4a060aa59ecf52acfa2860ebaf69c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:03:41Z",
+          "message": "Merge 84d756c3ee87d1fc26a2c1b68b5effa49a288947 into 7b97b3062fa1b643825a0aae621edcce5c8a63af\n"
+        },
+        {
+          "sha": "84d756c3ee87d1fc26a2c1b68b5effa49a288947",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:05:04-07:00",
+          "message": "fix(config): recognize equivalent saved project directories\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7b97b3062fa1b643825a0aae621edcce5c8a63af",
@@ -42,28 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:05:11-07:00",
           "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-896",
-      "ref": "refs/pull/896/merge",
-      "sha": "f3a811558c04df9bd2ac061da2f272eaf11575bd",
-      "timestamp": "2026-11-19T19:57:18.021Z",
-      "commits": [
-        {
-          "sha": "f3a811558c04df9bd2ac061da2f272eaf11575bd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:56:11-07:00",
-          "message": "Merge b25019957b0bf8457f86206a956c27f180c40048 into c2d97e8387a54fe5bcd2ce30580d704c3d509943\n"
-        },
-        {
-          "sha": "b25019957b0bf8457f86206a956c27f180c40048",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:05:04-07:00",
-          "message": "fix(config): recognize equivalent saved project directories\n"
         }
       ]
     },
