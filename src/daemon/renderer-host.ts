@@ -236,6 +236,9 @@ export function rendererHost(
   let configs = new Map<string, ConfigDelivery>();
   let declared: Subscriptions | undefined;
   let origins: Subscriptions["configs"] | undefined;
+  // A declaration can name origins that discovery failed to acquire. Keep
+  // the last applied holds so an unsuccessful START can restore them.
+  let followedOrigins: Subscriptions["configs"] = [];
   let selected: Subscriptions["configSelections"] | undefined;
   let followFailure: Failure | null = null;
   // [LAW:no-ambient-temporal-coupling] Only a complete replacement can
@@ -243,14 +246,41 @@ export function rendererHost(
   // generation whose initial turn never reached that point.
   let startFailure: Failure | null = null;
 
+  type Start = Extract<Event, { kind: "start" }>;
+  type StartResult =
+    | { readonly kind: "threw"; readonly failure: Failure }
+    | { readonly kind: "answered"; readonly event: Start };
+
+  const endedStart = (result: StartResult): void => {
+    startFailure = result.kind === "threw" ? result.failure : null;
+    if (result.kind === "threw") return;
+    configs.clear();
+    for (const { origin, config } of result.event.configs ?? [])
+      configs.set(originKey(origin), { kind: "received", config });
+    declared = undefined;
+    origins = undefined;
+    selected = undefined;
+    followFailure = null;
+  };
+
+  const follow = (wanted: Subscriptions["configs"]): void => {
+    world.configs.follow(wanted);
+    followedOrigins = wanted;
+  };
+
   // [LAW:one-source-of-truth] Restoring a generation uses the same discovery
   // holds as an ordinary config turn. It still follows preceding origins
   // until the replacement answers with its own complete declaration.
-  const prepareStart = (event: Extract<Event, { kind: "start" }>): Event => {
-    const wanted = new Map((origins ?? []).map((o) => [originKey(o), o]));
+  const prepareStart = (
+    event: Start,
+    borrow: (wanted: Subscriptions["configs"]) => void,
+  ): Start => {
+    const wanted = new Map(followedOrigins.map((o) => [originKey(o), o]));
+    for (const origin of origins ?? []) wanted.set(originKey(origin), origin);
     for (const { context } of event.sessions)
       wanted.set(originKey(context.requested), context.requested);
-    if (wanted.size > 0) world.configs.follow([...wanted.values()]);
+    if (wanted.size > followedOrigins.length || followFailure !== null)
+      borrow([...wanted.values()]);
     const configs = [...wanted].map(([key, origin]) => {
       const config = world.configs.snapshotOf(origin);
       if (config === null)
@@ -326,9 +356,11 @@ export function rendererHost(
       output = await renderer.answer(input);
     } catch (thrown) {
       recordTaken("session release", release);
-      return unanswered(failureOf(thrown), queuedMs);
+      const failure = failureOf(thrown);
+      if (input.event.kind === "start") endedStart({ kind: "threw", failure });
+      return unanswered(failure, queuedMs);
     }
-    if (input.event.kind === "config") {
+    if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
@@ -341,12 +373,10 @@ export function rendererHost(
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
-    if (input.event.kind === "start") {
-      startFailure = turn.kind === "threw" ? turn.failure : null;
-      if (startFailure === null)
-        for (const { origin, config } of input.event.configs ?? [])
-          configs.set(originKey(origin), { kind: "received", config });
-    }
+    if (input.event.kind === "start")
+      endedStart(
+        turn.kind === "threw" ? turn : { kind: "answered", event: input.event },
+      );
     const { settled, configFailure } = await landInSlot(
       input.event,
       output,
@@ -613,7 +643,12 @@ export function rendererHost(
     }
     try {
       if (moved || (requested !== null && followFailure !== null)) {
-        world.configs.follow(subscriptions.configs);
+        if (
+          subscriptions.configs.length > 0 ||
+          followedOrigins.length > 0 ||
+          followFailure !== null
+        )
+          follow(subscriptions.configs);
         followFailure = null;
       }
       const entries = subscriptions.configSelections;
@@ -831,6 +866,7 @@ export function rendererHost(
       pendingClicks.set(held.session, held);
     }
     return inMailbox(async (queuedMs, holds) => {
+      let restore: Subscriptions["configs"] | undefined;
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
         let made: Made;
@@ -839,21 +875,18 @@ export function rendererHost(
           made = make();
           if (made.kind === "event" && made.event.kind === "start") {
             starting = true;
-            made = { ...made, event: prepareStart(made.event) };
+            const event = prepareStart(made.event, (wanted) => {
+              // Discovery can acquire some watches before it fails.
+              restore = followedOrigins;
+              follow(wanted);
+            });
+            made = { ...made, event };
           }
         } catch (thrown) {
           made = failureOf(thrown);
         }
-        // A new generation needs new deliveries. The host's existing
-        // declaration and followed origins still stand until it answers.
-        if (starting) {
-          configs.clear();
-          declared = undefined;
-          selected = undefined;
-          followFailure = null;
-        }
         if (made.kind !== "event") {
-          if (starting) startFailure = made;
+          if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
         if (
@@ -868,11 +901,15 @@ export function rendererHost(
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : undefined,
         );
-        if (starting)
-          startFailure =
-            slotted.turn.kind === "threw" ? slotted.turn.failure : null;
+        if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };
       } finally {
+        // Config effects land inside the slot. Keep their discovery holds
+        // until then, and restore previous demand before another input.
+        if (restore !== undefined) {
+          const previous = restore;
+          recordTaken("start config demand rollback", () => follow(previous));
+        }
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
         // select another slot, including when this click was refused.
         if (held !== null && --held.count === 0)

@@ -5,6 +5,8 @@
 // failing no turn that answered.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
+import type { ConfigSnapshot } from "../../src/config/config-snapshot";
+import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
@@ -24,9 +26,13 @@ import {
 import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
-import type { Tick } from "../../src/utils/instant";
+import { instantOf, type Tick } from "../../src/utils/instant";
 import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
+import { ABSENT } from "../../src/utils/outcome";
+import { digestOf } from "../../src/utils/plain";
+import { heardRequest } from "../helpers/click";
+import { daemonFactsOf } from "../helpers/daemon-facts";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
@@ -146,6 +152,7 @@ const answered = (): RendererOutput => ({
 
 test("a start heads the mailbox, behind only the slot in progress", async () => {
   const heard: string[] = [];
+  const followed = jest.fn(NO_ACTS.configs.follow);
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
@@ -178,7 +185,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
   );
   const asked = host.ask({ kind: "close-journal" });
   const waiting = host.deliver(
@@ -195,6 +202,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   open();
   await Promise.all([asked, waiting, started]);
   expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+  expect(followed).not.toHaveBeenCalled();
 });
 
 test("every turn's record reaches `recorded`, whatever input it took and however it was asked", async () => {
@@ -544,7 +552,43 @@ test("failed replacement starts leave the accepted declaration until a complete 
     notices: [],
     watch: null,
   };
+  const context = heardRequest("added", "/added");
+  const added = context.requested;
+  const addedConfig: ConfigSnapshot = {
+    ...config,
+    checkout: { root: added.cwd, git: false },
+  };
+  const absent = { ...ABSENT, at: instantOf(new Date(0)) };
+  const worldState = {
+    v: FACTS_VERSION,
+    session: context.hookData.session_id,
+    seq: 1,
+    builtins: {
+      session: absent,
+      today: absent,
+      speed: absent,
+      context: absent,
+      metrics: absent,
+      activity: absent,
+      cache: absent,
+      autocompact: absent,
+      git: absent,
+      pr: absent,
+      tmux: absent,
+      hostName: absent,
+      hostUser: absent,
+    },
+    sources: {},
+    runs: {},
+    env: {},
+    daemon: daemonFactsOf(),
+    diagnostics: [],
+  };
   const previous = { ...NONE, sources: { kept: [] }, configs: [origin] };
+  const selectedPlan = {
+    ...previous,
+    configSelections: [{ origin, digest: digestOf(config) }],
+  };
   const taken: Subscriptions[] = [];
   const heard: Event[] = [];
   const stored: StoreWrite[] = [];
@@ -556,9 +600,17 @@ test("failed replacement starts leave the accepted declaration until a complete 
     value: { "open-menu": "before failing" },
   };
   const read: string[] = [];
+  const discoveries: string[] = [];
   const followed: string[][] = [];
-  let available = true;
-  let rejectsStart = false;
+  const heldPaths = new Set<string>();
+  let attempted:
+    | "make"
+    | "follow"
+    | "prepare"
+    | "transport"
+    | "renderer"
+    | "success" = "success";
+  let selected = false;
   let keepsDemand = true;
   const host = rendererHost(
     MAIN_RENDERER,
@@ -568,7 +620,8 @@ test("failed replacement starts leave the accepted declaration until a complete 
         event: async ({ event }) => {
           heard.push(event);
           if (event.kind === "start") {
-            if (rejectsStart)
+            if (attempted === "transport") throw new Error("lost transport");
+            if (attempted === "renderer")
               return {
                 ...answered(),
                 kind: "threw",
@@ -576,13 +629,25 @@ test("failed replacement starts leave the accepted declaration until a complete 
                 stored: [write],
                 record: [["restoring", "failed after work"]],
                 effects: [
-                  { kind: "copy", id: 1 as EffectId, session: null, text: "work completed" },
+                  {
+                    kind: "copy",
+                    id: 1 as EffectId,
+                    session: null,
+                    text: "work completed",
+                  },
                 ],
               };
-            return { ...answered(), subscriptions: keepsDemand ? previous : NONE };
+            return {
+              ...answered(),
+              subscriptions: keepsDemand ? selectedPlan : NONE,
+            };
           }
           if (event.kind === "effect-done") return answered();
-          return { ...answered(), subscriptions: previous };
+          return {
+            ...answered(),
+            subscriptions:
+              event.kind === "config" || selected ? selectedPlan : previous,
+          };
         },
         adapter: async () => {
           throw new Error("no push here");
@@ -607,11 +672,30 @@ test("failed replacement starts leave the accepted declaration until a complete 
       },
       configs: {
         ...NO_ACTS.configs,
-        follow: (wanted) => followed.push(wanted.map(({ cwd }) => cwd)),
-        retainedOf: () => "current",
+        follow: (wanted) => {
+          const paths = wanted.map(({ cwd }) => cwd);
+          followed.push(paths);
+          for (const cwd of paths) {
+            if (!heldPaths.has(cwd)) discoveries.push(cwd);
+            heldPaths.add(cwd);
+          }
+          if (attempted === "follow" && paths.includes(added.cwd))
+            throw new Error("follow failed after acquisition");
+          for (const cwd of heldPaths)
+            if (!paths.includes(cwd)) heldPaths.delete(cwd);
+        },
+        retainedOf: (of) =>
+          of.cwd === origin.cwd && selected ? "current" : undefined,
+        selected: (entries, delivered) => {
+          if (entries.length > 0) expect(delivered(origin)).toBe(config);
+          selected = entries.length > 0;
+        },
         snapshotOf: ({ cwd }) => {
           read.push(cwd);
-          return available ? config : null;
+          if (!heldPaths.has(cwd)) return null;
+          if (cwd === added.cwd)
+            return attempted === "prepare" ? null : addedConfig;
+          return config;
         },
       },
     },
@@ -622,24 +706,36 @@ test("failed replacement starts leave the accepted declaration until a complete 
   expect(read).toEqual(["/p"]);
   expect(taken).toEqual([previous]);
   const start = () =>
-    host.start(() => ({
-      kind: "event",
-      event: { kind: "start", viewers: {}, sessions: [] },
-    }), []);
-
-  available = false;
-  expect(await start()).toMatchObject({
-    kind: "threw",
-    failure: { message: expect.stringContaining("no config snapshot") },
-  });
-  expect(heard.map(({ kind }) => kind)).toEqual(["due", "config", "due"]);
-  expect(await host.answer(due)).toMatchObject({ kind: "threw" });
-  await expect(host.ask({ kind: "stats" })).rejects.toThrow("no config snapshot");
-  expect(read).toEqual(["/p", "/p"]);
+    host.start(() => {
+      if (attempted === "make") throw new Error("start maker failed");
+      return {
+        kind: "event",
+        event: {
+          kind: "start",
+          viewers: {},
+          sessions: [{ context, worldState }],
+        },
+      };
+    }, []);
+  for (const [stage, reason] of [
+    ["make", "start maker failed"],
+    ["follow", "follow failed after acquisition"],
+    ["prepare", "no config snapshot"],
+    ["transport", "lost transport"],
+  ] as const) {
+    attempted = stage;
+    expect(await start()).toMatchObject({
+      kind: "threw",
+      failure: { message: expect.stringContaining(reason) },
+    });
+    expect(heldPaths).toEqual(new Set([origin.cwd]));
+    expect(selected).toBe(true);
+    expect(await host.answer(due)).toMatchObject({ kind: "threw" });
+    await expect(host.ask({ kind: "stats" })).rejects.toThrow(reason);
+  }
   expect(taken).toEqual([previous]);
 
-  available = true;
-  rejectsStart = true;
+  attempted = "renderer";
   expect(await start()).toMatchObject({
     kind: "threw",
     settled: [{ kind: "ok" }],
@@ -653,22 +749,34 @@ test("failed replacement starts leave the accepted declaration until a complete 
     outcome: { kind: "ok" },
   });
   expect(taken).toEqual([previous]);
+  expect(heldPaths).toEqual(new Set([origin.cwd]));
+  expect(selected).toBe(true);
 
-  rejectsStart = false;
+  attempted = "success";
   expect(await start()).toMatchObject({ kind: "answered" });
   expect(heard.at(-1)).toMatchObject({
     kind: "start",
-    configs: [{ origin, config, retained: "current" }],
+    configs: [
+      { origin, config, retained: "current" },
+      { origin: added, config: addedConfig },
+    ],
   });
   expect(heard.map(({ kind }) => kind)).toEqual([
-    "due", "config", "due", "start", "effect-done", "start",
+    "due",
+    "config",
+    "due",
+    "start",
+    "start",
+    "effect-done",
+    "start",
   ]);
-  expect(read).toEqual(["/p", "/p", "/p", "/p"]);
-  expect(taken).toEqual([previous, previous]);
+  expect(discoveries.filter((key) => key === origin.cwd)).toEqual([origin.cwd]);
+  expect(heldPaths).toEqual(new Set([origin.cwd]));
+  expect(taken).toEqual([previous, selectedPlan]);
 
   keepsDemand = false;
   expect(await start()).toMatchObject({ kind: "answered" });
-  expect(taken).toEqual([previous, previous, NONE]);
+  expect(taken).toEqual([previous, selectedPlan, NONE]);
   expect(followed.at(-1)).toEqual([]);
 });
 
