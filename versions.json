@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-882",
+      "ref": "refs/pull/882/merge",
+      "sha": "6d2f1829ca6ed9e3808298e9956af67566490f55",
+      "timestamp": "2026-11-19T15:18:19.444Z",
+      "commits": [
+        {
+          "sha": "6d2f1829ca6ed9e3808298e9956af67566490f55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:16:57Z",
+          "message": "Merge c75711da8933703aca4faf8b2de73951b6d44027 into f10951d9400d761190b757a8dd55db47ac30e372\n"
+        },
+        {
+          "sha": "c75711da8933703aca4faf8b2de73951b6d44027",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:13:12-07:00",
+          "message": "fix(daemon): seal renders and pane acts when drain starts\n"
+        },
+        {
+          "sha": "4773b460887015dcbef70e4be867268db8fca84c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:42:39-07:00",
+          "message": "fix(daemon): drain live renderers before closing links\n"
+        }
+      ]
+    },
+    {
       "version": "pr-884",
       "ref": "refs/pull/884/merge",
       "sha": "754b4e51a5a87854d88c1dfa409945ca613dbde8",
@@ -157,28 +186,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:09:01-07:00",
           "message": "feat(click): route actions to their drawing renderer (#875)\n\nfeat(click): route actions to their drawing renderer (x96a.m85)"
-        }
-      ]
-    },
-    {
-      "version": "pr-882",
-      "ref": "refs/pull/882/merge",
-      "sha": "efd4451c2117266fa346d07183747bfe0f27b2b6",
-      "timestamp": "2026-11-19T14:55:58.037Z",
-      "commits": [
-        {
-          "sha": "efd4451c2117266fa346d07183747bfe0f27b2b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:54:51-07:00",
-          "message": "Merge 82e4d916c5edfe3837fa3ce17e236f382113977d into ba64a50c816d01574c923bb0ef96182d56914d25\n"
-        },
-        {
-          "sha": "82e4d916c5edfe3837fa3ce17e236f382113977d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:42:39-07:00",
-          "message": "fix(daemon): drain live renderers before closing links\n"
         }
       ]
     },
