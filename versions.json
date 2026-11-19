@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-878",
+      "ref": "refs/pull/878/merge",
+      "sha": "8df31cf53e3589b16843bb49c47b3ffcbe417509",
+      "timestamp": "2026-11-19T14:02:04.578Z",
+      "commits": [
+        {
+          "sha": "8df31cf53e3589b16843bb49c47b3ffcbe417509",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:00:54-07:00",
+          "message": "Merge c67863c6d3ea89372950638c577ca1c4ddfcc851 into 6b98f5c610697d392140c302f633044ebe7a2aac\n"
+        },
+        {
+          "sha": "c67863c6d3ea89372950638c577ca1c4ddfcc851",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:00:18-07:00",
+          "message": "fix(renderer): commit request frame memory on delivery\n"
+        }
+      ]
+    },
+    {
       "version": "pr-877",
       "ref": "refs/pull/877/merge",
       "sha": "3f0141625dbdd8f642df84afe3b553a3d0152511",
