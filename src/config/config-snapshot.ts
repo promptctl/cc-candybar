@@ -39,6 +39,22 @@ export interface Layer {
   readonly listed: Readonly<Record<string, PluginFile>>;
 }
 
+// [LAW:one-source-of-truth] The chain identifies a layer by its resolved
+// role or the authored path it already holds.
+export function layerForRole(
+  chain: readonly Layer[],
+  role: LayerRole,
+): Layer | undefined {
+  return chain.find((layer) => layer.role === role);
+}
+
+export function layerAtPath(
+  chain: readonly Layer[],
+  path: string,
+): Layer | undefined {
+  return chain.find((layer) => layer.path === path);
+}
+
 // [LAW:types-are-the-program] Missing and unreadable layers have different
 // consequences. A write may create an absent layer.
 export type LayerContent =

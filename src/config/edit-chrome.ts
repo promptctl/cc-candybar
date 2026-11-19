@@ -60,7 +60,7 @@ import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
-import { UNSAVED_VAR } from "./settings-menu.js";
+import { UNSAVED_VAR, USER_LAYER_WRITABLE } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
@@ -170,7 +170,7 @@ function inNamesView(
 // tests read the same string, never a second copy a rename here would leave
 // behind.
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
-const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
+const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${USER_LAYER_WRITABLE} .${PRESET_CUSTOMIZED_VAR} }}`;
 
 // [LAW:one-source-of-truth] Every synthesized segment is structural — removing
 // one via `-` would strand its sibling artifacts (a toggle segment with no
@@ -991,11 +991,11 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     default: 0,
   };
   // [LAW:one-type-per-behavior] The same save used in settings commits
-  // and closes the draft when edit mode is active.
-  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
+  // and closes the draft. Staged layout edits already name their layers.
+  artifacts.actions[EDIT_DONE_SEG] = { save: true };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:
-      `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}` +
+      `{{ if ${TO_KEEP} }}{{ if ${USER_LAYER_WRITABLE} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}{{ end }}` +
       `{{ else }}{{ action "${EDIT_DONE_SEG}" "✓ done" }}{{ end }}`,
     when: EDIT_MODE_GATE,
   };

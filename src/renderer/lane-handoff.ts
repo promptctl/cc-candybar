@@ -9,14 +9,17 @@
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { LayerRole } from "../config/layer-role.js";
+import type { DslConfig, RawDslConfig } from "../config/dsl-types.js";
 import {
   LANES,
   LANE_NAMES,
+  perLane,
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { VERB_RESET_CONFIG } from "../click/wire.js";
+import { configWriteArgs, VERB_RESET_CONFIG } from "../click/wire.js";
 import { actionTarget } from "../render/drawn-link.js";
+import { isBundledPreset } from "./bundled-presets.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
@@ -37,34 +40,65 @@ export function handedOffTo(
 
 export const HANDOFF_BUTTON = "[⟲ claude]";
 
-// The handoff row for `lanes` (non-empty): the button alone; the error
-// indicator is laid after it where the row is drawn (src/render/diagnostics.ts).
-// The button resets each lane's switch in every layer the session can write
-// that is this person's own — the user's file and the project's local one,
-// never the file the project checks in, which is every clone's: it is the way
-// out of a lane however this person saved it. It puts the renderer back to
-// `claude` and turns a 🧪 lane off;
-// what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
-// it opened closes.
+// [LAW:one-source-of-truth] Reset clears personal global settings and
+// personal deltas over bundled presets. The project and custom preset
+// pins survive. Compute the remaining defaults once per configuration.
+export function laneDefaultsAfterReset(
+  config: DslConfig,
+  bundled: DslConfig,
+  project: RawDslConfig,
+): ReadonlyMap<string, LaneSwitches> {
+  return new Map(
+    Object.entries(config.presets).map(([name, preset]) => [
+      name,
+      perLane((lane) => {
+        const { setting } = LANES[lane].switch;
+        const pin = isBundledPreset(name)
+          ? (project.presets?.[name]?.globals?.[setting] ??
+            bundled.presets[name]?.globals?.[setting])
+          : preset.globals?.[setting];
+        return (
+          (pin ?? project.globals?.[setting] ?? bundled.globals[setting]) ===
+          true
+        );
+      }),
+    ]),
+  );
+}
+
+// The handoff resets writable personal settings when that returns the bar.
+// The project file keeps its settings.
 export function laneHandoff(
   sessionId: SessionId,
   writable: readonly LayerRole[],
   lanes: readonly [Lane, ...Lane[]],
+  remaining: LaneSwitches,
 ): ChannelMessage {
-  const reset = actionTarget(
-    writable
-      .filter((layer) => layer !== "project")
-      .map((layer) => ({
-        verb: VERB_RESET_CONFIG,
-        args: [
-          sessionId,
-          layer,
-          ...lanes.map((lane) => LANES[lane].switch.setting),
-        ],
-      })),
-  );
+  const personal = writable.filter((role) => role !== "project");
+  const reason =
+    personal.length === 0
+      ? "No writable personal config layer for the pane"
+      : lanes.some((lane) => remaining[lane])
+        ? "The pane stays enabled by its config"
+        : null;
+  const line =
+    reason === null
+      ? diagnosticSpan(
+          HANDOFF_BUTTON,
+          actionTarget(
+            personal.map((role) => ({
+              verb: VERB_RESET_CONFIG,
+              args: configWriteArgs(
+                sessionId,
+                role,
+                ...lanes.map((lane) => LANES[lane].switch.setting),
+              ),
+            })),
+          ),
+        )
+      : diagnosticSpan(reason, null);
   return {
     severity: HANDOFF_SEVERITY,
-    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]],
+    lines: [[line]],
   };
 }

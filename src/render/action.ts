@@ -28,7 +28,7 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import { runDeclaration, type ActionDecl } from "../config/action.js";
+import { runDeclaration, type ResolvedActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
@@ -43,6 +43,7 @@ import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import {
+  configWriteArgs,
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_OPEN_VSCODE,
@@ -434,7 +435,7 @@ export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 // through one boundary. compileActions needs only the ability to parse a source.
 export function compileActions(
   parse: (src: string) => Template<RichText>,
-  actions: Readonly<Record<string, ActionDecl>>,
+  actions: Readonly<Record<string, ResolvedActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
   // This config's per-config option domains (currently just "styles" — the
   // config's merged style names) — resolveOptionDomain checks these before
@@ -465,7 +466,7 @@ export function compileActions(
 function compileAction(
   parse: (src: string) => Template<RichText>,
   name: string,
-  action: ActionDecl,
+  action: ResolvedActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
   compiled: CompiledActions,
@@ -510,7 +511,7 @@ function compileAction(
     };
   }
   if ("persist" in action) {
-    const layer = action.layer ?? "user";
+    const { layer } = action;
     const stateVar =
       CONFIG_KEY_TO_EFFECTIVE_VAR.get(action.persist) ?? action.persist;
     if ("to" in action) {
@@ -602,7 +603,7 @@ function compileAction(
     };
   }
   if ("reset" in action) {
-    return { kind: "reset", key: action.reset, layer: action.layer ?? "user" };
+    return { kind: "reset", key: action.reset, layer: action.layer };
   }
   if ("slash" in action) return { kind: "slash", line: action.slash };
   if ("run" in action) {
@@ -621,9 +622,9 @@ function compileAction(
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
   if ("rewind" in action) return { kind: "rewind" };
-  if ("save" in action) return { kind: "save", layer: action.layer ?? "user" };
+  if ("save" in action) return { kind: "save", layer: action.layer };
   if ("preset" in action) {
-    const layer = action.layer ?? "user";
+    const { layer } = action;
     return action.preset === "save"
       ? { kind: "preset-save", layer }
       : {
@@ -633,7 +634,7 @@ function compileAction(
         };
   }
   if ("themeDefault" in action)
-    return { kind: "theme-default-save", layer: action.layer ?? "user" };
+    return { kind: "theme-default-save", layer: action.layer };
   // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
   // entry compiled for that name, so there is no second statement of what any
   // of them writes. The loader proves every name resolves; a config assembled
@@ -919,7 +920,10 @@ export function realize(
       const current = readVar(store, c.stateVar);
       return {
         effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, c.value] },
+          {
+            verb: VERB_SET_CONFIG,
+            args: configWriteArgs(sessionId, c.layer, c.key, c.value),
+          },
         ],
         active: current === c.value,
       };
@@ -929,7 +933,10 @@ export function realize(
       const current = readVar(store, c.stateVar);
       return {
         effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, value] },
+          {
+            verb: VERB_SET_CONFIG,
+            args: configWriteArgs(sessionId, c.layer, c.key, value),
+          },
         ],
         active: current === value,
       };
@@ -938,7 +945,10 @@ export function realize(
       const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
       return {
         effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, next] },
+          {
+            verb: VERB_SET_CONFIG,
+            args: configWriteArgs(sessionId, c.layer, c.key, next),
+          },
         ],
         active: false,
       };
@@ -948,7 +958,7 @@ export function realize(
         effects: [
           {
             verb: VERB_STEP_CONFIG,
-            args: [sessionId, c.layer, c.key, String(c.by)],
+            args: configWriteArgs(sessionId, c.layer, c.key, String(c.by)),
           },
         ],
         active: false,
@@ -957,7 +967,10 @@ export function realize(
     case "reset":
       return {
         effects: [
-          { verb: VERB_RESET_CONFIG, args: [sessionId, c.layer, c.key] },
+          {
+            verb: VERB_RESET_CONFIG,
+            args: configWriteArgs(sessionId, c.layer, c.key),
+          },
         ],
         active: false,
       };
@@ -996,20 +1009,25 @@ export function realize(
           `a save that asks which layer it writes binds the layer as its value — {{ action "<save>" "💾 project" "project" }} — and ${boundValue === undefined ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`,
         );
       return {
-        effects: [{ verb: VERB_SAVE, args: [sessionId, layer] }],
+        effects: [{ verb: VERB_SAVE, args: configWriteArgs(sessionId, layer) }],
         active: false,
       };
     }
     // Never "active": one-shot triggers, like save.
     case "preset-save":
       return {
-        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId, c.layer] }],
+        effects: [
+          { verb: VERB_SAVE_PRESET, args: configWriteArgs(sessionId, c.layer) },
+        ],
         active: false,
       };
     case "theme-default-save":
       return {
         effects: [
-          { verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId, c.layer] },
+          {
+            verb: VERB_SAVE_THEME_DEFAULT,
+            args: configWriteArgs(sessionId, c.layer),
+          },
         ],
         active: false,
       };
@@ -1018,7 +1036,11 @@ export function realize(
         effects: [
           {
             verb: VERB_DELETE_PRESET,
-            args: [sessionId, c.layer, evalTemplate(c.name, buildScope(store))],
+            args: configWriteArgs(
+              sessionId,
+              c.layer,
+              evalTemplate(c.name, buildScope(store)),
+            ),
           },
         ],
         active: false,
@@ -1068,7 +1090,12 @@ export function realize(
         effects: [
           {
             verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId, c.layer, c.key, encodeLayoutOp(c.op)],
+            args: configWriteArgs(
+              sessionId,
+              c.layer,
+              c.key,
+              encodeLayoutOp(c.op),
+            ),
           },
         ],
         active: false,
@@ -1109,7 +1136,12 @@ export function realize(
         effects: [
           {
             verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId, c.layer, c.key, encodeLayoutOp(op)],
+            args: configWriteArgs(
+              sessionId,
+              c.layer,
+              c.key,
+              encodeLayoutOp(op),
+            ),
           },
         ],
         active: false,

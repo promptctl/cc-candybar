@@ -42,6 +42,7 @@ import type { RichText } from "@promptctl/rich-js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
+  editGlobalsOf,
   laneSwitches,
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
@@ -53,7 +54,9 @@ import {
 import type { FrameRecord } from "../render/frame-memory.js";
 import {
   feedsFact,
+  LANES,
   LANE_NAMES,
+  perLane,
   ANSWERING,
   type Drawing,
   type Lane,
@@ -156,7 +159,7 @@ export function renderFrame(
     const bar = drawn.body;
     const statusline = statuslineOf(
       sessionId,
-      setup.state.writable,
+      setup.view.writable(),
       drawn,
       handedOffTo(lanes, following),
     );
@@ -455,6 +458,10 @@ export function drawRender(
   const document = view.source.facts();
   // Which animation lanes this session's settings switch on, as drawn.
   const lanes = laneSwitches(effective);
+  const defaultsAfterReset = state.remainingLanes.get(effective.preset);
+  const editGlobals = editGlobalsOf(state.config, (key) =>
+    sessionState.get(sessionId, key),
+  );
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
     // The preset the session's settings resolve to, which the draw uses.
@@ -778,6 +785,11 @@ export function drawRender(
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
+      remainingLanes: perLane(
+        (lane) =>
+          (editGlobals[LANES[lane].switch.setting] ??
+            defaultsAfterReset?.[lane]) === true,
+      ),
     },
     evaluated,
     cellBreaks,
@@ -958,6 +970,7 @@ interface DrawnBar {
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
+  readonly remainingLanes: LaneSwitches;
 }
 
 // A render request's answer: the bar drawn for its client.
@@ -995,7 +1008,7 @@ export function answerRequest(
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(presentation.client ?? null) === "statusline";
   const frame = toStatusline
-    ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
+    ? statuslineOf(sessionId, setup.view.writable(), drawn, elsewhere)
     : drawn.body;
   // Kept once nothing of the turn is left to throw.
   keepDraw(parts, setup, kept);
@@ -1057,7 +1070,12 @@ function statuslineOf(
     : standIn(
         drawn.body,
         handoffRows(
-          laneHandoff(sessionId, writable, [first, ...rest]),
+          laneHandoff(
+            sessionId,
+            writable,
+            [first, ...rest],
+            drawn.remainingLanes,
+          ),
           drawn.diagnostics,
           sessionId,
           drawn.geometry,

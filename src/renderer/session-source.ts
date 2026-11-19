@@ -85,7 +85,7 @@ export interface SessionSourceDeps {
 export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
-  return ({ sessionId, state, store, requested }) => {
+  return ({ sessionId, state, store, requested, writable }) => {
     const pick = (key: string): string | null =>
       deps.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
@@ -116,7 +116,7 @@ export function sessionSource(
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick),
           configPath: state.configPath,
-          layers: layerFlags(state.writable),
+          layers: layerFlags(writable()),
         },
         history: deps.history(sessionId),
         back: deps.navigation(sessionId, state.config),

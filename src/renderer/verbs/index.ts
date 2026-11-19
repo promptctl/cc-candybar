@@ -24,7 +24,7 @@ import {
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import type { Locations } from "../../config/loader/chain-places";
-import type { ConfigSnapshot } from "../../config/config-snapshot";
+import { layerAtPath, type ConfigSnapshot } from "../../config/config-snapshot";
 import {
   LAYER_ROLES,
   layerRoleOf,
@@ -581,7 +581,7 @@ function proveLoadsAsLayer(
   const layer =
     origin === null
       ? undefined
-      : ctx.snapshotFor(origin).chain.find((l) => l.path === file);
+      : layerAtPath(ctx.snapshotFor(origin).chain, file);
   if (origin === null || layer === undefined)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,

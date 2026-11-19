@@ -66,6 +66,7 @@ import {
 import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
+import { layerFlags } from "../src/config/layer-role";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
@@ -217,6 +218,7 @@ function rig(
           // The daemon derives these per render (draw-bar.ts) through the same
           // function.
           ...settingCounts(config, entry.fileHeld, sessionPick),
+          layers: layerFlags(["user"]),
           // What the daemon publishes from the session's settings history.
           history: {
             undo: durable?.history(SID).past.length ?? 0,
@@ -327,13 +329,13 @@ describe("the save action", () => {
     root: { h: ['d'] },
   }`;
 
-  test("{ save: true } parses as a save", () => {
+  test("an authored save without a layer resolves to the user layer", () => {
     const config = parseAndValidate(
       "<test>",
       withActions(`{ s: { save: true } }`),
       ALLOWED,
     );
-    expect(config.actions.s).toEqual({ save: true });
+    expect(config.actions.s).toEqual({ save: true, layer: "user" });
   });
 
   test("a save carries nothing: any other value or key is a load error", () => {

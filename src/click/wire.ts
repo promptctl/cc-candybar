@@ -33,6 +33,7 @@ import { URLSearchParams } from "node:url";
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
+import type { LayerRole } from "../config/layer-role.js";
 import {
   isReservedName,
   MENU_NS,
@@ -224,6 +225,16 @@ export function runLinkFields(
 export interface Effect {
   readonly verb: EffectVerb;
   readonly args: readonly string[];
+}
+
+// [LAW:single-enforcer] Durable effects address a checked session and one
+// layer before the verb's payload.
+export function configWriteArgs(
+  session: SessionId,
+  role: LayerRole,
+  ...payload: string[]
+): readonly [SessionId, LayerRole, ...string[]] {
+  return [session, role, ...payload];
 }
 
 const sayStep = (key: string, by: string): string =>

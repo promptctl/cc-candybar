@@ -54,6 +54,7 @@ import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { writeFileSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
+import { layerFlags } from "../src/config/layer-role";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -164,6 +165,7 @@ describe("removeSegment/insertSegment loader shape", () => {
     );
     expect(config.actions.rm).toEqual({
       persist: "presets.default.root",
+      layer: "user",
       removeSegment: "directory",
     });
   });
@@ -178,6 +180,7 @@ describe("removeSegment/insertSegment loader shape", () => {
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
+      layer: "user",
       insertSegment: "directory",
       anchor: "git",
       relation: "before",
@@ -905,6 +908,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
         session_id: "s1",
         project_dir: "/tmp/proj",
         preset: { effective: presetName, customized: true },
+        layers: layerFlags(["user"]),
       },
       instantOf(new Date()),
       opts(),
@@ -956,6 +960,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
             session_id: "s1",
             project_dir: "/tmp/proj",
             preset: { effective: "gated", customized: true },
+            layers: layerFlags(["user"]),
           },
           instantOf(new Date()),
           opts(),

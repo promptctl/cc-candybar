@@ -32,7 +32,12 @@
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
-import { LAYER_ROLES, type LayerChoice, type LayerRole } from "./layer-role.js";
+import {
+  DEFAULT_WRITE_LAYER,
+  LAYER_ROLES,
+  type LayerChoice,
+  type LayerRole,
+} from "./layer-role.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -78,6 +83,20 @@ export const ACTION_KEYS = [
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
 
+type ActionLayerFor<Key extends ActionKey> = NonNullable<
+  Extract<ActionDecl, Record<Key, unknown>> extends infer Action
+    ? Action extends { readonly layer?: infer Layer }
+      ? Layer
+      : never
+    : never
+>;
+
+type ActionLayerChoices = {
+  [Key in ActionKey as ActionLayerFor<Key> extends never
+    ? never
+    : Key]: ReadonlyArray<ActionLayerFor<Key>>;
+};
+
 // [LAW:one-source-of-truth] The layers each config-writing action may name:
 // a role of the session's chain, or, for save alone, `ask` — the one write
 // whose click binds no value of its own, so it can bind the layer. An action
@@ -89,7 +108,7 @@ export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
     preset: LAYER_ROLES,
     themeDefault: LAYER_ROLES,
     save: [...LAYER_ROLES, "ask"],
-  };
+  } satisfies ActionLayerChoices;
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
 // binds to. The top-level discriminator is which of `set`/`copy`/`open` is
@@ -279,6 +298,31 @@ export type ActionDecl =
   // named together. The tuple type states the one structural fact — there is
   // always a head, the member whose display the region shows.
   | { readonly do: readonly [string, ...string[]] };
+
+// [LAW:types-are-the-program] Authored actions may omit a layer. Everything
+// from the validated configuration carries a layer on each durable action.
+type WithResolvedLayer<A> = A extends ActionDecl
+  ? "layer" extends keyof A
+    ? A & Required<Pick<A, "layer">>
+    : A
+  : never;
+
+export type ResolvedActionDecl = WithResolvedLayer<ActionDecl>;
+
+const defaultLayer = <Choice extends LayerChoice>(choice: Choice | undefined) =>
+  choice ?? DEFAULT_WRITE_LAYER;
+
+export function resolveActionLayer(action: ActionDecl): ResolvedActionDecl {
+  if ("save" in action) return { ...action, layer: defaultLayer(action.layer) };
+  if (
+    "persist" in action ||
+    "reset" in action ||
+    "preset" in action ||
+    "themeDefault" in action
+  )
+    return { ...action, layer: defaultLayer(action.layer) };
+  return action;
+}
 
 export interface RunAction {
   readonly run: readonly [string, ...string[]];

@@ -69,7 +69,11 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./reserved-names.js";
-import { LAYER_ROLES, type LayerRole } from "./layer-role.js";
+import {
+  DEFAULT_WRITE_LAYER,
+  LAYER_ROLES,
+  type LayerRole,
+} from "./layer-role.js";
 import {
   DIAGNOSTICS_VIEWING,
   SETTINGS_ANCHOR,
@@ -119,6 +123,11 @@ const COMMANDS_SEG = `${SETTINGS_NS}commands`;
 const COMMANDS = commandTray(`${COMMANDS_SEG}.`);
 const AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
 const AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+
+// Whether the session's chain can write a layer: the payload's
+// `layers.<role>`, read through this input.
+const layerVar = (role: LayerRole): string => `${SETTINGS_NS}layers.${role}`;
+export const USER_LAYER_WRITABLE = `.${layerVar(DEFAULT_WRITE_LAYER)}`;
 
 // A reference to one of the menu's segments.
 const seg = (name: string): LayoutNode => ({ kind: "segment", name });
@@ -183,7 +192,7 @@ const THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
 // The theme's name carries its swatch, as every theme name the bar shows does
 // (brandon-theme-swatch-8v9r), drawn through the theme control's own action.
 const THEME_DEFAULT_CELL: SegmentDecl = {
-  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
+  when: `{{ and ${USER_LAYER_WRITABLE} .${THEME_DEFAULT_DIFFERS} }}`,
   template:
     `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${THEME_DEFAULT_THEME}) }} ` +
     `{{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`,
@@ -266,7 +275,7 @@ const PREVIEWS: Readonly<Record<PreviewName, SegmentDecl>> = {
   // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
   // 📐 layout tab makes one.
   presetDelete: {
-    when: "{{ not .preset.bundled }}",
+    when: `{{ and ${USER_LAYER_WRITABLE} (not .preset.bundled) }}`,
     template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
   },
 };
@@ -514,28 +523,37 @@ const counted = (count: SaveCount, body: string): SavePart => ({
   body,
   shown: `(gt .${saveCountVar(count)} 0)`,
 });
-// Whether the session's chain can write a layer: the payload's
-// `layers.<role>`, read through this input.
-const layerVar = (role: LayerRole): string => `${SETTINGS_NS}layers.${role}`;
 // The save asks which layer (its declaration's `layer: "ask"`), so each link
 // binds one. A chain with one writable layer — the user's — draws the save as
 // one link; a project's chain draws a link per layer it can write.
 const SAVE_LABEL = `(printf "💾 save %d" .${UNSAVED_VAR})`;
-const SAVE_TO = LAYER_ROLES.map(
+const writableLayers = (roles: readonly LayerRole[]): string =>
+  `(or ${roles.map((role) => `.${layerVar(role)}`).join(" ")})`;
+const HAS_WRITABLE_LAYER = writableLayers(LAYER_ROLES);
+const HAS_OTHER_LAYER = writableLayers(
+  LAYER_ROLES.filter((role) => role !== DEFAULT_WRITE_LAYER),
+);
+
+// [LAW:single-enforcer] Settings Save offers exactly the layer roles the
+// current snapshot can write.
+const SAVE_TARGETS = LAYER_ROLES.map(
   (role) =>
     `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`,
 ).join("");
 const SAVE_BODY =
-  `{{ if or .${layerVar("project")} .${layerVar("local")} }}` +
-  `{{ ${SAVE_LABEL} }}:${SAVE_TO}` +
-  `{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
+  `{{ if ${HAS_OTHER_LAYER} }}{{ ${SAVE_LABEL} }}:${SAVE_TARGETS}` +
+  `{{ else if ${USER_LAYER_WRITABLE} }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "${DEFAULT_WRITE_LAYER}" }}{{ end }}`;
+
 const SAVE_PARTS: readonly SavePart[] = [
-  counted("unsaved", SAVE_BODY),
+  {
+    body: SAVE_BODY,
+    shown: `(and (gt .${UNSAVED_VAR} 0) ${HAS_WRITABLE_LAYER})`,
+  },
   counted("history.undo", `{{ action "${UNDO_ACTION}" "↶" }}`),
   counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`,
+    shown: `(and ${USER_LAYER_WRITABLE} (or ${anyResettable(CONTROLS)} ${RESET_ALL.armed}))`,
   },
 ];
 // The parts present, one space between each: `$sep` is empty until the first
@@ -910,6 +928,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
       [PRESET_SAVE]: {
         template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,
+        when: `{{ ${USER_LAYER_WRITABLE} }}`,
       },
       [EDIT_SEG]: {
         // Entering or leaving edit mode is a click like every other in the
@@ -1010,7 +1029,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       type: "boolean",
       default: false,
     };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
+    const resetCell = `{{ if and ${USER_LAYER_WRITABLE} .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
     // Whom a control is offered to gates where it is laid (`controlsAt`); its
     // list hangs on it, so hiding it hides the list.
