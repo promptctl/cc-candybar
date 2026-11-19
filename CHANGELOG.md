@@ -1,3 +1,11 @@
+## [1.235.12](https://github.com/promptctl/cc-candybar/compare/v1.235.11...v1.235.12) (2026-11-19)
+
+### Bug Fixes
+
+* **config:** recognize equivalent saved project directories ([#896](https://github.com/promptctl/cc-candybar/issues/896)) ([99736d5](https://github.com/promptctl/cc-candybar/commit/99736d58e59a636f23bf2fc28651bb8eeb1df4da))
+* **config:** select plugin definitions before reading them ([#906](https://github.com/promptctl/cc-candybar/issues/906)) ([98df29e](https://github.com/promptctl/cc-candybar/commit/98df29e0562517e9beb1e1386c47a4f552e80236))
+* **renderer:** use one outcome for each config delivery ([#894](https://github.com/promptctl/cc-candybar/issues/894)) ([f9d55e5](https://github.com/promptctl/cc-candybar/commit/f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81))
+
 ## [1.235.11](https://github.com/promptctl/cc-candybar/compare/v1.235.10...v1.235.11) (2026-11-19)
 
 ### Bug Fixes
