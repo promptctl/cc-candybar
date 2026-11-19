@@ -47529,6 +47529,21 @@ var WatcherRegistry = class {
     this.logger = opts.logger ?? defaultLogger;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
+  // [LAW:single-enforcer] A consumer that reloads several slots together can
+  // share their delivery window. Each slot still receives only its own paths.
+  // Keys acquired in this window belong to it until their last release.
+  batch(completed) {
+    const window2 = { pending: null, completed };
+    const acquire = (key, targets, onInvalidate) => this.acquired(key, targets, onInvalidate, window2);
+    return {
+      acquire,
+      follow: (held, spec, onInvalidate) => this.followed(
+        held,
+        spec,
+        (key, targets) => acquire(key, targets, onInvalidate)
+      )
+    };
+  }
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
@@ -47536,6 +47551,9 @@ var WatcherRegistry = class {
   // targets). A consumer that needs no more than "something changed" ignores
   // the invalidation's value.
   acquire(key, targets, onInvalidate) {
+    return this.acquired(key, targets, onInvalidate);
+  }
+  acquired(key, targets, onInvalidate, window2) {
     if (this.closed) {
       return {
         release: () => {
@@ -47551,6 +47569,10 @@ var WatcherRegistry = class {
       };
     }
     const shared = this.slots.get(key);
+    if (shared !== void 0 && (window2 === void 0 ? shared.window.completed !== void 0 : shared.window !== window2))
+      throw new Error(
+        `watch ${valueOf(key)} belongs to another delivery window`
+      );
     if (shared !== void 0) {
       for (const { dir } of shared.listeners.values())
         this.judged(dir, "acquire");
@@ -47559,18 +47581,21 @@ var WatcherRegistry = class {
     this.sighted(
       shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
     );
-    const slot = shared ?? this.opened(key, targets);
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null });
     const holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
   }
   // The held watch following `spec` (`followWatch`).
   follow(held, spec, onInvalidate) {
-    const followed = followWatch(
+    return this.followed(
       held,
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
+  }
+  followed(held, spec, acquire) {
+    const followed = followWatch(held, spec, acquire);
     if (followed.move === "kept")
       this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
     return followed;
@@ -47590,14 +47615,14 @@ var WatcherRegistry = class {
       if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
         record2.entry = UNSEEN;
   }
-  opened(key, targets) {
+  opened(key, targets, window2) {
     const slot = {
       key,
       targets: targets.dirs,
       listeners: /* @__PURE__ */ new Map(),
       polled: [],
       holders: /* @__PURE__ */ new Set(),
-      debounce: null
+      window: window2
     };
     this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
@@ -47804,32 +47829,43 @@ var WatcherRegistry = class {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
   }
   fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          const heard = heardOf(debounce.window);
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(heard);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-              );
+    const { window: window2 } = slot;
+    if (window2.pending === null) {
+      const changes2 = /* @__PURE__ */ new Map();
+      window2.pending = {
+        changes: changes2,
+        cancel: this.clock.after(
+          DEBOUNCE_MS,
+          () => {
+            window2.pending = null;
+            for (const [changed, gathered2] of changes2) {
+              if (this.slots.get(changed.key) !== changed) continue;
+              const heard = heardOf(gathered2);
+              for (const holder of changed.holders)
+                this.notify(changed.key, () => holder.onInvalidate(heard));
             }
-          }
-        },
-        { unref: true }
-      )
-    };
-    slot.debounce = debounce;
+            if (window2.completed !== void 0)
+              this.notify(null, window2.completed);
+          },
+          { unref: true }
+        )
+      };
+    }
+    const { changes } = window2.pending;
+    const gathered = changes.get(slot);
+    changes.set(
+      slot,
+      gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
+    );
+  }
+  notify(key, take) {
+    try {
+      take();
+    } catch (thrown2) {
+      const why2 = thrown2 instanceof Error ? thrown2.message : String(thrown2);
+      const about = key === null ? "batch" : `key=${valueOf(key)}`;
+      this.logger("warn", `watcher invalidate threw ${about}: ${why2}`);
+    }
   }
   makeHandle(slot, holder) {
     return {
@@ -47863,9 +47899,11 @@ var WatcherRegistry = class {
   // slot on it: a slot that names the path again starts from what is there at
   // its own acquire.
   closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
+    const { window: window2 } = slot;
+    const { pending: pending2 } = window2;
+    if (pending2 !== null && pending2.changes.delete(slot) && pending2.changes.size === 0) {
+      pending2.cancel();
+      window2.pending = null;
     }
     for (const listener of slot.listeners.values()) this.left(listener, cause);
     for (const record2 of slot.polled) {
@@ -70116,2145 +70154,8 @@ function repoQuestions(question, sessionId2, signer) {
   });
 }
 
-// src/dsl/render.ts
+// src/dsl/parts.ts
 init_globals();
-
-// src/config/edit-chrome.ts
-init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
-
-// src/config/option-domain.ts
-init_globals();
-
-// src/themes/palette-resolvers.ts
-init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
-  }
-  return palette;
-}
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
-}
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
-}
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
-  );
-}
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
-}
-function decideThemeName(name, where, onUnresolvable) {
-  const named2 = namedTheme(name);
-  if (named2 !== null) return named2;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
-    )
-  );
-  return themeFloor();
-}
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
-  );
-}
-function themeFloor() {
-  return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
-  };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
-      {
-        members: Object.keys(config.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
-      }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config.presets) }]
-  ]);
-}
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
-  }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/setting-control.ts
-init_globals();
-
-// src/config/menu-keys.ts
-init_globals();
-
-// src/config/ident.ts
-init_globals();
-function ident(name) {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-var ESCAPE = "Z";
-function escapedIdent(name) {
-  return Array.from(
-    name,
-    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
-      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
-      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
-    )
-  ).join("");
-}
-
-// src/config/menu-keys.ts
-var PAGE_HOLDING_CURRENT = "-1";
-function menuMember(applyName) {
-  return applyName;
-}
-function menuStateKey(placementId2, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
-}
-function sharedMenuStateKey(sharedKey) {
-  return MENU_NS + ident(sharedKey);
-}
-function menuActionName(stateKey, member) {
-  return stateKey + "." + member;
-}
-function menuPageKey(stateKey) {
-  return MENU_PAGE_NS + stateKey;
-}
-var MENU_OPTION_NAMES = [
-  "closeOnPick",
-  "paged",
-  "key",
-  "distribution"
-];
-var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
-var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
-function parseMenuOptions(entries) {
-  for (const name of Object.keys(entries)) {
-    if (!isMenuOptionName(name)) {
-      throw new Error(
-        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
-      );
-    }
-  }
-  const bool = (name, def) => {
-    const v = entries[name];
-    if (v === void 0) return def;
-    if (typeof v !== "boolean") {
-      throw new Error(
-        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
-      );
-    }
-    return v;
-  };
-  const key = entries["key"];
-  if (key !== void 0 && typeof key !== "string") {
-    throw new Error(
-      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
-    );
-  }
-  if (key === "") {
-    throw new Error(
-      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
-    );
-  }
-  const distribution = entries["distribution"];
-  if (distribution !== void 0 && !isDistributionName(distribution)) {
-    throw new Error(
-      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
-    );
-  }
-  return {
-    closeOnPick: bool("closeOnPick", false),
-    paged: bool("paged", true),
-    key,
-    distribution: placedBy(distribution)
-  };
-}
-
-// src/config/setting-control.ts
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
-  }
-  return parseSessionInt(value, domain) !== null;
-}
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted2 = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
-    const named2 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
-  }
-  return `an integer from ${domain.min} to ${domain.max}`;
-}
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
-    variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
-    },
-    list: { ref, rows }
-  };
-}
-
-// src/config/loader/persist-target.ts
-init_globals();
-
-// src/config/loader/globals.ts
-init_globals();
-var LIVE_GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
-);
-function retired(spec, description) {
-  return {
-    ...spec,
-    json: { ...spec.json, deprecated: true, description },
-    parse(ctx, path32, field, raw) {
-      spec.parse(ctx, path32, field, raw);
-      return void 0;
-    }
-  };
-}
-var GLOBALS_FIELDS = {
-  ...LIVE_GLOBALS_FIELDS,
-  updateNotice: retired(
-    optionalBooleanSpec(),
-    "Obsolete in-bar update notice."
-  ),
-  experimentalBand: retired(
-    optionalBooleanSpec(),
-    "Obsolete Claude Code band mod."
-  ),
-  experimentalTmuxStatus: retired(
-    optionalBooleanSpec(),
-    "Obsolete tmux status renderer."
-  ),
-  renderer: retired(
-    optionalEnumSpec(["claude", "tmux"]),
-    "Obsolete tmux status renderer."
-  )
-};
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row) {
-  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
-}
-function fragmentRejection(description, message2) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path32, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path32}.${field}`,
-          message: message2(`${path32}.${field}`),
-          line: findKeyLine(ctx.source, [...path32.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
-  );
-}
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
-  );
-}
-function nameOnlySpec(spec, subject, why2) {
-  return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path32, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path32}.${field}`,
-          message: `${path32}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path32.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path32, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
-    )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path32 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path32,
-        message: `${path32}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path32, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path32, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path32, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path32, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path32, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path32, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path32, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(LIVE_GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor3);
-  }
-  return seeds;
-}
-
-// src/config/loader/persist-target.ts
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
-  }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
-}
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
-}
-
-// src/config/loader/edit-mode.ts
-init_globals();
-
-// src/config/loader/reserved-namespace.ts
-init_globals();
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
-function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
-  for (const section of ["variables", "actions", "segments"]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(ns)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-      }
-    }
-  }
-}
-function pluginScopeCollisions(ctx, out, inherited) {
-  for (const section of [
-    "variables",
-    "actions",
-    "helpers",
-    "segments"
-  ]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      const scope = scopeOf(name);
-      if (scope === void 0) continue;
-      if (section !== "variables" && name === scope) continue;
-      if (section === "segments" && inherited.has(name)) continue;
-      ctx.issues.push({
-        path: `${section}.${name}`,
-        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
-        line: findKeyLine(ctx.source, [section, name])
-      });
-    }
-  }
-  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
-    for (const v of Object.keys(decl.vars ?? {})) {
-      const name = `${segment}.${v}`;
-      const at = () => ({
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      });
-      if (isPayloadInput(name)) {
-        ctx.issues.push({
-          ...at(),
-          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
-        });
-        continue;
-      }
-      const scope = scopeOf(name);
-      if (scope === void 0 || inherited.has(segment)) continue;
-      ctx.issues.push({
-        ...at(),
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
-      });
-    }
-  }
-}
-var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-function payloadDeclarationNotices(filePath2, source, declared) {
-  const lineOf = keyLocator(source);
-  return declared.filter(isPayloadInput).map((name) => {
-    const line = lineOf(["variables", name]);
-    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
-  });
-}
-function isPayloadInput(name) {
-  return Object.hasOwn(PAYLOAD_INPUTS, name);
-}
-
-// src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
-var EDIT_CONFIGURE_KEY = "edit.configure";
-var EDIT_TOGGLE_ACTION = "edit.toggle";
-var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(preset, id2) {
-  return `${escapedIdent(preset)}:${id2}`;
-}
-var EDIT_MODE_REF = {
-  variable: EDIT_MODE_KEY,
-  key: EDIT_MODE_KEY,
-  member: EDIT_MODE_ARRANGE
-};
-var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
-function referencesEditToggle(template) {
-  try {
-    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
-  } catch {
-    return false;
-  }
-}
-function fileWantsEditMode(out) {
-  if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
-  )) {
-    return true;
-  }
-  for (const seg2 of Object.values(out.segments ?? {})) {
-    const fields2 = [
-      seg2.template,
-      seg2.bg,
-      seg2.fg,
-      ...Object.values(seg2.partials ?? {})
-    ];
-    for (const field of fields2) {
-      if (typeof field === "string" && referencesEditToggle(field)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-function synthesizeEditModeToggle(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
-  if (!fileWantsEditMode(out)) return;
-  const { variables, actions } = editModeArtifacts();
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-}
-function editModeArtifacts() {
-  return {
-    variables: {
-      // Arranging lives inside the door: closing the menu leaves edit mode
-      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
-      // close the main menu").
-      [EDIT_MODE_KEY]: {
-        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-        within: [SETTINGS_REF]
-      },
-      // Configuring is a level inside arranging, so leaving edit mode by any
-      // control closes it (src/config/disclosure-nest.ts).
-      [EDIT_CONFIGURE_KEY]: {
-        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
-        within: [EDIT_MODE_REF]
-      }
-    },
-    actions: {
-      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-        EDIT_MODE_KEY,
-        EDIT_MODE_ARRANGE
-      ),
-      [EDIT_UNCONFIGURE_ACTION]: {
-        set: EDIT_CONFIGURE_KEY,
-        to: DISCLOSURE_CLOSED
-      }
-    }
-  };
-}
-
-// src/config/help.ts
-init_globals();
-var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within3, out) {
-  const self2 = {
-    variable: name,
-    key: name,
-    member: DISCLOSURE_OPEN
-  };
-  out.variables[name] = {
-    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within3.length > 0 && { within: within3 }
-  };
-  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
-  out.segments[name] = {
-    template: disclosureTrigger(
-      name,
-      HELP_GLYPH_CLOSED,
-      DISCLOSURE_GLYPH_CLOSE
-    ),
-    // The trigger is visible wherever its host surface is. An unnested `(?)`
-    // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within3)
-  };
-  const children2 = lines2.map((line, i2) => {
-    const lineName = `${name}.${i2}`;
-    out.segments[lineName] = { template: line };
-    return { kind: "segment", name: lineName };
-  });
-  return disclosureNode(
-    name,
-    self2,
-    { kind: "container", direction: "horizontal", children: children2 },
-    "drop"
-  );
-}
-function gateOf(within3) {
-  const [first2, ...rest2] = within3;
-  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
-}
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
-}
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
-}
-
-// src/help-text.ts
-init_globals();
-
-// src/config/edit-glyphs.ts
-init_globals();
-var REMOVE_GLYPH = "\u2716";
-var ADD_GLYPH = "\u271A";
-var CONFIGURE_GLYPH = "\u{1F527}";
-
-// src/cli-flags.ts
-init_globals();
-var NODE_FLAGS = {
-  help: ["-h", "--help"],
-  version: ["-V", "--version"]
-};
-
-// src/help-text.ts
-var LANE_PLACES = [
-  ...new Set(
-    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
-  )
-].join(" or ");
-var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
-var EDIT_MODE_HELP = [
-  `${ADD_GLYPH} inserts`,
-  `${REMOVE_GLYPH} removes`,
-  `${CONFIGURE_GLYPH} configures`,
-  "\u21BA resets layout"
-];
-var LANE_HELP = {
-  statusline: [
-    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "launch Claude Code with the command printed by cc-candybar --help"
-  ],
-  pane: [
-    "animates the bar in a tmux pane under this session's",
-    "on: opens that pane \xB7 off: closes it"
-  ]
-};
-var HELP_TEXT = `
-cc-candybar - Beautiful powerline statusline for Claude Code
-
-Usage: cc-candybar [options]
-
-Standalone Commands:
-  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
-  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
-
-Debugging:
-  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
-
-Configuration:
-  Layout and segment options are defined in .cc-candybar.json5 (place in your
-  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. To see the effective merged config:
-    cc-candybar config
-
-  Every bar carries a settings menu, whatever your config says \u2014 no config
-  needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
-  A change applies to this session at once.
-  Where each setting is in the menu: the globals field that sets it in a
-  config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path32, names }) => [
-  `    ${path32}`,
-  ...names.map(
-    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
-  )
-]).join("\n")}
-  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
-  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
-
-Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
-${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
-
-Subcommands:
-  install                  One-shot setup: stages the runtime (native render
-                           binary + dist bundle) at a stable path, creates the
-                           URL handler app + cc-candybar:// scheme (macOS), and
-                           writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
-  install-url-handler      Just stage the runtime and create + register the URL
-                           handler app (macOS only).
-  url-handle URL           Send a cc-candybar:// link to the daemon as a
-                           click. Terminal links use the URL handler app.
-  plugin install SOURCE    Install a repository's plugins into
-                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
-                           local path, a GitHub slug (owner/repo) or a git URL,
-                           and its plugins are the folders under
-                           .cc-candybar/plugins/. A definition the bar would
-                           drop installs nothing. Re-run to update.
-  daemon-stats [--json]    Query the running daemon for runtime stats:
-                           uptime, RSS, cache hit rates, watcher count,
-                           request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH]
-                           One session's bar as the daemon pushes it \u2014 up to
-                           30 frames a second while it moves, at once on a
-                           click \u2014 one JSON message per stdout line. Reads
-                           Claude Code's statusline JSON from stdin (one object
-                           a line) and sends it as the session's data
-                           (--config rides with it). LANE is one of
-                           ${LANE_NAMES.join(", ")}:
-                           the experimental lane this stream serves,
-                           which streams only while its toggle in the settings
-                           menu's ${LANE_PLACES} is on.
-  bar-pane PANE            Draw the bar of the Claude Code session in tmux
-                           pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. The bar is
-                           drawn at PANE's width, so split PANE with -v for a
-                           pane under it that fits. Experimental:
-                           runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
-
-Config tooling:
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
-                           every preset) with no daemon. With no path, checks
-                           the same file the daemon would load from here. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
-  schema                   Print the JSON Schema for the config file shape
-                           (.cc-candybar.json5). Point an editor's $schema at it
-                           for autocomplete + structural validation.
-  vars [--json]            Declared variables: source kind, value, last error.
-  segments [--json]        Segment templates and their last rendered output.
-  config [--json]          The effective merged config. (All three query the
-                           running daemon; none spawn one.)
-
-`;
-
-// src/config/settings-menu.ts
-init_globals();
-
-// src/config/quiet-text.ts
-init_globals();
-var QUIET_PCT = 60;
-var QUIET_MIN_CONTRAST = 3;
-var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/config/quick-actions.ts
-init_globals();
-var QUICK_ACTIONS = {
-  copySession: { copy: "{{ .session.id }}" },
-  copyResume: { copy: "{{ .resume_command }}" },
-  openProject: { open: "{{ .project_dir }}" },
-  openTranscript: { open: "{{ .transcript_path }}" },
-  openConfig: { open: "{{ .config_path }}" }
-};
-function quickActions(prefix) {
-  const name = (action2) => `${prefix}${action2}`;
-  return {
-    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
-    // their values: a local-only repo has no page and a bar on the bundled
-    // default no file, and the glyph is absent. Every payload carries a
-    // resume command, so `⎘ resume` is not gated.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
-    actions: Object.fromEntries(
-      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
-        `${prefix}${action2}`,
-        decl
-      ])
-    )
-  };
-}
-
-// src/config/command-tray.ts
-init_globals();
-
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
-  const actions = {};
-  for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
-// src/config/command-tray.ts
-var COMMANDS = ["/compact", "/model"];
-var CLEAR = "/clear";
-function commandTray(prefix) {
-  const commandAction = (line) => `${prefix}${line.slice(1)}`;
-  const typeClear = `${prefix}clear.slash`;
-  const clear = confirmStep(
-    `${prefix}clear`,
-    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [{ action: typeClear, when: "true" }]
-  );
-  return {
-    template: COMMANDS.map(
-      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
-    ).join("") + clear.template,
-    when: `{{ ${IN_TMUX} }}`,
-    actions: {
-      ...Object.fromEntries(
-        COMMANDS.map((line) => [
-          commandAction(line),
-          { slash: slashLine(line) }
-        ])
-      ),
-      ...clear.actions,
-      [typeClear]: { slash: slashLine(CLEAR) }
-    },
-    variables: clear.variables,
-    disarm: clear.disarm
-  };
-}
-
-// src/config/autocompact-control.ts
-init_globals();
-function autocompactControl(prefix, formatCount) {
-  return {
-    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
-    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
-    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
-    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
-    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
-    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
-    // picks one by name.
-    actions: {
-      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
-      ...Object.fromEntries(
-        AUTOCOMPACT_WINDOWS.map((w) => [
-          `${prefix}${w}`,
-          { slash: slashLine(`/autocompact ${w}`) }
-        ])
-      )
-    }
-  };
-}
-
-// src/config/format-token-count.ts
-init_globals();
-var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
-
-// src/config/settings-menu.ts
-var EDIT_SEG = `${SETTINGS_NS}edit`;
-var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
-var TOOLBAR = quickActions(SETTINGS_NS);
-var COMMANDS_SEG = `${SETTINGS_NS}commands`;
-var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
-var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
-var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
-var seg = (name) => ({ kind: "segment", name });
-var TAB_KEY = `${SETTINGS_NS}tab`;
-var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
-var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
-var tabRef = (tab) => ({
-  variable: TAB_KEY,
-  key: TAB_KEY,
-  member: tab
-});
-var SAVE_SEG = `${SETTINGS_NS}save`;
-var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
-var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
-var PRESET_DELETE_GLYPH = "\u{1F6AE}";
-var controlSeg = (name) => `${SETTINGS_NS}${name}`;
-var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
-var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
-var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
-var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
-var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
-var THEME_DEFAULT_CELL = {
-  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
-};
-var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-var UNDO_ACTION = `${SETTINGS_NS}undo`;
-var BACK_ACTION = `${SETTINGS_NS}back`;
-var BACK_STEP = `${BACK_ACTION}.step`;
-var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-var BACK_SEG = BACK_ACTION;
-var BACK_GLYPH = "\u25C1";
-var BACK_CELL = {
-  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
-};
-var REDO_ACTION = `${SETTINGS_NS}redo`;
-var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
-var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
-var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
-var submenuRef = (name) => {
-  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
-  return { variable: key, key, member: name };
-};
-var PREVIEWS = {
-  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
-  // segment, named, each block in the tint the bar's variation and shade deal
-  // it — so it shows what a preset, a variation or a shade changes.
-  layout: { template: "{{ layoutPreview }}" },
-  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
-  // samples exactly the palette the bar is drawn in. (The theme picker carries
-  // its own demo of the theme it has selected.)
-  palette: { template: "{{ themePreview }}" },
-  // While the preset ring is on a preset the user made
-  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
-  presetDelete: {
-    when: "{{ not .preset.bundled }}",
-    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
-  }
-};
-var controlRow = (name, row) => `${SETTINGS_NS}list.${name}.${row}`;
-var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
-var DRIFT_MARK = " \u2022";
-var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
-var laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].switch.setting, lane]
-);
-var HELP_ARTIFACTS = {
-  variables: {},
-  actions: {},
-  segments: {}
-};
-var HELP = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => {
-    const name = `${SETTINGS_NS}help.${setting}`;
-    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
-  })
-);
-var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-var laneReadout = (lane) => {
-  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
-  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
-    " "
-  );
-  return (
-    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
-    // the renderer's: the setting's value against the one that turns the lane
-    // on, each spelled as a template literal of its own type.
-    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
-  );
-};
-var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
-var FPS_SEG = `${SETTINGS_NS}fps`;
-var POLLED = "polled";
-var AT_MOST = "\u2264";
-var FPS_UNIT = " fps";
-var RATE_WIDTH = Math.max(
-  POLLED.length,
-  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
-);
-var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
-var TRAIL = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
-);
-var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var menuControl = (name) => {
-  const row = SETTINGS[name];
-  const place = PLACE[name];
-  return {
-    ...row,
-    name,
-    place,
-    control: settingControl(
-      {
-        label: row.label,
-        domain: settingControlDomain(row.configKey)
-      },
-      row.sessionKey,
-      row.effectiveVar,
-      controlApply(name),
-      accordionOf(place)
-    ),
-    beneath: row.previews.map((preview) => PREVIEWS[preview]),
-    help: [HELP[name]].filter((h) => h !== void 0),
-    submenus: submenusBeside(name)
-  };
-};
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
-var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-  controlsUnder(place)
-)}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
-    controlNode(c),
-    ...c.help,
-    ...c.submenus.map(
-      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-    )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
-var SETTINGS_WRITTEN_KEYS = new Set(
-  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
-);
-var RESET_ALL = confirmStep(
-  RESET_ALL_SEG,
-  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
-);
-var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
-var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
-var UNSAVED_VAR = saveCountVar("unsaved");
-var counted = (count, body) => ({
-  body,
-  shown: `(gt .${saveCountVar(count)} 0)`
-});
-var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
-var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
-var SAVE_TO = LAYER_ROLES.map(
-  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
-).join("");
-var SAVE_BODY = `{{ if or .${layerVar("project")} .${layerVar("local")} }}{{ ${SAVE_LABEL} }}:${SAVE_TO}{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
-var SAVE_PARTS = [
-  counted("unsaved", SAVE_BODY),
-  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
-  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
-  {
-    body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
-  }
-];
-var SAVE_CELL = {
-  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
-  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
-    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
-  ).join("")
-};
-var CONFIRMS = [
-  { step: RESET_ALL, place: "door" },
-  { step: COMMANDS2, place: "session" }
-];
-var disarms = (out) => out.map((c) => c.step.disarm);
-var DOOR_DISARMS = disarms(CONFIRMS);
-var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
-function controlNode(c) {
-  const self2 = controlSeg(c.name);
-  if (c.control.kind === "inline") return seg(self2);
-  return disclosureNode(
-    self2,
-    c.control.list.ref,
-    {
-      kind: "container",
-      direction: "vertical",
-      children: [...c.control.list.rows, ...c.beneath].map(
-        (_, row) => seg(controlRow(c.name, row))
-      )
-    },
-    "drop"
-  );
-}
-function isSettingsAnchor(segmentName) {
-  return segmentName === SETTINGS_ANCHOR;
-}
-function prependAnchor(node) {
-  const anchorRef = seg(SETTINGS_ANCHOR);
-  if (node.kind === "container" && node.direction === "vertical") {
-    const [first2, ...rest2] = node.children;
-    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
-      kind: "container",
-      direction: "vertical",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.when === void 0) {
-    return { ...node, children: [anchorRef, ...node.children] };
-  }
-  const { when: when2, children: children2, ...row } = node;
-  return {
-    ...row,
-    children: [
-      anchorRef,
-      { kind: "container", direction: row.direction, when: when2, children: children2 }
-    ]
-  };
-}
-function withAnchor(node) {
-  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed2;
-}
-function countAnchors(node) {
-  let n = 0;
-  for (const each of walkNodes(node)) {
-    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
-  }
-  return n;
-}
-function anchorUnderGate(node, gated2 = false) {
-  const here = gated2 || node.when !== void 0;
-  if (node.kind === "segment") {
-    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
-  }
-  return node.children.some((child) => anchorUnderGate(child, here));
-}
-var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
-  // The quick actions, then the commands typed into Claude Code beside the
-  // auto-compact window they would summarize at.
-  session: {
-    direction: "vertical",
-    content: [
-      seg(TOOLBAR_SEG),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
-      }
-    ],
-    after: []
-  },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
-  config: { direction: "horizontal", content: [], after: [] },
-  // The settings that adapt the theme, then — while the look they make
-  // differs from the theme's own default — the cell that saves it as that
-  // default.
-  gear: {
-    direction: "horizontal",
-    content: [],
-    after: [seg(THEME_DEFAULT_SEG)]
-  },
-  toggles: { direction: "horizontal", content: [], after: [] }
-};
-function placeBody(place) {
-  const { direction, content, after } = PLACE_BODY[place];
-  return {
-    kind: "container",
-    direction,
-    children: [...content, ...controlsAt(place), ...after]
-  };
-}
-function expandAnchor(node) {
-  if (node.kind === "segment") {
-    return isSettingsAnchor(node.name) ? {
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
-        seg(FPS_SEG)
-      ]
-    } : node;
-  }
-  return expandContainer(node);
-}
-function doorBody() {
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      placeBody("door"),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
-    ]
-  };
-}
-var DOOR_BODY = doorBody();
-function expandContainer(node) {
-  return {
-    ...node,
-    children: node.children.map((child) => expandAnchor(child))
-  };
-}
-function settingsArtifacts(doorGlyph) {
-  const artifacts = {
-    variables: {
-      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
-      [DIAGNOSTICS_VIEWING]: {
-        kind: "state",
-        key: DIAGNOSTICS_VIEWING,
-        default: "0"
-      }
-    },
-    actions: {
-      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
-      ...TOOLBAR.actions,
-      ...COMMANDS2.actions,
-      ...AUTOCOMPACT.actions,
-      [SAVE_SEG]: { save: true, layer: "ask" },
-      [UNDO_ACTION]: { undo: true },
-      // [LAW:composability] Going back can reopen a view a confirm sits in, so
-      // it disarms every confirm as the door does: a confirm is only ever
-      // clicked in the view its own arming click was made in.
-      [BACK_STEP]: { back: true },
-      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
-      [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save" },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
-      [PRESET_DELETE]: {
-        preset: "delete",
-        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
-      }
-    },
-    segments: {
-      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
-      // below, which are a word plus the ▸/▾ that gates it. The door has no
-      // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `✖` names what the click does.
-      //
-      // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ is red as this depth draws it on the pressed state, the
-      // theme's own error red wherever one reads (`errorRedOn`). It never
-      // slides lightness: a slid red stops reading as red, and the ✖ must be
-      // red on every theme. Closed,
-      // the author's glyph keeps the cell's own text.
-      [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
-      },
-      [FPS_SEG]: { template: FRAME_RATE },
-      [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
-      [AUTOCOMPACT_SEG]: {
-        template: AUTOCOMPACT.template,
-        bg: AUTOCOMPACT.bg,
-        when: AUTOCOMPACT.when
-      },
-      [BACK_SEG]: BACK_CELL,
-      [SAVE_SEG]: SAVE_CELL,
-      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
-      [PRESET_SAVE]: {
-        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
-      },
-      [EDIT_SEG]: {
-        // Entering or leaving edit mode is a click like every other in the
-        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
-        // reach while the bar is arranged.
-        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
-      }
-    }
-  };
-  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
-    kind: "input",
-    path: "themeDefault.differs",
-    type: "boolean",
-    default: false
-  };
-  artifacts.variables[THEME_DEFAULT_THEME] = {
-    kind: "input",
-    path: "themeDefault.theme",
-    type: "string",
-    default: ""
-  };
-  artifacts.variables[BACK_COUNT] = {
-    kind: "input",
-    path: "navigation.back",
-    type: "number",
-    default: 0
-  };
-  for (const role of LAYER_ROLES) {
-    artifacts.variables[layerVar(role)] = {
-      kind: "input",
-      path: `layers.${role}`,
-      type: "boolean",
-      default: false
-    };
-  }
-  for (const count of SAVE_COUNTS) {
-    artifacts.variables[saveCountVar(count)] = {
-      kind: "input",
-      path: count,
-      type: "number",
-      default: 0
-    };
-  }
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
-  for (const { member, label: label2 } of TABS) {
-    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
-      TAB_KEY,
-      member
-    );
-    artifacts.actions[tabSeg(member)] = {
-      do: [tabToggle(member), ...TAB_DISARMS]
-    };
-    const display = markedDisplay(member);
-    artifacts.segments[tabSeg(member)] = {
-      template: `{{ ${disclosureTriggerCall(
-        tabSeg(member),
-        display(label2),
-        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
-      )} }}`
-    };
-  }
-  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
-  declareSettingControls(artifacts);
-  return artifacts;
-}
-function declareSettingControls(artifacts) {
-  for (const c of CONTROLS) {
-    Object.assign(artifacts.actions, c.control.actions);
-    const reset = controlReset(c.name);
-    artifacts.actions[reset] = { reset: c.configKey };
-    artifacts.variables[controlResettable(c.name)] = {
-      kind: "input",
-      path: `resettable.${c.name}`,
-      type: "boolean",
-      default: false
-    };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
-    Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.name)] = {
-      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
-    };
-    if (c.control.kind === "picker") {
-      [
-        ...c.control.list.rows.map((template) => ({ template })),
-        ...c.beneath
-      ].forEach((row, i2) => {
-        artifacts.segments[controlRow(c.name, i2)] = row;
-      });
-    }
-  }
-  Object.assign(artifacts.actions, RESET_ALL.actions);
-  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
-  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
-  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
-  for (const name of SUBMENU_NAMES) {
-    const ref = submenuRef(name);
-    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
-      ref.key,
-      ref.member
-    );
-    artifacts.segments[submenuSeg(name)] = {
-      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
-    };
-  }
-}
-function ensureEditToggle(artifacts) {
-  const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables);
-  Object.assign(artifacts.actions, actions);
-}
-function synthesizeSettingsMenu(config) {
-  const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
-  ensureEditToggle(artifacts);
-  const presets = { ...config.presets };
-  for (const name of presetNames(config.presets)) {
-    const { node } = presetRoot(config, name);
-    const root = expandAnchor(withAnchor(node));
-    presets[name] = { ...presetByName(config.presets, name), root };
-  }
-  return {
-    ...config,
-    variables: { ...config.variables, ...artifacts.variables },
-    actions: { ...config.actions, ...artifacts.actions },
-    segments: { ...config.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/edit-chrome.ts
-var EDIT_LIVE_KEY = `${EDIT_NS}live`;
-var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
-var EDIT_DONE_SEG = `${EDIT_NS}done`;
-var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
-var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
-var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-var EDIT_LIVE_REF = {
-  variable: EDIT_LIVE_KEY,
-  key: EDIT_LIVE_KEY,
-  member: DISCLOSURE_OPEN
-};
-function configuringVar(presetIdent) {
-  return `${EDIT_NS}configuring.p${presetIdent}`;
-}
-function namesView(presetIdent) {
-  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
-}
-function configuringDecl(members) {
-  const terms = members.map(
-    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
-  );
-  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
-}
-function inNamesView(presetIdent, verdict, when2) {
-  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
-}
-var PRESET_CUSTOMIZED_VAR = "preset.customized";
-var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
-var isChromeExempt = isReservedName;
-function configOptionDomains(config) {
-  return new Map([
-    ...perConfigDomainsFor(config),
-    ...addableSegmentDomains(config)
-  ]);
-}
-var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
-function addableSegmentDomains(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      ADDABLE_DOMAIN,
-      {
-        members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
-        library: {
-          groups: LIBRARY_GROUPS.map((id2) => ({
-            id: id2,
-            label: GROUP_LABELS[id2]
-          })),
-          entry: (option) => {
-            const decl = config.segments[option];
-            return {
-              group: decl.group ?? OTHER_GROUP,
-              ...decl.description !== void 0 && {
-                description: decl.description
-              }
-            };
-          }
-        }
-      }
-    ]
-  ]);
-}
-function chromeCell(name, template, artifacts) {
-  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
-  return { kind: "segment", name };
-}
-function removeTerm(ctx, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
-  ctx.artifacts.actions[actionName] = {
-    persist: ctx.rootKey,
-    removeSegment: id2
-  };
-  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
-}
-function inArrangeMode(term) {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
-}
-function shownWhile(refs, when2) {
-  return refs.reduce(
-    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
-    when2
-  );
-}
-function configureRefsIn(nodes) {
-  return nodes.flatMap(
-    (node) => [...walkNodes(node)].flatMap(
-      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
-    )
-  );
-}
-function placementDraftKey(presetIdent, id2, setting) {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
-}
-function configureParts(ctx, node, decls) {
-  const id2 = placementId(node);
-  const placement = escapedIdent(id2);
-  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id2);
-  ctx.configured.push(member);
-  const enter = `${prefix}.configure.${placement}`;
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold]
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member
-  };
-  const drafts = {};
-  const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
-      key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
-    };
-    drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${placement}.${name}`;
-    const control2 = settingControl(
-      controlDeclOf(decl),
-      key,
-      variable,
-      segName,
-      listKey
-    );
-    Object.assign(ctx.artifacts.actions, control2.actions);
-    Object.assign(ctx.artifacts.variables, control2.variables);
-    if (control2.kind === "inline") {
-      ctx.artifacts.segments[segName] = { template: control2.template };
-      return { kind: "segment", name: segName };
-    }
-    ctx.artifacts.segments[segName] = { template: control2.template };
-    const rows = control2.list.rows.map((template, row) => {
-      const listSeg = `${segName}.list.${row}`;
-      ctx.artifacts.segments[listSeg] = { template };
-      return { kind: "segment", name: listSeg };
-    });
-    return disclosureNode(
-      segName,
-      control2.list.ref,
-      { kind: "container", direction: "vertical", children: rows },
-      "drop"
-    );
-  });
-  return {
-    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row, its list dropping below it when opened.
-    body: { kind: "container", direction: "vertical", children: controls },
-    drafts
-  };
-}
-var LABEL_NS = `${EDIT_NS}label:`;
-function arrangedSegment(name) {
-  if (name.startsWith(LABEL_NS)) {
-    const label2 = name.slice(LABEL_NS.length);
-    return label2.slice(label2.indexOf(":") + 1);
-  }
-  return name.startsWith(EDIT_NS) ? void 0 : name;
-}
-function labelChrome(child, decl, ctx, configure) {
-  const id2 = placementId(child);
-  const name = labelSegment(ctx, id2, child, decl, id2);
-  const settings = Object.fromEntries(
-    IMPLIED_SETTINGS.flatMap((setting) => {
-      const value = child.settings?.[setting];
-      return value === void 0 ? [] : [[setting, value]];
-    })
-  );
-  return {
-    ...disclosureNode(
-      name,
-      configure.ref,
-      configure.body,
-      "drop",
-      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
-    ),
-    ...Object.keys(settings).length > 0 && { settings },
-    drafts: Object.fromEntries(
-      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
-    )
-  };
-}
-function labelSegment(ctx, key, child, decl, text4) {
-  const name = `${LABEL_NS}${key}:${child.name}`;
-  ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
-    ...decl.palette !== void 0 && { palette: decl.palette }
-  };
-  return name;
-}
-function editableUnit(child, spliced, first2, ctx) {
-  const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
-  const after = insertTerm(ctx, id2, "after");
-  const remove = removeTerm(ctx, id2);
-  const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, child, settingsOf(decl));
-  const lead = inArrangeMode(remove);
-  const trail = inArrangeMode(configure.term);
-  return [
-    ...leading.map(
-      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
-    ),
-    // Labelled by the placement's id: two placements of one segment are
-    // told apart by it, and a bare placement's id is its segment's name.
-    { ...labelChrome(child, decl, ctx, configure), lead, trail },
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-      lead,
-      trail,
-      drafts: configure.drafts
-    },
-    chromeCell(after.host, after.template, ctx.artifacts)
-  ];
-}
-function fileLabel(file) {
-  return import_node_path26.default.join(import_node_path26.default.basename(import_node_path26.default.dirname(file)), import_node_path26.default.basename(file));
-}
-function insertedUnit(child, insertedBy, spliced, ctx) {
-  const decl = ctx.segments[child.name];
-  const id2 = placementId(child);
-  const label2 = {
-    kind: "segment",
-    // Keyed by the preset too: another preset may hold the same id as an
-    // editable placement, whose label reads only the id. An id holds no
-    // `/`, so the two names never meet.
-    name: labelSegment(
-      ctx,
-      `${id2}/${ctx.presetIdent}`,
-      child,
-      decl,
-      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
-    ),
-    when: `{{ ${namesView(ctx.presetIdent)} }}`
-  };
-  return [
-    label2,
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
-    }
-  ];
-}
-function insertTerm(ctx, anchor, relation) {
-  const { artifacts } = ctx;
-  const {
-    apply: applyName,
-    host: chromeSegName,
-    stateKey
-  } = insertGap(ctx.preset, anchor, relation);
-  artifacts.actions[applyName] = {
-    persist: ctx.rootKey,
-    insertSegmentFrom: ADDABLE_DOMAIN,
-    anchor,
-    relation
-  };
-  const member = menuMember(applyName);
-  const pageKey = menuPageKey(stateKey);
-  const identity2 = menuActionName(stateKey, member);
-  artifacts.variables[stateKey] = {
-    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
-    within: [EDIT_MODE_REF]
-  };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
-  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
-  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return {
-    host: chromeSegName,
-    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
-  };
-}
-function insertGap(preset, anchor, relation) {
-  const gap = `${relation}.${escapedIdent(anchor)}`;
-  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
-  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
-}
-function spliceContainer(node, ctx) {
-  const children2 = [];
-  const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
-  );
-  const splice2 = (body) => spliceContainer(body, ctx);
-  for (const [i2, child] of node.children.entries()) {
-    if (child.kind === "container") {
-      children2.push(splice2(child));
-      continue;
-    }
-    const spliced = mapOpens(child, splice2);
-    if (isChromeExempt(child.name)) {
-      children2.push(spliced);
-      continue;
-    }
-    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
-    const unit = {
-      kind: "container",
-      direction: "horizontal",
-      children: cells,
-      unit: true
-    };
-    children2.push(
-      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
-    );
-  }
-  return {
-    ...node,
-    children: children2,
-    ...node.when !== void 0 && {
-      when: shownWhile(
-        configureRefsIn(children2),
-        inNamesView(ctx.presetIdent, "true", node.when)
-      )
-    }
-  };
-}
-function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
-  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  artifacts.actions[actionName] = { reset: rootKey };
-  artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
-    when: CUSTOMIZED_BANNER_GATE
-  };
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      // The ways out lead the top row, top left, where they are found without
-      // reopening the menu edit mode was entered from: keep or discard what
-      // was changed, restore the bundled layout, and the view toggle.
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [...lead, { kind: "segment", name: chromeSegName }, live]
-      },
-      // The `(?)`'s body drops BELOW the row the trigger rides while the
-      // disclosure is open, like every other disclosure body in this codebase.
-      withTrailingCell(splicedRoot, tail)
-    ]
-  };
-}
-function withTrailingCell(node, cell3) {
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [node, cell3]
-    };
-  }
-  const last2 = node.children.at(-1);
-  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
-    return {
-      ...node,
-      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
-    };
-  }
-  return { ...node, children: [...node.children, cell3] };
-}
-function spliceEditChromeForPreset(config, presetName, artifacts, lead, live, tail) {
-  const { node } = presetRoot(config, presetName);
-  const ctx = {
-    preset: presetName,
-    presetIdent: escapedIdent(presetName),
-    rootKey: presetRootKey(presetName),
-    segments: config.segments,
-    artifacts,
-    configured: []
-  };
-  const spliced = spliceContainer(node, ctx);
-  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
-    ctx.configured
-  );
-  return wrapWithPresetRows(
-    spliced,
-    ctx.presetIdent,
-    ctx.rootKey,
-    artifacts,
-    lead,
-    live,
-    tail
-  );
-}
-function synthesizeEditChrome(config) {
-  const artifacts = {
-    variables: {},
-    actions: {},
-    segments: {}
-  };
-  const help = declareHelp(
-    `${EDIT_NS}help`,
-    EDIT_MODE_HELP,
-    [EDIT_MODE_REF],
-    artifacts
-  );
-  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
-    EDIT_LIVE_KEY,
-    DISCLOSURE_CLOSED
-  );
-  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
-    EDIT_LIVE_KEY,
-    EDIT_LIVE_REF.member
-  );
-  artifacts.segments[EDIT_LIVE_KEY] = {
-    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
-    when: EDIT_MODE_GATE
-  };
-  const live = { kind: "segment", name: EDIT_LIVE_KEY };
-  const tail = help;
-  artifacts.variables[EDIT_CHANGES_VAR] = {
-    kind: "input",
-    path: "history.sinceEdit",
-    type: "number",
-    default: 0
-  };
-  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
-  artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
-    when: EDIT_MODE_GATE
-  };
-  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
-  artifacts.segments[EDIT_CANCEL_SEG] = {
-    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
-  };
-  const lead = [
-    { kind: "segment", name: EDIT_DONE_SEG },
-    { kind: "segment", name: EDIT_CANCEL_SEG }
-  ];
-  const presets = { ...config.presets };
-  for (const name of presetNames(config.presets)) {
-    const root = spliceEditChromeForPreset(
-      config,
-      name,
-      artifacts,
-      lead,
-      live,
-      tail
-    );
-    presets[name] = { ...presetByName(config.presets, name), root };
-  }
-  return {
-    ...config,
-    variables: { ...config.variables, ...artifacts.variables },
-    actions: { ...config.actions, ...artifacts.actions },
-    segments: { ...config.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/shell-env.ts
-init_globals();
-var SHELL_BASE_ENV = [
-  "HOME",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "LOGNAME",
-  "PATH",
-  "SHELL",
-  "TMPDIR",
-  "USER",
-  "XDG_CACHE_HOME",
-  "XDG_CONFIG_DIRS",
-  "XDG_CONFIG_HOME",
-  "XDG_DATA_DIRS",
-  "XDG_DATA_HOME",
-  "XDG_RUNTIME_DIR",
-  "XDG_STATE_HOME"
-];
-function shellEnvOf(declared = []) {
-  return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
-}
 
 // src/var-system/sources.ts
 init_globals();
@@ -73871,8 +71772,53 @@ var SourceRegistry = class _SourceRegistry {
   }
 };
 
-// src/render/fill.ts
+// src/template-engine/index.ts
 init_globals();
+
+// src/template-engine/cells.ts
+init_globals();
+function fragmentsToCells(fragments, baseStyle) {
+  const cells = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const cell3 = buildCell(group, baseStyle);
+    if (cell3.plain.length > 0) cells.push(cell3);
+    group = [];
+  };
+  for (const frag of fragments) {
+    const item = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
+      flush();
+      const cell3 = buildCell([item], baseStyle);
+      if (cell3.plain.length > 0) cells.push(cell3);
+    } else {
+      group.push(item);
+    }
+  }
+  flush();
+  return cells;
+}
+function buildCell(items, baseStyle) {
+  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
+  const layered = items.map(
+    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
+  );
+  const cell3 = RichText.fromFragments(layered);
+  cell3.end = "";
+  cell3.overflow = "ignore";
+  if (layered.length === 1) {
+    cell3.style = layered[0].style;
+  } else if (base !== void 0) {
+    cell3.style = base;
+  }
+  return cell3;
+}
+function withStyle(frag, style) {
+  const copy2 = frag.copy();
+  copy2.style = style;
+  return copy2;
+}
 
 // src/template-engine/layout.ts
 init_globals();
@@ -73883,7 +71829,7 @@ function evaluateWhen(template, scope) {
 }
 var HIDDEN = { kind: "hidden" };
 var SHOWN = { kind: "shown" };
-function gateOf2(template, scope) {
+function gateOf(template, scope) {
   try {
     return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
   } catch (e) {
@@ -73967,156 +71913,241 @@ function applySegmentLayout(cells, options) {
   return [{ text: cell3, ...tail }];
 }
 
-// src/render/fill.ts
-function wrapOffsets(plain, line, indent2) {
-  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
-  const wrapping = held + plain;
-  const offsets = [];
-  let at = 0;
-  wrappedLines(wrapping, line).forEach((wrapped) => {
-    const content = wrapped.trimEnd();
-    const start = wrapping.indexOf(content, at);
-    if (content !== "" && start > held.length)
-      offsets.push(start - held.length);
-    at = start + content.length;
-  });
-  return offsets;
-}
-function takenOnLine(before, options) {
-  if (before.length === 0) return 0;
-  const { lines: lines2 } = drawStripCells(
-    before.map(({ owner }) => owner),
-    options
-  );
-  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
-  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
-}
-function fits(cell3, line, options) {
-  if (cell3.cellLength <= line) return true;
-  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
-  return cellLen(plainOf2(lines2.flat())) <= options.width;
-}
-function dividedToLine(item, line, before, options) {
-  if (fits(item.owner, line, options)) return [item];
-  const text4 = item.owner.copy().expandTabs();
-  const indent2 = takenOnLine(before, options);
-  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i2) => ({
-    ...item,
-    owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
-  })).filter(
-    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
-  );
-}
-function fitRow(row, options) {
-  const line = Math.max(
-    WIDEST_GLYPH_COLS,
-    lineWidth(options) - stripChromeCols(options) - options.padding
-  );
-  return filled(row, options).reduce(
-    (fitted, item) => [
-      ...fitted,
-      ...dividedToLine(item, line, fitted, options)
-    ],
-    []
-  );
-}
-function filled(row, options) {
-  const items = () => row.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
-  const demands = [];
-  row.forEach(({ fill }, at) => {
-    if (fill !== void 0) demands.push({ at, how: fill });
-  });
-  if (demands.length === 0) return items();
-  if (!Number.isFinite(options.width)) return items();
-  const natural = drawStripCells(row.map(stripItem), options).lines;
-  if (natural.length > 1) return items();
-  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
-  const share = Math.floor(deficit / demands.length);
-  const remainder = deficit - share * demands.length;
-  demands.forEach(({ at, how }, i2) => {
-    const grow = share + (i2 === demands.length - 1 ? remainder : 0);
-    const { text: text4 } = row[at];
-    sizeCell(text4, text4.cellLength + grow, how);
-  });
-  return items();
-}
-
-// src/render/frame-memory.ts
+// src/template-engine/colors.ts
 init_globals();
-function recordFrom(last2, source) {
-  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
 }
-function beginRecord(source, returned2) {
-  const placements = /* @__PURE__ */ new Map();
-  const rules = /* @__PURE__ */ new Map();
-  return {
-    placed: (id2, lines2) => {
-      const { drawing: drawing2 } = returned2(id2, lines2);
-      placements.set(
-        id2,
-        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-      );
-      return lines2;
-    },
-    rule: (slot, name) => rules.set(slot, name),
-    record: (passages) => ({ source, placements, rules, passages })
-  };
-}
-var HIDDEN_RECORD = { kind: "hidden" };
-
-// src/themes/index.ts
-init_globals();
-
-// src/template-engine/index.ts
-init_globals();
-
-// src/template-engine/cells.ts
-init_globals();
-function fragmentsToCells(fragments, baseStyle) {
-  const cells = [];
-  let group = [];
-  const flush = () => {
-    if (!group.length) return;
-    const cell3 = buildCell(group, baseStyle);
-    if (cell3.plain.length > 0) cells.push(cell3);
-    group = [];
-  };
-  for (const frag of fragments) {
-    const item = { frag, style: resolvedStyle(frag.style) };
-    if (item.style.link) {
-      flush();
-      const cell3 = buildCell([item], baseStyle);
-      if (cell3.plain.length > 0) cells.push(cell3);
-    } else {
-      group.push(item);
-    }
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
   }
-  flush();
-  return cells;
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
 }
-function buildCell(items, baseStyle) {
-  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
-  const layered = items.map(
-    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
-  );
-  const cell3 = RichText.fromFragments(layered);
-  cell3.end = "";
-  cell3.overflow = "ignore";
-  if (layered.length === 1) {
-    cell3.style = layered[0].style;
-  } else if (base !== void 0) {
-    cell3.style = base;
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
   }
-  return cell3;
 }
-function withStyle(frag, style) {
-  const copy2 = frag.copy();
-  copy2.style = style;
-  return copy2;
+
+// src/render/active-segment.ts
+init_globals();
+function createActiveSegmentRef(drawnAt) {
+  return { current: null, drawnAt };
+}
+function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+  const active2 = {
+    segName,
+    placementId: placementId2,
+    palette,
+    disclosure,
+    tint,
+    text: text4,
+    bg: void 0,
+    drops: []
+  };
+  ref.current = active2;
+  return active2;
+}
+function inSegment(ref, place, run3) {
+  return publishing(
+    ref,
+    () => run3(
+      openSegment(
+        ref,
+        place.segName,
+        place.placementId,
+        place.palette,
+        place.disclosure,
+        place.tint,
+        place.text
+      )
+    )
+  );
+}
+function outsideSegments(ref, run3) {
+  return publishing(ref, () => {
+    ref.current = null;
+    return run3();
+  });
+}
+function publishing(ref, run3) {
+  const prior = ref.current;
+  try {
+    return run3();
+  } finally {
+    ref.current = prior;
+  }
+}
+function requireActiveSegment(ref, spelling) {
+  const active2 = ref.current;
+  if (active2 === null) {
+    throw new Error(
+      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
+    );
+  }
+  return active2;
 }
 
 // src/render/action.ts
 init_globals();
+
+// src/config/option-domain.ts
+init_globals();
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
+  }
+  return palette;
+}
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function basePaletteFor(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) return null;
+  baseCache.set(name, palette);
+  return palette;
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named2 = namedTheme(name);
+  if (named2 !== null) return named2;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
+}
+
+// src/config/option-domain.ts
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
 
 // src/config/layout-ops.ts
 init_globals();
@@ -74772,24 +72803,6 @@ function actionFuncs(runtime) {
   };
 }
 
-// src/render/disclosure-close.ts
-init_globals();
-function disclosureCloseFragment(sessionId2, key) {
-  return linkFragment(
-    DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId2, key, DISCLOSURE_CLOSED]
-      }
-    ]),
-    false
-  );
-}
-
-// src/render/picker.ts
-init_globals();
-
 // src/render/band-style.ts
 init_globals();
 function stateCell(palette, background, drawnAt) {
@@ -74830,6 +72843,3138 @@ function bandItemStyle(active2, step4, drawnAt) {
     bandItem(active2.palette, active2.disclosure, step4, drawnAt)
   );
 }
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+
+// src/config/setting-control.ts
+init_globals();
+
+// src/config/menu-keys.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+function ident(name) {
+  return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+var ESCAPE = "Z";
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
+
+// src/config/menu-keys.ts
+var PAGE_HOLDING_CURRENT = "-1";
+function menuMember(applyName) {
+  return applyName;
+}
+function menuStateKey(placementId2, applyName, sharedKey) {
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
+}
+function sharedMenuStateKey(sharedKey) {
+  return MENU_NS + ident(sharedKey);
+}
+function menuActionName(stateKey, member) {
+  return stateKey + "." + member;
+}
+function menuPageKey(stateKey) {
+  return MENU_PAGE_NS + stateKey;
+}
+var MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution"
+];
+var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
+var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
+function parseMenuOptions(entries) {
+  for (const name of Object.keys(entries)) {
+    if (!isMenuOptionName(name)) {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
+      );
+    }
+  }
+  const bool = (name, def) => {
+    const v = entries[name];
+    if (v === void 0) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== void 0 && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
+    );
+  }
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
+    );
+  }
+  const distribution = entries["distribution"];
+  if (distribution !== void 0 && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+    distribution: placedBy(distribution)
+  };
+}
+
+// src/config/setting-control.ts
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function controlDomainAdmits(domain, value, perConfigDomains) {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    ).members.includes(value);
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function describeControlDomain(domain, perConfigDomains) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
+    const quoted2 = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
+    const named2 = typeof from === "string" ? ` "${from}"` : "";
+    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/loader/persist-target.ts
+init_globals();
+
+// src/config/loader/globals.ts
+init_globals();
+var LIVE_GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
+);
+function retired(spec, description) {
+  return {
+    ...spec,
+    json: { ...spec.json, deprecated: true, description },
+    parse(ctx, path32, field, raw) {
+      spec.parse(ctx, path32, field, raw);
+      return void 0;
+    }
+  };
+}
+var GLOBALS_FIELDS = {
+  ...LIVE_GLOBALS_FIELDS,
+  updateNotice: retired(
+    optionalBooleanSpec(),
+    "Obsolete in-bar update notice."
+  ),
+  experimentalBand: retired(
+    optionalBooleanSpec(),
+    "Obsolete Claude Code band mod."
+  ),
+  experimentalTmuxStatus: retired(
+    optionalBooleanSpec(),
+    "Obsolete tmux status renderer."
+  ),
+  renderer: retired(
+    optionalEnumSpec(["claude", "tmux"]),
+    "Obsolete tmux status renderer."
+  )
+};
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row) {
+  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
+}
+function fragmentRejection(description, message2) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path32, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path32}.${field}`,
+          message: message2(`${path32}.${field}`),
+          line: findKeyLine(ctx.source, [...path32.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why2) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path32, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path32}.${field}`,
+          message: `${path32}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path32.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path32, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path32 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path32,
+        message: `${path32}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path32, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path32, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path32, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path32, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path32, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path32, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path32, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(LIVE_GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor3);
+  }
+  return seeds;
+}
+
+// src/config/loader/persist-target.ts
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
+}
+
+// src/config/loader/edit-mode.ts
+init_globals();
+
+// src/config/loader/reserved-namespace.ts
+init_globals();
+function reservedNamespaceOf(name) {
+  const collapsed = ident(name);
+  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
+}
+function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
+  for (const section of ["variables", "actions", "segments"]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(ns)) {
+        ctx.issues.push({
+          path: `${section}.${name}`,
+          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+      }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const at = () => ({
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      });
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at(),
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
+        });
+        continue;
+      }
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        ...at(),
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
+      });
+    }
+  }
+}
+var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+function payloadDeclarationNotices(filePath2, source, declared) {
+  const lineOf = keyLocator(source);
+  return declared.filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+  });
+}
+function isPayloadInput(name) {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
+}
+
+// src/config/loader/edit-mode.ts
+var EDIT_MODE_KEY = "edit.mode";
+var EDIT_CONFIGURE_KEY = "edit.configure";
+var EDIT_TOGGLE_ACTION = "edit.toggle";
+var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+var EDIT_MODE_ARRANGE = "arrange";
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+function configureMember(preset, id2) {
+  return `${escapedIdent(preset)}:${id2}`;
+}
+var EDIT_MODE_REF = {
+  variable: EDIT_MODE_KEY,
+  key: EDIT_MODE_KEY,
+  member: EDIT_MODE_ARRANGE
+};
+var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
+function referencesEditToggle(template) {
+  try {
+    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
+  } catch {
+    return false;
+  }
+}
+function fileWantsEditMode(out) {
+  if (Object.values(out.actions ?? {}).some(
+    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+  )) {
+    return true;
+  }
+  for (const seg2 of Object.values(out.segments ?? {})) {
+    const fields2 = [
+      seg2.template,
+      seg2.bg,
+      seg2.fg,
+      ...Object.values(seg2.partials ?? {})
+    ];
+    for (const field of fields2) {
+      if (typeof field === "string" && referencesEditToggle(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function synthesizeEditModeToggle(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
+  if (!fileWantsEditMode(out)) return;
+  const { variables, actions } = editModeArtifacts();
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+}
+function editModeArtifacts() {
+  return {
+    variables: {
+      // Arranging lives inside the door: closing the menu leaves edit mode
+      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
+      // close the main menu").
+      [EDIT_MODE_KEY]: {
+        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+        within: [SETTINGS_REF]
+      },
+      // Configuring is a level inside arranging, so leaving edit mode by any
+      // control closes it (src/config/disclosure-nest.ts).
+      [EDIT_CONFIGURE_KEY]: {
+        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
+        within: [EDIT_MODE_REF]
+      }
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED
+      }
+    }
+  };
+}
+
+// src/config/help.ts
+init_globals();
+var HELP_GLYPH_CLOSED = "(?)";
+function declareHelp(name, lines2, within3, out) {
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...within3.length > 0 && { within: within3 }
+  };
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
+  out.segments[name] = {
+    template: disclosureTrigger(
+      name,
+      HELP_GLYPH_CLOSED,
+      DISCLOSURE_GLYPH_CLOSE
+    ),
+    // The trigger is visible wherever its host surface is. An unnested `(?)`
+    // (`within` empty) is always visible, and declares no `when` at all.
+    ...gateOf2(within3)
+  };
+  const children2 = lines2.map((line, i2) => {
+    const lineName = `${name}.${i2}`;
+    out.segments[lineName] = { template: line };
+    return { kind: "segment", name: lineName };
+  });
+  return disclosureNode(
+    name,
+    self2,
+    { kind: "container", direction: "horizontal", children: children2 },
+    "drop"
+  );
+}
+function gateOf2(within3) {
+  const [first2, ...rest2] = within3;
+  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+}
+
+// src/help-text.ts
+init_globals();
+
+// src/config/edit-glyphs.ts
+init_globals();
+var REMOVE_GLYPH = "\u2716";
+var ADD_GLYPH = "\u271A";
+var CONFIGURE_GLYPH = "\u{1F527}";
+
+// src/cli-flags.ts
+init_globals();
+var NODE_FLAGS = {
+  help: ["-h", "--help"],
+  version: ["-V", "--version"]
+};
+
+// src/help-text.ts
+var LANE_PLACES = [
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
+].join(" or ");
+var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+var EDIT_MODE_HELP = [
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
+  "\u21BA resets layout"
+];
+var LANE_HELP = {
+  statusline: [
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "launch Claude Code with the command printed by cc-candybar --help"
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane \xB7 off: closes it"
+  ]
+};
+var HELP_TEXT = `
+cc-candybar - Beautiful powerline statusline for Claude Code
+
+Usage: cc-candybar [options]
+
+Standalone Commands:
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
+
+Debugging:
+  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
+
+Configuration:
+  Layout and segment options are defined in .cc-candybar.json5 (place in your
+  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
+  to point at a specific file. To see the effective merged config:
+    cc-candybar config
+
+  Every bar carries a settings menu, whatever your config says \u2014 no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
+  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t2) => t2.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace().flatMap(({ path: path32, names }) => [
+  `    ${path32}`,
+  ...names.map(
+    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
+  )
+]).join("\n")}
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
+
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
+  url-handle URL           Send a cc-candybar:// link to the daemon as a
+                           click. Terminal links use the URL handler app.
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
+  frames --lane LANE [--config PATH]
+                           One session's bar as the daemon pushes it \u2014 up to
+                           30 frames a second while it moves, at once on a
+                           click \u2014 one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (--config rides with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ${LANE_PLACES} is on.
+  bar-pane PANE            Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, as the daemon
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
+
+Config tooling:
+  check [--render] [file]  Validate a config on the full render pipeline (parse
+                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
+                           every preset) with no daemon. With no path, checks
+                           the same file the daemon would load from here. Exit
+                           0 clean (warnings on stderr), 1 invalid, 2
+                           unreadable. --render also prints the bar a fresh
+                           session opens on, so you can read a config without
+                           installing it. "lint" is an alias.
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
+`;
+
+// src/config/settings-menu.ts
+init_globals();
+
+// src/config/quiet-text.ts
+init_globals();
+var QUIET_PCT = 60;
+var QUIET_MIN_CONTRAST = 3;
+var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
+
+// src/config/quick-actions.ts
+init_globals();
+var QUICK_ACTIONS = {
+  copySession: { copy: "{{ .session.id }}" },
+  copyResume: { copy: "{{ .resume_command }}" },
+  openProject: { open: "{{ .project_dir }}" },
+  openTranscript: { open: "{{ .transcript_path }}" },
+  openConfig: { open: "{{ .config_path }}" }
+};
+function quickActions(prefix) {
+  const name = (action2) => `${prefix}${action2}`;
+  return {
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    actions: Object.fromEntries(
+      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
+        `${prefix}${action2}`,
+        decl
+      ])
+    )
+  };
+}
+
+// src/config/command-tray.ts
+init_globals();
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/command-tray.ts
+var COMMANDS = ["/compact", "/model"];
+var CLEAR = "/clear";
+function commandTray(prefix) {
+  const commandAction = (line) => `${prefix}${line.slice(1)}`;
+  const typeClear = `${prefix}clear.slash`;
+  const clear = confirmStep(
+    `${prefix}clear`,
+    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
+    [{ action: typeClear, when: "true" }]
+  );
+  return {
+    template: COMMANDS.map(
+      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
+    ).join("") + clear.template,
+    when: `{{ ${IN_TMUX} }}`,
+    actions: {
+      ...Object.fromEntries(
+        COMMANDS.map((line) => [
+          commandAction(line),
+          { slash: slashLine(line) }
+        ])
+      ),
+      ...clear.actions,
+      [typeClear]: { slash: slashLine(CLEAR) }
+    },
+    variables: clear.variables,
+    disarm: clear.disarm
+  };
+}
+
+// src/config/autocompact-control.ts
+init_globals();
+function autocompactControl(prefix, formatCount) {
+  return {
+    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
+    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
+    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
+    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
+    // picks one by name.
+    actions: {
+      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
+      ...Object.fromEntries(
+        AUTOCOMPACT_WINDOWS.map((w) => [
+          `${prefix}${w}`,
+          { slash: slashLine(`/autocompact ${w}`) }
+        ])
+      )
+    }
+  };
+}
+
+// src/config/format-token-count.ts
+init_globals();
+var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
+
+// src/config/settings-menu.ts
+var EDIT_SEG = `${SETTINGS_NS}edit`;
+var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
+var TOOLBAR = quickActions(SETTINGS_NS);
+var COMMANDS_SEG = `${SETTINGS_NS}commands`;
+var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
+var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
+var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+var seg = (name) => ({ kind: "segment", name });
+var TAB_KEY = `${SETTINGS_NS}tab`;
+var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
+var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
+var tabRef = (tab) => ({
+  variable: TAB_KEY,
+  key: TAB_KEY,
+  member: tab
+});
+var SAVE_SEG = `${SETTINGS_NS}save`;
+var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
+var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+var PRESET_DELETE_GLYPH = "\u{1F6AE}";
+var controlSeg = (name) => `${SETTINGS_NS}${name}`;
+var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
+var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
+var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
+var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
+var THEME_DEFAULT_CELL = {
+  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
+};
+var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
+var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+var UNDO_ACTION = `${SETTINGS_NS}undo`;
+var BACK_ACTION = `${SETTINGS_NS}back`;
+var BACK_STEP = `${BACK_ACTION}.step`;
+var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
+var BACK_SEG = BACK_ACTION;
+var BACK_GLYPH = "\u25C1";
+var BACK_CELL = {
+  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
+};
+var REDO_ACTION = `${SETTINGS_NS}redo`;
+var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
+var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
+var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
+var submenuRef = (name) => {
+  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
+  return { variable: key, key, member: name };
+};
+var PREVIEWS = {
+  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
+  // segment, named, each block in the tint the bar's variation and shade deal
+  // it — so it shows what a preset, a variation or a shade changes.
+  layout: { template: "{{ layoutPreview }}" },
+  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+  // samples exactly the palette the bar is drawn in. (The theme picker carries
+  // its own demo of the theme it has selected.)
+  palette: { template: "{{ themePreview }}" },
+  // While the preset ring is on a preset the user made
+  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
+  // 📐 layout tab makes one.
+  presetDelete: {
+    when: "{{ not .preset.bundled }}",
+    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
+  }
+};
+var controlRow = (name, row) => `${SETTINGS_NS}list.${name}.${row}`;
+var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
+var DRIFT_MARK = " \u2022";
+var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
+var laneSettings = LANE_NAMES.map(
+  (lane) => [LANES[lane].switch.setting, lane]
+);
+var HELP_ARTIFACTS = {
+  variables: {},
+  actions: {},
+  segments: {}
+};
+var HELP = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  })
+);
+var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+var laneReadout = (lane) => {
+  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
+  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
+    " "
+  );
+  return (
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+  );
+};
+var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
+var FPS_SEG = `${SETTINGS_NS}fps`;
+var POLLED = "polled";
+var AT_MOST = "\u2264";
+var FPS_UNIT = " fps";
+var RATE_WIDTH = Math.max(
+  POLLED.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
+);
+var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
+var TRAIL = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
+);
+var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+var menuControl = (name) => {
+  const row = SETTINGS[name];
+  const place = PLACE[name];
+  return {
+    ...row,
+    name,
+    place,
+    control: settingControl(
+      {
+        label: row.label,
+        domain: settingControlDomain(row.configKey)
+      },
+      row.sessionKey,
+      row.effectiveVar,
+      controlApply(name),
+      accordionOf(place)
+    ),
+    beneath: row.previews.map((preview) => PREVIEWS[preview]),
+    help: [HELP[name]].filter((h) => h !== void 0),
+    submenus: submenusBeside(name)
+  };
+};
+var CONTROLS = Object.keys(SETTINGS).map(menuControl);
+var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
+var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+  controlsUnder(place)
+)}))`;
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
+var SETTINGS_WRITTEN_KEYS = new Set(
+  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
+);
+var RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
+);
+var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
+var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
+var UNSAVED_VAR = saveCountVar("unsaved");
+var counted = (count, body) => ({
+  body,
+  shown: `(gt .${saveCountVar(count)} 0)`
+});
+var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
+var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
+var SAVE_TO = LAYER_ROLES.map(
+  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
+).join("");
+var SAVE_BODY = `{{ if or .${layerVar("project")} .${layerVar("local")} }}{{ ${SAVE_LABEL} }}:${SAVE_TO}{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
+var SAVE_PARTS = [
+  counted("unsaved", SAVE_BODY),
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
+  {
+    body: RESET_ALL.template,
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
+  }
+];
+var SAVE_CELL = {
+  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
+  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
+    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
+  ).join("")
+};
+var CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS2, place: "session" }
+];
+var disarms = (out) => out.map((c) => c.step.disarm);
+var DOOR_DISARMS = disarms(CONFIRMS);
+var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
+function controlNode(c) {
+  const self2 = controlSeg(c.name);
+  if (c.control.kind === "inline") return seg(self2);
+  return disclosureNode(
+    self2,
+    c.control.list.ref,
+    {
+      kind: "container",
+      direction: "vertical",
+      children: [...c.control.list.rows, ...c.beneath].map(
+        (_, row) => seg(controlRow(c.name, row))
+      )
+    },
+    "drop"
+  );
+}
+function isSettingsAnchor(segmentName) {
+  return segmentName === SETTINGS_ANCHOR;
+}
+function prependAnchor(node) {
+  const anchorRef = seg(SETTINGS_ANCHOR);
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first2, ...rest2] = node.children;
+    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
+      kind: "container",
+      direction: "vertical",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.when === void 0) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  const { when: when2, children: children2, ...row } = node;
+  return {
+    ...row,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row.direction, when: when2, children: children2 }
+    ]
+  };
+}
+function withAnchor(node) {
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
+}
+function countAnchors(node) {
+  let n = 0;
+  for (const each of walkNodes(node)) {
+    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
+  }
+  return n;
+}
+function anchorUnderGate(node, gated2 = false) {
+  const here = gated2 || node.when !== void 0;
+  if (node.kind === "segment") {
+    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
+  }
+  return node.children.some((child) => anchorUnderGate(child, here));
+}
+var PLACE_BODY = {
+  // `◁ back`, the controls one click from the door — theme, preset — then
+  // arranging the bar, then the save cell whenever it has something to do.
+  door: {
+    direction: "horizontal",
+    content: [seg(BACK_SEG)],
+    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
+  },
+  // The quick actions, then the commands typed into Claude Code beside the
+  // auto-compact window they would summarize at.
+  session: {
+    direction: "vertical",
+    content: [
+      seg(TOOLBAR_SEG),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
+      }
+    ],
+    after: []
+  },
+  look: { direction: "horizontal", content: [], after: [] },
+  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  config: { direction: "horizontal", content: [], after: [] },
+  // The settings that adapt the theme, then — while the look they make
+  // differs from the theme's own default — the cell that saves it as that
+  // default.
+  gear: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)]
+  },
+  toggles: { direction: "horizontal", content: [], after: [] }
+};
+function placeBody(place) {
+  const { direction, content, after } = PLACE_BODY[place];
+  return {
+    kind: "container",
+    direction,
+    children: [...content, ...controlsAt(place), ...after]
+  };
+}
+function expandAnchor(node) {
+  if (node.kind === "segment") {
+    return isSettingsAnchor(node.name) ? {
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
+        seg(FPS_SEG)
+      ]
+    } : node;
+  }
+  return expandContainer(node);
+}
+function doorBody() {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      placeBody("door"),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: TABS.map(
+          ({ member }) => disclosureNode(
+            tabSeg(member),
+            tabRef(member),
+            placeBody(member),
+            "drop"
+          )
+        )
+      }
+    ]
+  };
+}
+var DOOR_BODY = doorBody();
+function expandContainer(node) {
+  return {
+    ...node,
+    children: node.children.map((child) => expandAnchor(child))
+  };
+}
+function settingsArtifacts(doorGlyph) {
+  const artifacts = {
+    variables: {
+      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0"
+      }
+    },
+    actions: {
+      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      ...TOOLBAR.actions,
+      ...COMMANDS2.actions,
+      ...AUTOCOMPACT.actions,
+      [SAVE_SEG]: { save: true, layer: "ask" },
+      [UNDO_ACTION]: { undo: true },
+      // [LAW:composability] Going back can reopen a view a confirm sits in, so
+      // it disarms every confirm as the door does: a confirm is only ever
+      // clicked in the view its own arming click was made in.
+      [BACK_STEP]: { back: true },
+      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
+      [REDO_ACTION]: { redo: true },
+      [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
+      [PRESET_DELETE]: {
+        preset: "delete",
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
+      }
+    },
+    segments: {
+      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
+      // below, which are a word plus the ▸/▾ that gates it. The door has no
+      // label to gate: it is a glyph, so a second glyph beside it would be the
+      // only thing on the bar that spells its state twice. The door's glyph
+      // names what it opens, `✖` names what the click does.
+      //
+      // Two displays through the same `[closed, member]` cycle every other
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ is red as this depth draws it on the pressed state, the
+      // theme's own error red wherever one reads (`errorRedOn`). It never
+      // slides lightness: a slid red stops reading as red, and the ✖ must be
+      // red on every theme. Closed,
+      // the author's glyph keeps the cell's own text.
+      [SETTINGS_ANCHOR]: {
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+      },
+      [FPS_SEG]: { template: FRAME_RATE },
+      [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
+      [AUTOCOMPACT_SEG]: {
+        template: AUTOCOMPACT.template,
+        bg: AUTOCOMPACT.bg,
+        when: AUTOCOMPACT.when
+      },
+      [BACK_SEG]: BACK_CELL,
+      [SAVE_SEG]: SAVE_CELL,
+      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
+      [PRESET_SAVE]: {
+        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
+      },
+      [EDIT_SEG]: {
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
+      }
+    }
+  };
+  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
+    kind: "input",
+    path: "themeDefault.differs",
+    type: "boolean",
+    default: false
+  };
+  artifacts.variables[THEME_DEFAULT_THEME] = {
+    kind: "input",
+    path: "themeDefault.theme",
+    type: "string",
+    default: ""
+  };
+  artifacts.variables[BACK_COUNT] = {
+    kind: "input",
+    path: "navigation.back",
+    type: "number",
+    default: 0
+  };
+  for (const role of LAYER_ROLES) {
+    artifacts.variables[layerVar(role)] = {
+      kind: "input",
+      path: `layers.${role}`,
+      type: "boolean",
+      default: false
+    };
+  }
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
+      kind: "input",
+      path: count,
+      type: "number",
+      default: 0
+    };
+  }
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
+  for (const { member, label: label2 } of TABS) {
+    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
+      TAB_KEY,
+      member
+    );
+    artifacts.actions[tabSeg(member)] = {
+      do: [tabToggle(member), ...TAB_DISARMS]
+    };
+    const display = markedDisplay(member);
+    artifacts.segments[tabSeg(member)] = {
+      template: `{{ ${disclosureTriggerCall(
+        tabSeg(member),
+        display(label2),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
+      )} }}`
+    };
+  }
+  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
+  declareSettingControls(artifacts);
+  return artifacts;
+}
+function declareSettingControls(artifacts) {
+  for (const c of CONTROLS) {
+    Object.assign(artifacts.actions, c.control.actions);
+    const reset = controlReset(c.name);
+    artifacts.actions[reset] = { reset: c.configKey };
+    artifacts.variables[controlResettable(c.name)] = {
+      kind: "input",
+      path: `resettable.${c.name}`,
+      type: "boolean",
+      default: false
+    };
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
+    Object.assign(artifacts.variables, c.control.variables);
+    artifacts.segments[controlSeg(c.name)] = {
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
+    };
+    if (c.control.kind === "picker") {
+      [
+        ...c.control.list.rows.map((template) => ({ template })),
+        ...c.beneath
+      ].forEach((row, i2) => {
+        artifacts.segments[controlRow(c.name, i2)] = row;
+      });
+    }
+  }
+  Object.assign(artifacts.actions, RESET_ALL.actions);
+  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
+  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
+  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
+  for (const name of SUBMENU_NAMES) {
+    const ref = submenuRef(name);
+    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
+      ref.key,
+      ref.member
+    );
+    artifacts.segments[submenuSeg(name)] = {
+      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
+    };
+  }
+}
+function ensureEditToggle(artifacts) {
+  const { variables, actions } = editModeArtifacts();
+  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.actions, actions);
+}
+function synthesizeSettingsMenu(config) {
+  const artifacts = settingsArtifacts(config.globals.menuGlyph ?? DOOR_GLYPH);
+  ensureEditToggle(artifacts);
+  const presets = { ...config.presets };
+  for (const name of presetNames(config.presets)) {
+    const { node } = presetRoot(config, name);
+    const root = expandAnchor(withAnchor(node));
+    presets[name] = { ...presetByName(config.presets, name), root };
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...artifacts.variables },
+    actions: { ...config.actions, ...artifacts.actions },
+    segments: { ...config.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/edit-chrome.ts
+var EDIT_LIVE_KEY = `${EDIT_NS}live`;
+var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
+var EDIT_DONE_SEG = `${EDIT_NS}done`;
+var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
+var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
+var EDIT_LIVE_REF = {
+  variable: EDIT_LIVE_KEY,
+  key: EDIT_LIVE_KEY,
+  member: DISCLOSURE_OPEN
+};
+function configuringVar(presetIdent) {
+  return `${EDIT_NS}configuring.p${presetIdent}`;
+}
+function namesView(presetIdent) {
+  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
+}
+function configuringDecl(members) {
+  const terms = members.map(
+    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
+  );
+  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
+}
+function inNamesView(presetIdent, verdict, when2) {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
+}
+var PRESET_CUSTOMIZED_VAR = "preset.customized";
+var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
+var isChromeExempt = isReservedName;
+function configOptionDomains(config) {
+  return new Map([
+    ...perConfigDomainsFor(config),
+    ...addableSegmentDomains(config)
+  ]);
+}
+var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
+function addableSegmentDomains(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      ADDABLE_DOMAIN,
+      {
+        members: Object.keys(config.segments).filter((n) => !isChromeExempt(n)),
+        library: {
+          groups: LIBRARY_GROUPS.map((id2) => ({
+            id: id2,
+            label: GROUP_LABELS[id2]
+          })),
+          entry: (option) => {
+            const decl = config.segments[option];
+            return {
+              group: decl.group ?? OTHER_GROUP,
+              ...decl.description !== void 0 && {
+                description: decl.description
+              }
+            };
+          }
+        }
+      }
+    ]
+  ]);
+}
+function chromeCell(name, template, artifacts) {
+  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
+  return { kind: "segment", name };
+}
+function removeTerm(ctx, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
+  ctx.artifacts.actions[actionName] = {
+    persist: ctx.rootKey,
+    removeSegment: id2
+  };
+  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
+}
+function inArrangeMode(term) {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
+}
+function shownWhile(refs, when2) {
+  return refs.reduce(
+    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+    when2
+  );
+}
+function configureRefsIn(nodes) {
+  return nodes.flatMap(
+    (node) => [...walkNodes(node)].flatMap(
+      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
+    )
+  );
+}
+function placementDraftKey(presetIdent, id2, setting) {
+  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
+}
+function configureParts(ctx, node, decls) {
+  const id2 = placementId(node);
+  const placement = escapedIdent(id2);
+  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
+  const member = configureMember(ctx.preset, id2);
+  ctx.configured.push(member);
+  const enter = `${prefix}.configure.${placement}`;
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold]
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member
+  };
+  const drafts = {};
+  const controls = Object.entries(decls).map(([name, decl]) => {
+    const key = placementDraftKey(ctx.presetIdent, id2, name);
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    ctx.artifacts.variables[variable] = {
+      kind: "state",
+      key,
+      default: settingSpelling(node.settings?.[name] ?? decl.default)
+    };
+    drafts[name] = { id: id2, key, variable };
+    const segName = `${prefix}.setting.${placement}.${name}`;
+    const control2 = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      listKey
+    );
+    Object.assign(ctx.artifacts.actions, control2.actions);
+    Object.assign(ctx.artifacts.variables, control2.variables);
+    if (control2.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control2.template };
+      return { kind: "segment", name: segName };
+    }
+    ctx.artifacts.segments[segName] = { template: control2.template };
+    const rows = control2.list.rows.map((template, row) => {
+      const listSeg = `${segName}.list.${row}`;
+      ctx.artifacts.segments[listSeg] = { template };
+      return { kind: "segment", name: listSeg };
+    });
+    return disclosureNode(
+      segName,
+      control2.list.ref,
+      { kind: "container", direction: "vertical", children: rows },
+      "drop"
+    );
+  });
+  return {
+    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
+    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
+    // One control per row, its list dropping below it when opened.
+    body: { kind: "container", direction: "vertical", children: controls },
+    drafts
+  };
+}
+var LABEL_NS = `${EDIT_NS}label:`;
+function arrangedSegment(name) {
+  if (name.startsWith(LABEL_NS)) {
+    const label2 = name.slice(LABEL_NS.length);
+    return label2.slice(label2.indexOf(":") + 1);
+  }
+  return name.startsWith(EDIT_NS) ? void 0 : name;
+}
+function labelChrome(child, decl, ctx, configure) {
+  const id2 = placementId(child);
+  const name = labelSegment(ctx, id2, child, decl, id2);
+  const settings = Object.fromEntries(
+    IMPLIED_SETTINGS.flatMap((setting) => {
+      const value = child.settings?.[setting];
+      return value === void 0 ? [] : [[setting, value]];
+    })
+  );
+  return {
+    ...disclosureNode(
+      name,
+      configure.ref,
+      configure.body,
+      "drop",
+      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
+    ),
+    ...Object.keys(settings).length > 0 && { settings },
+    drafts: Object.fromEntries(
+      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
+    )
+  };
+}
+function labelSegment(ctx, key, child, decl, text4) {
+  const name = `${LABEL_NS}${key}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
+    ...decl.palette !== void 0 && { palette: decl.palette }
+  };
+  return name;
+}
+function editableUnit(child, spliced, first2, ctx) {
+  const id2 = placementId(child);
+  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
+  const after = insertTerm(ctx, id2, "after");
+  const remove = removeTerm(ctx, id2);
+  const decl = ctx.segments[child.name];
+  const configure = configureParts(ctx, child, settingsOf(decl));
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map(
+      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts
+    },
+    chromeCell(after.host, after.template, ctx.artifacts)
+  ];
+}
+function fileLabel(file) {
+  return import_node_path26.default.join(import_node_path26.default.basename(import_node_path26.default.dirname(file)), import_node_path26.default.basename(file));
+}
+function insertedUnit(child, insertedBy, spliced, ctx) {
+  const decl = ctx.segments[child.name];
+  const id2 = placementId(child);
+  const label2 = {
+    kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/`, so the two names never meet.
+    name: labelSegment(
+      ctx,
+      `${id2}/${ctx.presetIdent}`,
+      child,
+      decl,
+      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`
+  };
+  return [
+    label2,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
+    }
+  ];
+}
+function insertTerm(ctx, anchor, relation) {
+  const { artifacts } = ctx;
+  const {
+    apply: applyName,
+    host: chromeSegName,
+    stateKey
+  } = insertGap(ctx.preset, anchor, relation);
+  artifacts.actions[applyName] = {
+    persist: ctx.rootKey,
+    insertSegmentFrom: ADDABLE_DOMAIN,
+    anchor,
+    relation
+  };
+  const member = menuMember(applyName);
+  const pageKey = menuPageKey(stateKey);
+  const identity2 = menuActionName(stateKey, member);
+  artifacts.variables[stateKey] = {
+    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF]
+  };
+  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
+  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
+  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return {
+    host: chromeSegName,
+    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
+  };
+}
+function insertGap(preset, anchor, relation) {
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
+  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
+}
+function spliceContainer(node, ctx) {
+  const children2 = [];
+  const firstContent = node.children.findIndex(
+    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
+  );
+  const splice2 = (body) => spliceContainer(body, ctx);
+  for (const [i2, child] of node.children.entries()) {
+    if (child.kind === "container") {
+      children2.push(splice2(child));
+      continue;
+    }
+    const spliced = mapOpens(child, splice2);
+    if (isChromeExempt(child.name)) {
+      children2.push(spliced);
+      continue;
+    }
+    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
+    const unit = {
+      kind: "container",
+      direction: "horizontal",
+      children: cells,
+      unit: true
+    };
+    children2.push(
+      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
+    );
+  }
+  return {
+    ...node,
+    children: children2,
+    ...node.when !== void 0 && {
+      when: shownWhile(
+        configureRefsIn(children2),
+        inNamesView(ctx.presetIdent, "true", node.when)
+      )
+    }
+  };
+}
+function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  artifacts.actions[actionName] = { reset: rootKey };
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
+    when: CUSTOMIZED_BANNER_GATE
+  };
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      // The ways out lead the top row, top left, where they are found without
+      // reopening the menu edit mode was entered from: keep or discard what
+      // was changed, restore the bundled layout, and the view toggle.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [...lead, { kind: "segment", name: chromeSegName }, live]
+      },
+      // The `(?)`'s body drops BELOW the row the trigger rides while the
+      // disclosure is open, like every other disclosure body in this codebase.
+      withTrailingCell(splicedRoot, tail)
+    ]
+  };
+}
+function withTrailingCell(node, cell3) {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell3]
+    };
+  }
+  const last2 = node.children.at(-1);
+  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
+    };
+  }
+  return { ...node, children: [...node.children, cell3] };
+}
+function spliceEditChromeForPreset(config, presetName, artifacts, lead, live, tail) {
+  const { node } = presetRoot(config, presetName);
+  const ctx = {
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
+    rootKey: presetRootKey(presetName),
+    segments: config.segments,
+    artifacts,
+    configured: []
+  };
+  const spliced = spliceContainer(node, ctx);
+  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
+    ctx.configured
+  );
+  return wrapWithPresetRows(
+    spliced,
+    ctx.presetIdent,
+    ctx.rootKey,
+    artifacts,
+    lead,
+    live,
+    tail
+  );
+}
+function synthesizeEditChrome(config) {
+  const artifacts = {
+    variables: {},
+    actions: {},
+    segments: {}
+  };
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts
+  );
+  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
+    EDIT_LIVE_KEY,
+    DISCLOSURE_CLOSED
+  );
+  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
+    EDIT_LIVE_KEY,
+    EDIT_LIVE_REF.member
+  );
+  artifacts.segments[EDIT_LIVE_KEY] = {
+    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
+    when: EDIT_MODE_GATE
+  };
+  const live = { kind: "segment", name: EDIT_LIVE_KEY };
+  const tail = help;
+  artifacts.variables[EDIT_CHANGES_VAR] = {
+    kind: "input",
+    path: "history.sinceEdit",
+    type: "number",
+    default: 0
+  };
+  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
+  artifacts.segments[EDIT_DONE_SEG] = {
+    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
+    when: EDIT_MODE_GATE
+  };
+  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
+  artifacts.segments[EDIT_CANCEL_SEG] = {
+    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+  };
+  const lead = [
+    { kind: "segment", name: EDIT_DONE_SEG },
+    { kind: "segment", name: EDIT_CANCEL_SEG }
+  ];
+  const presets = { ...config.presets };
+  for (const name of presetNames(config.presets)) {
+    const root = spliceEditChromeForPreset(
+      config,
+      name,
+      artifacts,
+      lead,
+      live,
+      tail
+    );
+    presets[name] = { ...presetByName(config.presets, name), root };
+  }
+  return {
+    ...config,
+    variables: { ...config.variables, ...artifacts.variables },
+    actions: { ...config.actions, ...artifacts.actions },
+    segments: { ...config.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/themes/index.ts
+init_globals();
+
+// src/dsl/node-registry.ts
+init_globals();
+
+// src/render/split-lines.ts
+init_globals();
+function splitCellsIntoLines(cells) {
+  const lines2 = [];
+  let current = [];
+  for (const cell3 of cells) {
+    if (!cell3.contains("\n")) {
+      current.push(cell3);
+      continue;
+    }
+    const pieces = cell3.split("\n");
+    current.push(pieces[0]);
+    for (let i2 = 1; i2 < pieces.length; i2++) {
+      lines2.push(current);
+      current = [pieces[i2]];
+    }
+  }
+  lines2.push(current);
+  return lines2;
+}
+
+// src/dsl/node-registry.ts
+function rowIdentities(lines2) {
+  const counts = /* @__PURE__ */ new Map();
+  return lines2.map((line) => {
+    const kind = `${line.place}.${line.band}`;
+    const nth = counts.get(kind) ?? 0;
+    counts.set(kind, nth + 1);
+    return { line, row: `${kind}#${nth}` };
+  });
+}
+var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
+function within2(parent, own2) {
+  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
+}
+function returnedBy(id2, lines2) {
+  const own2 = [];
+  const deeper = [];
+  let ground;
+  for (const line of lines2) {
+    (line.band === "own" ? own2 : deeper).push(line);
+    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
+  }
+  return {
+    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
+    deeper
+  };
+}
+function heldLine(line) {
+  return { ...line, cells: line.cells.map(heldCell) };
+}
+function composeBlocks(direction, blocks) {
+  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
+  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
+  return [...above, ...composeFlow(direction, flow3)];
+}
+function composeFlow(direction, blocks) {
+  switch (direction) {
+    case "vertical":
+      return blocks.flatMap((b) => b);
+    case "horizontal": {
+      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
+      if (height === 0) return [];
+      const row0 = {
+        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
+        band: "own",
+        place: "flow"
+      };
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return [row0, ...drops];
+    }
+  }
+}
+function layoutRows(node, shown) {
+  const lines2 = (n, address) => {
+    if (!shown(n)) return [];
+    if (n.kind === "segment") {
+      return [
+        {
+          cells: [{ name: n.name, address, settings: n.settings }],
+          band: "own",
+          place: "flow"
+        }
+      ];
+    }
+    return composeBlocks(
+      n.direction,
+      n.children.map(
+        (child, index) => lines2(child, [...address, childStep(n, index)])
+      )
+    );
+  };
+  return lines2(node, []).map((line) => [...line.cells]);
+}
+function childStep(node, index) {
+  return node.steps[index];
+}
+function spanOf(node) {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf2(laid), reach: reachOf(laid) };
+}
+function laidOut(node) {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
+  }
+  let start = 0;
+  return spans.map((span, i2) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i2) };
+  });
+}
+var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
+var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+function placeChildren(node, at) {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
+  return places.map((index) => ({
+    index,
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd
+  }));
+}
+var containerType = {
+  compile(node, cctx) {
+    const steps2 = placeChildren(node, cctx.at);
+    return {
+      kind: "container",
+      direction: node.direction,
+      when: cctx.when,
+      steps: steps2,
+      children: node.children.map(
+        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
+      )
+    };
+  },
+  render(node, ctx) {
+    if (ctx.gate.kind === "failed") ctx.gate.report();
+    return composeBlocks(
+      node.direction,
+      node.children.map(
+        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
+      )
+    );
+  }
+};
+var BODY_PLACE = {
+  drop: (line) => line.place,
+  above: () => "above"
+};
+var OPEN_LEAD = {
+  drop: (inline, close) => ({ lead: close(), stays: inline }),
+  above: (inline) => ({
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
+    stays: inline.slice(1)
+  })
+};
+var segmentType = {
+  compile(node, cctx) {
+    return {
+      kind: "segment",
+      when: cctx.when,
+      name: node.name,
+      id: placementId(node),
+      settings: cctx.placementSettings(node),
+      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
+      // predicate by the one `disclosureGate` every disclosure reads through.
+      ...node.opens !== void 0 && {
+        opens: {
+          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            void 0
+          ),
+          key: node.opens.ref.key,
+          placement: node.opens.placement
+        }
+      },
+      ...node.lead !== void 0 && {
+        lead: cctx.parse(node.lead, "lead")
+      },
+      ...node.trail !== void 0 && {
+        trail: cctx.parse(node.trail, "trail")
+      }
+    };
+  },
+  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
+  // hidden, gated off, drawn, broken — is reported to the session's record, so
+  // one that stops drawing leaves the bar as it was last drawn.
+  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+};
+function drawSegment(node, ctx) {
+  const seg2 = ctx.lookupSegment(node.name);
+  if (seg2 === void 0) {
+    throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  }
+  if (ctx.gate.kind === "hidden") return [];
+  const scope = placementScope(ctx.scope, node.settings);
+  if (ctx.gate.kind === "failed") {
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
+  }
+  try {
+    const parts = ctx.placement(node);
+    const gate2 = within2(ctx.gate, parts.gate());
+    if (gate2.kind === "failed") {
+      return brokenSegment(node, scope, ctx, gate2.message);
+    }
+    if (gate2.kind === "hidden") return [];
+    const ownBodyGate = parts.bodyGate();
+    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
+    if (bodyGate.kind === "failed") {
+      return brokenSegment(node, scope, ctx, bodyGate.message);
+    }
+    const palette = placementPalette(node.settings.theme, ctx.palette);
+    const placement = {
+      id: node.id,
+      effect: node.settings.effect,
+      ground: groundOf(palette)
+    };
+    const layoutOf = (baseStyle) => ({
+      width: seg2.width ?? "auto",
+      justify: seg2.justify ?? "left",
+      truncate: seg2.truncate ?? "right",
+      baseStyle,
+      // [LAW:dataflow-not-control-flow] Padding is uniform across every
+      // line a segment contributes — inline rows AND dropped menu bands —
+      // one value, no per-line-kind branch. The picker reserves 2×padding
+      // at its pagination seam so a padded band still fits the width
+      // budget.
+      padding: ctx.padding,
+      placement
+    });
+    const bodyOpen = bodyGate.kind === "shown";
+    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
+    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
+    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
+      node,
+      scope,
+      ctx,
+      own2.variable,
+      palette,
+      bodyOpen,
+      layoutOf
+    );
+    if (drawn === null) return [];
+    const { styles, inline: inlineLines, drops: dropLines } = drawn;
+    const opens = node.opens;
+    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
+      ...line,
+      place: BODY_PLACE[opens.placement](line)
+    }));
+    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
+      ...layoutOf(style),
+      width: "auto",
+      padding
+    });
+    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
+      inlineLines,
+      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
+    ) : { lead: [], stays: inlineLines };
+    const holdLead = openLead.flatMap(
+      (cell3) => leadCell(
+        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
+        styles.trigger,
+        0
+      )
+    );
+    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
+    const ledBody = bodyLines.map((line, i2) => ({
+      cells: [...leadOf(line, i2), ...line.cells],
+      band: "deeper",
+      place: line.place
+    }));
+    const laidLines = [...stays, ...dropLines];
+    ctx.segments.set(
+      node.id,
+      [
+        ...laidLines.flatMap((line) => line.cells),
+        ...bodyLines.flatMap(leadOf)
+      ].flatMap(cellParts)
+    );
+    return [...laidLines, ...ledBody];
+  } catch (err) {
+    return brokenSegment(
+      node,
+      scope,
+      ctx,
+      err.message ?? String(err)
+    );
+  }
+}
+var waitingOn = (variable) => ({
+  kind: "waiting",
+  variable
+});
+function ownAnswer(evaluate) {
+  try {
+    return { kind: "drawn", segment: evaluate() };
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 === void 0) throw err;
+    return waitingOn(pending2.variable);
+  }
+}
+function drawnRows2(segment, layoutOf) {
+  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
+  const baseStyle = open2 ? styles.trigger : styles.closed;
+  const layout = layoutOf(baseStyle);
+  const inline = splitCellsIntoLines(
+    fragmentsToCells(fragments, baseStyle)
+  ).map((line, i2) => ({
+    cells: applySegmentLayout(line, {
+      ...layout,
+      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
+      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
+    }),
+    band: "own",
+    place: "flow"
+  }));
+  return {
+    styles,
+    inline,
+    drops: drops.map((body) => ({
+      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
+        ...layout,
+        baseStyle: styles.band
+      }),
+      band: "deeper",
+      place: "flow"
+    }))
+  };
+}
+var LOADING_GLYPH = "\u2026";
+function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
+  ctx.waited(variable);
+  const last2 = ctx.lastDrawn(node.id);
+  if (last2?.kind === "hidden") return null;
+  const styles = ctx.decorations(node, palette);
+  const style = bodyOpen ? styles.trigger : styles.closed;
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
+  const trail = fragmentsToCells(
+    errorAffix(node.trail, node, scope, ctx),
+    style
+  );
+  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
+    (line) => line.cells.map((cell3) => cell3.text.cellLength)
+  );
+  return {
+    styles,
+    inline: rows.map((widths, row) => ({
+      cells: widths.flatMap((width, i2) => {
+        const first2 = row === 0 && i2 === 0;
+        return applySegmentLayout(
+          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
+          {
+            ...layoutOf(style),
+            width,
+            justify: "left",
+            truncate: "right",
+            lead: first2 ? lead : [],
+            trail: first2 ? trail : []
+          }
+        );
+      }),
+      band: "own",
+      place: "flow"
+    })),
+    drops: []
+  };
+}
+function cellsWidth(cells) {
+  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
+}
+function brokenSegment(node, scope, ctx, message2) {
+  ctx.brokenPlacement(node.id, message2);
+  const oneLine = message2.replace(/\s*\n\s*/g, " ");
+  return [
+    {
+      cells: applySegmentLayout(
+        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        {
+          width: "auto",
+          justify: "left",
+          truncate: "right",
+          padding: 0,
+          // It follows the bar, and fades in from the bar's ground: the
+          // failure it reports may be the read of this placement's own
+          // settings.
+          placement: {
+            id: node.id,
+            effect: FOLLOW_BAR,
+            ground: groundOf(ctx.palette)
+          },
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx)
+        }
+      ),
+      band: "own",
+      place: "flow"
+    }
+  ];
+}
+function errorAffix(affix, node, scope, ctx) {
+  if (affix === void 0) return [];
+  try {
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 !== void 0) ctx.waited(pending2.variable);
+    else ctx.brokenPlacement(node.id, err.message ?? String(err));
+    return [];
+  }
+}
+var REGISTRY = {
+  container: containerType,
+  segment: segmentType
+};
+function nodeType(kind) {
+  return REGISTRY[kind];
+}
+
+// src/dsl/parts.ts
+var SELECTION_OF = {
+  palette: "theme",
+  style: "style",
+  effect: "effect"
+};
+var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
+var COLOR_FLOOR = "truecolor";
+var UNDRAWN = {
+  width: 0,
+  chromeCols: 0,
+  padding: 0,
+  seamCols: 0,
+  preset: ""
+};
+function answerOf3(deriver) {
+  try {
+    return { ok: true, value: deriver() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+function unwrap2(answer2) {
+  if (answer2.ok) return answer2.value;
+  throw answer2.error;
+}
+var always = (value) => ({ read: () => value });
+var sameLook = sameBy({
+  basePalette: is,
+  palette: is,
+  decor: sameDecor
+});
+var ViewParts = class {
+  constructor(store, registry, source, view) {
+    this.store = store;
+    this.registry = registry;
+    this.source = source;
+    this.view = observable.box(view, { deep: false });
+    this.scope = buildScope(store);
+    this.depth = store.derive("drawn depth", "computed", () => {
+      const said2 = this.inputAt(COLOR_PATH);
+      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
+    });
+    const drawn = observable(UNDRAWN, void 0, { deep: false });
+    this.facts = drawn;
+    const look = this.look;
+    const phase = this.phase;
+    const layout = () => this.layout.read();
+    this.binding = {
+      store,
+      registry,
+      get width() {
+        return drawn.width;
+      },
+      get chromeCols() {
+        return drawn.chromeCols;
+      },
+      get padding() {
+        return drawn.padding;
+      },
+      get seamCols() {
+        return drawn.seamCols;
+      },
+      get look() {
+        return phase.ruling ? void 0 : look.get();
+      },
+      get layout() {
+        return phase.ruling ? void 0 : layout;
+      }
+    };
+    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
+      const root = source.roots.get(drawn.preset);
+      const palette = look.get().palette;
+      return layoutRows(root, (node) => this.shown(node)).map(
+        (row) => row.flatMap(({ name: placedName, address, settings }) => {
+          const name = arrangedSegment(placedName);
+          return name === void 0 ? [] : [
+            {
+              name,
+              address,
+              palette: placementPalette(settings.theme, palette)
+            }
+          ];
+        })
+      );
+    });
+    registry.bindInputs({
+      session: () => this.view.get().session,
+      read: (path32) => this.inputAt(path32),
+      run: (digest2) => this.view.get().run(digest2),
+      env: (name) => this.view.get().env(name),
+      drawnAt: () => drawnDepth(this.colorCompatibility())
+    });
+  }
+  store;
+  registry;
+  source;
+  // How many parts have derived since the view's first draw: what one draw
+  // adds is how many of its parts it evaluated.
+  evaluated = 0;
+  // [LAW:one-source-of-truth] The view's one scope. Its names are the
+  // store's when it is built, at the view's first draw: a view declares
+  // every variable before it is drawn.
+  scope;
+  binding;
+  facts;
+  look = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
+  });
+  layout;
+  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
+  // draw resolves its look — the look is what the rules decide — so while one
+  // is, the binding has neither look nor layout to give: a read is refused by
+  // name (renderLook, renderLayout), never answered with the last draw's.
+  // Read outside every kept part but the rule's own, which always runs here.
+  phase = { ruling: false };
+  gates = /* @__PURE__ */ new Map();
+  placements = /* @__PURE__ */ new Map();
+  rules = /* @__PURE__ */ new Map();
+  slots = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
+  // and its slots read it as it stands, never a copy a draw wrote.
+  view;
+  terminalWidth = observable.box(null);
+  // The draw in progress's own facts — the payload fields its instant answers
+  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
+  // the projections over them, which only a draw reads.
+  projected = void 0;
+  drawnSlots = /* @__PURE__ */ new Map();
+  // What the view draws from: a session view's source is bound once; a caller
+  // drawing a fixed payload binds each.
+  bind(view) {
+    runInAction(() => this.view.set(view));
+  }
+  // [LAW:no-ambient-temporal-coupling] An older request's terminal width is
+  // visible to the templates in this draw only. Restore it before the outer
+  // action ends so subscription reactions see the canonical view's inputs.
+  withTerminalWidth(width, draw2) {
+    return runInAction(() => {
+      const before = this.terminalWidth.get();
+      this.terminalWidth.set(width);
+      try {
+        return draw2();
+      } finally {
+        this.terminalWidth.set(before);
+      }
+    });
+  }
+  // The selections in force.
+  selections() {
+    return this.view.get().selections();
+  }
+  // The draw's facts, before it reads a part, and the payload fields its own
+  // instant answers.
+  draw(facts, projected) {
+    this.draws++;
+    this.projected = projected;
+    this.drawnSlots.clear();
+    runInAction(() => Object.assign(this.facts, facts));
+  }
+  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
+  // answers it: a selection's `.effective` its slot, a field of the instant
+  // the draw in progress, every other the view's payload.
+  inputAt(path32) {
+    const slot = slotAt(path32);
+    if (slot !== void 0) return found(this.slotName(slot));
+    if (drawProjectionAt(path32) !== void 0)
+      return resolvePath2(this.projected, path32);
+    if (path32 === "term.cols") {
+      const width = this.terminalWidth.get();
+      if (width !== null) return found(width);
+    }
+    return resolvePath2(this.view.get().payload(), path32);
+  }
+  // The depth the view's colour setting draws at: its floor while the payload
+  // has not said, or says something no depth is.
+  depth;
+  colorCompatibility() {
+    return this.depth.read();
+  }
+  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
+  // the rule's answer. A rule that reads no instant is kept: settled in the
+  // turn what it reads changes, so a cache policy over the slot's
+  // `.effective` re-runs then, never at a draw. A pending answer keeps the
+  // name last settled (the floor before any); a failure is the floor with
+  // its warning, which every draw reading the slot reports.
+  slot(slot) {
+    let node = this.slots.get(slot);
+    if (node === void 0) {
+      let last2;
+      const settle3 = () => {
+        const selection2 = this.selections()[SELECTION_OF[slot]];
+        if (selection2.kind === "decided")
+          return settled2(selection2.name, null, null);
+        const rule = compiledRule(this.source, slot, selection2.source);
+        if (this.source.instant.has(rule.template))
+          return { kind: "per-draw", rule };
+        const outcome = this.rule(rule.template);
+        switch (outcome.kind) {
+          case "named": {
+            let warning = null;
+            last2 = decideSlot(
+              this.source,
+              slot,
+              outcome.name,
+              rule.where,
+              (m) => {
+                warning = m;
+              }
+            );
+            return settled2(last2, warning, null);
+          }
+          case "pending":
+            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
+          case "failed":
+            last2 = SLOT_FLOORS[slot];
+            return settled2(
+              last2,
+              ruleFloorMessage(
+                rule.where,
+                slot,
+                `the rule failed \u2014 ${outcome.error}`
+              ),
+              null
+            );
+        }
+      };
+      let held;
+      node = this.store.derive(`slot ${slot}`, "computed", () => {
+        const next2 = settle3();
+        if (held === void 0 || !sameSlot(held, next2)) held = next2;
+        return held;
+      });
+      this.slots.set(slot, node);
+    }
+    return node.read();
+  }
+  // The name a slot's `.effective` reads: its settled name, or what this
+  // draw's rule settled on.
+  slotName(slot) {
+    const state = this.slot(slot);
+    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
+  }
+  // What a per-draw rule settled on in the draw in progress.
+  drawnSlot(slot, name) {
+    this.drawnSlots.set(slot, name);
+  }
+  // Which draw is in progress: a part that reads the instant answers once in it.
+  draws = 0;
+  // The look the draw resolved, before its walk.
+  publishLook(look) {
+    runInAction(() => this.look.set(look));
+  }
+  // A layout node's own `when`, as the walk asks it.
+  gate(node) {
+    const { when: when2 } = node;
+    if (when2 === void 0) return gateOf(when2, this.scope);
+    let part = this.gates.get(node);
+    if (part === void 0) {
+      part = this.derive(
+        "when",
+        this.readsInstant(when2),
+        () => outsideSegments(
+          this.source.activeSegment,
+          () => gateOf(when2, this.scope)
+        )
+      );
+      this.gates.set(node, part);
+    }
+    return part.read();
+  }
+  placement(node) {
+    let parts = this.placements.get(node);
+    if (parts === void 0) {
+      parts = new Placement(this, node);
+      this.placements.set(node, parts);
+    }
+    return parts;
+  }
+  rule(template) {
+    let part = this.rules.get(template);
+    if (part === void 0) {
+      part = this.derive(
+        "rule",
+        this.readsInstant(template),
+        () => {
+          this.phase.ruling = true;
+          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
+          try {
+            return {
+              kind: "named",
+              name: template.evaluate(this.scope).map((f) => f.plain).join("")
+            };
+          } catch (e) {
+            const pending2 = readPending(e);
+            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+              kind: "failed",
+              error: e instanceof Error ? e.message : String(e)
+            };
+          } finally {
+            bound?.[Symbol.dispose]();
+            this.phase.ruling = false;
+          }
+        }
+      );
+      this.rules.set(template, part);
+    }
+    return part.read();
+  }
+  readsInstant(...templates) {
+    return templates.some(
+      (template) => template !== void 0 && this.source.instant.has(template)
+    );
+  }
+  // [LAW:single-enforcer] Every part derives here: kept by the store, or
+  // derived at every read when it reads the instant, and counted.
+  // A part that reads the instant is derived once per draw however often the
+  // draw reads it — a body reads its colours, its lead and trail read both —
+  // since one draw is one instant over one store.
+  derive(name, readsInstant, deriver) {
+    const counted2 = () => {
+      this.evaluated++;
+      return deriver();
+    };
+    return this.store.derive(
+      `part ${name}`,
+      readsInstant ? "projection" : "computed",
+      readsInstant ? this.oncePerDraw(counted2) : counted2
+    );
+  }
+  oncePerDraw(deriver) {
+    let memo = null;
+    return () => {
+      if (memo?.draw !== this.draws) {
+        memo = { draw: this.draws, answer: answerOf3(deriver) };
+      }
+      return unwrap2(memo.answer);
+    };
+  }
+  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
+  // the rows a layout lays out are drawn by: a node's `when`, then a
+  // segment's own — and a segment either `when` of which throws is SHOWN,
+  // because the walk draws an error cell exactly there, where a container
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
+  shown(node) {
+    const gate2 = this.gate(node);
+    if (node.kind === "container")
+      return gate2.kind === "shown" || gate2.kind === "pending";
+    if (arrangedSegment(node.name) === void 0) return false;
+    if (gate2.kind === "hidden") return false;
+    if (gate2.kind === "failed") return true;
+    return this.placement(node).gate().kind !== "hidden";
+  }
+};
+function bindView(source, store, registry, view) {
+  const parts = source.views.get(store);
+  if (parts !== void 0) {
+    parts.bind(view);
+    return parts;
+  }
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
+}
+function partsOf(source, store) {
+  const parts = source.views.get(store);
+  if (parts === void 0) {
+    throw new Error(
+      "a store was drawn before its view was bound (bindView): its inputs have no source"
+    );
+  }
+  return parts;
+}
+var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
+var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
+function compiledRule(source, slot, rule) {
+  const compiled = source.globalExpressions.get(slot)?.get(rule);
+  if (compiled === void 0) {
+    throw new Error(
+      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
+    );
+  }
+  return compiled;
+}
+function decideSlot(source, slot, name, where, warn) {
+  switch (slot) {
+    case "palette":
+      return decideThemeName(name, where, warn).name;
+    case "style":
+      return decideStyleName(name, source.styles).name;
+    case "effect":
+      return decideEffectName(name).name;
+  }
+}
+var Placement = class {
+  // What the walk hands each part: where it draws the placement, then what
+  // the colours and the body evaluated to.
+  where = inlet(
+    sameBy({ palette: is, region: sameRegion })
+  );
+  ground = inlet(
+    sameBy({
+      colours: sameDealt,
+      bodyOpen: is
+    })
+  );
+  opened = inlet(
+    sameBy({
+      colours: sameDealt,
+      open: is
+    })
+  );
+  ownGate;
+  open;
+  colours;
+  body;
+  affixes;
+  constructor(view, node) {
+    const seg2 = view.source.segments[node.name];
+    const ref = view.source.activeSegment;
+    const scope = placementScope(view.scope, node.settings);
+    const { when: when2, bg, fg, template } = seg2;
+    const { lead, trail } = node;
+    const opens = node.opens?.open;
+    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
+      `${node.id} when`,
+      view.readsInstant(when2),
+      () => outsideSegments(ref, () => gateOf(when2, scope))
+    );
+    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
+      `${node.id} body gate`,
+      view.readsInstant(opens),
+      () => outsideSegments(ref, () => gateOf(opens, view.scope))
+    );
+    this.colours = view.derive(
+      `${node.id} colours`,
+      view.readsInstant(bg, fg),
+      () => {
+        const { palette, region } = this.where.get();
+        return coloursOf(
+          ref,
+          node,
+          palette,
+          region,
+          view.registry.drawnAt(),
+          bg,
+          fg,
+          scope
+        );
+      }
+    );
+    this.body = view.derive(
+      `${node.id} body`,
+      view.readsInstant(template),
+      () => {
+        const { colours, bodyOpen } = this.ground.get();
+        return bodyOf(ref, node, colours, template, bodyOpen, scope);
+      }
+    );
+    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
+      `${node.id} affixes`,
+      view.readsInstant(lead, trail),
+      () => {
+        const { colours, open: open2 } = this.opened.get();
+        return affixesOf(ref, node, colours, open2, lead, trail, scope);
+      }
+    );
+  }
+  gate() {
+    return this.ownGate.read();
+  }
+  bodyGate() {
+    return this.open.read();
+  }
+  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
+  // what the one before it evaluated to: the colours, then the body over its
+  // ground, then the lead and trail over what the body opened.
+  evaluate(palette, region) {
+    this.where.set({ palette, region });
+    const colours = this.colours.read();
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
+    const body = this.body.read();
+    this.opened.set({ colours, open: body.open });
+    return evaluated(colours, body, this.affixes.read());
+  }
+};
+function inlet(same2) {
+  const box = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
+  });
+  return {
+    set: (value) => runInAction(() => box.set(value)),
+    // [LAW:no-defensive-null-guards] Filled before it is read (above).
+    get: () => box.get()
+  };
+}
+var sameHex = (a, b) => a.hex === b.hex;
+var sameDealt = sameBy({
+  palette: is,
+  drawnAt: is,
+  tint: sameHex,
+  text: sameHex,
+  bg: sameHex,
+  disclosure: sameDisclosure
+});
+function placeOf(node, colours) {
+  return {
+    segName: node.name,
+    placementId: node.id,
+    palette: colours.palette,
+    disclosure: colours.disclosure,
+    tint: colours.tint,
+    text: colours.text
+  };
+}
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
+function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
+  const dealt = {
+    palette,
+    drawnAt,
+    ...decorationFor(palette, region, drawnAt)
+  };
+  return inSegment(ref, placeOf(node, dealt), (active2) => {
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
+    return { ...dealt, bg: active2.bg, style };
+  });
+}
+function bodyOf(ref, node, colours, template, bodyOpen, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
+    const fragments = template.evaluate(scope);
+    return {
+      fragments,
+      drops: active2.drops,
+      open: active2.drops.length > 0 || bodyOpen
+    };
+  });
+}
+function affixesOf(ref, node, colours, open2, lead, trail, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = open2 ? bandOf(colours).state : colours.bg;
+    return {
+      lead: lead?.evaluate(scope) ?? [],
+      trail: trail?.evaluate(scope) ?? [],
+      drops: active2.drops
+    };
+  });
+}
+var NO_AFFIXES = { lead: [], trail: [], drops: [] };
+function stylesOf(colours) {
+  const { palette, drawnAt, disclosure } = colours;
+  return {
+    closed: colours.style,
+    get trigger() {
+      return stateCell(palette, bandOf(colours).state, drawnAt);
+    },
+    get band() {
+      return stateCell(palette, bandOf(colours).plane, drawnAt);
+    },
+    get close() {
+      return closeCell(palette, bandOf(colours).state, drawnAt);
+    },
+    disclosure
+  };
+}
+function evaluated(colours, body, affixes) {
+  return {
+    styles: stylesOf(colours),
+    fragments: body.fragments,
+    lead: affixes.lead,
+    trail: affixes.trail,
+    drops: [...body.drops, ...affixes.drops],
+    open: body.open
+  };
+}
+function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
+  const colours = coloursOf(
+    ref,
+    node,
+    palette,
+    region,
+    drawnAt,
+    void 0,
+    void 0,
+    scope
+  );
+  return evaluated(
+    colours,
+    bodyOf(ref, node, colours, body, false, scope),
+    NO_AFFIXES
+  );
+}
+function decoratedStyles(ref, node, palette, region, drawnAt) {
+  return stylesOf(
+    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
+  );
+}
+
+// src/dsl/render.ts
+init_globals();
+
+// src/config/shell-env.ts
+init_globals();
+var SHELL_BASE_ENV = [
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOGNAME",
+  "PATH",
+  "SHELL",
+  "TMPDIR",
+  "USER",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_DIRS",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_DIRS",
+  "XDG_DATA_HOME",
+  "XDG_RUNTIME_DIR",
+  "XDG_STATE_HOME"
+];
+function shellEnvOf(declared = []) {
+  return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
+}
+
+// src/render/fill.ts
+init_globals();
+function wrapOffsets(plain, line, indent2) {
+  const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
+  const wrapping = held + plain;
+  const offsets = [];
+  let at = 0;
+  wrappedLines(wrapping, line).forEach((wrapped) => {
+    const content = wrapped.trimEnd();
+    const start = wrapping.indexOf(content, at);
+    if (content !== "" && start > held.length)
+      offsets.push(start - held.length);
+    at = start + content.length;
+  });
+  return offsets;
+}
+function takenOnLine(before, options) {
+  if (before.length === 0) return 0;
+  const { lines: lines2 } = drawStripCells(
+    before.map(({ owner }) => owner),
+    options
+  );
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
+  return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
+}
+function fits(cell3, line, options) {
+  if (cell3.cellLength <= line) return true;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
+}
+function dividedToLine(item, line, before, options) {
+  if (fits(item.owner, line, options)) return [item];
+  const text4 = item.owner.copy().expandTabs();
+  const indent2 = takenOnLine(before, options);
+  return text4.divide(wrapOffsets(text4.plain, line, indent2)).map((piece, i2) => ({
+    ...item,
+    owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
+  })).filter(
+    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
+  );
+}
+function fitRow(row, options) {
+  const line = Math.max(
+    WIDEST_GLYPH_COLS,
+    lineWidth(options) - stripChromeCols(options) - options.padding
+  );
+  return filled(row, options).reduce(
+    (fitted, item) => [
+      ...fitted,
+      ...dividedToLine(item, line, fitted, options)
+    ],
+    []
+  );
+}
+function filled(row, options) {
+  const items = () => row.map((cell3) => ({ owner: stripItem(cell3), placement: cell3.placement }));
+  const demands = [];
+  row.forEach(({ fill }, at) => {
+    if (fill !== void 0) demands.push({ at, how: fill });
+  });
+  if (demands.length === 0) return items();
+  if (!Number.isFinite(options.width)) return items();
+  const natural = drawStripCells(row.map(stripItem), options).lines;
+  if (natural.length > 1) return items();
+  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
+  const share = Math.floor(deficit / demands.length);
+  const remainder = deficit - share * demands.length;
+  demands.forEach(({ at, how }, i2) => {
+    const grow = share + (i2 === demands.length - 1 ? remainder : 0);
+    const { text: text4 } = row[at];
+    sizeCell(text4, text4.cellLength + grow, how);
+  });
+  return items();
+}
+
+// src/render/frame-memory.ts
+init_globals();
+function recordFrom(last2, source) {
+  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+}
+function beginRecord(source, returned2) {
+  const placements = /* @__PURE__ */ new Map();
+  const rules = /* @__PURE__ */ new Map();
+  return {
+    placed: (id2, lines2) => {
+      const { drawing: drawing2 } = returned2(id2, lines2);
+      placements.set(
+        id2,
+        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+      );
+      return lines2;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: (passages) => ({ source, placements, rules, passages })
+  };
+}
+var HIDDEN_RECORD = { kind: "hidden" };
+
+// src/render/disclosure-close.ts
+init_globals();
+function disclosureCloseFragment(sessionId2, key) {
+  return linkFragment(
+    DISCLOSURE_GLYPH_CLOSE,
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [sessionId2, key, DISCLOSURE_CLOSED]
+      }
+    ]),
+    false
+  );
+}
+
+// src/render/picker.ts
+init_globals();
 
 // src/render/option-paint.ts
 init_globals();
@@ -74934,65 +76079,6 @@ function chunk2(items, size) {
 }
 function fitCells(text4, width) {
   return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
-}
-
-// src/render/active-segment.ts
-init_globals();
-function createActiveSegmentRef(drawnAt) {
-  return { current: null, drawnAt };
-}
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
-  const active2 = {
-    segName,
-    placementId: placementId2,
-    palette,
-    disclosure,
-    tint,
-    text: text4,
-    bg: void 0,
-    drops: []
-  };
-  ref.current = active2;
-  return active2;
-}
-function inSegment(ref, place, run3) {
-  return publishing(
-    ref,
-    () => run3(
-      openSegment(
-        ref,
-        place.segName,
-        place.placementId,
-        place.palette,
-        place.disclosure,
-        place.tint,
-        place.text
-      )
-    )
-  );
-}
-function outsideSegments(ref, run3) {
-  return publishing(ref, () => {
-    ref.current = null;
-    return run3();
-  });
-}
-function publishing(ref, run3) {
-  const prior = ref.current;
-  try {
-    return run3();
-  } finally {
-    ref.current = prior;
-  }
-}
-function requireActiveSegment(ref, spelling) {
-  const active2 = ref.current;
-  if (active2 === null) {
-    throw new Error(
-      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
-    );
-  }
-  return active2;
 }
 
 // src/render/picker.ts
@@ -75880,1037 +76966,6 @@ function variableScopes(config) {
     SCOPES.set(config, scopes);
   }
   return scopes;
-}
-
-// src/dsl/parts.ts
-init_globals();
-
-// src/dsl/node-registry.ts
-init_globals();
-
-// src/render/split-lines.ts
-init_globals();
-function splitCellsIntoLines(cells) {
-  const lines2 = [];
-  let current = [];
-  for (const cell3 of cells) {
-    if (!cell3.contains("\n")) {
-      current.push(cell3);
-      continue;
-    }
-    const pieces = cell3.split("\n");
-    current.push(pieces[0]);
-    for (let i2 = 1; i2 < pieces.length; i2++) {
-      lines2.push(current);
-      current = [pieces[i2]];
-    }
-  }
-  lines2.push(current);
-  return lines2;
-}
-
-// src/dsl/node-registry.ts
-function rowIdentities(lines2) {
-  const counts = /* @__PURE__ */ new Map();
-  return lines2.map((line) => {
-    const kind = `${line.place}.${line.band}`;
-    const nth = counts.get(kind) ?? 0;
-    counts.set(kind, nth + 1);
-    return { line, row: `${kind}#${nth}` };
-  });
-}
-var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
-function within2(parent, own2) {
-  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
-}
-function returnedBy(id2, lines2) {
-  const own2 = [];
-  const deeper = [];
-  let ground;
-  for (const line of lines2) {
-    (line.band === "own" ? own2 : deeper).push(line);
-    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
-  }
-  return {
-    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
-    deeper
-  };
-}
-function heldLine(line) {
-  return { ...line, cells: line.cells.map(heldCell) };
-}
-function composeBlocks(direction, blocks) {
-  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
-  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
-  return [...above, ...composeFlow(direction, flow3)];
-}
-function composeFlow(direction, blocks) {
-  switch (direction) {
-    case "vertical":
-      return blocks.flatMap((b) => b);
-    case "horizontal": {
-      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      if (height === 0) return [];
-      const row0 = {
-        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
-        band: "own",
-        place: "flow"
-      };
-      const drops = blocks.flatMap((b) => b.slice(1));
-      return [row0, ...drops];
-    }
-  }
-}
-function layoutRows(node, shown) {
-  const lines2 = (n, address) => {
-    if (!shown(n)) return [];
-    if (n.kind === "segment") {
-      return [
-        {
-          cells: [{ name: n.name, address, settings: n.settings }],
-          band: "own",
-          place: "flow"
-        }
-      ];
-    }
-    return composeBlocks(
-      n.direction,
-      n.children.map(
-        (child, index) => lines2(child, [...address, childStep(n, index)])
-      )
-    );
-  };
-  return lines2(node, []).map((line) => [...line.cells]);
-}
-function childStep(node, index) {
-  return node.steps[index];
-}
-function spanOf(node) {
-  if (node.kind === "segment" || node.unit === true) {
-    return { width: 1, reach: 1 };
-  }
-  const laid = laidOut(node);
-  return { width: widthOf2(laid), reach: reachOf(laid) };
-}
-function laidOut(node) {
-  const spans = node.children.map(spanOf);
-  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
-  if (node.direction === "vertical" || node.unit === true) {
-    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
-  }
-  let start = 0;
-  return spans.map((span, i2) => {
-    const at = start;
-    start += span.width;
-    return { start: at, span, ownLine: ownLine(i2) };
-  });
-}
-var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
-var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
-function placeChildren(node, at) {
-  const laid = laidOut(node);
-  if (at?.axis === "cell") {
-    return laid.map(({ start, span, ownLine }) => {
-      const index = at.index + start;
-      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
-    });
-  }
-  const axis = AXIS_OF[node.direction];
-  const distribution = placedBy(node.distribution);
-  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
-  return places.map((index) => ({
-    index,
-    count,
-    distribution,
-    axis,
-    lineStart: 0,
-    lineEnd
-  }));
-}
-var containerType = {
-  compile(node, cctx) {
-    const steps2 = placeChildren(node, cctx.at);
-    return {
-      kind: "container",
-      direction: node.direction,
-      when: cctx.when,
-      steps: steps2,
-      children: node.children.map(
-        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
-      )
-    };
-  },
-  render(node, ctx) {
-    if (ctx.gate.kind === "failed") ctx.gate.report();
-    return composeBlocks(
-      node.direction,
-      node.children.map(
-        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
-      )
-    );
-  }
-};
-var BODY_PLACE = {
-  drop: (line) => line.place,
-  above: () => "above"
-};
-var OPEN_LEAD = {
-  drop: (inline, close) => ({ lead: close(), stays: inline }),
-  above: (inline) => ({
-    lead: inline.slice(0, 1).flatMap((line) => line.cells),
-    stays: inline.slice(1)
-  })
-};
-var segmentType = {
-  compile(node, cctx) {
-    return {
-      kind: "segment",
-      when: cctx.when,
-      name: node.name,
-      id: placementId(node),
-      settings: cctx.placementSettings(node),
-      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
-      // predicate by the one `disclosureGate` every disclosure reads through.
-      ...node.opens !== void 0 && {
-        opens: {
-          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          // A body roots a band: its first step is placed afresh.
-          body: cctx.compileChild(
-            node.opens.body,
-            bodyPath(cctx.path),
-            void 0
-          ),
-          key: node.opens.ref.key,
-          placement: node.opens.placement
-        }
-      },
-      ...node.lead !== void 0 && {
-        lead: cctx.parse(node.lead, "lead")
-      },
-      ...node.trail !== void 0 && {
-        trail: cctx.parse(node.trail, "trail")
-      }
-    };
-  },
-  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
-  // hidden, gated off, drawn, broken — is reported to the session's record, so
-  // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
-};
-function drawSegment(node, ctx) {
-  const seg2 = ctx.lookupSegment(node.name);
-  if (seg2 === void 0) {
-    throw new Error(`Layout segment "${node.name}" has no matching segment`);
-  }
-  if (ctx.gate.kind === "hidden") return [];
-  const scope = placementScope(ctx.scope, node.settings);
-  if (ctx.gate.kind === "failed") {
-    return brokenSegment(node, scope, ctx, ctx.gate.message);
-  }
-  try {
-    const parts = ctx.placement(node);
-    const gate2 = within2(ctx.gate, parts.gate());
-    if (gate2.kind === "failed") {
-      return brokenSegment(node, scope, ctx, gate2.message);
-    }
-    if (gate2.kind === "hidden") return [];
-    const ownBodyGate = parts.bodyGate();
-    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
-    if (bodyGate.kind === "failed") {
-      return brokenSegment(node, scope, ctx, bodyGate.message);
-    }
-    const palette = placementPalette(node.settings.theme, ctx.palette);
-    const placement = {
-      id: node.id,
-      effect: node.settings.effect,
-      ground: groundOf(palette)
-    };
-    const layoutOf = (baseStyle) => ({
-      width: seg2.width ?? "auto",
-      justify: seg2.justify ?? "left",
-      truncate: seg2.truncate ?? "right",
-      baseStyle,
-      // [LAW:dataflow-not-control-flow] Padding is uniform across every
-      // line a segment contributes — inline rows AND dropped menu bands —
-      // one value, no per-line-kind branch. The picker reserves 2×padding
-      // at its pagination seam so a padded band still fits the width
-      // budget.
-      padding: ctx.padding,
-      placement
-    });
-    const bodyOpen = bodyGate.kind === "shown";
-    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
-    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
-    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
-      node,
-      scope,
-      ctx,
-      own2.variable,
-      palette,
-      bodyOpen,
-      layoutOf
-    );
-    if (drawn === null) return [];
-    const { styles, inline: inlineLines, drops: dropLines } = drawn;
-    const opens = node.opens;
-    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
-      ...line,
-      place: BODY_PLACE[opens.placement](line)
-    }));
-    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
-      ...layoutOf(style),
-      width: "auto",
-      padding
-    });
-    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
-      inlineLines,
-      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
-    ) : { lead: [], stays: inlineLines };
-    const holdLead = openLead.flatMap(
-      (cell3) => leadCell(
-        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
-        styles.trigger,
-        0
-      )
-    );
-    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
-    const ledBody = bodyLines.map((line, i2) => ({
-      cells: [...leadOf(line, i2), ...line.cells],
-      band: "deeper",
-      place: line.place
-    }));
-    const laidLines = [...stays, ...dropLines];
-    ctx.segments.set(
-      node.id,
-      [
-        ...laidLines.flatMap((line) => line.cells),
-        ...bodyLines.flatMap(leadOf)
-      ].flatMap(cellParts)
-    );
-    return [...laidLines, ...ledBody];
-  } catch (err) {
-    return brokenSegment(
-      node,
-      scope,
-      ctx,
-      err.message ?? String(err)
-    );
-  }
-}
-var waitingOn = (variable) => ({
-  kind: "waiting",
-  variable
-});
-function ownAnswer(evaluate) {
-  try {
-    return { kind: "drawn", segment: evaluate() };
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 === void 0) throw err;
-    return waitingOn(pending2.variable);
-  }
-}
-function drawnRows2(segment, layoutOf) {
-  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
-  const baseStyle = open2 ? styles.trigger : styles.closed;
-  const layout = layoutOf(baseStyle);
-  const inline = splitCellsIntoLines(
-    fragmentsToCells(fragments, baseStyle)
-  ).map((line, i2) => ({
-    cells: applySegmentLayout(line, {
-      ...layout,
-      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
-      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
-    }),
-    band: "own",
-    place: "flow"
-  }));
-  return {
-    styles,
-    inline,
-    drops: drops.map((body) => ({
-      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
-        ...layout,
-        baseStyle: styles.band
-      }),
-      band: "deeper",
-      place: "flow"
-    }))
-  };
-}
-var LOADING_GLYPH = "\u2026";
-function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
-  ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
-  if (last2?.kind === "hidden") return null;
-  const styles = ctx.decorations(node, palette);
-  const style = bodyOpen ? styles.trigger : styles.closed;
-  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
-  const trail = fragmentsToCells(
-    errorAffix(node.trail, node, scope, ctx),
-    style
-  );
-  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
-    (line) => line.cells.map((cell3) => cell3.text.cellLength)
-  );
-  return {
-    styles,
-    inline: rows.map((widths, row) => ({
-      cells: widths.flatMap((width, i2) => {
-        const first2 = row === 0 && i2 === 0;
-        return applySegmentLayout(
-          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
-          {
-            ...layoutOf(style),
-            width,
-            justify: "left",
-            truncate: "right",
-            lead: first2 ? lead : [],
-            trail: first2 ? trail : []
-          }
-        );
-      }),
-      band: "own",
-      place: "flow"
-    })),
-    drops: []
-  };
-}
-function cellsWidth(cells) {
-  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
-}
-function brokenSegment(node, scope, ctx, message2) {
-  ctx.brokenPlacement(node.id, message2);
-  const oneLine = message2.replace(/\s*\n\s*/g, " ");
-  return [
-    {
-      cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
-        {
-          width: "auto",
-          justify: "left",
-          truncate: "right",
-          padding: 0,
-          // It follows the bar, and fades in from the bar's ground: the
-          // failure it reports may be the read of this placement's own
-          // settings.
-          placement: {
-            id: node.id,
-            effect: FOLLOW_BAR,
-            ground: groundOf(ctx.palette)
-          },
-          lead: errorAffix(node.lead, node, scope, ctx),
-          trail: errorAffix(node.trail, node, scope, ctx)
-        }
-      ),
-      band: "own",
-      place: "flow"
-    }
-  ];
-}
-function errorAffix(affix, node, scope, ctx) {
-  if (affix === void 0) return [];
-  try {
-    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.brokenPlacement(node.id, err.message ?? String(err));
-    return [];
-  }
-}
-var REGISTRY = {
-  container: containerType,
-  segment: segmentType
-};
-function nodeType(kind) {
-  return REGISTRY[kind];
-}
-
-// src/dsl/parts.ts
-var SELECTION_OF = {
-  palette: "theme",
-  style: "style",
-  effect: "effect"
-};
-var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
-var COLOR_FLOOR = "truecolor";
-var UNDRAWN = {
-  width: 0,
-  chromeCols: 0,
-  padding: 0,
-  seamCols: 0,
-  preset: ""
-};
-function answerOf3(deriver) {
-  try {
-    return { ok: true, value: deriver() };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-function unwrap2(answer2) {
-  if (answer2.ok) return answer2.value;
-  throw answer2.error;
-}
-var always = (value) => ({ read: () => value });
-var sameLook = sameBy({
-  basePalette: is,
-  palette: is,
-  decor: sameDecor
-});
-var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
-    this.registry = registry;
-    this.source = source;
-    this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
-      const said2 = this.inputAt(COLOR_PATH);
-      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
-    });
-    const drawn = observable(UNDRAWN, void 0, { deep: false });
-    this.facts = drawn;
-    const look = this.look;
-    const phase = this.phase;
-    const layout = () => this.layout.read();
-    this.binding = {
-      store,
-      registry,
-      get width() {
-        return drawn.width;
-      },
-      get chromeCols() {
-        return drawn.chromeCols;
-      },
-      get padding() {
-        return drawn.padding;
-      },
-      get seamCols() {
-        return drawn.seamCols;
-      },
-      get look() {
-        return phase.ruling ? void 0 : look.get();
-      },
-      get layout() {
-        return phase.ruling ? void 0 : layout;
-      }
-    };
-    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
-      const root = source.roots.get(drawn.preset);
-      const palette = look.get().palette;
-      return layoutRows(root, (node) => this.shown(node)).map(
-        (row) => row.flatMap(({ name: placedName, address, settings }) => {
-          const name = arrangedSegment(placedName);
-          return name === void 0 ? [] : [
-            {
-              name,
-              address,
-              palette: placementPalette(settings.theme, palette)
-            }
-          ];
-        })
-      );
-    });
-    registry.bindInputs({
-      session: () => this.view.get().session,
-      read: (path32) => this.inputAt(path32),
-      run: (digest2) => this.view.get().run(digest2),
-      env: (name) => this.view.get().env(name),
-      drawnAt: () => drawnDepth(this.colorCompatibility())
-    });
-  }
-  store;
-  registry;
-  source;
-  // How many parts have derived since the view's first draw: what one draw
-  // adds is how many of its parts it evaluated.
-  evaluated = 0;
-  // [LAW:one-source-of-truth] The view's one scope. Its names are the
-  // store's when it is built, at the view's first draw: a view declares
-  // every variable before it is drawn.
-  scope;
-  binding;
-  facts;
-  look = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
-  });
-  layout;
-  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
-  // draw resolves its look — the look is what the rules decide — so while one
-  // is, the binding has neither look nor layout to give: a read is refused by
-  // name (renderLook, renderLayout), never answered with the last draw's.
-  // Read outside every kept part but the rule's own, which always runs here.
-  phase = { ruling: false };
-  gates = /* @__PURE__ */ new Map();
-  placements = /* @__PURE__ */ new Map();
-  rules = /* @__PURE__ */ new Map();
-  slots = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
-  // and its slots read it as it stands, never a copy a draw wrote.
-  view;
-  // The draw in progress's own facts — the payload fields its instant answers
-  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
-  // the projections over them, which only a draw reads.
-  projected = void 0;
-  drawnSlots = /* @__PURE__ */ new Map();
-  // What the view draws from: a session view's source is bound once; a caller
-  // drawing a fixed payload binds each.
-  bind(view) {
-    runInAction(() => this.view.set(view));
-  }
-  // The selections in force.
-  selections() {
-    return this.view.get().selections();
-  }
-  // The draw's facts, before it reads a part, and the payload fields its own
-  // instant answers.
-  draw(facts, projected) {
-    this.draws++;
-    this.projected = projected;
-    this.drawnSlots.clear();
-    runInAction(() => Object.assign(this.facts, facts));
-  }
-  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
-  // answers it: a selection's `.effective` its slot, a field of the instant
-  // the draw in progress, every other the view's payload.
-  inputAt(path32) {
-    const slot = slotAt(path32);
-    if (slot !== void 0) return found(this.slotName(slot));
-    if (drawProjectionAt(path32) !== void 0)
-      return resolvePath2(this.projected, path32);
-    return resolvePath2(this.view.get().payload(), path32);
-  }
-  // The depth the view's colour setting draws at: its floor while the payload
-  // has not said, or says something no depth is.
-  depth;
-  colorCompatibility() {
-    return this.depth.read();
-  }
-  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
-  // the rule's answer. A rule that reads no instant is kept: settled in the
-  // turn what it reads changes, so a cache policy over the slot's
-  // `.effective` re-runs then, never at a draw. A pending answer keeps the
-  // name last settled (the floor before any); a failure is the floor with
-  // its warning, which every draw reading the slot reports.
-  slot(slot) {
-    let node = this.slots.get(slot);
-    if (node === void 0) {
-      let last2;
-      const settle3 = () => {
-        const selection2 = this.selections()[SELECTION_OF[slot]];
-        if (selection2.kind === "decided")
-          return settled2(selection2.name, null, null);
-        const rule = compiledRule(this.source, slot, selection2.source);
-        if (this.source.instant.has(rule.template))
-          return { kind: "per-draw", rule };
-        const outcome = this.rule(rule.template);
-        switch (outcome.kind) {
-          case "named": {
-            let warning = null;
-            last2 = decideSlot(
-              this.source,
-              slot,
-              outcome.name,
-              rule.where,
-              (m) => {
-                warning = m;
-              }
-            );
-            return settled2(last2, warning, null);
-          }
-          case "pending":
-            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
-          case "failed":
-            last2 = SLOT_FLOORS[slot];
-            return settled2(
-              last2,
-              ruleFloorMessage(
-                rule.where,
-                slot,
-                `the rule failed \u2014 ${outcome.error}`
-              ),
-              null
-            );
-        }
-      };
-      let held;
-      node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next2 = settle3();
-        if (held === void 0 || !sameSlot(held, next2)) held = next2;
-        return held;
-      });
-      this.slots.set(slot, node);
-    }
-    return node.read();
-  }
-  // The name a slot's `.effective` reads: its settled name, or what this
-  // draw's rule settled on.
-  slotName(slot) {
-    const state = this.slot(slot);
-    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
-  }
-  // What a per-draw rule settled on in the draw in progress.
-  drawnSlot(slot, name) {
-    this.drawnSlots.set(slot, name);
-  }
-  // Which draw is in progress: a part that reads the instant answers once in it.
-  draws = 0;
-  // The look the draw resolved, before its walk.
-  publishLook(look) {
-    runInAction(() => this.look.set(look));
-  }
-  // A layout node's own `when`, as the walk asks it.
-  gate(node) {
-    const { when: when2 } = node;
-    if (when2 === void 0) return gateOf2(when2, this.scope);
-    let part = this.gates.get(node);
-    if (part === void 0) {
-      part = this.derive(
-        "when",
-        this.readsInstant(when2),
-        () => outsideSegments(
-          this.source.activeSegment,
-          () => gateOf2(when2, this.scope)
-        )
-      );
-      this.gates.set(node, part);
-    }
-    return part.read();
-  }
-  placement(node) {
-    let parts = this.placements.get(node);
-    if (parts === void 0) {
-      parts = new Placement(this, node);
-      this.placements.set(node, parts);
-    }
-    return parts;
-  }
-  rule(template) {
-    let part = this.rules.get(template);
-    if (part === void 0) {
-      part = this.derive(
-        "rule",
-        this.readsInstant(template),
-        () => {
-          this.phase.ruling = true;
-          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
-          try {
-            return {
-              kind: "named",
-              name: template.evaluate(this.scope).map((f) => f.plain).join("")
-            };
-          } catch (e) {
-            const pending2 = readPending(e);
-            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-              kind: "failed",
-              error: e instanceof Error ? e.message : String(e)
-            };
-          } finally {
-            bound?.[Symbol.dispose]();
-            this.phase.ruling = false;
-          }
-        }
-      );
-      this.rules.set(template, part);
-    }
-    return part.read();
-  }
-  readsInstant(...templates) {
-    return templates.some(
-      (template) => template !== void 0 && this.source.instant.has(template)
-    );
-  }
-  // [LAW:single-enforcer] Every part derives here: kept by the store, or
-  // derived at every read when it reads the instant, and counted.
-  // A part that reads the instant is derived once per draw however often the
-  // draw reads it — a body reads its colours, its lead and trail read both —
-  // since one draw is one instant over one store.
-  derive(name, readsInstant, deriver) {
-    const counted2 = () => {
-      this.evaluated++;
-      return deriver();
-    };
-    return this.store.derive(
-      `part ${name}`,
-      readsInstant ? "projection" : "computed",
-      readsInstant ? this.oncePerDraw(counted2) : counted2
-    );
-  }
-  oncePerDraw(deriver) {
-    let memo = null;
-    return () => {
-      if (memo?.draw !== this.draws) {
-        memo = { draw: this.draws, answer: answerOf3(deriver) };
-      }
-      return unwrap2(memo.answer);
-    };
-  }
-  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
-  // the rows a layout lays out are drawn by: a node's `when`, then a
-  // segment's own — and a segment either `when` of which throws is SHOWN,
-  // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. A `when` not answered yet is shown,
-  // and under it a segment as its own `when` says, as the walk asks it. Edit
-  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
-  // part of it, while a name label stands in for its segment
-  // (`arrangedSegment`).
-  shown(node) {
-    const gate2 = this.gate(node);
-    if (node.kind === "container")
-      return gate2.kind === "shown" || gate2.kind === "pending";
-    if (arrangedSegment(node.name) === void 0) return false;
-    if (gate2.kind === "hidden") return false;
-    if (gate2.kind === "failed") return true;
-    return this.placement(node).gate().kind !== "hidden";
-  }
-};
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
-  if (parts !== void 0) {
-    parts.bind(view);
-    return parts;
-  }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
-  return made;
-}
-function partsOf(source, store) {
-  const parts = source.views.get(store);
-  if (parts === void 0) {
-    throw new Error(
-      "a store was drawn before its view was bound (bindView): its inputs have no source"
-    );
-  }
-  return parts;
-}
-var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
-var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
-function compiledRule(source, slot, rule) {
-  const compiled = source.globalExpressions.get(slot)?.get(rule);
-  if (compiled === void 0) {
-    throw new Error(
-      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
-    );
-  }
-  return compiled;
-}
-function decideSlot(source, slot, name, where, warn) {
-  switch (slot) {
-    case "palette":
-      return decideThemeName(name, where, warn).name;
-    case "style":
-      return decideStyleName(name, source.styles).name;
-    case "effect":
-      return decideEffectName(name).name;
-  }
-}
-var Placement = class {
-  // What the walk hands each part: where it draws the placement, then what
-  // the colours and the body evaluated to.
-  where = inlet(
-    sameBy({ palette: is, region: sameRegion })
-  );
-  ground = inlet(
-    sameBy({
-      colours: sameDealt,
-      bodyOpen: is
-    })
-  );
-  opened = inlet(
-    sameBy({
-      colours: sameDealt,
-      open: is
-    })
-  );
-  ownGate;
-  open;
-  colours;
-  body;
-  affixes;
-  constructor(view, node) {
-    const seg2 = view.source.segments[node.name];
-    const ref = view.source.activeSegment;
-    const scope = placementScope(view.scope, node.settings);
-    const { when: when2, bg, fg, template } = seg2;
-    const { lead, trail } = node;
-    const opens = node.opens?.open;
-    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
-      view.readsInstant(when2),
-      () => outsideSegments(ref, () => gateOf2(when2, scope))
-    );
-    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
-      view.readsInstant(opens),
-      () => outsideSegments(ref, () => gateOf2(opens, view.scope))
-    );
-    this.colours = view.derive(
-      `${node.id} colours`,
-      view.readsInstant(bg, fg),
-      () => {
-        const { palette, region } = this.where.get();
-        return coloursOf(
-          ref,
-          node,
-          palette,
-          region,
-          view.registry.drawnAt(),
-          bg,
-          fg,
-          scope
-        );
-      }
-    );
-    this.body = view.derive(
-      `${node.id} body`,
-      view.readsInstant(template),
-      () => {
-        const { colours, bodyOpen } = this.ground.get();
-        return bodyOf(ref, node, colours, template, bodyOpen, scope);
-      }
-    );
-    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
-      view.readsInstant(lead, trail),
-      () => {
-        const { colours, open: open2 } = this.opened.get();
-        return affixesOf(ref, node, colours, open2, lead, trail, scope);
-      }
-    );
-  }
-  gate() {
-    return this.ownGate.read();
-  }
-  bodyGate() {
-    return this.open.read();
-  }
-  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
-  // what the one before it evaluated to: the colours, then the body over its
-  // ground, then the lead and trail over what the body opened.
-  evaluate(palette, region) {
-    this.where.set({ palette, region });
-    const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
-    const body = this.body.read();
-    this.opened.set({ colours, open: body.open });
-    return evaluated(colours, body, this.affixes.read());
-  }
-};
-function inlet(same2) {
-  const box = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
-  });
-  return {
-    set: (value) => runInAction(() => box.set(value)),
-    // [LAW:no-defensive-null-guards] Filled before it is read (above).
-    get: () => box.get()
-  };
-}
-var sameHex = (a, b) => a.hex === b.hex;
-var sameDealt = sameBy({
-  palette: is,
-  drawnAt: is,
-  tint: sameHex,
-  text: sameHex,
-  bg: sameHex,
-  disclosure: sameDisclosure
-});
-function placeOf(node, colours) {
-  return {
-    segName: node.name,
-    placementId: node.id,
-    palette: colours.palette,
-    disclosure: colours.disclosure,
-    tint: colours.tint,
-    text: colours.text
-  };
-}
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
-function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
-  const dealt = {
-    palette,
-    drawnAt,
-    ...decorationFor(palette, region, drawnAt)
-  };
-  return inSegment(ref, placeOf(node, dealt), (active2) => {
-    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
-    return { ...dealt, bg: active2.bg, style };
-  });
-}
-function bodyOf(ref, node, colours, template, bodyOpen, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
-    const fragments = template.evaluate(scope);
-    return {
-      fragments,
-      drops: active2.drops,
-      open: active2.drops.length > 0 || bodyOpen
-    };
-  });
-}
-function affixesOf(ref, node, colours, open2, lead, trail, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = open2 ? bandOf(colours).state : colours.bg;
-    return {
-      lead: lead?.evaluate(scope) ?? [],
-      trail: trail?.evaluate(scope) ?? [],
-      drops: active2.drops
-    };
-  });
-}
-var NO_AFFIXES = { lead: [], trail: [], drops: [] };
-function stylesOf(colours) {
-  const { palette, drawnAt, disclosure } = colours;
-  return {
-    closed: colours.style,
-    get trigger() {
-      return stateCell(palette, bandOf(colours).state, drawnAt);
-    },
-    get band() {
-      return stateCell(palette, bandOf(colours).plane, drawnAt);
-    },
-    get close() {
-      return closeCell(palette, bandOf(colours).state, drawnAt);
-    },
-    disclosure
-  };
-}
-function evaluated(colours, body, affixes) {
-  return {
-    styles: stylesOf(colours),
-    fragments: body.fragments,
-    lead: affixes.lead,
-    trail: affixes.trail,
-    drops: [...body.drops, ...affixes.drops],
-    open: body.open
-  };
-}
-function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
-  const colours = coloursOf(
-    ref,
-    node,
-    palette,
-    region,
-    drawnAt,
-    void 0,
-    void 0,
-    scope
-  );
-  return evaluated(
-    colours,
-    bodyOf(ref, node, colours, body, false, scope),
-    NO_AFFIXES
-  );
-}
-function decoratedStyles(ref, node, palette, region, drawnAt) {
-  return stylesOf(
-    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
-  );
 }
 
 // src/dsl/view-source.ts
@@ -81911,8 +81966,8 @@ function composePayload(facts, inputs, draw2) {
     ...effectiveInputs(effective),
     history: draw2.history,
     navigation: { back: draw2.back },
-    // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
-    // measured it (`renderWidth`), the one value the draw's options carry.
+    // The live width for feeds and source keys. A waiting request can
+    // project its own columns into its draw without replacing this payload.
     term: { cols: renderWidth(hints) },
     ...settingCounts2,
     ...configPath !== null && { configPath },
@@ -82379,10 +82434,10 @@ function retireSession(parts, session) {
 function holdSessionAt(parts, req) {
   return parts.renderCache.holdSession(req.requested, req);
 }
-function setUpRender(parts, req, readings, facts) {
+function setUpRender(parts, req, readings, facts, terminal) {
   const hintsError = hintsErrorOf(req);
   const hold2 = holdSessionAt(parts, req);
-  return setUpDraw(parts, hold2, req, hintsError, readings, facts);
+  return setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal);
 }
 function setUpFrame(parts, sessionId2, readings, facts) {
   const { renderCache } = parts;
@@ -82403,7 +82458,7 @@ function setUpFrame(parts, sessionId2, readings, facts) {
   }
   return setUpDraw(parts, hold2, req, hintsError, readings, facts);
 }
-function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
+function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   try {
     const { entry, state, view } = hold2;
     noteFacts(facts, { at: readings.at.toFixed(3) });
@@ -82416,6 +82471,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
       state,
       view,
       hintsError,
+      terminal,
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -82438,8 +82494,9 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
     // The preset the session's settings resolve to, which the draw uses.
     preset: effective.preset
   });
-  const hints = view.source.hints();
-  const width = payload.term.cols;
+  const { terminal } = setup;
+  const width = terminal === void 0 ? payload.term.cols : renderWidth(terminal);
+  const rows = viewerRowCap((terminal ?? view.source.hints()).termRows);
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
@@ -82535,15 +82592,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   });
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
-  const {
-    frame: frame2,
-    memory,
-    warnings: drawnWarnings,
-    segments,
-    evaluated: evaluated2,
-    cellBreaks,
-    rules
-  } = drawDsl(
+  const draw2 = () => drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -82563,6 +82612,15 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
       idleSince: idleSince ?? void 0
     }
   );
+  const {
+    frame: frame2,
+    memory,
+    warnings: drawnWarnings,
+    segments,
+    evaluated: evaluated2,
+    cellBreaks,
+    rules
+  } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
   noteFacts(facts, {
@@ -82571,7 +82629,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   const recorded2 = renderWarnings.moves(sessionId2, drawing2.by, drawnWarnings);
   const geometry = {
     width,
-    rows: viewerRowCap(hints.termRows),
+    rows,
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
     colorCompatibility: frame2.depth
@@ -82722,7 +82780,7 @@ function subjectOf(w) {
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
-function answerRequest(parts, req, client, facts, inspect2) {
+function answerRequest(parts, req, presentation, facts, inspect2) {
   var _stack = [];
   try {
     const { time, feeds } = parts;
@@ -82731,7 +82789,8 @@ function answerRequest(parts, req, client, facts, inspect2) {
       parts,
       req,
       { at: time.at, tick: time.tick },
-      facts
+      facts,
+      presentation
     ));
     const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } = drawRender(
       parts,
@@ -82741,7 +82800,7 @@ function answerRequest(parts, req, client, facts, inspect2) {
       inspect2
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
-    const toStatusline = roleOf(client) === "statusline";
+    const toStatusline = roleOf(presentation.client ?? null) === "statusline";
     const frame2 = toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body;
     keepDraw(parts, setup, kept);
     noteFacts(facts, {
@@ -87761,7 +87820,7 @@ function mainRenderer(parts, pushed, drained) {
         const { frame: frame2, delivery, inspection } = answerRequest(
           parts,
           current,
-          event.context.hints.client ?? null,
+          event.context.hints,
           record2,
           event.inspect
         );
@@ -88609,15 +88668,24 @@ function contentAt({ resolution, locations: locations2 }, place, files) {
 var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
+    this.watches = deps.watchers.batch(() => {
+      const keys2 = [...this.invalidated];
+      this.invalidated.clear();
+      this.heard(keys2, "config-watch");
+    });
     const answers = repoConfigsPath(deps.stateDir);
-    this.answersWatch = deps.watchers.acquire(
+    this.answersWatch = this.watches.acquire(
       `repo-configs:${answers}`,
       { dirs: [], polled: [answers] },
-      () => this.heard(this.asking(), "answers-watch")
+      () => {
+        for (const key of this.asking()) this.invalidated.add(key);
+      }
     );
   }
   deps;
   followed = /* @__PURE__ */ new Map();
+  watches;
+  invalidated = /* @__PURE__ */ new Set();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -88695,6 +88763,7 @@ var ConfigDiscovery = class {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.invalidated.clear();
     this.answersWatch.release();
     for (const { watch: watch2 } of this.followed.values()) watch2.handle.release();
     this.followed.clear();
@@ -88733,12 +88802,19 @@ var ConfigDiscovery = class {
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
-      const now2 = {
-        ...this.discovered(was.origin, shared, was.watch),
-        renderers: was.renderers
-      };
-      this.followed.set(key, now2);
-      if (now2.digest !== was.digest) moved2.push(now2);
+      try {
+        const now2 = {
+          ...this.discovered(was.origin, shared, was.watch),
+          renderers: was.renderers
+        };
+        this.followed.set(key, now2);
+        if (now2.digest !== was.digest) moved2.push(now2);
+      } catch (thrown2) {
+        this.deps.log(
+          "error",
+          `config discovery why=${why2} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
+        );
+      }
     }
     this.deps.log(
       "info",
@@ -88764,11 +88840,9 @@ var ConfigDiscovery = class {
       ...paths2,
       key: `config:${JSON.stringify(key)}:${paths2.key}`
     };
-    const { watch: watch2, move } = this.deps.watchers.follow(
-      held,
-      spec,
-      () => this.heard([key], "config-watch")
-    );
+    const { watch: watch2, move } = this.watches.follow(held, spec, () => {
+      this.invalidated.add(key);
+    });
     if (move === "rebound") this.bound(origin, paths2);
     const snapshot = {
       ...found2.snapshot,
@@ -88902,7 +88976,6 @@ function createDaemon(inputs) {
       const key = inputs.linkKey();
       return {
         stored: stores.current(),
-        digest: bundle.digest,
         host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes: memoryLimitBytes2,
         linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key

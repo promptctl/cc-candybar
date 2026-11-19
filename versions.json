@@ -2,39 +2,38 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
-      "timestamp": "2026-11-19T11:21:26.529Z",
-      "commits": [
-        {
-          "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:22Z",
-          "message": "Merge 9abf9f5d0b76113135496d1a06fb5281c91848e8 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
-        },
-        {
-          "sha": "9abf9f5d0b76113135496d1a06fb5281c91848e8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:56:20-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-856",
       "ref": "refs/pull/856/merge",
-      "sha": "373369c1fbf9bf0bee4dc0a9eaa1ea6e4211968b",
-      "timestamp": "2026-11-19T11:19:36.252Z",
+      "sha": "3efca274db7d76afdf91621cacd763ec6dacbe1b",
+      "timestamp": "2026-11-19T11:27:19.443Z",
       "commits": [
         {
-          "sha": "373369c1fbf9bf0bee4dc0a9eaa1ea6e4211968b",
+          "sha": "3efca274db7d76afdf91621cacd763ec6dacbe1b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:18:25-07:00",
-          "message": "Merge 85f02a19e17069167cdbdfb32e1219e13729c650 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
+          "timestamp": "2026-11-19T11:26:14Z",
+          "message": "Merge 293d27884aad148c02aa1558dd5dc1df482c0e8f into ecf212eaa936d5cb5e72328591459059b6f50927\n"
+        },
+        {
+          "sha": "293d27884aad148c02aa1558dd5dc1df482c0e8f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:24:47-07:00",
+          "message": "fix(renderer): keep requesting client dimensions for its draw (ibyq.n91)\n\n(cherry picked from commit fd59c7b498ae8c8e8054d718d3344b45cff22e22)\n"
+        },
+        {
+          "sha": "521afee719d0a11657ecccf15df4d2d491a52095",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:20:46-07:00",
+          "message": "fix: batch shared config watch invalidation\n\n(cherry picked from commit f12d7bf54165a690553e0f0c0caa5eaadf47d763)\n"
+        },
+        {
+          "sha": "5b64738836cf540656c8b03a360c6b90b6d366a7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:18:42-07:00",
+          "message": "refactor(renderer): agree on the private wire version at boot (ibyq.cg5)\n\n(cherry picked from commit 39bb98fbe5f4ac3054f8bc86fb507d1a58a0abd4)\n"
         },
         {
           "sha": "85f02a19e17069167cdbdfb32e1219e13729c650",
@@ -140,6 +139,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:45:50-07:00",
           "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n\n(cherry picked from commit 6facef33f8daaf204f8747cc43d15a8533084c14)\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
+      "timestamp": "2026-11-19T11:21:26.529Z",
+      "commits": [
+        {
+          "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:20:22Z",
+          "message": "Merge 9abf9f5d0b76113135496d1a06fb5281c91848e8 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
+        },
+        {
+          "sha": "9abf9f5d0b76113135496d1a06fb5281c91848e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:56:20-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
         }
       ]
     },
