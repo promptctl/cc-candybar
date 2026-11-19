@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ce2ac88bf897455ae62bb613793a5d30fd7ddf35",
+      "timestamp": "2026-11-19T15:28:54.324Z",
+      "commits": [
+        {
+          "sha": "ce2ac88bf897455ae62bb613793a5d30fd7ddf35",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:27:56-07:00",
+          "message": "refactor(config): resolve write layers before rendering (#880)\n\n* refactor(config): resolve write layers before rendering\n\n* fix(config): share write availability with render diagnostics"
+        }
+      ]
+    },
+    {
       "version": "pr-885",
       "ref": "refs/pull/885/merge",
       "sha": "88a7989b03abd58b5f8bd7553cb631e0c32b5223",
@@ -141,50 +156,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:00:18-07:00",
           "message": "fix(renderer): commit request frame memory on delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-880",
-      "ref": "refs/pull/880/merge",
-      "sha": "932b54f8f1ae602cd6d88f0807930169709fff62",
-      "timestamp": "2026-11-19T15:21:10.566Z",
-      "commits": [
-        {
-          "sha": "932b54f8f1ae602cd6d88f0807930169709fff62",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:19:44Z",
-          "message": "Merge 40f4d95a98dc07891964de87e2e5eb0e8018d614 into 53453112ae58ddddcd39dca83f2f94c90b7165df\n"
-        },
-        {
-          "sha": "40f4d95a98dc07891964de87e2e5eb0e8018d614",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:18:56-07:00",
-          "message": "fix(config): share write availability with render diagnostics\n"
-        },
-        {
-          "sha": "e8420231176e0294418435fe3d0dab7e9569439f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:01:09-07:00",
-          "message": "refactor(config): resolve write layers before rendering\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "53453112ae58ddddcd39dca83f2f94c90b7165df",
-      "timestamp": "2026-11-19T15:18:54.471Z",
-      "commits": [
-        {
-          "sha": "53453112ae58ddddcd39dca83f2f94c90b7165df",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T15:17:50Z",
-          "message": "chore(release): set `package.json` to 1.235.0\n\n## [1.235.0](https://github.com/promptctl/cc-candybar/compare/v1.234.4...v1.235.0) (2026-11-19)\n\n### Features\n\n* **click:** route actions to their drawing renderer ([#875](https://github.com/promptctl/cc-candybar/issues/875)) ([f10951d](https://github.com/promptctl/cc-candybar/commit/f10951d9400d761190b757a8dd55db47ac30e372))\n"
         }
       ]
     },
