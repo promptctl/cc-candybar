@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-904",
+      "ref": "refs/pull/904/merge",
+      "sha": "aaeea859620dde4cc98fa4db0106f6967a0d17d3",
+      "timestamp": "2026-11-19T19:04:09.024Z",
+      "commits": [
+        {
+          "sha": "aaeea859620dde4cc98fa4db0106f6967a0d17d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:02:54-07:00",
+          "message": "Merge b57c7524433b7f3a17ef3e3da0ee596411d48735 into ca59b705bf84552eb3ec9b216786363ccde4b4da\n"
+        },
+        {
+          "sha": "b57c7524433b7f3a17ef3e3da0ee596411d48735",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:02:08-07:00",
+          "message": "test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-902",
       "ref": "refs/pull/902/merge",
       "sha": "8dc364a511eb4c545588bb8e37b3bdf82b288081",
