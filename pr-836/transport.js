@@ -2424,7 +2424,7 @@ var require_path_browserify = __commonJS({
       var res = "";
       var lastSegmentLength = 0;
       var lastSlash = -1;
-      var dots2 = 0;
+      var dots = 0;
       var code2;
       for (var i2 = 0; i2 <= path45.length; ++i2) {
         if (i2 < path45.length)
@@ -2434,8 +2434,8 @@ var require_path_browserify = __commonJS({
         else
           code2 = 47;
         if (code2 === 47) {
-          if (lastSlash === i2 - 1 || dots2 === 1) {
-          } else if (lastSlash !== i2 - 1 && dots2 === 2) {
+          if (lastSlash === i2 - 1 || dots === 1) {
+          } else if (lastSlash !== i2 - 1 && dots === 2) {
             if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
               if (res.length > 2) {
                 var lastSlashIndex = res.lastIndexOf("/");
@@ -2448,14 +2448,14 @@ var require_path_browserify = __commonJS({
                     lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
                   }
                   lastSlash = i2;
-                  dots2 = 0;
+                  dots = 0;
                   continue;
                 }
               } else if (res.length === 2 || res.length === 1) {
                 res = "";
                 lastSegmentLength = 0;
                 lastSlash = i2;
-                dots2 = 0;
+                dots = 0;
                 continue;
               }
             }
@@ -2474,11 +2474,11 @@ var require_path_browserify = __commonJS({
             lastSegmentLength = i2 - lastSlash - 1;
           }
           lastSlash = i2;
-          dots2 = 0;
-        } else if (code2 === 46 && dots2 !== -1) {
-          ++dots2;
+          dots = 0;
+        } else if (code2 === 46 && dots !== -1) {
+          ++dots;
         } else {
-          dots2 = -1;
+          dots = -1;
         }
       }
       return res;
@@ -5306,7 +5306,7 @@ var require_lib = __commonJS({
     var NODOT = "(?!\\.)";
     var STAR = "[^/]*";
     var GLOBSTAR_NODOT = "[^/]*(?:/(?!\\.)[^/]*)*";
-    var literal = (pattern2, i2, code2) => {
+    var literal = (pattern3, i2, code2) => {
       switch (code2) {
         case 36:
         case 42:
@@ -5322,9 +5322,9 @@ var require_lib = __commonJS({
         case 123:
         case 124:
         case 125:
-          return "\\" + pattern2[i2];
+          return "\\" + pattern3[i2];
         default:
-          return pattern2[i2];
+          return pattern3[i2];
       }
     };
     var posixClass = (name) => {
@@ -5360,44 +5360,44 @@ var require_lib = __commonJS({
       }
       return;
     };
-    var classEnd = (pattern2, i2) => {
-      const length = pattern2.length;
+    var classEnd = (pattern3, i2) => {
+      const length = pattern3.length;
       let j = i2 + 1;
-      const first2 = pattern2.charCodeAt(j);
+      const first2 = pattern3.charCodeAt(j);
       if (first2 === 33 || first2 === 94)
         j++;
-      if (pattern2.charCodeAt(j) === 93)
+      if (pattern3.charCodeAt(j) === 93)
         j++;
       for (; j < length; j++) {
-        const code2 = pattern2.charCodeAt(j);
+        const code2 = pattern3.charCodeAt(j);
         if (code2 === 93)
           return j + 1;
-        if (code2 === 91 && pattern2.charCodeAt(j + 1) === 58) {
-          const close = pattern2.indexOf(":]", j + 2);
+        if (code2 === 91 && pattern3.charCodeAt(j + 1) === 58) {
+          const close = pattern3.indexOf(":]", j + 2);
           if (close > 0)
             j = close + 1;
         }
       }
       return -1;
     };
-    var member = (pattern2, i2) => {
-      const code2 = pattern2.charCodeAt(i2);
+    var member = (pattern3, i2) => {
+      const code2 = pattern3.charCodeAt(i2);
       const special = code2 === 93 || code2 === 92 || code2 === 91 || code2 === 94 || code2 === 45;
-      return (special ? "\\" : "") + pattern2[i2];
+      return (special ? "\\" : "") + pattern3[i2];
     };
-    var classSource = (pattern2, i2, end) => {
+    var classSource = (pattern3, i2, end) => {
       const last2 = end - 1;
       let j = i2 + 1;
       let out = "";
       let members = 0;
-      const first2 = pattern2.charCodeAt(j);
+      const first2 = pattern3.charCodeAt(j);
       const negate = first2 === 33 || first2 === 94;
       if (negate)
         j++;
       while (j < last2) {
-        if (pattern2.charCodeAt(j) === 91 && pattern2.charCodeAt(j + 1) === 58) {
-          const close = pattern2.indexOf(":]", j + 2);
-          const cls = close > 0 ? posixClass(pattern2.slice(j + 2, close)) : void 0;
+        if (pattern3.charCodeAt(j) === 91 && pattern3.charCodeAt(j + 1) === 58) {
+          const close = pattern3.indexOf(":]", j + 2);
+          const cls = close > 0 ? posixClass(pattern3.slice(j + 2, close)) : void 0;
           if (cls !== void 0) {
             out += cls;
             members += 2;
@@ -5405,31 +5405,31 @@ var require_lib = __commonJS({
             continue;
           }
         }
-        if (pattern2.charCodeAt(j + 1) === 45 && j + 2 < last2) {
-          if (pattern2.charCodeAt(j + 2) >= pattern2.charCodeAt(j)) {
-            out += member(pattern2, j) + "-" + member(pattern2, j + 2);
+        if (pattern3.charCodeAt(j + 1) === 45 && j + 2 < last2) {
+          if (pattern3.charCodeAt(j + 2) >= pattern3.charCodeAt(j)) {
+            out += member(pattern3, j) + "-" + member(pattern3, j + 2);
             members += 2;
           }
           j += 3;
           continue;
         }
-        out += member(pattern2, j);
+        out += member(pattern3, j);
         members++;
         j++;
       }
       if (!negate && members === 1)
-        return literal(pattern2, last2 - 1, pattern2.charCodeAt(last2 - 1));
+        return literal(pattern3, last2 - 1, pattern3.charCodeAt(last2 - 1));
       if (!members)
         return negate ? "[^/]" : "[]";
       return (negate ? "[^" : "[") + out + "]";
     };
-    var groupEnd = (pattern2, i2) => {
-      const length = pattern2.length;
+    var groupEnd = (pattern3, i2) => {
+      const length = pattern3.length;
       let depth = 1;
       for (; i2 < length; i2++) {
-        const code2 = pattern2.charCodeAt(i2);
+        const code2 = pattern3.charCodeAt(i2);
         if (code2 === 91) {
-          const end = classEnd(pattern2, i2);
+          const end = classEnd(pattern3, i2);
           if (end > 0)
             i2 = end - 1;
         } else if (code2 === 40)
@@ -5488,18 +5488,18 @@ var require_lib = __commonJS({
       const once2 = "(?:" + body + ")(?:" + more + ")*";
       return type3 === 42 ? "(?:" + once2 + ")?" : once2;
     };
-    var compile = (pattern2, extglob, nodot, tail, segStart) => {
-      const length = pattern2.length;
+    var compile = (pattern3, extglob, nodot, tail, segStart) => {
+      const length = pattern3.length;
       let out = "";
       let i2 = 0;
       let start = segStart;
       while (i2 < length) {
-        const code2 = pattern2.charCodeAt(i2);
-        if (extglob && pattern2.charCodeAt(i2 + 1) === 40 && isExtglobPrefix(code2)) {
-          const end = groupEnd(pattern2, i2 + 2);
+        const code2 = pattern3.charCodeAt(i2);
+        if (extglob && pattern3.charCodeAt(i2 + 1) === 40 && isExtglobPrefix(code2)) {
+          const end = groupEnd(pattern3, i2 + 2);
           if (end > 0) {
-            const after = compile(pattern2.slice(end), extglob, nodot, tail, false);
-            const alts = splitAlts(pattern2.slice(i2 + 2, end - 1));
+            const after = compile(pattern3.slice(end), extglob, nodot, tail, false);
+            const alts = splitAlts(pattern3.slice(i2 + 2, end - 1));
             return out + extglobSource(code2, alts, extglob, nodot, after + tail, start) + after;
           }
         }
@@ -5509,26 +5509,26 @@ var require_lib = __commonJS({
         switch (code2) {
           case 42: {
             let j = i2 + 1;
-            while (pattern2.charCodeAt(j) === 42)
+            while (pattern3.charCodeAt(j) === 42)
               j++;
             if (j === i2 + 1) {
-              const whole = atStart && (j === length || pattern2.charCodeAt(j) === 47);
+              const whole = atStart && (j === length || pattern3.charCodeAt(j) === 47);
               out += guard2 + (whole ? "[^/]+" : STAR);
               i2 = j;
               break;
             }
-            let slash2 = pattern2.charCodeAt(j) === 47;
+            let slash2 = pattern3.charCodeAt(j) === 47;
             while (slash2) {
               let k = j + 1;
-              if (pattern2.charCodeAt(k) !== 42 || pattern2.charCodeAt(k + 1) !== 42)
+              if (pattern3.charCodeAt(k) !== 42 || pattern3.charCodeAt(k + 1) !== 42)
                 break;
               k += 2;
-              while (pattern2.charCodeAt(k) === 42)
+              while (pattern3.charCodeAt(k) === 42)
                 k++;
               if (k === length) {
                 j = k;
                 slash2 = false;
-              } else if (pattern2.charCodeAt(k) === 47)
+              } else if (pattern3.charCodeAt(k) === 47)
                 j = k;
               else
                 break;
@@ -5547,13 +5547,13 @@ var require_lib = __commonJS({
             i2++;
             break;
           case 91: {
-            const end = classEnd(pattern2, i2);
+            const end = classEnd(pattern3, i2);
             if (end < 0) {
               out += "\\[";
               i2++;
               break;
             }
-            const cls = classSource(pattern2, i2, end);
+            const cls = classSource(pattern3, i2, end);
             out += (cls.charCodeAt(0) === 91 ? guard2 : "") + cls;
             i2 = end;
             break;
@@ -5564,17 +5564,17 @@ var require_lib = __commonJS({
             start = true;
             break;
           default:
-            out += literal(pattern2, i2, code2);
+            out += literal(pattern3, i2, code2);
             i2++;
         }
       }
       return out;
     };
-    var closingBrace = (pattern2, open2) => {
-      const length = pattern2.length;
+    var closingBrace = (pattern3, open2) => {
+      const length = pattern3.length;
       let depth = 0;
       for (let i2 = open2; i2 < length; i2++) {
-        const code2 = pattern2.charCodeAt(i2);
+        const code2 = pattern3.charCodeAt(i2);
         if (code2 === 123)
           depth++;
         else if (code2 === 125 && !--depth)
@@ -5636,17 +5636,17 @@ var require_lib = __commonJS({
       }
       return out;
     };
-    var expandInto = (pattern2, out, max3) => {
-      for (let open2 = pattern2.indexOf("{"); open2 >= 0; open2 = pattern2.indexOf("{", open2 + 1)) {
-        const close = closingBrace(pattern2, open2);
+    var expandInto = (pattern3, out, max3) => {
+      for (let open2 = pattern3.indexOf("{"); open2 >= 0; open2 = pattern3.indexOf("{", open2 + 1)) {
+        const close = closingBrace(pattern3, open2);
         if (close < 0)
           continue;
-        const body = pattern2.slice(open2 + 1, close);
+        const body = pattern3.slice(open2 + 1, close);
         const alts = commaSplit(body) || rangeOf3(body, max3);
         if (!alts)
           continue;
-        const prefix = pattern2.slice(0, open2);
-        const suffixes = (0, exports2.expandBraces)(pattern2.slice(close + 1), max3);
+        const prefix = pattern3.slice(0, open2);
+        const suffixes = (0, exports2.expandBraces)(pattern3.slice(close + 1), max3);
         for (let i2 = 0; i2 < alts.length; i2++) {
           const heads = (0, exports2.expandBraces)(alts[i2], max3);
           for (let j = 0; j < heads.length; j++) {
@@ -5660,22 +5660,22 @@ var require_lib = __commonJS({
         }
         return;
       }
-      out.push(pattern2);
+      out.push(pattern3);
     };
-    var expandBraces = (pattern2, max3 = 1e5) => {
+    var expandBraces = (pattern3, max3 = 1e5) => {
       const out = [];
-      expandInto(pattern2, out, max3);
+      expandInto(pattern3, out, max3);
       return out;
     };
     exports2.expandBraces = expandBraces;
-    var toRegex = (pattern2, options) => {
+    var toRegex = (pattern3, options) => {
       const extglob = !!options?.extglob;
       const nodot = options?.dot === false;
       let source;
-      if (pattern2.indexOf("{") < 0)
-        source = compile(pattern2, extglob, nodot, "", true);
+      if (pattern3.indexOf("{") < 0)
+        source = compile(pattern3, extglob, nodot, "", true);
       else {
-        const set2 = (0, exports2.expandBraces)(pattern2);
+        const set2 = (0, exports2.expandBraces)(pattern3);
         const length = set2.length;
         if (length === 1)
           source = compile(set2[0], extglob, nodot, "", true);
@@ -5698,9 +5698,9 @@ var require_lib = __commonJS({
     };
     exports2.toRegex = toRegex;
     var isRegExp = /^\/(.{1,4096})\/([gimsuy]{0,6})$/;
-    var toMatcher = (pattern2, options) => {
+    var toMatcher = (pattern3, options) => {
       const regexes = [];
-      const patterns = Array.isArray(pattern2) ? pattern2 : [pattern2];
+      const patterns = Array.isArray(pattern3) ? pattern3 : [pattern3];
       for (const pat of patterns) {
         if (typeof pat === "string") {
           const match = isRegExp.exec(pat);
@@ -5728,16 +5728,16 @@ var require_watchIgnore = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.watchIgnoreToMatcher = exports2.watchIgnorePatternToMatcher = void 0;
     var glob_to_regex_js_1 = require_lib();
-    var watchIgnorePatternToMatcher = (pattern2) => {
-      if (typeof pattern2 === "function")
-        return pattern2;
-      if (pattern2 instanceof RegExp)
-        return (filename) => pattern2.test(filename);
-      if (typeof pattern2 === "string") {
-        const regex = (0, glob_to_regex_js_1.toRegex)(pattern2);
+    var watchIgnorePatternToMatcher = (pattern3) => {
+      if (typeof pattern3 === "function")
+        return pattern3;
+      if (pattern3 instanceof RegExp)
+        return (filename) => pattern3.test(filename);
+      if (typeof pattern3 === "string") {
+        const regex = (0, glob_to_regex_js_1.toRegex)(pattern3);
         return (filename) => regex.test(filename);
       }
-      throw new TypeError(`The "options.ignore" property must be of type string, RegExp, function, or an array thereof. Received ${typeof pattern2}`);
+      throw new TypeError(`The "options.ignore" property must be of type string, RegExp, function, or an array thereof. Received ${typeof pattern3}`);
     };
     exports2.watchIgnorePatternToMatcher = watchIgnorePatternToMatcher;
     var watchIgnoreToMatcher = (ignore) => {
@@ -8532,8 +8532,8 @@ var require_glob = __commonJS({
       }
       return globParts.filter((parts) => parts.length);
     };
-    var compile = (pattern2) => {
-      const source = pattern2.replace(/\\/g, "/");
+    var compile = (pattern3) => {
+      const source = pattern3.replace(/\\/g, "/");
       if (!source)
         return [[], []];
       const globSet = [...new Set((0, glob_to_regex_js_1.expandBraces)(source))];
@@ -8675,19 +8675,19 @@ var require_glob = __commonJS({
       addToStatCache(path45, value) {
         this.stats.set(path45, value);
       }
-      add(path45, pattern2) {
+      add(path45, pattern3) {
         let keys2 = this.seenKeys.get(path45);
         if (!keys2) {
           keys2 = /* @__PURE__ */ new Set();
           this.seenKeys.set(path45, keys2);
         }
         const originalSize = keys2.size;
-        for (const index of pattern2.indexes)
-          keys2.add(pattern2.cacheKey(index));
-        return keys2.size !== originalSize + pattern2.indexes.size;
+        for (const index of pattern3.indexes)
+          keys2.add(pattern3.cacheKey(index));
+        return keys2.size !== originalSize + pattern3.indexes.size;
       }
-      seen(path45, pattern2, index) {
-        return !!this.seenKeys.get(path45)?.has(pattern2.cacheKey(index));
+      seen(path45, pattern3, index) {
+        return !!this.seenKeys.get(path45)?.has(pattern3.cacheKey(index));
       }
     };
     var depthOf = (root, fullpath) => {
@@ -8702,7 +8702,7 @@ var require_glob = __commonJS({
     };
     var EMPTY_OPTIONS = {};
     var Glob = class {
-      constructor(fs2, pattern2, options = EMPTY_OPTIONS) {
+      constructor(fs2, pattern3, options = EMPTY_OPTIONS) {
         this.fs = fs2;
         this.followSymlinks = false;
         this.isExcluded = () => false;
@@ -8729,12 +8729,12 @@ var require_glob = __commonJS({
             this.exclude = exclude;
         }
         let patterns;
-        if (typeof pattern2 === "object") {
-          (0, validators_1.validateStringArray)(pattern2, "patterns");
-          patterns = pattern2;
+        if (typeof pattern3 === "object") {
+          (0, validators_1.validateStringArray)(pattern3, "patterns");
+          patterns = pattern3;
         } else {
-          (0, validators_1.validateString)(pattern2, "patterns");
-          patterns = [pattern2];
+          (0, validators_1.validateString)(pattern3, "patterns");
+          patterns = [pattern3];
         }
         const compiled = [];
         for (let i2 = 0; i2 < patterns.length; i2++) {
@@ -8762,32 +8762,32 @@ var require_glob = __commonJS({
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
-      isDirectory(path45, stat3, pattern2) {
+      isDirectory(path45, stat3, pattern3) {
         if (stat3?.isDirectory())
           return true;
         if (!stat3?.isSymbolicLink())
           return false;
         if (this.followSymlinks)
           return !!this.cache.followStatSync(path45)?.isDirectory();
-        return pattern2.hasSeenSymlinks;
+        return pattern3.hasSeenSymlinks;
       }
-      nextRealpaths(path45, isDirectory, pattern2) {
+      nextRealpaths(path45, isDirectory, pattern3) {
         if (!this.followSymlinks || !isDirectory)
-          return pattern2.realpaths;
+          return pattern3.realpaths;
         const real = this.cache.realpathSync(path45);
         if (real === null)
-          return pattern2.realpaths;
-        const realpaths = new Set(pattern2.realpaths);
+          return pattern3.realpaths;
+        const realpaths = new Set(pattern3.realpaths);
         realpaths.add(real);
         return realpaths;
       }
-      isCyclic(path45, isDirectory, pattern2) {
+      isCyclic(path45, isDirectory, pattern3) {
         if (!this.followSymlinks || !isDirectory)
           return false;
         const real = this.cache.realpathSync(path45);
-        return real !== null && pattern2.realpaths.has(real);
+        return real !== null && pattern3.realpaths.has(real);
       }
-      addSubpattern(path45, pattern2) {
+      addSubpattern(path45, pattern3) {
         if (this.isExcluded(path45))
           return;
         const fullpath = resolve(this.root, path45);
@@ -8804,9 +8804,9 @@ var require_glob = __commonJS({
         }
         const existing = this.subpatterns.get(path45);
         if (existing)
-          existing.push(pattern2);
+          existing.push(pattern3);
         else
-          this.subpatterns.set(path45, [pattern2]);
+          this.subpatterns.set(path45, [pattern3]);
       }
       accept(path45) {
         if (this.results.has(path45))
@@ -8816,49 +8816,49 @@ var require_glob = __commonJS({
         this.results.add(path45);
         return true;
       }
-      *walkPattern(path45, pattern2) {
-        if (this.cache.add(path45, pattern2))
+      *walkPattern(path45, pattern3) {
+        if (this.cache.add(path45, pattern3))
           return;
         const cache2 = this.cache;
         const fullpath = resolve(this.root, path45);
         const stat3 = cache2.statSync(fullpath);
-        const last2 = pattern2.last;
-        const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
-        const isLast = pattern2.isLast(isDirectory);
-        const isFirst = pattern2.isFirst();
+        const last2 = pattern3.last;
+        const isDirectory = this.isDirectory(fullpath, stat3, pattern3);
+        const isLast = pattern3.isLast(isDirectory);
+        const isFirst = pattern3.isFirst();
         if (this.isExcluded(fullpath))
           return;
-        if (isFirst && pattern2.at(0) === "") {
-          this.addSubpattern("/", pattern2.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern3.at(0) === "") {
+          this.addSubpattern("/", pattern3.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isFirst && pattern2.at(0) === "..") {
-          this.addSubpattern("../", pattern2.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern3.at(0) === "..") {
+          this.addSubpattern("../", pattern3.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isFirst && pattern2.at(0) === ".") {
-          this.addSubpattern(".", pattern2.child(/* @__PURE__ */ new Set([1])));
+        if (isFirst && pattern3.at(0) === ".") {
+          this.addSubpattern(".", pattern3.child(/* @__PURE__ */ new Set([1])));
           return;
         }
-        if (isLast && typeof pattern2.at(-1) === "string") {
-          const p2 = pattern2.at(-1);
+        if (isLast && typeof pattern3.at(-1) === "string") {
+          const p2 = pattern3.at(-1);
           const leaf = cache2.statSync(join4(fullpath, p2));
           const match = join4(path45, p2);
           if (leaf && (p2 || isDirectory) && this.accept(match))
             yield this.result(match);
-          if (pattern2.indexes.size === 1 && pattern2.indexes.has(last2))
+          if (pattern3.indexes.size === 1 && pattern3.indexes.has(last2))
             return;
-        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path45 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
+        } else if (isLast && pattern3.at(-1) === GLOBSTAR && (path45 !== "." || pattern3.at(0) === "." || !last2 && stat3)) {
           if (this.accept(path45))
             yield this.result(path45);
         }
-        if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern2))
+        if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern3))
           return;
         if (this.maxdepth !== Infinity && depthOf(this.root, fullpath) > this.maxdepth)
           return;
-        const nextRealpaths = this.nextRealpaths(fullpath, isDirectory, pattern2);
+        const nextRealpaths = this.nextRealpaths(fullpath, isDirectory, pattern3);
         let children2;
-        const firstPattern = pattern2.indexes.size === 1 && pattern2.at(pattern2.indexes.values().next().value);
+        const firstPattern = pattern3.indexes.size === 1 && pattern3.at(pattern3.indexes.values().next().value);
         if (typeof firstPattern === "string") {
           const child = cache2.statSync(join4(fullpath, firstPattern));
           if (!child)
@@ -8876,20 +8876,20 @@ var require_glob = __commonJS({
           const entryIsDirectory = entry.isDirectory() || this.followSymlinks && entry.isSymbolicLink() && !!cache2.followStatSync(entryFullpath)?.isDirectory();
           const subPatterns = /* @__PURE__ */ new Set();
           const nSymlinks = /* @__PURE__ */ new Set();
-          for (const index of pattern2.indexes) {
-            if (cache2.seen(entryPath, pattern2, index) || cache2.seen(entryPath, pattern2, index + 1))
+          for (const index of pattern3.indexes) {
+            if (cache2.seen(entryPath, pattern3, index) || cache2.seen(entryPath, pattern3, index + 1))
               return;
-            const current = pattern2.at(index);
+            const current = pattern3.at(index);
             const nextIndex = index + 1;
-            const next = pattern2.at(nextIndex);
-            const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
+            const next = pattern3.at(nextIndex);
+            const fromSymlink = !this.followSymlinks && pattern3.symlinks.has(index);
             if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
-              const nextMatches = pattern2.test(nextIndex, name);
+              const nextMatches = pattern3.test(nextIndex, name);
               let nextNonGlobIndex = nextIndex;
-              while (pattern2.at(nextNonGlobIndex) === GLOBSTAR)
+              while (pattern3.at(nextNonGlobIndex) === GLOBSTAR)
                 nextNonGlobIndex++;
-              const matchesDot = isDot && pattern2.test(nextNonGlobIndex, name);
+              const matchesDot = isDot && pattern3.test(nextNonGlobIndex, name);
               if (isDot && !matchesDot || this.exclude && this.exclude(this.withFileTypes ? entry : name))
                 continue;
               if (!fromSymlink && entryIsDirectory)
@@ -8901,25 +8901,25 @@ var require_glob = __commonJS({
                   yield this.result(entryPath);
               } else if (nextMatches && entryIsDirectory)
                 subPatterns.add(index + 2);
-              if ((nextMatches || pattern2.at(0) === ".") && (entryIsDirectory || entry.isSymbolicLink()) && !fromSymlink)
+              if ((nextMatches || pattern3.at(0) === ".") && (entryIsDirectory || entry.isSymbolicLink()) && !fromSymlink)
                 subPatterns.add(nextIndex);
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
               if (next === ".." && entryIsDirectory) {
                 const parent = join4(path45, "..");
                 if (nextIndex < last2) {
-                  if (!this.subpatterns.has(path45) && !cache2.seen(path45, pattern2, nextIndex + 1))
-                    this.subpatterns.set(path45, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
-                  if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern2, nextIndex + 1))
-                    this.subpatterns.set(parent, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(path45) && !cache2.seen(path45, pattern3, nextIndex + 1))
+                    this.subpatterns.set(path45, [pattern3.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern3, nextIndex + 1))
+                    this.subpatterns.set(parent, [pattern3.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                 } else {
-                  if (!cache2.seen(path45, pattern2, nextIndex)) {
-                    cache2.add(path45, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
+                  if (!cache2.seen(path45, pattern3, nextIndex)) {
+                    cache2.add(path45, pattern3.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(path45))
                       yield this.result(path45);
                   }
-                  if (!cache2.seen(path45, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
-                    cache2.add(parent, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
+                  if (!cache2.seen(path45, pattern3, nextIndex) || !cache2.seen(parent, pattern3, nextIndex)) {
+                    cache2.add(parent, pattern3.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(parent))
                       yield this.result(parent);
                   }
@@ -8927,9 +8927,9 @@ var require_glob = __commonJS({
               }
             }
             if (typeof current === "string") {
-              if (pattern2.test(index, name) && index !== last2)
+              if (pattern3.test(index, name) && index !== last2)
                 subPatterns.add(nextIndex);
-              else if (current === "." && pattern2.test(nextIndex, name)) {
+              else if (current === "." && pattern3.test(nextIndex, name)) {
                 if (nextIndex === last2) {
                   if (this.accept(entryPath))
                     yield this.result(entryPath);
@@ -8937,7 +8937,7 @@ var require_glob = __commonJS({
                   subPatterns.add(nextIndex + 1);
               }
             }
-            if (typeof current === "object" && pattern2.test(index, name)) {
+            if (typeof current === "object" && pattern3.test(index, name)) {
               if (index === last2) {
                 if (this.accept(entryPath))
                   yield this.result(entryPath);
@@ -8946,21 +8946,21 @@ var require_glob = __commonJS({
             }
           }
           if (subPatterns.size > 0)
-            this.addSubpattern(entryPath, pattern2.child(subPatterns, nSymlinks, nextRealpaths));
+            this.addSubpattern(entryPath, pattern3.child(subPatterns, nSymlinks, nextRealpaths));
         }
       }
     };
-    var globWalk = (fs2, pattern2, options) => new Glob(fs2, pattern2, options).walk();
+    var globWalk = (fs2, pattern3, options) => new Glob(fs2, pattern3, options).walk();
     exports2.globWalk = globWalk;
-    var globSync = (fs2, pattern2, options) => {
+    var globSync = (fs2, pattern3, options) => {
       const results = [];
-      for (const match of (0, exports2.globWalk)(fs2, pattern2, options))
+      for (const match of (0, exports2.globWalk)(fs2, pattern3, options))
         results.push(match);
       return results;
     };
     exports2.globSync = globSync;
-    async function* glob(fs2, pattern2, options) {
-      yield* (0, exports2.globWalk)(fs2, pattern2, options);
+    async function* glob(fs2, pattern3, options) {
+      yield* (0, exports2.globWalk)(fs2, pattern3, options);
     }
   }
 });
@@ -15681,7 +15681,7 @@ var require_FsPromises = __commonJS({
         this.opendir = (0, util_1.promisify)(this.fs, "opendir");
         this.statfs = (0, util_1.promisify)(this.fs, "statfs");
         this.lutimes = (0, util_1.promisify)(this.fs, "lutimes");
-        this.glob = (pattern2, options) => (0, glob_1.glob)(this.fs, pattern2, options);
+        this.glob = (pattern3, options) => (0, glob_1.glob)(this.fs, pattern3, options);
         this.access = (0, util_1.promisify)(this.fs, "access");
         this.chmod = (0, util_1.promisify)(this.fs, "chmod");
         this.chown = (0, util_1.promisify)(this.fs, "chown");
@@ -20186,13 +20186,13 @@ var require_volume = __commonJS({
           const type3 = options?.type || "";
           return new Blob([buffer], { type: type3 });
         };
-        this.glob = (pattern2, options, callback) => {
+        this.glob = (pattern3, options, callback) => {
           if (typeof options === "function") {
             callback = options;
             options = void 0;
           }
           const cb = (0, util_2.validateCallback)(callback);
-          const walk3 = (0, glob_1.globWalk)(this, pattern2, options);
+          const walk3 = (0, glob_1.globWalk)(this, pattern3, options);
           Promise.resolve().then(() => {
             const results = [];
             for (const match of walk3)
@@ -20200,7 +20200,7 @@ var require_volume = __commonJS({
             return results;
           }).then((results) => cb(null, results), cb);
         };
-        this.globSync = (pattern2, options) => (0, glob_1.globSync)(this, pattern2, options);
+        this.globSync = (pattern3, options) => (0, glob_1.globSync)(this, pattern3, options);
         this._opendir = (filename, options, path45, errorPath) => {
           const result = this._core.getResolvedLinkResult(filename, "opendir");
           if (!result.ok)
@@ -28569,8 +28569,12 @@ function decodeWire(decode) {
 init_globals();
 var SESSION_ID_MAX_BYTES = 250;
 function parseSessionId(raw) {
-  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
+  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : isArrayIndex(raw) ? `is ${JSON.stringify(raw)}, an array index, which is never a session id` : raw === "__proto__" ? `is "__proto__", which is never a session id` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
   return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+function isArrayIndex(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n < 2 ** 32 - 1 && String(n) === raw;
 }
 function sessionKeyed(record2, refused2) {
   const keyed = /* @__PURE__ */ new Map();
@@ -29067,9 +29071,9 @@ var MAX_LINK_HOPS = 40;
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
-function eventHoldAt(event, holdS, at, render3) {
+function eventHoldAt(event, holdS, at, render4) {
   if (at < event.at + holdS) return "held";
-  return render3 === "request" && !event.answered ? "owed" : "over";
+  return render4 === "request" && !event.answered ? "owed" : "over";
 }
 function joinedEvent(last2, text4, at) {
   return {
@@ -29819,14 +29823,14 @@ function landVerdict(status, end) {
     throw err;
   }
 }
-function createLauncher(owner, clock, spawner) {
-  return launcherWithState(owner, clock, spawner).launcher;
+function createLauncher(owner2, clock, spawner) {
+  return launcherWithState(owner2, clock, spawner).launcher;
 }
-function createOneShotLauncher(owner, clock, spawner) {
-  const { launcher, state } = launcherWithState(owner, clock, spawner);
+function createOneShotLauncher(owner2, clock, spawner) {
+  const { launcher, state } = launcherWithState(owner2, clock, spawner);
   return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
 }
-function launcherWithState(owner, clock, spawner) {
+function launcherWithState(owner2, clock, spawner) {
   const launcher = {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts)),
@@ -29863,7 +29867,7 @@ function launcherWithState(owner, clock, spawner) {
       },
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
-      ...owner,
+      ...owner2,
       clock
     },
     lastStartAt: /* @__PURE__ */ new Map(),
@@ -30010,8 +30014,8 @@ var systemSpawner = {
 };
 
 // src/proc/system-launcher.ts
-var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawner);
-var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
+var systemLauncher = (owner2, clock) => createLauncher(owner2, clock, systemSpawner);
+var systemOneShotLauncher = (owner2, clock) => createOneShotLauncher(owner2, clock, systemSpawner);
 
 // src/host.ts
 function processWorld() {
@@ -30244,13 +30248,17 @@ var SESSION_BOOK_FILE = {
   // request it came from was.
   parse: (value) => {
     const origin = originOfRecord(value);
-    if (origin === null) return null;
+    if (origin === null)
+      return { kind: "failed", reason: "is not the origin of a render" };
     const { claudeConfigDir: claudeConfigDir2 } = value;
     if (!(0, import_node_path3.isAbsolute)(origin.projectDir) || !(0, import_node_path3.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path3.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path3.isAbsolute)(claudeConfigDir2)))
-      return null;
+      return { kind: "failed", reason: "holds a path that is not absolute" };
     return {
-      origin,
-      ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+      kind: "ok",
+      value: {
+        origin,
+        ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+      }
     };
   }
 };
@@ -30281,7 +30289,7 @@ var SessionBook = class {
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
     this.phase = "open";
-    this.storage.save(Object.fromEntries(this.book));
+    this.storage.save(this.book);
   }
   // The session's newest request: what it says the session is, saved when
   // it moved.
@@ -30294,7 +30302,7 @@ var SessionBook = class {
     this.book.set(session, durable);
     this.bound();
     if (held2 !== void 0 && sameDurable(held2, durable)) return;
-    if (this.phase === "open") this.storage.save(Object.fromEntries(this.book));
+    if (this.phase === "open") this.storage.save(this.book);
   }
   // [LAW:one-source-of-truth] The session as a click finds it: live from the
   // request heard since the daemon started, else what the book kept of it,
@@ -30366,10 +30374,10 @@ function failureText(r, where = "") {
   const said2 = saidBy(r, r.stderr);
   return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
 }
-function launcherWarningsAt(facts, at, render3) {
+function launcherWarningsAt(facts, at, render4) {
   return facts.flatMap((fact) => {
     if (fact.kind === "lifeline") return [fact];
-    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
+    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render4);
     return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
   });
 }
@@ -30525,12 +30533,6 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
 function sessionStatePath(host) {
   return import_node_path5.default.join(stateDir(host), "session-state.json");
 }
@@ -30556,7 +30558,6 @@ function logPath(host) {
 function daemonPaths(host) {
   return {
     socket: socketPath(host),
-    lease: leasePath(host),
     state: stateDir(host),
     registry: daemonRegistryDir(host),
     log: logPath(host),
@@ -33384,9 +33385,9 @@ var ObservableArrayAdministration = class {
     }
   }
 };
-function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned2 = false) {
+function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned = false) {
   return initObservable(() => {
-    const adm = new ObservableArrayAdministration(name, enhancer, owned2);
+    const adm = new ObservableArrayAdministration(name, enhancer, owned);
     addHiddenFinalProp(adm.values_, $mobx, adm);
     const proxy = new Proxy(adm.values_, arrayTraps);
     adm.proxy_ = proxy;
@@ -44076,12 +44077,12 @@ function shiftAnchor(anchor, cells) {
     inner: anchor.inner && shiftAnchor(anchor.inner, cells)
   };
 }
-function drawnBy(anchor, owner) {
-  return levelOf(anchor, owner) !== void 0;
+function drawnBy(anchor, owner2) {
+  return levelOf(anchor, owner2) !== void 0;
 }
-function levelOf(anchor, owner) {
+function levelOf(anchor, owner2) {
   let level = anchor;
-  while (level !== void 0 && level.owner !== owner)
+  while (level !== void 0 && level.owner !== owner2)
     level = level.inner;
   return level;
 }
@@ -44984,7 +44985,7 @@ var Segment = class _Segment {
    * Control segments occupy no cell and are left as they are. `firstRow` is
    * the owner's row that `lines[0]` is, for output that arrives in pieces.
    */
-  static anchorLines(lines2, owner, firstRow = 0) {
+  static anchorLines(lines2, owner2, firstRow = 0) {
     return lines2.map((line, i2) => {
       const row2 = firstRow + i2;
       let col = 0;
@@ -44992,7 +44993,7 @@ var Segment = class _Segment {
         if (segment.isControl)
           return segment;
         const style = segment.style ?? Style.null();
-        const anchored2 = new _Segment(segment.text, style.withAnchor({ owner, row: row2, col, inner: style.anchor }));
+        const anchored2 = new _Segment(segment.text, style.withAnchor({ owner: owner2, row: row2, col, inner: style.anchor }));
         col += segment.cellLength;
         return anchored2;
       });
@@ -46034,9 +46035,9 @@ var ListState = class {
     this.#items = [...items];
   }
 };
-function refuseRenderWrite(owner) {
+function refuseRenderWrite(owner2) {
   const pass = activePass();
-  if (pass !== void 0 && pass !== owner)
+  if (pass !== void 0 && pass !== owner2)
     throw new RenderWriteError();
 }
 
@@ -46324,11 +46325,11 @@ var RichText = class _RichText {
     this._addSpan(clampedStart, clampedEnd, style);
     return this;
   }
-  highlightRegex(pattern2, style) {
+  highlightRegex(pattern3, style) {
     const text4 = this._text.get();
     let count = 0;
-    const flags = pattern2.flags.includes("g") ? pattern2.flags : pattern2.flags + "g";
-    const re = new RegExp(pattern2.source, flags);
+    const flags = pattern3.flags.includes("g") ? pattern3.flags : pattern3.flags + "g";
+    const re = new RegExp(pattern3.source, flags);
     let match;
     while ((match = re.exec(text4)) !== null) {
       if (match[0].length === 0) {
@@ -47145,10 +47146,10 @@ var JoinedCell = class _JoinedCell {
     const read2 = (side) => {
       if (parts[side].size === 0)
         return null;
-      const [owner, edge] = [neighbours[side], edges[side]];
-      if (owner === null || edge === void 0)
+      const [owner2, edge] = [neighbours[side], edges[side]];
+      if (owner2 === null || edge === void 0)
         throw new Error(`a join cell paints with its ${side} neighbour's edge, and the join has no ${side} neighbour`);
-      return { owner, edge };
+      return { owner: owner2, edge };
     };
     this.reads = { left: read2("left"), right: read2("right") };
     this.follows = this.reads.left !== null || this.reads.right !== null;
@@ -47595,15 +47596,15 @@ function edgesBeside(walked, drawings) {
     });
     return byRow;
   };
-  return (cells, side, owner) => {
+  return (cells, side, owner2) => {
     const row2 = (rows ??= index()).get(cells[0].row) ?? [];
     const first2 = cells[0].col;
     const last2 = cells[cells.length - 1].col;
     if (side === "right")
-      return row2.find((cell3) => cell3.col > last2 && drawnBy(cell3.anchor, owner));
+      return row2.find((cell3) => cell3.col > last2 && drawnBy(cell3.anchor, owner2));
     for (let k = row2.length - 1; k >= 0; k--) {
       const cell3 = row2[k];
-      if (cell3.col < first2 && drawnBy(cell3.anchor, owner))
+      if (cell3.col < first2 && drawnBy(cell3.anchor, owner2))
         return cell3;
     }
     return void 0;
@@ -47639,14 +47640,14 @@ function measured(looked2, walked, depth, theme24) {
 }
 function confined(effect, ...owners) {
   const confinedTo = new Set(owners);
-  const owned2 = (cell3) => {
+  const owned = (cell3) => {
     for (let level = cell3.anchor; level; level = level.inner)
       if (confinedTo.has(level.owner))
         return true;
     return false;
   };
-  const narrowed = (drawn) => ({ ...drawn, all: () => drawn.all().filter(owned2), cells: () => drawn.cells().filter(owned2) });
-  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame2) => (look, cell3) => owned2(cell3) ? frame2(look, cell3) : look);
+  const narrowed = (drawn) => ({ ...drawn, all: () => drawn.all().filter(owned), cells: () => drawn.cells().filter(owned) });
+  return (drawn) => Animation.map(effect(narrowed(drawn)), (frame2) => (look, cell3) => owned(cell3) ? frame2(look, cell3) : look);
 }
 function onScreen(slots, reverse2) {
   return reverse2 ? { fg: slots.bg, bg: slots.fg } : slots;
@@ -50771,12 +50772,56 @@ var refusedRender = (problems) => ({
 init_globals();
 init_os();
 var import_node_path14 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process.kill(pid2, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+function sameProcess(a, b) {
+  if (a.pid !== b.pid) return "different";
+  if (a.startTime === null || b.startTime === null) return "incomparable";
+  return a.startTime === b.startTime ? "same" : "different";
+}
+
+// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path14.default.join(stateDir2, "update-act", key);
 }
 function looked(prev, job, began, done, longestLookMs) {
-  if (prev === null || !sameJob(prev.job, job)) {
+  if (prev === null || !sameRecord(prev.job, job)) {
     return {
       kind: "first",
       watched: {
@@ -50861,7 +50906,7 @@ var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
 async function isRecordedJob(record2, read2, jobs, boot) {
   if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
-  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
+  return leader.kind === "unavailable" || sameProcess(record2, { pid: record2.pid, startTime: leader.token }) !== "different";
 }
 function readRecord(actDir) {
   const file = recordOf(actDir);
@@ -50886,15 +50931,16 @@ function parsedRecord(file, text4) {
   }
   throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
-var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
+var sameRecord = (a, b) => a.identity === b.identity && a.pid === b.pid && a.startTime === b.startTime && a.started === b.started;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
-    if (known === null || !sameJob(known.record, record2)) {
+    if (known === null || known.act !== act2 || !sameRecord(known.record, record2)) {
       known = {
+        act: act2,
         record: record2,
         ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
@@ -51069,7 +51115,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.8";
+var PACKAGE_VERSION = "1.232.10";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -52240,21 +52286,21 @@ var SessionEffects = class {
     };
     const byScope = (items) => {
       const parts = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
+      for (const { owner: owner2, placement } of items) {
         const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
         const seen2 = parts.get(part.scope);
         if (seen2 === void 0)
-          parts.set(part.scope, { ...part, owners: [owner] });
-        else seen2.owners.push(owner);
+          parts.set(part.scope, { ...part, owners: [owner2] });
+        else seen2.owners.push(owner2);
       }
       return [...parts.values()];
     };
     const passagesOf = (items) => {
       const byPlacement = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
+      for (const { owner: owner2, placement } of items) {
         const mine = byPlacement.get(placement.id);
-        if (mine === void 0) byPlacement.set(placement.id, [owner]);
-        else mine.push(owner);
+        if (mine === void 0) byPlacement.set(placement.id, [owner2]);
+        else mine.push(owner2);
       }
       return [...byPlacement].flatMap(([id2, owners]) => {
         const passage = passages.get(id2) ?? null;
@@ -52896,6 +52942,12 @@ var TRUNCATE_MODES = [
 // src/config/loader/diagnostics.ts
 init_globals();
 
+// src/utils/regex.ts
+init_globals();
+function escapeRegExp(literal) {
+  return literal.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
 // src/config/json5-edit.ts
 init_globals();
 var import_json5 = __toESM(require_dist(), 1);
@@ -53505,7 +53557,7 @@ function elementPathLine(source, document, pathParts) {
   return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
 }
 function findKeyOccurrence(source, from, key) {
-  const escaped2 = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  const escaped2 = escapeRegExp(key);
   const re = new RegExp(`(?:["']${escaped2}["']|\\b${escaped2}\\b)\\s*:`, "g");
   re.lastIndex = from;
   const m = re.exec(source);
@@ -54254,6 +54306,10 @@ var GLOBAL_FIELDS = {
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
   menuGlyph: text2(menuGlyphSpec)
 };
+function settingNameOf(field) {
+  const row2 = GLOBAL_FIELDS[field];
+  return row2.kind === "selection" ? row2.sessionKey : field;
+}
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
   ([, row2]) => row2.kind === "session" || row2.kind === "config"
@@ -54280,13 +54336,9 @@ function wireKindOf(field) {
 
 // src/config/setting-projections.ts
 var effectiveVarOf = (name) => `${name}.effective`;
-var nameOf = (field) => {
-  const row2 = GLOBAL_FIELDS[field];
-  return row2.kind === "selection" ? row2.sessionKey : field;
-};
 var SETTINGS = Object.fromEntries(
   CONTROLLED_FIELDS.map((field) => {
-    const name = nameOf(field);
+    const name = settingNameOf(field);
     return [
       name,
       {
@@ -54640,7 +54692,7 @@ registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
 });
 var PLACEMENT_THEMES = "placementThemes";
 registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+  paletteOf: (option, render4) => placementPalette(option, render4.palette)
 });
 for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
   registerBuiltinDomain(name, () => members, { library, labelOf });
@@ -54658,7 +54710,7 @@ function perConfigDomainsFor(config2) {
         // palette (see OptionPalette).
         // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
         // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config2.styles[option])
+        paletteOf: (option, render4) => transposedPalette(render4.basePalette, config2.styles[option])
       }
     ],
     // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
@@ -54722,13 +54774,13 @@ function escapedIdent(name) {
     )
   ).join("");
 }
-function unescapedIdent(spelled2) {
+function unescapedIdent(spelled3) {
   const escape = new RegExp(`${ESCAPE}(0[0-9a-f]{5}|10[0-9a-f]{4})`, "g");
-  const name = spelled2.replace(
+  const name = spelled3.replace(
     escape,
     (_, hex3) => String.fromCodePoint(parseInt(hex3, 16))
   );
-  return escapedIdent(name) === spelled2 ? name : null;
+  return escapedIdent(name) === spelled3 ? name : null;
 }
 
 // src/config/menu-keys.ts
@@ -54818,10 +54870,10 @@ function describeControlDomain(domain, perConfigDomains) {
   if (!("min" in domain)) {
     const from = optionsOf(domain);
     const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+    const quoted2 = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
     const named3 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+    return `one of the ${members.length}${named3} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }
@@ -60323,30 +60375,67 @@ function editModeArtifacts() {
 // src/config/placement-keys.ts
 init_globals();
 function chainOwner(paths2) {
-  const digest2 = createHash("sha256").update(JSON.stringify(paths2)).digest("hex");
-  return `o${digest2.slice(0, 16)}`;
+  return `o${digestOf([...paths2]).slice(0, 16)}`;
 }
-var OWNER = "(o[0-9a-f]{16})";
-var SPELT = "([A-Za-z0-9]+)";
-var RELATION = "(before|after)";
-function family(spelling) {
+var FIELDS = {
+  preset: "[A-Za-z0-9]+",
+  id: "[A-Za-z0-9]+",
+  setting: "[^.]+",
+  relation: "before|after"
+};
+var PRESET = { field: "preset" };
+var ID = { field: "id" };
+var SETTING = { field: "setting" };
+var RELATION = { field: "relation" };
+var owner = (then) => ({ ownerThen: then });
+function spelled(strings, ...parts) {
+  return strings.flatMap(
+    (text4, i2) => i2 < parts.length ? [text4, parts[i2]] : [text4]
+  );
+}
+var render2 = (template, fields2, by) => template.map(
+  (part) => typeof part === "string" ? part : "field" in part ? fields2[part.field] : by === null ? "" : by + part.ownerThen
+).join("");
+function pattern2(template, owned) {
+  const seen2 = /* @__PURE__ */ new Set();
+  const source = template.map((part) => {
+    if (typeof part === "string") return escapeRegExp(part);
+    if ("ownerThen" in part)
+      return owned ? `(?<owner>o[0-9a-f]{16})${escapeRegExp(part.ownerThen)}` : "";
+    if (seen2.has(part.field)) return `\\k<${part.field}>`;
+    seen2.add(part.field);
+    return `(?<${part.field}>${FIELDS[part.field]})`;
+  }).join("");
+  return new RegExp(`^${source}$`);
+}
+function family(template, fieldsOf, atOf2) {
+  const freeForm = pattern2(template, false);
+  const ownedForm = pattern2(template, true);
+  const mint = (at) => render2(template, fieldsOf(at), null);
+  const parse4 = (re, text4) => {
+    const groups = re.exec(text4)?.groups;
+    const at = groups === void 0 ? null : atOf2(groups);
+    return at === null ? null : { at, by: groups.owner ?? null };
+  };
   const free = (text4) => {
-    const m = spelling.free.exec(text4);
-    const at = m === null ? null : spelling.at(m.slice(1));
-    return at !== null && spelling.mint(at) === text4 ? at : null;
+    const got = parse4(freeForm, text4);
+    return got !== null && mint(got.at) === text4 ? got.at : null;
+  };
+  const read2 = (text4) => {
+    const got = parse4(ownedForm, text4);
+    return got !== null && got.by !== null && render2(template, fieldsOf(got.at), got.by) === text4 ? { owner: got.by, at: got.at } : null;
   };
   return {
-    mint: spelling.mint,
+    mint,
     free,
-    own: (text4, owner) => {
+    own: (text4, by) => {
       const at = free(text4);
-      return at === null ? null : spelling.owned(at, owner);
+      return at === null ? null : render2(template, fieldsOf(at), by);
     },
-    read: (text4) => {
-      const m = spelling.stored.exec(text4);
-      const owner = m?.[1];
-      const at = m === null ? null : spelling.at(m.slice(2));
-      return at !== null && owner !== void 0 && spelling.owned(at, owner) === text4 ? { owner, at } : null;
+    read: read2,
+    unown: (text4) => {
+      const got = read2(text4);
+      return got === null ? null : mint(got.at);
     }
   };
 }
@@ -60354,10 +60443,10 @@ function paged(menu) {
   const under3 = (text4) => text4.startsWith(MENU_PAGE_NS) ? text4.slice(MENU_PAGE_NS.length) : null;
   return {
     mint: (at) => menuPageKey(menu.mint(at)),
-    own: (text4, owner) => {
+    own: (text4, by) => {
       const inner = under3(text4);
-      const owned2 = inner === null ? null : menu.own(inner, owner);
-      return owned2 === null ? null : MENU_PAGE_NS + owned2;
+      const owned = inner === null ? null : menu.own(inner, by);
+      return owned === null ? null : menuPageKey(owned);
     },
     free: (text4) => {
       const inner = under3(text4);
@@ -60366,68 +60455,60 @@ function paged(menu) {
     read: (text4) => {
       const inner = under3(text4);
       return inner === null ? null : menu.read(inner);
+    },
+    unown: (text4) => {
+      const inner = under3(text4);
+      const free = inner === null ? null : menu.unown(inner);
+      return free === null ? null : menuPageKey(free);
     }
   };
 }
-var placementOf = (preset, id2) => {
+var placementFields = ({ preset, id: id2 }) => ({
+  preset: escapedIdent(preset),
+  id: escapedIdent(id2)
+});
+var placementOf = ({ preset = "", id: id2 = "" }) => {
   const p2 = unescapedIdent(preset);
   const i2 = unescapedIdent(id2);
   return p2 === null || i2 === null ? null : { preset: p2, id: i2 };
 };
-var esc = escapedIdent;
-var DRAFTS = family({
-  mint: ({ preset, id: id2, setting }) => `${PLACEMENT_DRAFT_NS}${esc(preset)}.${esc(id2)}.${setting}`,
-  owned: ({ preset, id: id2, setting }, owner) => `${PLACEMENT_DRAFT_NS}${owner}.${esc(preset)}.${esc(id2)}.${setting}`,
-  free: new RegExp(
-    `^${dots(PLACEMENT_DRAFT_NS)}${SPELT}\\.${SPELT}\\.([^.]+)$`
-  ),
-  stored: new RegExp(
-    `^${dots(PLACEMENT_DRAFT_NS)}${OWNER}\\.${SPELT}\\.${SPELT}\\.([^.]+)$`
-  ),
-  at: ([preset = "", id2 = "", setting = ""]) => {
-    const at = placementOf(preset, id2);
-    return at === null ? null : { ...at, setting };
+var DRAFTS = family(
+  spelled`${PLACEMENT_DRAFT_NS}${owner(".")}${PRESET}.${ID}.${SETTING}`,
+  (at) => ({ ...placementFields(at), setting: at.setting }),
+  (f) => {
+    const at = placementOf(f);
+    return at === null ? null : { ...at, setting: f.setting };
   }
-});
-var CONFIGURE_LISTS = family({
-  mint: ({ preset, id: id2 }) => sharedMenuStateKey(`${EDIT_NS}${esc(preset)}.configure.${esc(id2)}`),
-  owned: ({ preset, id: id2 }, owner) => `${MENU_NS}edit_${owner}_${esc(preset)}_configure_${esc(id2)}`,
-  free: new RegExp(`^${dots(MENU_NS)}edit_${SPELT}_configure_${SPELT}$`),
-  stored: new RegExp(
-    `^${dots(MENU_NS)}edit_${OWNER}_${SPELT}_configure_${SPELT}$`
-  ),
-  at: ([preset = "", id2 = ""]) => placementOf(preset, id2)
-});
-function insertGap(preset, anchor, relation) {
-  const gap = `${relation}.${esc(anchor)}`;
-  const apply = `${EDIT_NS}${esc(preset)}.insert.${gap}`;
-  const host = `${EDIT_NS}${esc(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
-}
-var LIBRARIES = family({
-  mint: ({ preset, id: id2, relation }) => insertGap(preset, id2, relation).stateKey,
-  owned: ({ preset, id: id2, relation }, owner) => `${MENU_NS}edit_${owner}_${esc(preset)}_insert_${relation}_${esc(id2)}`,
-  // The tail repeats the head's fields; re-minting checks they agree.
-  free: new RegExp(
-    `^${dots(MENU_NS)}edit_${SPELT}_insertSeg_${RELATION}_${SPELT}\\.edit_[A-Za-z0-9]+_insert_(?:before|after)_[A-Za-z0-9]+$`
-  ),
-  stored: new RegExp(
-    `^${dots(MENU_NS)}edit_${OWNER}_${SPELT}_insert_${RELATION}_${SPELT}$`
-  ),
-  at: ([preset = "", relation = "", id2 = ""]) => {
-    const at = placementOf(preset, id2);
-    return at === null || relation !== "before" && relation !== "after" ? null : { ...at, relation };
+);
+var CONFIGURE_LISTS = family(
+  spelled`${MENU_NS}edit_${owner("_")}${PRESET}_configure_${ID}`,
+  placementFields,
+  placementOf
+);
+var LIBRARIES = family(
+  spelled`${MENU_NS}edit_${owner("_")}${PRESET}_insertSeg_${RELATION}_${ID}.edit_${PRESET}_insert_${RELATION}_${ID}`,
+  (at) => ({ ...placementFields(at), relation: at.relation }),
+  (f) => {
+    const at = placementOf(f);
+    return at === null || f.relation !== "before" && f.relation !== "after" ? null : { ...at, relation: f.relation };
   }
-});
-var CONFIGURING = family({
-  mint: ({ preset, id: id2 }) => `${esc(preset)}:${esc(id2)}`,
-  owned: ({ preset, id: id2 }, owner) => `${owner}:${esc(preset)}:${esc(id2)}`,
-  free: new RegExp(`^${SPELT}:${SPELT}$`),
-  stored: new RegExp(`^${OWNER}:${SPELT}:${SPELT}$`),
-  at: ([preset = "", id2 = ""]) => placementOf(preset, id2)
-});
+);
+var CONFIGURING = family(
+  spelled`${owner(":")}${PRESET}:${ID}`,
+  placementFields,
+  placementOf
+);
 var placementDraftKey = (preset, id2, setting) => DRAFTS.mint({ preset, id: id2, setting });
 var configureMember = (preset, id2) => CONFIGURING.mint({ preset, id: id2 });
+function insertGap(preset, anchor, relation) {
+  const fields2 = placementFields({ preset, id: anchor });
+  const gap = `${relation}.${fields2.id}`;
+  return {
+    apply: `edit.${fields2.preset}.insert.${gap}`,
+    host: `edit.${fields2.preset}.insertSeg.${gap}`,
+    stateKey: LIBRARIES.mint({ preset, id: anchor, relation })
+  };
+}
 var KEY_FAMILIES = [
   DRAFTS,
   CONFIGURE_LISTS,
@@ -60435,19 +60516,24 @@ var KEY_FAMILIES = [
   paged(CONFIGURE_LISTS),
   paged(LIBRARIES)
 ];
-function ownedKey(key, owner) {
-  for (const f of KEY_FAMILIES)
-    if (f.free(key) !== null) return f.own(key, owner());
-  return key;
+function ownedKey(key, by) {
+  const f = KEY_FAMILIES.find((family2) => family2.free(key) !== null);
+  return f === void 0 ? key : f.own(key, by());
 }
-function ownedValue(key, value, owner) {
-  return isOwnerFreeValue(key, value) ? CONFIGURING.own(value, owner()) : value;
+function ownedValue(key, value, by) {
+  return isOwnerFreeValue(key, value) ? CONFIGURING.own(value, by()) : value;
 }
-function freeValue(key, value, owner) {
+function freeValue(key, value, by) {
   if (key !== EDIT_CONFIGURE_KEY || value === null || !isMember(value))
     return value;
   const read2 = CONFIGURING.read(value);
-  return read2 !== null && read2.owner === owner() ? CONFIGURING.mint(read2.at) : null;
+  return read2 !== null && read2.owner === by() ? CONFIGURING.mint(read2.at) : null;
+}
+function ownerFree(key, value) {
+  return {
+    key: KEY_FAMILIES.map((f) => f.unown(key)).find((k) => k !== null) ?? key,
+    value: key === EDIT_CONFIGURE_KEY ? CONFIGURING.unown(value) ?? value : value
+  };
 }
 var isMember = (value) => value.includes(":");
 function isOwnerFree(key) {
@@ -60456,54 +60542,51 @@ function isOwnerFree(key) {
 function isOwnerFreeValue(key, value) {
   return key === EDIT_CONFIGURE_KEY && CONFIGURING.free(value) !== null;
 }
-var isDraftKey = (key) => DRAFTS.read(key) !== null || DRAFTS.free(key) !== null;
+var isDraftKey = (key) => DRAFTS.read(key) !== null;
 var FOREIGN = { kind: "foreign" };
 var OLD = { kind: "old" };
-var owned = (owner, at) => ({
+var ownedBy2 = (by, at) => ({
   kind: "owned",
-  owner,
+  owner: by,
   member: CONFIGURING.mint(at)
 });
 function classify(key, value) {
   if (key === EDIT_CONFIGURE_KEY) {
     const v = value();
     const read2 = v === null ? null : CONFIGURING.read(v);
-    if (read2 !== null) return owned(read2.owner, read2.at);
+    if (read2 !== null) return ownedBy2(read2.owner, read2.at);
     return v !== null && isMember(v) ? OLD : FOREIGN;
   }
   for (const f of KEY_FAMILIES) {
     const read2 = f.read(key);
-    if (read2 !== null) return owned(read2.owner, read2.at);
+    if (read2 !== null) return ownedBy2(read2.owner, read2.at);
     if (f.free(key) !== null) return OLD;
   }
   return key.startsWith(PLACEMENT_DRAFT_NS) ? OLD : FOREIGN;
 }
 function holdsOf(chain2) {
   const prefixes = [
-    { paths: [], config: chain2.base },
+    { paths: [], trees: chain2.base },
     ...chain2.layers.map((layer, i2) => ({
       paths: chain2.layers.slice(0, i2 + 1).map((l) => l.path),
-      config: layer.config
+      trees: layer.placed
     }))
   ];
   return new Map(
-    prefixes.map(({ paths: paths2, config: config2 }) => [
+    prefixes.map(({ paths: paths2, trees }) => [
       chainOwner(paths2),
-      { paths: paths2, placed: placedIn(config2) }
+      { paths: paths2, placed: placedIn(trees) }
     ])
   );
 }
-function placedIn(config2) {
+function placedIn(trees) {
   return new Set(
-    presetNames(config2.presets).flatMap(
-      (preset) => [...walkNodes(presetRoot(config2, preset).node)].flatMap(
-        (n) => n.kind === "segment" ? [CONFIGURING.mint({ preset, id: placementId(n) })] : []
+    presetNames(trees.presets).flatMap(
+      (preset) => placementIds(presetRoot(trees, preset).node).map(
+        (id2) => CONFIGURING.mint({ preset, id: id2 })
       )
     )
   );
-}
-function dots(literal) {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // src/config/help.ts
@@ -62119,10 +62202,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf3 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
+  const nameOf2 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
   const actions = {};
   for (let held2 = 0; held2 < 2 ** gates.length; held2++)
-    actions[nameOf3(held2)] = {
+    actions[nameOf2(held2)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -62130,7 +62213,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i2, held2) => i2 === gates.length ? `"${nameOf3(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
+  const link = (i2, held2) => i2 === gates.length ? `"${nameOf2(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -64620,21 +64703,21 @@ function postMortemsOf(files) {
     )
   }));
 }
-function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
-  const dir = owner.snapshotDir;
+function realLimitsDeps(startedAtMs, shutdown, owner2, overrides = {}) {
+  const dir = owner2.snapshotDir;
   return {
-    clock: owner.clock,
+    clock: owner2.clock,
     pid: process.pid,
     snapshotDir: dir,
-    log: owner.log,
+    log: owner2.log,
     memoryBytes: () => {
       const mem = process.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(owner.launcher, process.platform),
+    memoryCharge: chargeProbe(owner2.launcher, process.platform),
     captureMemoryReport: (pids) => memoryReports(
       pids.map(
-        (pid2) => platformProbes(owner.launcher, process.platform, pid2)
+        (pid2) => platformProbes(owner2.launcher, process.platform, pid2)
       )
     ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
@@ -64643,7 +64726,7 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
     // sensitive?" question at the worst moment to be asking it.
     writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
     writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
-    writeLogNow: owner.writeLogNow,
+    writeLogNow: owner2.writeLogNow,
     listArtifacts: () => breachArtifacts(dir),
     removeFile: (file) => fs_default.unlinkSync(file),
     shutdown,
@@ -66085,8 +66168,8 @@ var PricingService = class {
       { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
       { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
     ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
+    for (const { pattern: pattern3, fallback } of patterns) {
+      if (pattern3.some((p2) => lowerModelId.includes(p2))) {
         if (allPricing[fallback]) {
           return allPricing[fallback];
         }
@@ -71072,14 +71155,14 @@ function applyPlugins(files, ctx, base, validate) {
   );
 }
 function withoutPlugin(config2, plugin) {
-  const owned2 = ownedBy(plugin);
-  const keep2 = (r) => Object.fromEntries(Object.entries(r).filter(([name]) => !owned2(name)));
+  const owned = ownedBy(plugin);
+  const keep2 = (r) => Object.fromEntries(Object.entries(r).filter(([name]) => !owned(name)));
   const held2 = [
     config2.variables,
     config2.segments,
     config2.helpers,
     config2.actions
-  ].some((r) => Object.keys(r).some(owned2));
+  ].some((r) => Object.keys(r).some(owned));
   if (!held2) return config2;
   return {
     ...config2,
@@ -71589,9 +71672,9 @@ function requireOneSourcePerFile(file, plugin, config2) {
     },
     /* @__PURE__ */ new Map()
   );
-  const owned2 = ownedBy(plugin);
-  const issues = [...readers].filter(([, names]) => names.length > 1 && names.some(owned2)).map(([read2, names]) => ({
-    path: `sources.${names.find(owned2).slice(`${plugin}.`.length)}`,
+  const owned = ownedBy(plugin);
+  const issues = [...readers].filter(([, names]) => names.length > 1 && names.some(owned)).map(([read2, names]) => ({
+    path: `sources.${names.find(owned).slice(`${plugin}.`.length)}`,
     message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read2}: a session's file is one document, read by one source`
   }));
   if (issues.length > 0) throw new ConfigError(file, issues);
@@ -72795,16 +72878,16 @@ function refusalOf2({ identity: { read: read2, refresh } }) {
 function absolute(where, path45) {
   return (0, import_node_path31.isAbsolute)(path45) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path45)}`;
 }
-function capturing(pattern2) {
+function capturing(pattern3) {
   let regex;
   let groups;
   try {
-    regex = new RegExp(pattern2);
-    groups = new RegExp(`${pattern2}|`).exec("").length - 1;
+    regex = new RegExp(pattern3);
+    groups = new RegExp(`${pattern3}|`).exec("").length - 1;
   } catch (e) {
     return `parse.regex is not a valid regular expression: ${e.message}`;
   }
-  return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
+  return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern3)}`;
 }
 
 // src/doctor/gather.ts
@@ -72970,7 +73053,7 @@ function resolveValued(field, staged, sessionPick, globals) {
   const row2 = valuedRow(field);
   return effectiveGlobal(
     staged[field],
-    row2.kind === "session" ? sessionPick(field) : null,
+    row2.kind === "session" ? sessionPick(settingNameOf(field)) : null,
     globals[field],
     row2.floor,
     row2.parse
@@ -72978,7 +73061,9 @@ function resolveValued(field, staged, sessionPick, globals) {
 }
 function presetOf(config2, sessionPick) {
   return effectivePresetName(
-    sessionPick("preset"),
+    // [LAW:one-source-of-truth] Read under the key a preset pick is written
+    // under.
+    sessionPick(settingNameOf("preset")),
     config2.globals.preset,
     config2.presets
   );
@@ -72989,7 +73074,7 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config2.editGlobals : {};
   const theme24 = resolveThemeSelection(
     staged.palette,
-    sessionPick("theme"),
+    sessionPick(settingNameOf("palette")),
     declared.palette
   );
   const globals = underThemeDefault(
@@ -73008,13 +73093,13 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
     theme: theme24,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick("style"),
+      sessionPick(settingNameOf("style")),
       globals.style,
       config2.styles
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick("effect"),
+      sessionPick(settingNameOf("effect")),
       globals.effect
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
@@ -74199,7 +74284,7 @@ var INSTALL_QUERIES = (session) => [
   show(session, PRIOR_OPTION),
   show(session, WROTE_OPTION)
 ];
-function leftBehind(prior, wrote, owner) {
+function leftBehind(prior, wrote, owner2) {
   let parsed2;
   let status;
   try {
@@ -74211,17 +74296,17 @@ function leftBehind(prior, wrote, owner) {
       why: `${PRIOR_OPTION} does not read (${String(error)})`
     };
   }
-  return parsed2.owner === owner ? { kind: "ours", prior: parsed2, status } : {
+  return parsed2.owner === owner2 ? { kind: "ours", prior: parsed2, status } : {
     kind: "theirs",
     why: `the daemon at ${JSON.stringify(parsed2.owner)} draws it`
   };
 }
-function installPlan(session, answers, owner) {
+function installPlan(session, answers, owner2) {
   const [statusWordNow = "", ...rest2] = answers;
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") return leftBehind(prior, wrote, owner2);
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i2 = 0; i2 < base; i2++) {
@@ -74238,7 +74323,7 @@ function installPlan(session, answers, owner) {
     )
   };
   const laid = {
-    owner,
+    owner: owner2,
     base,
     status: own2.status,
     formats: own2.formats,
@@ -75244,7 +75329,7 @@ var OUTLIVES = {
   surface: true
 };
 var outlives = (act2) => OUTLIVES[act2.kind];
-function nameOf2(act2) {
+function nameOf(act2) {
   switch (act2.kind) {
     case "copy":
     case "open":
@@ -75380,9 +75465,9 @@ var Acts = class {
     const { outcome, said: said2 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act2);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf2(act2)}: ${said2}`
+      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf(act2)}: ${said2}`
     );
-    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act2)}: ${outcome.reason}` };
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf(act2)}: ${outcome.reason}` };
   }
   async performed(act2) {
     try {
@@ -78150,7 +78235,7 @@ function wrapOffsets(plain, line, indent2) {
 function takenOnLine(before, options) {
   if (before.length === 0) return 0;
   const { lines: lines2 } = drawStripCells(
-    before.map(({ owner }) => owner),
+    before.map(({ owner: owner2 }) => owner2),
     options
   );
   const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
@@ -78169,7 +78254,7 @@ function dividedToLine(item, line, before, options) {
     ...item,
     owner: piece.truncate(line, { marker: "" }).padLeft(i2 > 0 ? options.padding : 0)
   })).filter(
-    ({ owner }, _, { length }) => length === 1 || owner.plain.trim() !== ""
+    ({ owner: owner2 }, _, { length }) => length === 1 || owner2.plain.trim() !== ""
   );
 }
 function fitRow(row2, options) {
@@ -79029,7 +79114,7 @@ var cell2 = (text4, style) => {
   return drawn;
 };
 var currentMark = (current) => new Style({ bold: current });
-function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
+function optionPaint(active2, distribution, render4, paletteOf, drawnAt, ground) {
   if (paletteOf === void 0) {
     return (position, _option, label2, current) => cell2(
       label2,
@@ -79043,7 +79128,7 @@ function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground)
   return (_position, option, label2, current) => named2(
     label2,
     Style.combine([text4, currentMark(current)]),
-    paletteOf(option, render3)
+    paletteOf(option, render4)
   );
 }
 var named2 = (label2, text4, palette) => cell2(
@@ -79053,15 +79138,15 @@ var named2 = (label2, text4, palette) => cell2(
     swatch(palette)
   ])
 );
-function labelPaint(render3, paletteOf, option, label2) {
-  return paletteOf === void 0 ? cell2(label2) : named2(label2, void 0, paletteOf(option, render3));
+function labelPaint(render4, paletteOf, option, label2) {
+  return paletteOf === void 0 ? cell2(label2) : named2(label2, void 0, paletteOf(option, render4));
 }
-function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
+function swatchPaint(active2, render4, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
   return (_position, option, _label, current) => cell2(
     RichText.fromFragments([
       cell2(current ? "[" : " ", text4),
-      swatch(paletteOf(option, render3)),
+      swatch(paletteOf(option, render4)),
       cell2(current ? "]" : " ", text4)
     ])
   );
@@ -82586,10 +82671,10 @@ function synthesizePlacementMenus(config2, issues) {
         const member = menuMember(apply);
         const stateKey = menuStateKey(id2, apply, options.key);
         const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const owner2 = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
         const clashKey = [stateKey, pageKey].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
-          return prior2 !== void 0 && prior2 !== owner;
+          return prior2 !== void 0 && prior2 !== owner2;
         });
         if (clashKey !== void 0) {
           issue3(
@@ -82598,8 +82683,8 @@ function synthesizePlacementMenus(config2, issues) {
           );
           continue;
         }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
+        ownerBySynthKey.set(stateKey, owner2);
+        ownerBySynthKey.set(pageKey, owner2);
         const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity2);
@@ -82725,8 +82810,8 @@ function presenceOf(segments, rendering) {
   return (name) => {
     if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
       return { kind: "declared" };
-    const owner = owners.find(([owns]) => owns(name));
-    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
+    const owner2 = owners.find(([owns]) => owns(name));
+    if (owner2 !== void 0) return { kind: "plugin", definition: owner2[1] };
     const scope = scopeOf(name);
     return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
   };
@@ -82824,9 +82909,9 @@ function authoredPlacement(raw, name) {
 }
 var unplacedMessage = (layoutKey, name, segments, presence2) => presence2.kind === "plugin" ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence2.definition)}" declares \u2014 the plugin loaded from ${presence2.definition.path} declares: ${pluginDeclares(pluginNs(presence2.definition), segments)}${missingSegmentHint(name, segments)}` : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
 function pluginDeclares(ns, segments) {
-  const owned2 = Object.keys(segments).filter(ownedBy(ns)).sort();
-  if (owned2.length === 0) return "no segments";
-  return owned2.map((seg2) => {
+  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
+  if (owned.length === 0) return "no segments";
+  return owned.map((seg2) => {
     const settings = Object.keys(segments[seg2].settings ?? {});
     return `${seg2} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
   }).join(", ");
@@ -83936,7 +84021,7 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
   };
   if (top === void 0) {
     return {
-      layers,
+      layers: [],
       base,
       installed,
       ...renderable(
@@ -83950,19 +84035,29 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
     };
   }
   try {
+    const chain2 = renderable(
+      validateRenderable(
+        top,
+        rendering,
+        top.path,
+        allowedPalettes,
+        layers.slice(0, -1).reverse()
+      )
+    );
     return {
-      layers,
+      // [LAW:one-source-of-truth] Each prefix's trees through the one insert
+      // pass validation places the chain's by; the top's is the chain's own.
+      layers: layers.map((layer, i2) => ({
+        ...layer,
+        placed: i2 === layers.length - 1 ? chain2.placed : insertsOf(
+          layer,
+          layers.slice(0, i2).reverse(),
+          layer.plugins.rendering
+        ).place()
+      })),
       base,
       installed,
-      ...renderable(
-        validateRenderable(
-          top,
-          rendering,
-          top.path,
-          allowedPalettes,
-          layers.slice(0, -1).reverse()
-        )
-      )
+      ...chain2
     };
   } catch (e) {
     for (const [i2, layer] of layers.slice(0, -1).entries())
@@ -83986,7 +84081,7 @@ function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
     );
     return;
   }
-  const owned2 = ownedBy(ns);
+  const owned = ownedBy(ns);
   const issues = [];
   const ctx = {
     source: "",
@@ -83996,9 +84091,9 @@ function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
     unplaced: [],
     inherited: []
   };
-  validateDeclarations(ctx, config2, templateScopeOf(config2), owned2);
-  validateNoCycles(ctx, config2, owned2);
-  validateNoNesting(ctx, config2, { checked: owned2, authored: owned2 });
+  validateDeclarations(ctx, config2, templateScopeOf(config2), owned);
+  validateNoCycles(ctx, config2, owned);
+  validateNoNesting(ctx, config2, { checked: owned, authored: owned });
   if (issues.length > 0) throw new ConfigError(filePath2, issues);
 }
 function unauthored(config2) {
@@ -84020,18 +84115,13 @@ var NO_FILE = {
   }
 };
 function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
-  const presence2 = presenceOf(authoredConfig.config.segments, rendering);
-  const written3 = layerInserts(
-    { ...authoredConfig, path: filePath2 },
-    beneath,
-    presence2
-  );
+  const {
+    presence: presence2,
+    written: written3,
+    inserted: placing
+  } = insertsOf({ ...authoredConfig, path: filePath2 }, beneath, rendering);
   const judge = (cells, refused2) => {
-    const inserted = placeInserts(
-      authoredConfig.config,
-      cells,
-      written3.authored
-    );
+    const inserted = placing(cells);
     return judgeRenderable(
       authoredConfig,
       filePath2,
@@ -84128,6 +84218,17 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     dropped,
     placed: merged,
     warnings: notices
+  };
+}
+function insertsOf(top, beneath, rendering) {
+  const presence2 = presenceOf(top.config.segments, rendering);
+  const written3 = layerInserts(top, beneath, presence2);
+  const inserted = (cells) => placeInserts(top.config, cells, written3.authored);
+  return {
+    presence: presence2,
+    written: written3,
+    inserted,
+    place: () => inserted(written3.cells).config
   };
 }
 function layerInserts(top, beneath, presence2) {
@@ -86217,10 +86318,10 @@ function lastClickError(state, sessionId2) {
   const raw = state.get(sessionId2, KEY);
   return raw === null ? null : recordOf2(raw);
 }
-function clickErrorAt(state, sessionId2, at, render3) {
+function clickErrorAt(state, sessionId2, at, render4) {
   const last2 = lastClickError(state, sessionId2);
   if (last2 === null) return { kind: "none" };
-  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
+  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render4);
   return kind === "over" ? { kind } : { kind, error: last2 };
 }
 function recordOf2(raw) {
@@ -86761,8 +86862,8 @@ function subjectOf(w) {
       return w.where;
   }
 }
-function daemonEventAt(kind, event, at, render3) {
-  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
+function daemonEventAt(kind, event, at, render4) {
+  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render4) === "over" ? void 0 : { kind, message: event.text, event };
 }
 function answerRequest(parts, req, facts, effects) {
   var _stack = [];
@@ -87288,7 +87389,7 @@ init_globals();
 
 // src/renderer/setting-drafts.ts
 init_globals();
-function spelled(e, name) {
+function spelled2(e, name) {
   const value = e[name];
   switch (typeof value) {
     case "boolean":
@@ -87336,12 +87437,12 @@ function baseOf(config2, sessionPick) {
 }
 function differing(rows, session, baseOf2, targetOf) {
   return rows.flatMap(([name, row2]) => {
-    const value = spelled(session, name);
-    return value === null || value === spelled(baseOf2(name), name) ? [] : [{ ...row2, value, target: targetOf(row2) }];
+    const value = spelled2(session, name);
+    return value === null || value === spelled2(baseOf2(name), name) ? [] : [{ ...row2, value, target: targetOf(row2) }];
   });
 }
 function sessionSettingValue(config2, sessionPick, name) {
-  return spelled(sessionGlobals2(config2, sessionPick), name);
+  return spelled2(sessionGlobals2(config2, sessionPick), name);
 }
 function settingDrafts(config2, sessionPick) {
   const session = sessionGlobals2(config2, sessionPick);
@@ -87356,11 +87457,7 @@ function landingKey(config2, preset, field) {
   return field in (presetByName(config2.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
 }
 function durableLanding(config2, sessionPick, key) {
-  const preset = effectivePresetName(
-    sessionPick(SETTINGS.preset.sessionKey),
-    config2.globals.preset,
-    config2.presets
-  );
+  const preset = presetOf(config2, sessionPick);
   const target = parsePersistTarget(key);
   return {
     key: target?.scope === "globals" ? landingKey(config2, preset, target.field) : key,
@@ -87447,21 +87544,21 @@ function themeOwnLook(config2, theme24) {
 }
 function themeDefaultSave(config2, sessionPick) {
   const session = sessionGlobals2(config2, sessionPick);
-  const theme24 = spelled(session, "theme");
+  const theme24 = spelled2(session, "theme");
   if (theme24 === null) return { kind: "rule" };
   const own2 = themeOwnLook(config2, theme24);
   const declared = presetGlobals(config2, session.preset);
   const look = Object.fromEntries(
     THEME_DEFAULT_FIELDS.map((f) => [
       f,
-      spelled(declared[f] === void 0 ? session : own2, f)
+      spelled2(declared[f] === void 0 ? session : own2, f)
     ])
   );
   return {
     kind: "look",
     theme: theme24,
     look,
-    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own2, f))
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled2(own2, f))
   };
 }
 function resetLayers(key) {
@@ -88462,6 +88559,7 @@ var SessionState = class {
 
 // src/renderer-interface/history-storage.ts
 init_globals();
+var holdsNothing = (history) => history.past.length === 0 && history.future.length === 0 && history.savepoint === void 0;
 var SETTING_SESSION_KEYS = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey)
 );
@@ -88737,9 +88835,7 @@ var SettingsHistory = class {
   put(sessionId2, history) {
     const next = new Map(this.state);
     next.delete(sessionId2);
-    if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
-      next.set(sessionId2, history);
-    }
+    if (!holdsNothing(history)) next.set(sessionId2, history);
     this.moved.delete(sessionId2);
     this.moved.add(sessionId2);
     this.adopt(next);
@@ -88762,7 +88858,9 @@ var SettingsHistory = class {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
-        next.set(oldest, withoutOldestStep(h));
+        const trimmed = withoutOldestStep(h);
+        if (holdsNothing(trimmed)) next.delete(oldest);
+        else next.set(oldest, trimmed);
       } else {
         this.logger(
           "warn",
@@ -88992,7 +89090,7 @@ function ownedStore(inner, ownerOf) {
     clear: (sessionId2, k) => inner.clear(sessionId2, key(sessionId2, k))
   };
 }
-function releaseEnded(store, sessions, holds2, by, log) {
+function releaseEnded(store, sessions, holds2, by) {
   const lines2 = [];
   runInAction(() => {
     for (const sessionId2 of sessions) {
@@ -89001,19 +89099,19 @@ function releaseEnded(store, sessions, holds2, by, log) {
         const c = classify(key, () => store.get(sessionId2, key));
         const ends = c.kind === "old" || c.kind === "owned" && holds2.get(c.owner)?.placed.has(c.member) === false;
         if (!ends) continue;
-        const owner = c.kind === "owned" ? c.owner : "none";
-        released.set(owner, [...released.get(owner) ?? [], key]);
+        const owner2 = c.kind === "owned" ? c.owner : "none";
+        released.set(owner2, [...released.get(owner2) ?? [], key]);
       }
-      for (const [owner, keys2] of released) {
+      for (const [owner2, keys2] of released) {
         for (const key of keys2) store.clear(sessionId2, key);
-        const chain2 = owner === "none" ? "-" : holds2.get(owner).paths.join(",") || "<default>";
+        const chain2 = owner2 === "none" ? "-" : holds2.get(owner2).paths.join(",") || "<default>";
         lines2.push(
-          `placement-state released by=${by} session=${sessionId2} owner=${owner} chain=${chain2} keys=${keys2.join(",")}`
+          `placement-state released by=${by} session=${sessionId2} owner=${owner2} chain=${chain2} keys=${keys2.join(",")}`
         );
       }
     }
   });
-  for (const line of lines2) log(line);
+  return lines2.length > 0 ? lines2 : [`placement-state released by=${by} sessions=${sessions.length} keys=0`];
 }
 
 // src/doctor/mark-book.ts
@@ -89549,13 +89647,13 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     "info",
     `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} (session=${sid})`
   );
-  releaseEnded(
+  for (const line of releaseEnded(
     ctx.journal.sessionState,
     [sid],
     holds2,
-    "click",
-    (line) => ctx.log("info", line)
-  );
+    "click"
+  ))
+    ctx.landedLog(line);
 };
 var undo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
@@ -89569,9 +89667,8 @@ var back = (value, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
-    ctx.sessionState,
-    ctx.gates.state.gateFor(ctx.configFor(origin)),
-    ctx.ownerFor(origin)
+    ctx.journal.sessionState,
+    ctx.gates.state.gateFor(ctx.configFor(origin))
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -89860,13 +89957,13 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
   const lanes = sid === null ? null : laneMeter(ctx, sid, context);
-  const owner = origin === null ? null : ctx.ownerFor(origin);
-  const owned2 = (store) => ownedStore(store, (session) => {
-    if (session !== sid || owner === null)
+  const owner2 = origin === null ? null : ctx.ownerFor(origin);
+  const owned = (store) => ownedStore(store, (session) => {
+    if (session !== sid || owner2 === null)
       throw new BadVerbArgs(
         `${verb}: session ${session} has not rendered in this click \u2014 no config owns its placements`
       );
-    return owner;
+    return owner2;
   });
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
@@ -89875,7 +89972,8 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text4, read2) => proveLoadsAsLayer(ctx, origin, file, text4, read2)
   });
-  const navigation = ctx.navigation.begin(owned2(journal.sessionState), owner);
+  const navigation = ctx.navigation.begin(journal.sessionState);
+  const landedLines = [];
   const failures = [];
   const closing = (store) => closingView(
     store,
@@ -89887,9 +89985,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
       ...ctx,
       session: sid,
       context,
-      sessionState: closing(owned2(journal.sessionState)),
+      sessionState: closing(owned(journal.sessionState)),
       journal,
-      navigating: closing(navigation.sessionState)
+      navigating: closing(owned(navigation.sessionState)),
+      landedLog: (line) => landedLines.push(line)
     });
   } catch (e) {
     failures.push(e);
@@ -89903,6 +90002,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
         failed3.push(e);
       }
     }
+    for (const line of landedLines) ctx.log("info", line);
     if (lanes !== null) {
       try {
         const after = lanes.read();
@@ -90032,29 +90132,34 @@ var NavigationHistory = class {
   );
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId2, store, gate2, owner) {
-    return this.restorable(sessionId2, store, gate2, owner).length;
+  depth(sessionId2, store, gate2) {
+    return this.restorable(sessionId2, store, gate2).length;
   }
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
   // while every key it changed still holds what it left there and every value
   // it would write back passes `gate` — the session's config's, as it reads
-  // now — and it was made in the chain `owner` names. Any other step is over a
-  // view that is gone — rewritten since (a layout edit releasing the placement
-  // it configured), or no longer one the config admits (that placement
-  // removed, a group renamed, another chain's ✚ that shares the id) — and is
-  // discarded rather than replayed.
-  restorable(sessionId2, store, gate2, owner) {
+  // now. Any other step is over a view that is gone — rewritten since (a
+  // layout edit releasing the placement it configured), or no longer one the
+  // config admits (that placement removed, a group renamed) — and is
+  // discarded rather than replayed. A step names keys as the store holds them,
+  // owned (src/config/placement-keys.ts), so a step made in another config
+  // restores that config's keys alone; the gate, derived from the compile,
+  // names them owner-free.
+  restorable(sessionId2, store, gate2) {
     const state = /* @__PURE__ */ new Map();
     const read2 = (key) => state.has(key) ? state.get(key) : store.get(sessionId2, key);
+    const admits = (key, value) => {
+      const free = ownerFree(key, value);
+      return gate2.validate(free.key, free.value).ok;
+    };
     const kept = [];
-    for (const made of [...this.past.get(sessionId2) ?? []].reverse()) {
-      const { step: step4 } = made;
-      const holds2 = made.owner === owner && step4.every(
-        (c) => read2(c.key) === c.after && (c.before === null || gate2.validate(c.key, c.before).ok)
+    for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
+      const holds2 = step4.every(
+        (c) => read2(c.key) === c.after && (c.before === null || admits(c.key, c.before))
       );
       if (!holds2) continue;
-      kept.unshift(made);
+      kept.unshift(step4);
       for (const c of step4) state.set(c.key, c.before);
     }
     return kept;
@@ -90062,7 +90167,7 @@ var NavigationHistory = class {
   // `store` is the click's own view of session state — the settings journal's,
   // so a navigating click that also picks a setting still records the pick
   // where undo reaches it.
-  begin(store, owner) {
+  begin(store) {
     const pending2 = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
       store,
@@ -90081,7 +90186,7 @@ var NavigationHistory = class {
           const step4 = [...changes.values()].filter(
             (c) => c.before !== c.after
           );
-          if (step4.length > 0) this.push(sessionId2, { owner, step: step4 });
+          if (step4.length > 0) this.push(sessionId2, step4);
         }
         pending2.clear();
       }
@@ -90091,10 +90196,10 @@ var NavigationHistory = class {
   // returns it, with how many steps it discarded (restorable). Written through
   // the bare store, never a navigation journal, so going back is not itself a
   // step.
-  back(sessionId2, store, gate2, owner) {
+  back(sessionId2, store, gate2) {
     const all2 = this.past.get(sessionId2) ?? [];
-    const steps2 = this.restorable(sessionId2, store, gate2, owner);
-    const step4 = steps2.at(-1)?.step;
+    const steps2 = this.restorable(sessionId2, store, gate2);
+    const step4 = steps2.at(-1);
     const discarded = all2.length - steps2.length;
     if (step4 === void 0) {
       this.put(sessionId2, steps2);
@@ -90114,9 +90219,9 @@ var NavigationHistory = class {
     this.put(sessionId2, steps2.slice(0, -1));
     return { step: step4, discarded };
   }
-  push(sessionId2, made) {
+  push(sessionId2, step4) {
     const steps2 = this.past.get(sessionId2) ?? [];
-    this.put(sessionId2, [...steps2, made].slice(-MAX_STEPS2));
+    this.put(sessionId2, [...steps2, step4].slice(-MAX_STEPS2));
   }
   // Move-to-end keeps insertion order as recency.
   put(sessionId2, steps2) {
@@ -90137,7 +90242,7 @@ init_globals();
 init_globals();
 var KEPT_FAULTS = "kept";
 var spelledFaults = (faults) => JSON.stringify(faults);
-var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
+var faultsNote = (spelled3, last2) => last2 === spelled3 ? KEPT_FAULTS : spelled3;
 
 // src/renderer/render-warnings.ts
 var MAX_RECORDS = 512;
@@ -90191,19 +90296,19 @@ var RenderWarningRecords = class {
   // read against. A record evicted, or none yet, makes the note whole.
   keep(sessionId2, by, scope, warnings, faults) {
     const key = keyOf(sessionId2, by);
-    const spelled2 = spelledFaults(faults);
+    const spelled3 = spelledFaults(faults);
     const last2 = this.records.get(key)?.faults;
     this.records.delete(key);
     this.records.set(key, {
       generation: generationOf(scope.config),
       warnings,
-      faults: spelled2
+      faults: spelled3
     });
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
-    return faultsNote(spelled2, last2);
+    return faultsNote(spelled3, last2);
   }
 };
 var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
@@ -90699,7 +90804,7 @@ function sessionSource(deps) {
           layers: layerFlags(state.writable)
         },
         history: deps.history(sessionId2),
-        back: deps.navigation(sessionId2, state)
+        back: deps.navigation(sessionId2, state.config)
       })
     );
     const document = () => deps.worldStates.of(sessionId2);
@@ -90926,7 +91031,10 @@ function loadKey(inputs) {
           // keeps the state.
           source: null,
           // Not keyed: the entry's, recomposed on every load.
-          warnings: null
+          warnings: null,
+          // Not keyed: placed from the layers' own configs and inserts,
+          // keyed here.
+          placed: null
         })
       ),
       base: loaded.base,
@@ -90983,8 +91091,8 @@ function buildRenderState(load, deps) {
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   const warnings = [];
-  const owner = chainOwner(layers.map((l) => l.path));
-  const sessionState = ownedStore(deps.sessionState, () => owner);
+  const owner2 = chainOwner(layers.map((l) => l.path));
+  const sessionState = ownedStore(deps.sessionState, () => owner2);
   const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     store,
@@ -91016,7 +91124,7 @@ function buildRenderState(load, deps) {
     kind: "built",
     state: {
       config: config2,
-      owner,
+      owner: owner2,
       holds: holdsOf(loaded),
       sessionState,
       dropped,
@@ -91550,13 +91658,13 @@ var RenderCache = class {
     const outcome = loadOrigin(cwd2, snapshot, this.deps, served);
     if (outcome.kind !== "failed") {
       const store = this.deps.sessionState;
-      releaseEnded(
+      for (const line of releaseEnded(
         store,
         store.sessions(),
         outcome.state.holds,
-        "load",
-        (line) => this.log("info", line)
-      );
+        "load"
+      ))
+        this.log("info", line);
     }
     return outcome;
   }
@@ -92397,12 +92505,11 @@ function mainRendererOf(inputs, host) {
         home: inputs.home,
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with, over
-        // the state's own view of the store.
-        navigation: (sessionId2, state) => navigationHistory.depth(
+        // the store as the steps name its keys, owned.
+        navigation: (sessionId2, config2) => navigationHistory.depth(
           sessionId2,
-          state.sessionState,
-          gates.state.gateFor(state.config),
-          state.owner
+          sessionState,
+          gates.state.gateFor(config2)
         )
       })
     },
@@ -92588,6 +92695,13 @@ var HeldStores = class {
     this.doctor = readStores(this.storage.doctor);
   }
   // What a renderer built now is built from.
+  // [LAW:locality-or-seam] The boot crosses to the renderer as JSON, so each
+  // store goes as a record, and the renderer reads recency off its key order.
+  // That order holds only because the session-id parse refuses an id that a
+  // record would reorder (an array index), and `__proto__`, which the
+  // records the renderer's lanes (renderer/main.ts) and the frame feed's
+  // viewers (frame-feed.ts) are filled by assignment would take as their
+  // prototype.
   current() {
     return {
       sessions: Object.fromEntries(this.sessions),
@@ -92621,13 +92735,9 @@ var HeldStores = class {
           break;
       }
     if (sessions && !this.closed)
-      steps2.push(
-        () => this.storage.session.save(Object.fromEntries(this.sessions))
-      );
+      steps2.push(() => this.storage.session.save(this.sessions));
     if (history && !this.closed)
-      steps2.push(
-        () => this.storage.history.save(Object.fromEntries(this.history))
-      );
+      steps2.push(() => this.storage.history.save(this.history));
     runEach(steps2);
   }
   file(write) {
@@ -95627,9 +95737,64 @@ var ephemeralSessionFile = () => ({
 var SESSION_STATE_FILE = {
   name: "session-state",
   record: (kv) => kv,
-  parse: (kv) => kv !== null && typeof kv === "object" && !Array.isArray(kv) && Object.values(kv).every((leaf) => typeof leaf === "string") ? kv : null
+  parse: (kv) => {
+    if (!isPlainObject2(kv))
+      return { kind: "failed", reason: "is not an object" };
+    const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
+    return bad === void 0 ? { kind: "ok", value: kv } : {
+      kind: "failed",
+      reason: `has a ${JSON.stringify(bad)} that is not a string`
+    };
+  }
 };
-var isRecord3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function loadSessionFile(kind, filePath2, logger) {
+  const loaded = /* @__PURE__ */ new Map();
+  let text4;
+  try {
+    text4 = fs_default.readFileSync(filePath2, "utf8");
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT")
+      logger("info", `${kind.name} load: no file, starting empty`);
+    else logger("warn", `${kind.name} read failed (${code2}); starting empty`);
+    return loaded;
+  }
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(text4);
+  } catch {
+    logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
+    return loaded;
+  }
+  if (!isPlainObject2(parsed2)) {
+    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
+    return loaded;
+  }
+  let dropped = 0;
+  const keyed = sessionKeyed(parsed2, (key, problem) => {
+    dropped += 1;
+    logger(
+      "warn",
+      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+    );
+  });
+  for (const [id2, value] of keyed) {
+    const entry = kind.parse(value);
+    if (entry.kind === "ok") loaded.set(id2, entry.value);
+    else {
+      dropped += 1;
+      logger(
+        "warn",
+        `${kind.name} load: dropped session ${JSON.stringify(id2)}: its value ${entry.reason}`
+      );
+    }
+  }
+  logger(
+    "info",
+    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`
+  );
+  return loaded;
+}
 var LANDED = { ok: true };
 var SessionFile = class {
   constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
@@ -95655,60 +95820,11 @@ var SessionFile = class {
   written = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   waiting = null;
-  // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
-  // *defined* recovery, not a hidden fallback to different data: an empty
-  // store re-rolls random picks exactly as a first-ever boot would.
   load() {
-    const loaded = /* @__PURE__ */ new Map();
-    let raw;
-    try {
-      raw = fs_default.readFileSync(this.filePath, "utf8");
-    } catch (e) {
-      const code2 = e.code;
-      if (code2 !== "ENOENT") {
-        this.logger(
-          "warn",
-          `${this.kind.name} read failed (${code2}); starting empty`
-        );
-      }
-      return loaded;
-    }
-    try {
-      const parsed2 = JSON.parse(raw);
-      if (isRecord3(parsed2)) {
-        const keyed = sessionKeyed(
-          parsed2,
-          (key, problem) => this.logger(
-            "warn",
-            `${this.kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
-          )
-        );
-        for (const [id2, value] of keyed) {
-          const held2 = this.kind.parse(value);
-          if (held2 !== null) loaded.set(id2, held2);
-          else
-            this.logger(
-              "warn",
-              `${this.kind.name} load: dropped session ${JSON.stringify(id2)}: its value has the wrong shape`
-            );
-        }
-        return loaded;
-      }
-      this.logger(
-        "warn",
-        `${this.kind.name} load: unexpected shape, starting empty`
-      );
-      return loaded;
-    } catch {
-      this.logger(
-        "warn",
-        `${this.kind.name} load: corrupt JSON, starting empty`
-      );
-      return loaded;
-    }
+    return loadSessionFile(this.kind, this.filePath, this.logger);
   }
   save(snapshot) {
-    this.pending = snapshot;
+    this.pending = new Map(snapshot);
     this.schedule();
   }
   // One debounce window at a time: the saves inside it coalesce into the
@@ -95743,13 +95859,12 @@ var SessionFile = class {
     }
     return this.waiting;
   }
+  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
+  // order the owner holds them.
   body(snapshot) {
     return JSON.stringify(
       Object.fromEntries(
-        Object.entries(snapshot).map(([id2, value]) => [
-          id2,
-          this.kind.record(value)
-        ])
+        [...snapshot].map(([id2, value]) => [id2, this.kind.record(value)])
       )
     );
   }
@@ -95795,7 +95910,7 @@ var SessionFile = class {
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
-      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
+      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${snapshot.size} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
     );
   }
 };
@@ -95869,43 +95984,6 @@ function productionClaudeInputEdge(launcher) {
   };
 }
 
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
-  };
-}
-
 // src/daemon/file-storage.ts
 init_globals();
 
@@ -95926,12 +96004,13 @@ function isSavepoint(v) {
   const o = v;
   return Number.isInteger(o.at) && o.at >= 0 && Array.isArray(o.net) && o.net.every(isChange) && isSteps(o.below);
 }
-function isSessionHistory(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  return isSteps(o.past) && isSteps(o.future) && (o.savepoint === void 0 || isSavepoint(o.savepoint));
+function parseSessionHistory(v) {
+  if (!isPlainObject2(v)) return { kind: "failed", reason: "is not an object" };
+  const problem = !isSteps(v.past) ? "has a 'past' that is not a list of steps" : !isSteps(v.future) ? "has a 'future' that is not a list of steps" : v.savepoint !== void 0 && !isSavepoint(v.savepoint) ? "has a 'savepoint' that is not a savepoint" : null;
+  return problem === null ? { kind: "ok", value: v } : { kind: "failed", reason: problem };
 }
-function withoutRetiredKeys(history, retired) {
+function withoutRetiredKeys(history) {
+  const retired = /* @__PURE__ */ new Set();
   const keep2 = (change) => {
     if (change.kind === "layer" || isSettingKey(change.key)) return true;
     retired.add(change.key);
@@ -95941,64 +96020,52 @@ function withoutRetiredKeys(history, retired) {
   const { savepoint } = history;
   const past = steps2(history.past);
   const future = steps2(history.future);
-  if (savepoint === void 0) return { past, future };
+  if (savepoint === void 0) return { history: { past, future }, retired };
   return {
-    past,
-    future,
-    savepoint: {
-      at: steps2(history.past.slice(0, savepoint.at)).length,
-      net: savepoint.net.filter(keep2),
-      below: steps2(savepoint.below)
-    }
+    history: {
+      past,
+      future,
+      savepoint: {
+        at: steps2(history.past.slice(0, savepoint.at)).length,
+        net: savepoint.net.filter(keep2),
+        below: steps2(savepoint.below)
+      }
+    },
+    retired
   };
 }
+var quoted = (keys2) => [...keys2].map((k) => `"${k}"`).join(", ");
+var HISTORY_FILE = {
+  name: "settings-history",
+  parse: (value) => {
+    const parsed2 = parseSessionHistory(value);
+    if (parsed2.kind === "failed") return parsed2;
+    const stripped = withoutRetiredKeys(parsed2.value);
+    if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
+    return {
+      kind: "failed",
+      reason: stripped.retired.size > 0 ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting` : "holds nothing to undo, redo or cancel"
+    };
+  }
+};
 function fileHistoryStorage(file, logger) {
   return {
     load: () => {
-      const loaded = /* @__PURE__ */ new Map();
-      let raw;
-      try {
-        raw = fs_default.readFileSync(file, "utf8");
-      } catch (e) {
-        const code2 = e.code;
-        if (code2 !== "ENOENT") {
+      const loaded = loadSessionFile(HISTORY_FILE, file, logger);
+      for (const [id2, { retired }] of loaded)
+        if (retired.size > 0)
           logger(
             "warn",
-            `settings-history read failed (${code2}); starting empty`
+            `settings-history load: session ${JSON.stringify(id2)} dropped the changes to ${quoted(retired)}, no longer a setting`
           );
-        }
-        return loaded;
-      }
-      try {
-        const parsed2 = JSON.parse(raw);
-        if (parsed2 !== null && typeof parsed2 === "object" && !Array.isArray(parsed2) && Object.values(parsed2).every(isSessionHistory)) {
-          const retired = /* @__PURE__ */ new Set();
-          const keyed = sessionKeyed(
-            parsed2,
-            (key, problem) => logger(
-              "warn",
-              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
-            )
-          );
-          for (const [id2, history] of keyed)
-            loaded.set(id2, withoutRetiredKeys(history, retired));
-          if (retired.size > 0) {
-            logger(
-              "warn",
-              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`
-            );
-          }
-          return loaded;
-        }
-      } catch {
-      }
-      logger("warn", "settings-history load: unexpected shape, starting empty");
-      return loaded;
+      return new Map(
+        [...loaded].map(([id2, { history }]) => [id2, history])
+      );
     },
     save: (state) => {
       try {
         fs_default.mkdirSync(import_node_path48.default.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(state), 384);
+        writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
         const message2 = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
         logger("error", message2);
@@ -96937,7 +97004,7 @@ async function frame(size) {
   if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
   return parseFrame(resp.frame);
 }
-async function render2(size) {
+async function render3(size) {
   const drawn = await frame(size);
   return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
@@ -96959,7 +97026,7 @@ async function click2(url, size) {
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
     const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused3 };
+    return { ...await render3(size), refused: refused3 };
   }
   let refused2 = null;
   try {
@@ -96967,7 +97034,7 @@ async function click2(url, size) {
   } catch (e) {
     refused2 = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused: refused2 };
+  return { ...await render3(size), refused: refused2 };
 }
 var listeners = [];
 var notify = () => {
@@ -97003,7 +97070,7 @@ var transport = {
   about: `This is <a href="https://github.com/promptctl/cc-candybar">cc-candybar</a>'s own daemon, compiled for the browser and running in this page against a simulated machine. The bar replays a few turns of a Claude Code session. Every click is real: open the \u{1F36B} menu, switch themes, arrange segments.`,
   landscape: "landscape/",
   frame,
-  render: render2,
+  render: render3,
   click: click2,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
@@ -97013,7 +97080,7 @@ var transport = {
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();
-    return render2(size);
+    return render3(size);
   },
   scenario: {
     steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
