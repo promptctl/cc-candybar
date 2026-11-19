@@ -129,7 +129,7 @@ describe("a link that cannot be proven is said, never thrown", () => {
     fs.chmodSync(dotGit, 0o000);
     try {
       expect(worktreeLink(wt)).toEqual({
-        kind: "unproven",
+        kind: "unreadable",
         reason: expect.stringContaining("EACCES"),
       });
     } finally {

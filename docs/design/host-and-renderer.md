@@ -225,7 +225,7 @@ interface ConfigSnapshot {
   readonly repo: RepoQuestion | null;        // null: the origin's directories hold nothing to ask about
   readonly plugins: readonly PluginFile[];   // installed and the approved repository's, one per scope and name
   readonly strays: readonly Stray[];         // loose files in a plugin root, each dropped naming where it belongs
-  readonly checkout: Checkout;               // the root a plugin's `data.checkout` resolves against
+  readonly checkout: Checkout | null;        // the root a plugin's `data.checkout` resolves against, or a read failure named in notices
   readonly notices: readonly string[];       // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null;             // what the config's watch cannot hear, or null
 }

@@ -18,8 +18,8 @@ export interface ConfigSnapshot {
   readonly plugins: readonly PluginFile[]; // installed and the approved repository's, one per scope and name
   readonly strays: readonly Stray[]; // loose files in a plugin root, each dropped naming where it belongs
   // The root a plugin's `data.checkout` resolves against: the checkout of the
-  // origin's working directory.
-  readonly checkout: Checkout;
+  // origin's working directory. A read failure supplies a notice and no root.
+  readonly checkout: Checkout | null;
   readonly notices: readonly string[]; // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null; // what the config's watch cannot hear, or null
 }

@@ -195,10 +195,11 @@ function excludeRewrite(
   rewrites: ReadonlyMap<string, FileRewrite>,
   readText: ConfigWriteFiles["readText"],
 ): Outcome<FileRewrite> {
-  const root = gitRootOf(path.dirname(file));
-  if (root === undefined) return ABSENT;
+  const checkout = gitRootOf(path.dirname(file));
+  if (checkout.kind !== "ok") return checkout;
+  const root = checkout.value;
   const at = sharedExcludeOf(root);
-  if (at.kind !== "ok") return at.kind === "absent" ? ABSENT : at;
+  if (at.kind !== "ok") return at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
   const was = prior === undefined ? readText(exclude) : prior.was;

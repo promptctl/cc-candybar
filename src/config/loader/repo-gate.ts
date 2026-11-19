@@ -43,9 +43,18 @@ export interface RepoDir {
 
 // [LAW:one-source-of-truth] The directory a repository's answer is kept
 // under: a linked worktree's counterpart in its main worktree, else the
-// directory itself (an unproven link answers for nobody but itself).
-export function answerDir(d: RepoDir): string {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
+// directory itself. [LAW:no-silent-failure] A failed read leaves the key
+// unknown and cannot be treated as a decided standalone directory.
+export function answerDir(d: RepoDir): string | null {
+  switch (d.link.kind) {
+    case "linked":
+      return d.link.main;
+    case "unreadable":
+      return null;
+    case "unlinked":
+    case "unproven":
+      return d.dir;
+  }
 }
 
 const answerOf = (book: RepoConfigBook, dir: string): RepoAnswer | null =>
@@ -60,6 +69,7 @@ interface Ruling {
 }
 function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
   const key = answerDir(d);
+  if (key === null) return { standing: "unread", under: d.dir };
   if (answers.kind === "failed") return { standing: "unread", under: key };
   const repo = answerOf(answers.value, key);
   if (repo !== null) return { standing: repo, under: key };
@@ -75,12 +85,17 @@ export interface ProjectAccess {
   readonly approved: ApprovedRepo | null;
   readonly question: RepoQuestion | null;
   readonly unread: string | null;
+  readonly unreadIdentity: {
+    readonly dir: string;
+    readonly reason: string;
+  } | null;
 }
 
 export const NO_PROJECT_ACCESS: ProjectAccess = {
   approved: null,
   question: null,
   unread: null,
+  unreadIdentity: null,
 };
 
 export interface RepoProject extends RepoDir {
@@ -106,6 +121,10 @@ export function projectAccess(
         }
       : null,
     unread,
+    unreadIdentity:
+      project.link.kind === "unreadable"
+        ? { dir: project.dir, reason: project.link.reason }
+        : null,
   };
 }
 

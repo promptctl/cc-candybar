@@ -14,7 +14,7 @@ import type {
   PluginFile,
   Stray,
 } from "../../config/config-snapshot.js";
-import type { Checkout } from "../../utils/git-root.js";
+import type { Checkout, CheckoutRead } from "../../utils/git-root.js";
 import type { StateObservation } from "../state-file.js";
 import { repoConfigs } from "./repo-configs.js";
 import type { LayerRole } from "../../config/layer-role.js";
@@ -172,7 +172,7 @@ export interface SessionPlugins {
   readonly plugins: readonly PluginFile[];
   readonly strays: readonly Stray[];
   readonly notices: readonly string[];
-  readonly checkout: Checkout;
+  readonly checkout: Checkout | null;
 }
 
 // [LAW:single-enforcer] The one place plugin precedence applies: keyed by
@@ -181,7 +181,7 @@ export interface SessionPlugins {
 // is no plugin's is keyed alike: it still loads, once, and drops naming why.
 export function sessionPlugins(
   roots: ReadonlyArray<RootListing<PluginFile>>,
-  checkout: Checkout,
+  checkout: CheckoutRead,
 ): SessionPlugins {
   const byNs = new Map<string, PluginFile>();
   const strays: Stray[] = [];
@@ -203,11 +203,15 @@ export function sessionPlugins(
     for (const name of listed.files)
       strays.push({ path: path.join(root, name), scope });
   }
+  // [LAW:no-silent-failure] Only confirmed absence can use cwd. A failed
+  // ancestor check gives checkout-relative plugin data no root.
+  if (checkout.kind === "failed")
+    notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
     plugins: [...byNs.values()],
     strays,
     notices,
-    checkout,
+    checkout: checkout.kind === "ok" ? checkout.value : null,
   };
 }
 
@@ -327,10 +331,14 @@ export function discover(
   );
   // [LAW:dataflow-not-control-flow] Every notice is computed every time; an
   // absent one is a null in the list.
+  const { unreadIdentity } = project;
   const notices = [
     configCollisionNotice(locations),
     configResolutionNotice(resolution),
     repoUnreadNotice(project),
+    unreadIdentity === null
+      ? null
+      : `Repository identity could not be read: ${unreadIdentity.dir} — ${unreadIdentity.reason}`,
     ...session.notices,
   ].filter((n): n is string => n !== null);
   return {

@@ -38,19 +38,31 @@ describe("checkoutLocation", () => {
   afterAll(() => fs.rmSync(tmp, { recursive: true }));
 
   test("main checkout", () => {
-    expect(checkoutLocation(main)).toEqual({ main, worktree: "", subpath: "", noRepo: false });
+    expect(checkoutLocation(main)).toEqual({
+      kind: "ok",
+      value: { main, worktree: "", subpath: "", noRepo: false },
+    });
   });
   test("main checkout subdirectory", () => {
-    expect(checkoutLocation(path.join(main, "src"))).toEqual({ main, worktree: "", subpath: "/src", noRepo: false });
+    expect(checkoutLocation(path.join(main, "src"))).toEqual({
+      kind: "ok",
+      value: { main, worktree: "", subpath: "/src", noRepo: false },
+    });
   });
   test("linked worktree, wherever it lives", () => {
-    expect(checkoutLocation(linked)).toEqual({ main, worktree: "my-tree", subpath: "", noRepo: false });
+    expect(checkoutLocation(linked)).toEqual({
+      kind: "ok",
+      value: { main, worktree: "my-tree", subpath: "", noRepo: false },
+    });
   });
   test("linked worktree subdirectory", () => {
-    expect(checkoutLocation(path.join(linked, "src"))).toEqual({ main, worktree: "my-tree", subpath: "/src", noRepo: false });
+    expect(checkoutLocation(path.join(linked, "src"))).toEqual({
+      kind: "ok",
+      value: { main, worktree: "my-tree", subpath: "/src", noRepo: false },
+    });
   });
   test("no repo", () => {
-    expect(checkoutLocation(tmp)).toEqual({ main: "", worktree: "", subpath: "", noRepo: true });
+    expect(checkoutLocation(tmp)).toEqual({ kind: "absent" });
   });
 });
 

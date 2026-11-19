@@ -5,7 +5,7 @@ import type { Layer } from "../../config/config-snapshot.js";
 import {
   checkoutOf,
   worktreeLink,
-  type Checkout,
+  type CheckoutRead,
   type WorktreeLink,
 } from "../../utils/git-root.js";
 import { oncePerPath } from "../../utils/once-per-path.js";
@@ -25,7 +25,7 @@ export interface DiscoveryFiles {
   readonly text: (path: string) => TextRead;
   readonly stateText: (path: string) => string | null;
   readonly worktree: (dir: string) => WorktreeLink;
-  readonly checkout: (cwd: string) => Checkout;
+  readonly checkout: (cwd: string) => CheckoutRead;
 }
 
 // [LAW:no-silent-failure] The raw read reports its cause. Named layers and
