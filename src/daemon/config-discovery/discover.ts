@@ -302,9 +302,9 @@ export function snapshotOf(
 // names, and the working directory its checkout is found from.
 export type DiscoverQuery = ConfigQuery & { readonly cwd: string };
 
-// [LAW:single-enforcer] What the render cache watches beside what the load
-// names: every candidate location of the chain, there or not, and the plugin
-// roots searched, so a file or a root appearing reloads.
+// [LAW:single-enforcer] Discovery names every candidate layer, repository
+// answer file it consulted, and plugin root it searched. A new file in
+// those locations can change the snapshot.
 export interface ConfigTargets {
   readonly files: readonly string[];
   readonly roots: readonly string[];

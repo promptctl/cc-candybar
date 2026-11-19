@@ -685,11 +685,14 @@ function countingText(
 function physicalDiscovery(
   dataHome: string,
   reads: string[],
-  opens?: string[],
-  state = path.join(root, "state"),
+  { opens, state = path.join(root, "state"), clock = heldClock(new Date()) }: {
+    opens?: string[];
+    state?: string;
+    clock?: ReturnType<typeof heldClock>;
+  } = {},
 ) {
   const watchers = new WatcherRegistry({
-    clock: heldClock(new Date()),
+    clock,
     logger: () => {},
   });
   const service = new ConfigDiscovery({
@@ -722,7 +725,7 @@ test("the two renderers and an answer written through the host read each book re
   };
   const reads: string[] = [];
   const opens: string[] = [];
-  const service = physicalDiscovery(project("data"), reads, opens, state);
+  const service = physicalDiscovery(project("data"), reads, { opens, state });
   const main = service.forRenderer(MAIN_RENDERER);
   const worker = service.forRenderer(rendererNameOf("worktree"));
   main.follow([only]);
@@ -779,7 +782,7 @@ test.each([
     const { origin, file } = named("shared-write", initial);
     const reads: string[] = [];
     const opens: string[] = [];
-    const service = physicalDiscovery(project("empty-data"), reads, opens);
+    const service = physicalDiscovery(project("empty-data"), reads, { opens });
     const first = service.forRenderer(MAIN_RENDERER);
     const second = service.forRenderer(rendererNameOf("worktree"));
     first.follow([origin]);
@@ -802,6 +805,27 @@ test.each([
       expect(textOfLayer(consumer, origin, file)).toBe(changePadding(current));
   },
 );
+
+test("a dangling plugin definition stays quiet until its target appears", () => {
+  const data = project("data");
+  const plugin = path.join(project("data/cc-candybar/plugins/widget"), "plugin.json5");
+  const target = path.join(root, "definition.json5");
+  fs.symlinkSync(target, plugin);
+  const { file, origin: base } = named("session");
+  const origin = { ...base, target: requestedConfigTarget(file, undefined, "config-only") };
+  const clock = heldClock(new Date());
+  const opens: string[] = [];
+  const service = physicalDiscovery(data, [], { clock, opens });
+  const renderer = service.forRenderer(MAIN_RENDERER);
+  renderer.follow([origin]);
+  const definition = () => renderer.snapshotOf(origin)?.plugins.find((p) => p.path === plugin)?.definition;
+  expect(definition()?.kind).toBe("unreadable");
+  clock.advance(3 * POLL_MS + DEBOUNCE_MS);
+  expect(opens.filter((at) => at === file)).toEqual([file]);
+  fs.writeFileSync(target, "{}");
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(definition()).toMatchObject({ kind: "text", text: "{}" });
+});
 
 test("a held layer replaced by a directory cannot be overwritten by an edit", () => {
   const initial = '{ globals: { padding: 1 } }';

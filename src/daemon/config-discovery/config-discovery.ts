@@ -25,7 +25,10 @@ import {
   readTextIfPresent,
   type withRegularTextFile,
 } from "../../utils/regular-text.js";
-import type { FileObservations } from "../foundations/polled-entry.js";
+import {
+  absentPolledEntry,
+  type FileObservations,
+} from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { resolvedTarget } from "../../utils/atomic-write.js";
 import { digestOf } from "../../utils/plain.js";
@@ -264,20 +267,21 @@ export class ConfigDiscovery {
   private batch(): DiscoveryBatch {
     const observed = new Map<string, string>();
     const readText = (file: string): string => {
-      try {
-        const read = this.texts.read(file);
-        observed.set(file, read.entry);
-        return read.text;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT")
-          observed.set(file, "error:ENOENT");
-        throw error;
-      }
+      const read = this.texts.read(file);
+      observed.set(file, read.entry);
+      return read.text;
     };
     const facts = readShared(
       this.deps,
       { ...diskFiles, text: textFrom(readText), ...this.deps.files?.() },
-      (file) => readTextIfPresent(file, (at) => readText(resolvedTarget(at))),
+      (file) => {
+        const target = resolvedTarget(file);
+        const text = readTextIfPresent(target, readText);
+        // A missing target and its still-present symlink have different
+        // polling entries. Record the absence only against the final target.
+        if (text === null) observed.set(target, absentPolledEntry);
+        return text;
+      },
     );
     return { facts, observed };
   }
