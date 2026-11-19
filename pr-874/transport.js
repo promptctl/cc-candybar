@@ -29224,7 +29224,7 @@ var FORGE_CLI = {
   github: { cli: "gh", repoEnv: "GH_REPO" },
   gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
 };
-var GIT_REPOSITORY_ENV = [
+var GIT_REPOSITORY_LOCAL_ENV = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
   "GIT_CONFIG",
   "GIT_CONFIG_PARAMETERS",
@@ -29241,10 +29241,17 @@ var GIT_REPOSITORY_ENV = [
   "GIT_SHALLOW_FILE",
   "GIT_COMMON_DIR"
 ];
-var REPOSITORY_NAMING_ENV = [
-  ...GIT_REPOSITORY_ENV,
+var REPOSITORY_SCOPED_ENV = [
+  ...GIT_REPOSITORY_LOCAL_ENV,
   ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
 ];
+function withoutRepositoryScoped(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
+    )
+  );
+}
 
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
@@ -29275,8 +29282,6 @@ function checkRateLimit(lastStartAt, category, now2) {
 }
 function childEnv(scope, opts) {
   const env2 = { ...opts.environment ?? scope.inherited };
-  const withheld = opts.environment === void 0 ? REPOSITORY_NAMING_ENV : [];
-  for (const name of withheld) delete env2[name];
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -29387,7 +29392,7 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: childEnv(state.scope, {}),
+      env: state.scope.inherited,
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -29995,6 +30000,12 @@ function launcherWithState(owner, clock, spawner) {
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
       ...owner,
+      // [LAW:single-enforcer] The owner's environment is whichever shell
+      // spawned it, so the variables scoped to that shell's repository (a git
+      // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are removed
+      // once, here, and no child inherits them: a child's repository is its
+      // working directory's. The owner's own environment is not edited.
+      inherited: withoutRepositoryScoped(owner.inherited),
       clock
     },
     lastStartAt: /* @__PURE__ */ new Map(),
@@ -49639,128 +49650,18 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
   };
 }
 
-// src/utils/git-root.ts
-init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
-function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path10.default.join(dir, ".git"));
-}
-function gitRootOf(start) {
-  let dir = import_node_path10.default.resolve(start);
-  for (; ; ) {
-    if (holdsGit(dir)) return dir;
-    const parent = import_node_path10.default.dirname(dir);
-    if (parent === dir) return void 0;
-    dir = parent;
-  }
-}
-function checkoutOf(cwd2) {
-  const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path10.default.resolve(cwd2), git: false } : { root, git: true };
-}
-function probe(read2) {
-  try {
-    return ok(read2());
-  } catch (e) {
-    return e.code === "ENOENT" ? ABSENT : failed(e.message, "read");
-  }
-}
-var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
-var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
-function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path10.default.join(root, ".git"), "utf-8"));
-  if (text4.kind !== "ok") return text4;
-  const named2 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path10.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path10.default.resolve(root, named2));
-}
-function sharedExcludeOf(root) {
-  const dotGit = import_node_path10.default.join(root, ".git");
-  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
-  if (isDir.kind !== "ok") return isDir;
-  if (isDir.value) return ok(import_node_path10.default.join(dotGit, "info", "exclude"));
-  const gitDir = gitDirNamed(root);
-  if (gitDir.kind !== "ok") return gitDir;
-  const common = commonDirOf(gitDir.value);
-  if (common.kind === "failed") return common;
-  const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path10.default.join(shared, "info", "exclude"));
-}
-function commonDirOf(gitDir) {
-  const text4 = probe(
-    () => fs_default.readFileSync(import_node_path10.default.join(gitDir, "commondir"), "utf-8")
-  );
-  if (text4.kind !== "ok") return text4;
-  const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path10.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path10.default.resolve(gitDir, common));
-}
-var UNLINKED = { kind: "unlinked" };
-var unproven = (reason) => ({
-  kind: "unproven",
-  reason
-});
-function worktreeLink(dir) {
-  const root = gitRootOf(dir);
-  if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path10.default.join(root, ".git");
-  const followed = probe(() => fs_default.statSync(dotGit));
-  if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
-  const entry = probe(() => fs_default.lstatSync(dotGit));
-  if (entry.kind !== "ok") return unproven(why(dotGit, entry));
-  if (!entry.value.isFile()) return unproven(`${dotGit} is not a file`);
-  const named2 = gitDirNamed(root);
-  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
-  const gitDir = realDir(named2.value);
-  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
-  const common = commonDirOf(gitDir.value);
-  if (common.kind === "absent") return UNLINKED;
-  if (common.kind === "failed") return unproven(common.reason);
-  const realCommon = realDir(common.value);
-  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path10.default.dirname(gitDir.value) !== import_node_path10.default.join(realCommon.value, "worktrees")) {
-    return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
-  }
-  const backFile = import_node_path10.default.join(gitDir.value, "gitdir");
-  const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
-  if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path10.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path10.default.dirname(pointer));
-  if (import_node_path10.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
-    return unproven(
-      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
-    );
-  }
-  const main = import_node_path10.default.basename(realCommon.value) === ".git" ? import_node_path10.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path10.default.join(main, import_node_path10.default.relative(root, dir)) };
-}
-function checkoutLocation(dir) {
-  const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path10.default.resolve(dir);
-  const root = gitRootOf(at);
-  if (root === void 0)
-    return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path10.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path10.default.sep).join("/")}`;
-  const link = worktreeLink(at);
-  return link.kind === "linked" ? {
-    main: import_node_path10.default.resolve(link.main, import_node_path10.default.relative(at, root)),
-    worktree: import_node_path10.default.basename(root),
-    subpath,
-    noRepo: false
-  } : { main: root, worktree: "", subpath, noRepo: false };
-}
-
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path11.default.resolve(base, expandHome(p2, home));
+  return import_node_path10.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -50026,13 +49927,13 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path12.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path11.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path12.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path11.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
@@ -50272,19 +50173,19 @@ var Observations = class {
       this.recent.set(key, recent);
       return ok(recent);
     }
-    const { observed, originalPath } = await this.pending.run(key, async () => {
-      const observed2 = await read2();
-      if (observed2.kind === "ok" && observed2.value.stamp === stamp2 && observed2.value.bytes <= FOLD_WINDOW_BYTES) {
-        this.recent.set(key, observed2.value.value);
+    const { observed: observed2, originalPath } = await this.pending.run(key, async () => {
+      const observed3 = await read2();
+      if (observed3.kind === "ok" && observed3.value.stamp === stamp2 && observed3.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed3.value.value);
         if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
           const oldest = this.recent.keys().next();
           if (!oldest.done) this.recent.delete(oldest.value);
         }
       }
-      return { observed: observed2, originalPath: path31 };
+      return { observed: observed3, originalPath: path31 };
     });
     return observedValue(
-      originalPath === path31 || observed.kind === "ok" && observed.value.stamp === stamp2 ? observed : await read2()
+      originalPath === path31 || observed2.kind === "ok" && observed2.value.stamp === stamp2 ? observed2 : await read2()
     );
   }
 };
@@ -50723,7 +50624,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           clock,
           parts.closing,
           parts.log,
-          checkoutLocation,
+          parts.checkoutLocation,
           checked.req,
           // [LAW:one-source-of-truth] The book's, the newest request's, so a
           // request that arrived behind a newer one runs nothing in its older
@@ -51052,7 +50953,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/segments/git.ts
 init_globals();
@@ -51402,8 +51303,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path13.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path13.default.join(gitDir, "HEAD"), import_node_path13.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path12.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path12.default.join(gitDir, "HEAD"), import_node_path12.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -51843,7 +51744,7 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/segments/pricing.ts
 init_globals();
@@ -51871,18 +51772,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path14.default.join(root, "usage");
+    return import_node_path13.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path14.default.join(root, "locks");
+    return import_node_path13.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -51915,7 +51816,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -51937,7 +51838,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -51966,7 +51867,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path14.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path13.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -52021,7 +51922,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path14.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path13.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -52420,7 +52321,7 @@ var PricingService = class {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -52494,19 +52395,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path15.join)(homeDir, ".config", "claude"), (0, import_node_path15.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path14.join)(homeDir, ".config", "claude"), (0, import_node_path14.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path15.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path14.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path15.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path14.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -52522,14 +52423,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path15.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path14.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path15.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path14.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -53625,9 +53526,9 @@ var SessionUsageStore = class {
       ring.sort((a, b) => a.atMs - b.atMs);
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
       if (ring.at(-1) === cur) slot.sampledAt = stamp2;
-      const observed = ok({ samples: [...ring] });
-      answer(slot.speed, observed);
-      return observed;
+      const observed2 = ok({ samples: [...ring] });
+      answer(slot.speed, observed2);
+      return observed2;
     });
   }
   // The session's speed as its last refresh observed it, for a draw: a frame
@@ -53715,7 +53616,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path16.join)(dir, "projects") + import_node_path16.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path15.join)(dir, "projects") + import_node_path15.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -53736,7 +53637,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path16.dirname)(transcriptPath),
+      (0, import_node_path15.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -53785,7 +53686,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path16.join)(dir, file);
+          const filePath2 = (0, import_node_path15.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -53880,6 +53781,162 @@ var SessionUsageStore = class {
 // src/daemon/cache/git-service.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
+
+// src/utils/git-root.ts
+init_globals();
+var import_node_path16 = __toESM(require_path_browserify(), 1);
+
+// src/utils/regular-text.ts
+init_globals();
+function withRegularTextFile(path31, use) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const stat3 = () => fstatSync(fd, { bigint: true });
+    const observed2 = stat3();
+    if (!observed2.isFile()) throw new Error("not a file");
+    return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+function readRegularTextSync(path31) {
+  return withRegularTextFile(path31, (file) => file.text());
+}
+
+// src/utils/git-root.ts
+function holdsGit(dir) {
+  return fs_default.existsSync(import_node_path16.default.join(dir, ".git"));
+}
+function ascend(start, entry) {
+  let dir = import_node_path16.default.resolve(start);
+  for (; ; ) {
+    const found2 = entry(dir);
+    if (found2 !== void 0) return { root: dir, entry: found2 };
+    const parent = import_node_path16.default.dirname(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+}
+function gitRootOf(start) {
+  return ascend(start, (dir) => holdsGit(dir) ? true : void 0)?.root;
+}
+function checkoutOf(cwd2, files = checkoutFiles) {
+  const root = checkoutAt(cwd2, files)?.root;
+  return root === void 0 ? { root: import_node_path16.default.resolve(cwd2), git: false } : { root, git: true };
+}
+function probe(read2) {
+  try {
+    const value = read2();
+    return value === void 0 ? ABSENT : ok(value);
+  } catch (e) {
+    return e.code === "ENOENT" ? ABSENT : failed(e.message, "read");
+  }
+}
+var checkoutFiles = {
+  stat: (file) => probe(() => fs_default.statSync(file, { throwIfNoEntry: false })),
+  lstat: (file) => probe(() => fs_default.lstatSync(file)),
+  realpath: (file) => probe(() => fs_default.realpathSync.native(file)),
+  text: (file) => probe(() => readRegularTextSync(file))
+};
+function checkoutAt(dir, files) {
+  return ascend(dir, (candidate) => {
+    const entry = files.stat(import_node_path16.default.join(candidate, ".git"));
+    return entry.kind === "ok" ? entry.value : void 0;
+  });
+}
+var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
+function gitDirNamed(root, files = checkoutFiles) {
+  const text4 = files.text(import_node_path16.default.join(root, ".git"));
+  if (text4.kind !== "ok") return text4;
+  const named2 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+  return named2 === void 0 ? failed(`${import_node_path16.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path16.default.resolve(root, named2));
+}
+function sharedExcludeOf(root) {
+  const dotGit = import_node_path16.default.join(root, ".git");
+  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
+  if (isDir.kind !== "ok") return isDir;
+  if (isDir.value) return ok(import_node_path16.default.join(dotGit, "info", "exclude"));
+  const gitDir = gitDirNamed(root);
+  if (gitDir.kind !== "ok") return gitDir;
+  const common = commonDirOf(gitDir.value);
+  if (common.kind === "failed") return common;
+  const shared = common.kind === "ok" ? common.value : gitDir.value;
+  return ok(import_node_path16.default.join(shared, "info", "exclude"));
+}
+function commonDirOf(gitDir, files = checkoutFiles) {
+  const text4 = files.text(import_node_path16.default.join(gitDir, "commondir"));
+  if (text4.kind !== "ok") return text4;
+  const common = text4.value.trim();
+  return common === "" ? failed(`${import_node_path16.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path16.default.resolve(gitDir, common));
+}
+var UNLINKED = { kind: "unlinked" };
+var unproven = (reason) => ({
+  kind: "unproven",
+  reason
+});
+function worktreeLink(dir, files = checkoutFiles) {
+  const found2 = checkoutAt(dir, files);
+  if (found2 === void 0) return UNLINKED;
+  const link = worktreeLinkAt(found2, files);
+  return link.kind === "linked" ? {
+    kind: "linked",
+    main: import_node_path16.default.join(link.main, import_node_path16.default.relative(found2.root, dir))
+  } : link;
+}
+function worktreeLinkAt({ root, entry }, files) {
+  const dotGit = import_node_path16.default.join(root, ".git");
+  if (entry.isDirectory()) return UNLINKED;
+  const direct = files.lstat(dotGit);
+  if (direct.kind !== "ok") return unproven(why(dotGit, direct));
+  if (!direct.value.isFile()) return unproven(`${dotGit} is not a file`);
+  const named2 = gitDirNamed(root, files);
+  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
+  const gitDir = files.realpath(named2.value);
+  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
+  const common = commonDirOf(gitDir.value, files);
+  if (common.kind === "absent") return UNLINKED;
+  if (common.kind === "failed") return unproven(common.reason);
+  const realCommon = files.realpath(common.value);
+  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
+  if (import_node_path16.default.dirname(gitDir.value) !== import_node_path16.default.join(realCommon.value, "worktrees")) {
+    return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
+  }
+  const backFile = import_node_path16.default.join(gitDir.value, "gitdir");
+  const back2 = files.text(backFile);
+  if (back2.kind !== "ok") return unproven(why(backFile, back2));
+  const pointer = import_node_path16.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = files.realpath(import_node_path16.default.dirname(pointer));
+  if (import_node_path16.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+    return unproven(
+      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
+    );
+  }
+  const main = import_node_path16.default.basename(realCommon.value) === ".git" ? import_node_path16.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main };
+}
+function checkoutLocation(dir, files = checkoutFiles) {
+  const real = files.realpath(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path16.default.resolve(dir);
+  const found2 = checkoutAt(at, files);
+  if (found2 === void 0)
+    return { main: "", worktree: "", subpath: "", noRepo: true };
+  const { root } = found2;
+  const sub2 = import_node_path16.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path16.default.sep).join("/")}`;
+  const link = worktreeLinkAt(found2, files);
+  return link.kind === "linked" ? {
+    main: link.main,
+    worktree: import_node_path16.default.basename(root),
+    subpath,
+    noRepo: false
+  } : { main: root, worktree: "", subpath, noRepo: false };
+}
+
+// src/daemon/cache/git-service.ts
 function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
@@ -53978,9 +54035,9 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the launcher withholds
-  // them from the daemon's children, since they describe whichever shell
-  // spawned the daemon rather than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the ascent reads the
+  // filesystem, never the daemon's environment, which describes whichever
+  // shell spawned the daemon rather than the session being rendered.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -55502,22 +55559,6 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
     );
   }
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/utils/regular-text.ts
-init_globals();
-function readRegularTextSync(path31) {
-  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  try {
-    if (!fstatSync(fd).isFile()) throw new Error("not a file");
-    return readFileSync(fd, "utf8");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (error) {
-      debug(`close ${path31}: ${String(error)}`);
-    }
-  }
 }
 
 // src/claude-settings-read.ts
@@ -86306,8 +86347,8 @@ var EditTransactions = class {
     runInAction(() => this.entries.delete(sid));
   }
   update(sid, draft) {
-    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision }));
+    const revision2 = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision: revision2 }));
   }
 };
 
@@ -88994,6 +89035,33 @@ function isDirectoryLink(root, e) {
 // src/daemon/config-discovery/discovery-files.ts
 init_globals();
 var import_node_path31 = __toESM(require_path_browserify(), 1);
+
+// src/utils/once-per-path.ts
+init_globals();
+function oncePerPath(read2) {
+  const readings = /* @__PURE__ */ new Map();
+  return (file) => {
+    const held = readings.get(file);
+    if (held !== void 0) return held.value;
+    const value = read2(file);
+    readings.set(file, { value });
+    return value;
+  };
+}
+
+// src/daemon/config-discovery/discovery-files.ts
+function textFrom(read2) {
+  return (file) => {
+    try {
+      return { kind: "text", text: read2(file) };
+    } catch (e) {
+      return {
+        kind: "unreadable",
+        error: types.isNativeError(e) ? e.message : String(e)
+      };
+    }
+  };
+}
 var diskFiles = {
   presence,
   realpath(file) {
@@ -89004,16 +89072,7 @@ var diskFiles = {
     }
   },
   folders: listFolders,
-  text(file) {
-    try {
-      return { kind: "text", text: readRegularTextSync(file) };
-    } catch (e) {
-      return {
-        kind: "unreadable",
-        error: types.isNativeError(e) ? e.message : String(e)
-      };
-    }
-  },
+  text: textFrom(readRegularTextSync),
   worktree: worktreeLink,
   checkout: checkoutOf
 };
@@ -89023,16 +89082,6 @@ function readNamedText(files, directory, name) {
   const physical = typeof resolved === "string" ? resolved : entry;
   const read2 = files.text(physical);
   return read2.kind === "unreadable" ? { ...read2, error: read2.error.replace(`'${physical}'`, () => `'${name}'`) } : read2;
-}
-function oncePerPath(read2) {
-  const readings = /* @__PURE__ */ new Map();
-  return (file) => {
-    const held = readings.get(file);
-    if (held !== void 0) return held;
-    const observed = read2(file);
-    readings.set(file, observed);
-    return observed;
-  };
 }
 function discoveryFiles(files = diskFiles) {
   return {
@@ -89052,13 +89101,13 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
     const unchecked = [];
     const candidates = [];
     for (const candidate of location.candidates) {
-      const observed = files.presence(candidate.file);
-      if (observed === "present" && location.role !== "user" && selectedBase !== null && files.realpath(candidate.file) === selectedBase)
+      const observed2 = files.presence(candidate.file);
+      if (observed2 === "present" && location.role !== "user" && selectedBase !== null && files.realpath(candidate.file) === selectedBase)
         continue;
       candidates.push(candidate);
-      if (observed === "absent") continue;
-      if (observed !== "present") {
-        unchecked.push(observed);
+      if (observed2 === "absent") continue;
+      if (observed2 !== "present") {
+        unchecked.push(observed2);
         continue;
       }
       const dir = files.realpath(import_node_path32.default.dirname(candidate.file));
@@ -89348,10 +89397,58 @@ function contentAt({ resolution, locations: locations2 }, place, files) {
   return unchecked === void 0 ? at(place.path, { kind: "absent" }) : at(unchecked.path, { kind: "unreadable", error: unchecked.error });
 }
 
+// src/daemon/config-discovery/config-text.ts
+init_globals();
+var MAX_ENTRIES4 = 256;
+var MAX_BYTES2 = 4 * 1024 * 1024;
+function revision(stat3) {
+  return `${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
+}
+var ConfigText = class {
+  constructor(open2 = withRegularTextFile) {
+    this.open = open2;
+  }
+  open;
+  held = /* @__PURE__ */ new Map();
+  bytes = 0;
+  read(file) {
+    return this.open(file, (opened) => {
+      const key = identityKey(opened.observed);
+      const version = revision(opened.observed);
+      const held = this.held.get(key);
+      if (held !== void 0) {
+        this.held.delete(key);
+        if (held.revision === version) {
+          this.held.set(key, held);
+          return held.text;
+        }
+        this.bytes -= held.bytes;
+      }
+      const text4 = opened.text();
+      const bytes = text4.length * 2;
+      if (bytes <= MAX_BYTES2 && revision(opened.stat()) === version) {
+        this.held.set(key, { revision: version, text: text4, bytes });
+        this.bytes += bytes;
+        for (const [oldest, entry] of this.held) {
+          if (this.held.size <= MAX_ENTRIES4 && this.bytes <= MAX_BYTES2) break;
+          this.held.delete(oldest);
+          this.bytes -= entry.bytes;
+        }
+      }
+      return text4;
+    });
+  }
+  clear() {
+    this.held.clear();
+    this.bytes = 0;
+  }
+};
+
 // src/daemon/config-discovery/config-discovery.ts
 var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
+    this.texts = new ConfigText(deps.openText);
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
@@ -89370,6 +89467,7 @@ var ConfigDiscovery = class {
   followed = /* @__PURE__ */ new Map();
   watches;
   invalidated = /* @__PURE__ */ new Set();
+  texts;
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -89405,7 +89503,7 @@ var ConfigDiscovery = class {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = readShared(this.deps, this.deps.files);
+      const shared = this.shared();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -89451,6 +89549,7 @@ var ConfigDiscovery = class {
     this.answersWatch.release();
     for (const { watch: watch2 } of this.followed.values()) watch2.handle.release();
     this.followed.clear();
+    this.texts.clear();
   }
   // The origins an answer to the trust book can move.
   asking() {
@@ -89481,7 +89580,7 @@ var ConfigDiscovery = class {
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = readShared(this.deps, this.deps.files);
+    const shared = this.shared();
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
@@ -89505,6 +89604,15 @@ var ConfigDiscovery = class {
       `config discovery why=${why2} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
     return moved2;
+  }
+  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
+  // one physical-text owner reuses bytes once the descriptor proves its revision.
+  shared() {
+    return readShared(this.deps, {
+      ...diskFiles,
+      text: textFrom((file) => this.texts.read(file)),
+      ...this.deps.files?.()
+    });
   }
   // What discovery finds at `origin` now, with its watch following the
   // targets that finding names, and what that watch cannot hear in the
@@ -89569,6 +89677,73 @@ function watchTargetsFor(found2) {
     ],
     whole: roots
   });
+}
+
+// src/daemon/checkout-observations.ts
+init_globals();
+var CHECKOUT_FRESH_MS = 1e3;
+var MAX_PATHS_PER_PROBE = 512;
+var MAX_RETAINED_CHARACTERS = 8 * 1024;
+function retainMetadata(read2) {
+  switch (read2.kind) {
+    case "ok":
+      return read2.value.length <= MAX_RETAINED_CHARACTERS;
+    case "failed":
+      return read2.reason.length <= MAX_RETAINED_CHARACTERS;
+    case "absent":
+      return true;
+  }
+}
+function observed(read2, clock, retain = () => true) {
+  const paths2 = /* @__PURE__ */ new Map();
+  const refresh = (file) => {
+    const value = read2(file);
+    paths2.delete(file);
+    if (file.length > MAX_RETAINED_CHARACTERS || !retain(value)) return value;
+    paths2.set(file, { value, expires: clock.monotonic() + CHECKOUT_FRESH_MS });
+    if (paths2.size > MAX_PATHS_PER_PROBE) {
+      const oldest = paths2.keys().next();
+      if (!oldest.done) paths2.delete(oldest.value);
+    }
+    return value;
+  };
+  return {
+    // [LAW:no-ambient-temporal-coupling] A redraw never extends freshness.
+    held: (file) => {
+      const seen = paths2.get(file);
+      return seen !== void 0 && clock.monotonic() < seen.expires ? seen.value : refresh(file);
+    },
+    fresh: () => oncePerPath(refresh)
+  };
+}
+function checkoutObservations(files, clock) {
+  const stat3 = observed(files.stat, clock);
+  const lstat2 = observed(files.lstat, clock);
+  const realpath2 = observed(files.realpath, clock, retainMetadata);
+  const text4 = observed(files.text, clock, retainMetadata);
+  const held = {
+    stat: stat3.held,
+    lstat: lstat2.held,
+    realpath: realpath2.held,
+    text: text4.held
+  };
+  return {
+    location: (dir) => checkoutLocation(dir, held),
+    // [LAW:parse-dont-validate] Repository admission gets fresh proof for its
+    // own batch. Its physical observations can warm display, never the reverse.
+    discovery: () => {
+      const fresh = {
+        stat: stat3.fresh(),
+        lstat: lstat2.fresh(),
+        realpath: realpath2.fresh(),
+        text: text4.fresh()
+      };
+      return {
+        checkout: (dir) => checkoutOf(dir, fresh),
+        worktree: (dir) => worktreeLink(dir, fresh)
+      };
+    }
+  };
 }
 
 // src/daemon/daemon.ts
@@ -89810,10 +89985,12 @@ function createDaemon(inputs) {
       release: (id2) => managedStorage.release(id2)
     }
   };
+  const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
+    files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
@@ -89848,7 +90025,13 @@ function createDaemon(inputs) {
       ),
       boot: () => ({
         stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
+        // The renderer is a child of this daemon, so its view of the
+        // environment lacks the repository-scoped variables as its process's
+        // does.
+        host: {
+          ...host,
+          env: plainEnvironment(withoutRepositoryScoped(host.env))
+        },
         memoryLimitBytes: memoryLimitBytes2
       }),
       node: bundle.node
@@ -90008,6 +90191,7 @@ function createDaemon(inputs) {
     launcher,
     log,
     clock,
+    checkoutLocation: checkouts.location,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
     sessionBook,
@@ -90194,7 +90378,7 @@ function createDaemon(inputs) {
 // src/daemon/log.ts
 init_globals();
 var import_node_path34 = __toESM(require_path_browserify(), 1);
-var MAX_BYTES2 = 5 * 1024 * 1024;
+var MAX_BYTES3 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
 var EXIT_WAIT_MS = 1e3;
@@ -90413,7 +90597,7 @@ var DaemonLog = class {
       done += written3;
     }
     batch.state = { kind: "landed" };
-    if (endsAt >= MAX_BYTES2) {
+    if (endsAt >= MAX_BYTES3) {
       this.closeSink();
       const now2 = await fs_default.promises.stat(held.path).catch(() => null);
       if (now2 !== null && idOf3(now2) === held.id) await rotate(held.path);
@@ -91004,7 +91188,8 @@ function productionAdapters(paths2, daemonLog, machine) {
       if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
       return entry;
     },
-    stat: fs_default.statSync
+    stat: fs_default.statSync,
+    checkoutFiles
   };
 }
 
