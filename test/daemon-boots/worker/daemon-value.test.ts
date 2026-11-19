@@ -407,8 +407,16 @@ describe("the daemon is a value", () => {
       args: ["-c", 'echo $$ > "$1"; exec sleep 30', "sh", pidFile],
       category: "user-shell",
     });
-    await until(() => existsSync(pidFile), "the child to start");
-    const childPid = Number(readFileSync(pidFile, "utf8").trim());
+    // The shell opens the file before echo writes the PID. An empty file
+    // would produce pid 0, which probes the worker's own process group.
+    let childPid = 0;
+    await until(() => {
+      if (!existsSync(pidFile)) return false;
+      const line = readFileSync(pidFile, "utf8");
+      if (!/^[1-9]\d*\n$/.test(line)) return false;
+      childPid = Number(line);
+      return Number.isSafeInteger(childPid);
+    }, "the child to record its pid");
     expect(processProbe.alive(childPid)).toBe(true);
 
     // A render waiting on the slow source as the daemon closes.
