@@ -59,6 +59,7 @@ import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
+import { placementsOf } from "../../src/config/placement-state";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
 // beside the rig's session state, which a click reads its own session's from
@@ -305,6 +306,12 @@ export function testVerbContext(
         throw new Error("configFor: this test handed in no config");
       }
       return config;
+    },
+    // What the session's placement state is judged against: the placements
+    // of whichever config this context's `configFor` reads, a spread
+    // override's included.
+    placementsFor(origin) {
+      return placementsOf(this.configFor(origin));
     },
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.

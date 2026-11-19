@@ -46,6 +46,7 @@ export function closingView(
     write(sessionId, pairs, () => store.setBatch(sessionId, pairs));
   return {
     get: (sessionId, key) => store.get(sessionId, key),
+    entries: (sessionId) => store.entries(sessionId),
     revision: (sessionId) => store.revision(sessionId),
     set: (sessionId, key, value) => setBatch(sessionId, [{ key, value }]),
     setBatch,

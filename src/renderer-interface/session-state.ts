@@ -23,6 +23,9 @@ export interface SessionStateReader {
 // render half-applied state. The atomicity contract lives in the seam,
 // not in each consumer. [LAW:single-enforcer]
 export interface SessionStateRW extends SessionStateReader {
+  // Every key the session holds, with its value, as a write through this
+  // view would find it.
+  entries(sessionId: SessionId): ReadonlyArray<readonly [string, string]>;
   set(sessionId: SessionId, key: string, value: string): void;
   setBatch(
     sessionId: SessionId,

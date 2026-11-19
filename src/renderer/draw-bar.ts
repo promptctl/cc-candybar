@@ -17,12 +17,14 @@ import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
 import { repoQuestions } from "../config/repo-question";
 import {
+  placementsJudged,
   type CacheEntry,
   type RenderCache,
   type DslRenderState,
   type SessionHold,
   type SessionView,
 } from "./render-cache";
+import { releaseUnplaced } from "./placement-release.js";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
@@ -417,6 +419,7 @@ function setUpDraw(
 ): RenderSetup {
   try {
     const { entry, state, view } = hold;
+    releaseBeforeDraw(parts, req.hookData.session_id, entry, view);
     // The instant the bar is drawn for, which a `context` turn, made before
     // the request waited, cannot say.
     noteFacts(facts, { at: readings.at.toFixed(3) });
@@ -439,6 +442,30 @@ function setUpDraw(
     hold[Symbol.dispose]();
     throw e;
   }
+}
+
+// Before a session draws, it lets go of what it holds for placements the
+// config it draws no longer places (src/renderer/placement-release.ts), so a
+// placement that takes a removed one's id opens with nothing of it.
+// [LAW:carrying-cost] The placements are judged once per load, and a render
+// whose session state and placements are the ones its view last judged has
+// nothing new to judge: one comparison per tick.
+function releaseBeforeDraw(
+  parts: RendererParts,
+  sessionId: SessionId,
+  entry: CacheEntry,
+  view: SessionView<SessionSource, CheckedRenderRequest>,
+): void {
+  const { sessionState } = parts;
+  const placements = placementsJudged(entry);
+  const judged = view.released;
+  if (
+    judged?.placements === placements &&
+    judged.revision === sessionState.revision(sessionId)
+  )
+    return;
+  releaseUnplaced(sessionState, sessionId, placements, parts.log);
+  view.released = { placements, revision: sessionState.revision(sessionId) };
 }
 
 // [LAW:one-source-of-truth] The one draw of a render, a request's or a

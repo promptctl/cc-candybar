@@ -55,6 +55,7 @@ export function recordingView(
   };
   return {
     get: (sessionId, key) => store.get(sessionId, key),
+    entries: (sessionId) => store.entries(sessionId),
     revision: (sessionId) => store.revision(sessionId),
     set: (sessionId, key, value) =>
       recorded(sessionId, [key], () => store.set(sessionId, key, value)),
@@ -125,6 +126,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // outside a tracking context (the common direct-read case) it is a no-op.
     this.atom.reportObserved();
     return this.sessions.get(sessionId)?.values.get(key) ?? null;
+  }
+
+  entries(sessionId: SessionId): ReadonlyArray<readonly [string, string]> {
+    this.atom.reportObserved();
+    return [...(this.sessions.get(sessionId)?.values ?? [])];
   }
 
   revision(sessionId: SessionId): number {

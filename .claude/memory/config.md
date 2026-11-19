@@ -68,6 +68,8 @@ Edit mode's save and cancel are that history and nothing more. Layout clicks are
 
 A segment declaration is a definition. Each node in a layout is a placement, identified by its id or, failing that, the segment name. Per-instance state is keyed on that id.
 
+A session lets go of a placement's state only at its own render (and within its own click, so undo brings it back), judged against the config it draws: stale state harms only the session holding it, when it draws or saves, and a load can't judge for every session, since each renders its own config and a failed load draws one its files don't hold.
+
 - A removal target or an anchor is a placement id, and it's checked only at click time. A load-time check would reject the config its own click wrote.
 - An insertion mints its id at click time, over the rendered tree.
 - Edit chrome is named by the placement and preset it serves, each spelled injectively, because a name keyed on walk position hands an open menu or list to a neighbour on every add, and the identifier collapse would merge names that differ only in punctuation.

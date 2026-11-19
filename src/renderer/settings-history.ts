@@ -740,6 +740,18 @@ function heldWrites(
       const writes = held.get(sessionId);
       return writes?.has(key) ? writes.get(key)! : store.get(sessionId, key);
     },
+    // The store's keys under the click's own writes: a held clear hides one.
+    entries: (sessionId) => {
+      const writes = held.get(sessionId) ?? new Map<string, string | null>();
+      return [
+        ...new Map<string, string | null>([
+          ...store.entries(sessionId),
+          ...writes,
+        ]),
+      ].flatMap(([key, value]) =>
+        value === null ? [] : [[key, value] as const],
+      );
+    },
     revision: (sessionId) => store.revision(sessionId),
     set: (sessionId, key, value) => put(sessionId, key, value),
     setBatch: (sessionId, pairs) => {

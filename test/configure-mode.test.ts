@@ -231,7 +231,15 @@ describe("configure mode: one placement's settings at a time", () => {
     });
     await rt.click(opener!);
     expect(themeOptions()).toBeGreaterThan(closed);
-    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    // Leaving configure by its own ✕, the write that closes what it holds open.
+    await rt.click(
+      linkUrls(rt.render()).find((u) =>
+        effectsOf(u).some(
+          (e) =>
+            e.args[1] === EDIT_CONFIGURE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+        ),
+      )!,
+    );
     await enter();
     expect(themeOptions()).toBe(closed);
   });

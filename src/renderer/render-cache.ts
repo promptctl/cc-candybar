@@ -49,6 +49,11 @@ import {
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
+import {
+  EVERY_PLACEMENT_STANDS,
+  placementsOf,
+  type Placements,
+} from "../config/placement-state.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   fixedSource,
@@ -247,6 +252,9 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
+  // [LAW:one-source-of-truth] Every placement `config` places, judged once
+  // per load: what a session's placement state is released against.
+  readonly placements: Placements;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
   readonly dropped: readonly DroppedFileError[];
@@ -453,6 +461,19 @@ export interface CacheEntry {
   lastError: string | null;
   lastWarnings: readonly string[];
   state: DslRenderState;
+}
+
+// [LAW:one-source-of-truth] What a session drawn from the entry judges its
+// placement state against: the placements of the config it renders, while
+// that config is the one its files hold. Under a load error the bar draws the
+// last config that loaded, or the bundled default, and neither is what the
+// files say, so nothing is judged gone.
+export function placementsJudged(
+  entry: Pick<CacheEntry, "lastError" | "state">,
+): Placements {
+  return entry.lastError === null
+    ? entry.state.placements
+    : EVERY_PLACEMENT_STANDS;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -789,6 +810,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     kind: "built",
     state: {
       config,
+      placements: placementsOf(config),
       dropped,
       compileKey: registration.compileKey,
       loadKey: load.key,
@@ -998,6 +1020,13 @@ export interface SessionView<
   // held here so it goes with the view.
   readonly frames: Map<Drawing["by"], FrameRecord<RenderedLine>>;
   lastRenderCellsBySegment: ReadonlyMap<string, readonly RichText[]>;
+  // What the session's last release was judged against: the placements, and
+  // the session state's revision once it was done. A render that finds both
+  // as they were has nothing new to judge.
+  released: {
+    readonly placements: Placements;
+    readonly revision: number;
+  } | null;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.
@@ -1123,6 +1152,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     facts: () => requested.get(),
     frames: new Map(),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    released: null,
     retire: stopChanged,
     dispose: () => {
       stopChanged();
