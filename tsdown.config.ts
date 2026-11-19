@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
+import { mayImport, zoneOf } from './scripts/import-zones.mjs';
 import pkg from './package.json' with { type: 'json' };
 import { sourceDigest } from './src/source-digest.ts';
 
@@ -52,14 +53,13 @@ export default defineConfig([{
 	noExternal: [/./],
 	define,
 	plugins: [sourceDigestPlugin(), {
-		name: 'cc-candybar:renderer-filesystem',
-		// [LAW:effects-at-boundaries] The CLI and host in this same bundle need
-		// the filesystem. The renderer process includes its transport and the
-		// core. Follow their shared modules, packages and dynamic imports.
+		name: 'cc-candybar:renderer-boundary',
+		// [LAW:effects-at-boundaries] Only the renderer's graph is bounded in
+		// this shared CLI bundle. Follow packages and dynamic imports as well.
 		generateBundle() {
 			const entry = path.join(SRC, 'renderer-process.ts');
 			if (!this.getModuleInfo(entry)) {
-				this.error('Cannot check the renderer filesystem boundary: renderer entry is missing');
+				this.error('Cannot check the renderer boundary: renderer entry is missing');
 			}
 			const paths = new Map([[entry, [path.relative(ROOT, entry)]]]);
 			for (const [module, chain] of paths) {
@@ -69,9 +69,17 @@ export default defineConfig([{
 				}
 				for (const id of [...info.importedIds, ...info.dynamicallyImportedIds]) {
 					if (paths.has(id)) continue;
-					const next = [...chain, path.isAbsolute(id) ? path.relative(ROOT, id) : id];
+					const label = path.isAbsolute(id) ? path.relative(ROOT, id) : id;
+					const next = [...chain, label];
 					if (/^(?:node:)?fs(?:\/|$)/.test(id)) {
 						this.error(`Renderer imports the filesystem through ${next.join(' -> ')}`);
+					}
+					if (id === 'node:child_process' || id === 'child_process') {
+						this.error(`Renderer imports child_process through ${next.join(' -> ')}`);
+					}
+					const projectModule = id.startsWith(ROOT + path.sep) && !label.split(path.sep).includes('node_modules');
+					if (projectModule && !mayImport('renderer-process', zoneOf(label))) {
+						this.error(`Renderer imports a host module through ${next.join(' -> ')}`);
 					}
 					paths.set(id, next);
 				}
