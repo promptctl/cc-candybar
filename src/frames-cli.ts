@@ -32,8 +32,6 @@ import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
 import { describeFailure } from "./daemon/client-transport";
-import { obtainDaemonKick } from "./daemon/acquire";
-import { planOutcome } from "./outcome-plan";
 import { socketPath } from "./daemon/paths";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
@@ -166,8 +164,6 @@ export async function runFrames(
     );
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));
-    // [LAW:single-enforcer] A render's kick is the render policy's to say.
-    if (planOutcome(outcome).kick) obtainDaemonKick(world);
   };
 
   const subscribe = (id: SessionId): void => {
