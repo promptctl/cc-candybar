@@ -363,7 +363,7 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
         return;
       // What the daemon itself stands on, which says nothing of the config.
       case "file-events":
-      case "lifeline":
+      case "standing":
       case "launch-pipes":
       case "renderer-ended":
       case "act-failed":

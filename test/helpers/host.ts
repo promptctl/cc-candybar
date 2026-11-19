@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../../src/proc/repository-vars";
 import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
@@ -28,7 +29,7 @@ export function hostOf(
 export function worldOf(host: Host): World {
   return {
     host,
-    launcher: systemOneShotLauncher({ inherited: host.env }, systemTimekeeper),
+    launcher: systemOneShotLauncher({ withholds: WITHHOLDS_NOTHING, inherited: host.env }, systemTimekeeper),
     clock: systemTimekeeper,
   };
 }

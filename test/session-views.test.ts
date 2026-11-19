@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
@@ -473,7 +474,7 @@ test("a config load starts no view's source, and still names a session value tha
   let shells = 0;
   const launcher = systemLauncher(
     {
-      inherited: process.env,
+      withholds: WITHHOLDS_NOTHING, inherited: process.env,
       stats: {
         onStart: (c) => {
           if (c === "user-shell") shells++;

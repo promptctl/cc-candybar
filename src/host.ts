@@ -1,6 +1,14 @@
 import os from "node:os";
 import type { OneShotLauncher } from "./proc/launch.js";
-import { systemOneShotLauncher } from "./proc/system-launcher.js";
+import {
+  systemOneShotLauncher,
+  systemReaderLauncher,
+} from "./proc/system-launcher.js";
+import {
+  ASK_TIMEOUT_MS,
+  WITHHOLDS_NOTHING,
+  type ReaderLauncher,
+} from "./proc/repository-vars.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
 import type { Host } from "./host-facts.js";
 
@@ -34,7 +42,31 @@ export function processWorld(): World {
   const clock = systemTimekeeper;
   return {
     host,
-    launcher: systemOneShotLauncher({ inherited: process.env }, clock),
+    launcher: systemOneShotLauncher(
+      { inherited: process.env, withholds: WITHHOLDS_NOTHING },
+      clock,
+    ),
     clock,
   };
 }
+
+// The world of a process whose children read a session's repository (the
+// daemon once it is admitted, a plugin's clone): its launcher withholds the
+// repository variables and owns git's answer, asked at its first launch that
+// inherits the process's environment. Building one asks nothing, so a usage
+// error never runs git.
+export interface ReaderWorld extends World {
+  readonly launcher: ReaderLauncher;
+}
+
+export const readerWorld = (
+  world: World,
+  timeoutMs = ASK_TIMEOUT_MS,
+): ReaderWorld => ({
+  ...world,
+  launcher: systemReaderLauncher(
+    { inherited: world.host.env },
+    world.clock,
+    timeoutMs,
+  ),
+});

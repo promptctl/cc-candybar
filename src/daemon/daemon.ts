@@ -93,7 +93,10 @@ export interface DaemonAdapters {
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
-  readonly launcher: (own: LaunchOwner) => TestableLauncher;
+  // The daemon's own launcher over its scope. The adapter supplies what its
+  // children are withheld, so the daemon cannot be built over a launcher that
+  // does not own git's answer (src/daemon/production-adapters.ts).
+  readonly launcher: (own: Omit<LaunchOwner, "withholds">) => TestableLauncher;
   // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
   // are kept, which the daemon reads once it serves and is then their sole
   // writer. Built over the daemon's log: a write in flight at the close

@@ -6,7 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld } from "./host";
+import { processWorld, readerWorld } from "./host";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -115,7 +115,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     await exitWith(await checkCommandPlan(args, world));
   },
   plugin: async (args) => {
-    process.exit(runPlugin(args, world));
+    process.exit(runPlugin(args, readerWorld(world)));
   },
   schema: async () => {
     await exitWith(schemaPlan());

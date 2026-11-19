@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../../src/proc/repository-vars";
 import { spawnSync } from "node:child_process";
 import { getEventListeners } from "node:events";
 import fs from "node:fs";
@@ -88,7 +89,7 @@ let launcher: TestableLauncher & OneShotLauncher;
 let ending: AbortController;
 const scoped = (scope: Partial<LaunchScope>): void => {
   launcher = systemOneShotLauncher(
-    { inherited: process.env, signal: ending.signal, ...scope },
+    { withholds: WITHHOLDS_NOTHING, inherited: process.env, signal: ending.signal, ...scope },
     systemTimekeeper,
   );
 };
@@ -101,7 +102,9 @@ const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
   launcher.launchJobSync(opts, files);
 // The lifeline's warning stands whatever the instant.
 const lifelineWarnings = () =>
-  launcher.standing().filter((w) => w.kind === "lifeline");
+  launcher
+    .standing()
+    .filter((w) => w.kind === "standing" && w.source === "lifeline");
 const lifeline = () => launcher.__lifelineForTest();
 
 beforeEach(() => {
@@ -840,7 +843,8 @@ describe("the lifeline", () => {
     );
     expect(lifelineWarnings()).toEqual([
       {
-        kind: "lifeline",
+        kind: "standing",
+        source: "lifeline",
         message:
           "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
       },
@@ -966,7 +970,7 @@ describe("a launcher's scope", () => {
     const closing = new AbortController();
     const closed = makeSpyHandle();
     const first = systemLauncher(
-      { inherited: process.env, stats: closed.handle, signal: closing.signal },
+      { withholds: WITHHOLDS_NOTHING, inherited: process.env, stats: closed.handle, signal: closing.signal },
       systemTimekeeper,
     );
     closing.abort();
@@ -987,7 +991,7 @@ describe("a launcher's scope", () => {
 
   it("a daemon's launcher has no blocking launch to reach", () => {
     const daemons = systemLauncher(
-      { inherited: process.env },
+      { withholds: WITHHOLDS_NOTHING, inherited: process.env },
       systemTimekeeper,
     );
     // @ts-expect-error A Launcher offers no launchSync.
@@ -1003,7 +1007,7 @@ describe("a launcher's scope", () => {
       reason: "rate-limited",
     });
     const next = systemOneShotLauncher(
-      { inherited: process.env, signal: ending.signal },
+      { withholds: WITHHOLDS_NOTHING, inherited: process.env, signal: ending.signal },
       systemTimekeeper,
     );
     expect(next.launchSync(once)).toMatchObject({ ok: true });

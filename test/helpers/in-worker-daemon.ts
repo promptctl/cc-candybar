@@ -4,7 +4,8 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
-import { HOST } from "./host";
+import { HOST, WORLD } from "./host";
+import { readerWorld, type ReaderWorld } from "../../src/host";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -46,7 +47,14 @@ export type DaemonOverrides = Partial<
 > & {
   readonly paths?: DaemonPaths;
   readonly profile?: (log: DaemonLogger) => Partial<ProfileStorage>;
+  // The world its real adapters are built over: the worker's reader unless a
+  // case builds its own.
+  readonly world?: ReaderWorld;
 };
+
+// The worker's world as a daemon's process holds it once admitted: a reader,
+// which asks the worker's git at its first launch, once per test file.
+export const READER_WORLD: ReaderWorld = readerWorld(WORLD);
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
 // lays one down there.
@@ -79,7 +87,10 @@ export interface BuiltDaemon {
 // hears a watch only by a delivered event, which is what a watcher case proves.
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
-export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
+export function buildDaemon({
+  world = READER_WORLD,
+  ...overrides
+}: DaemonOverrides = {}): BuiltDaemon {
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
@@ -87,7 +98,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
     overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
     const daemon = createDaemon({
-      ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      ...productionAdapters(paths, daemonLog, world),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),

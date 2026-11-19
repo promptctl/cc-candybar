@@ -4,7 +4,7 @@
 
 import { execFileSync } from "node:child_process";
 import { HOST, hostOf, worldOf } from "./helpers/host";
-import type { World } from "../src/host";
+import { readerWorld, type ReaderWorld } from "../src/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -208,11 +208,13 @@ describe("installFromRepo", () => {
 });
 
 describe("runPlugin", () => {
-  let world: World;
+  let world: ReaderWorld;
   let log: jest.SpyInstance;
   let err: jest.SpyInstance;
   beforeEach(() => {
-    world = worldOf(hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }));
+    world = readerWorld(
+      worldOf(hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") })),
+    );
     log = jest.spyOn(console, "log").mockImplementation(() => {});
     err = jest.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -231,11 +233,18 @@ describe("runPlugin", () => {
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
     const url = `file://${repo}`;
 
-    // A hook's GIT_DIR names another repository; the clone ignores it.
+    // A hook's GIT_DIR and GIT_WORK_TREE name another repository; the
+    // reader's launches withhold them, so the clone ignores it.
     const other = path.join(dir, "other");
     execFileSync("git", ["init", "-q", other]);
-    const hooked = worldOf(
-      hostOf({ ...world.host.env, GIT_DIR: path.join(other, ".git") }),
+    const hooked = readerWorld(
+      worldOf(
+        hostOf({
+          ...world.host.env,
+          GIT_DIR: path.join(other, ".git"),
+          GIT_WORK_TREE: other,
+        }),
+      ),
     );
     expect(runPlugin(["install", url], hooked)).toBe(0);
     expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(
@@ -265,13 +274,50 @@ describe("runPlugin", () => {
     );
   });
 
+  // A `git` first on the PATH that records each run and then runs `script`.
+  const recordingGit = (script: string) => {
+    const bin = path.join(dir, "bin");
+    const runs = path.join(dir, "git-runs");
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(
+      path.join(bin, "git"),
+      `#!/bin/sh\necho "$*" >> '${runs}'\n${script}\n`,
+      { mode: 0o755 },
+    );
+    return {
+      world: readerWorld(
+        worldOf(hostOf({ ...world.host.env, PATH: `${bin}:${HOST.env.PATH}` })),
+      ),
+      runs: () => (fs.existsSync(runs) ? fs.readFileSync(runs, "utf8") : ""),
+    };
+  };
+
+  test("a git that cannot name the repository variables refuses the clone with its answer", () => {
+    // A git too old to know the flag echoes it back.
+    const old = recordingGit('for a; do echo "$a"; done | tail -1');
+    expect(runPlugin(["install", "file:///nowhere"], old.world)).toBe(1);
+    expect(err).toHaveBeenCalledWith(
+      'plugin install: git may read the repository this process was started in rather than a session\'s: `git rev-parse --local-env-vars` answered "--local-env-vars", which is no variable name',
+    );
+    expect(old.runs()).toBe("rev-parse --local-env-vars\n");
+  });
+
   test.each([[[]], [["install"]], [["remove", "x"]], [["install", "a", "b"]]])(
-    "%j is a usage error",
+    "%j is a usage error, and runs no git",
     (argv) => {
-      expect(runPlugin(argv, world)).toBe(2);
+      const recorded = recordingGit("exit 1");
+      expect(runPlugin(argv, recorded.world)).toBe(2);
       expect(err).toHaveBeenCalledWith(
         "Usage: cc-candybar plugin install <path | owner/repo | git URL>",
       );
+      expect(recorded.runs()).toBe("");
     },
   );
+
+  test("an install from a path runs no git", () => {
+    const recorded = recordingGit("exit 1");
+    const repo = repoWith({ app: DEFINITION });
+    expect(runPlugin(["install", repo], recorded.world)).toBe(0);
+    expect(recorded.runs()).toBe("");
+  });
 });

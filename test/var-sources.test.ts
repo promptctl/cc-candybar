@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
@@ -723,7 +724,7 @@ describe("SourceRegistry — shell: basic", () => {
       undefined,
       runsOver({
         launcher: systemLauncher(
-          { inherited: process.env, signal: closing.signal },
+          { withholds: WITHHOLDS_NOTHING, inherited: process.env, signal: closing.signal },
           systemTimekeeper,
         ),
       }),

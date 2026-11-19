@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../../src/proc/repository-vars";
 import {
   createOneShotLauncher,
   LIFELINE_PROGRAM,
@@ -52,7 +53,7 @@ export function fakeLauncher(
     readsStdin("until-end"),
   );
   const launcher = createOneShotLauncher(
-    { inherited: {}, ...owner },
+    { withholds: WITHHOLDS_NOTHING, inherited: {}, ...owner },
     clock,
     spawner,
   );

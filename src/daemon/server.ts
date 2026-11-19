@@ -21,7 +21,8 @@ import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
-import type { World } from "../host";
+import { readerWorld, type World } from "../host";
+import { repositoryVarsFault } from "../proc/repository-vars";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
@@ -179,6 +180,21 @@ async function boot(): Promise<void> {
   }
   breakerRegistryPath = admission.registryPath;
 
+  // [LAW:no-ambient-temporal-coupling] The daemon reads sessions'
+  // repositories, so from here on it launches through a reader, which owns
+  // git's answer. Built and asked only now: the start-time read above is a
+  // launch too, and a refused daemon must spawn nothing more. Asked here, not
+  // at the first read, so the line saying what its launches withhold leads
+  // every launch after admission.
+  const reader = readerWorld(world);
+  const vars = reader.launcher.repositoryVars;
+  serverLog("info", `launches withhold ${vars.withheld().join(",")}`);
+  const answer = vars.answer();
+  // [LAW:no-silent-failure] It also stands as ⚠ on every bar, through the
+  // daemon's launcher, which withholds by this same answer.
+  if (answer.kind === "unknown")
+    serverLog("warn", repositoryVarsFault(answer.reason));
+
   fs.mkdirSync(paths.state, { recursive: true });
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
   // not a symlink before we bind. Without this check, a same-host attacker
@@ -194,12 +210,12 @@ async function boot(): Promise<void> {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     rendererName: MAIN_RENDERER,
-    ...productionAdapters(paths, daemonLog, world.clock),
+    ...productionAdapters(paths, daemonLog, reader),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.
     renderer: processPort({
-      launcher: world.launcher,
+      launcher: reader.launcher,
       entry: processEntry(),
       cwd: paths.state,
       heapCapMb: heapCapMb(host.env),

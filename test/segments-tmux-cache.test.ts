@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -74,7 +75,7 @@ beforeEach(() => {
     onPipeError: () => {},
   };
   launcher = systemLauncher(
-    { inherited: INHERITED, stats: handle },
+    { withholds: WITHHOLDS_NOTHING, inherited: INHERITED, stats: handle },
     systemTimekeeper,
   );
   svc = new TmuxService({ launcher, clock: systemTimekeeper });

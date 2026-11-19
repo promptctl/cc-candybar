@@ -16,8 +16,11 @@ import {
 import { DEFINITION_FILE } from "./config/loader/plugins.js";
 import { readDefinition } from "./daemon/config-discovery/discover.js";
 import { locations } from "./daemon/paths.js";
-import type { World } from "./host.js";
-import { type OneShotLauncher } from "./proc/launch.js";
+import type { ReaderWorld } from "./host.js";
+import {
+  repositoryVarsFault,
+  type ReaderLauncher,
+} from "./proc/repository-vars.js";
 import { failureText } from "./proc/launcher.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
@@ -89,23 +92,25 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // checks out nothing, and repoDefinitions says so. `--` keeps a source
 // spelled like an option from being read as one. With terminal prompts off,
 // a repo that is not there (GitHub asks for credentials) fails rather than
-// waiting on a prompt; a credential helper still answers. The variables git
-// names as locating a repository (a hook's GIT_DIR, say) are dropped, so
-// every call acts on the clone. `shown` stands for `url` in messages.
+// waiting on a prompt; a credential helper still answers. `shown` stands for
+// `url` in messages.
+// [LAW:single-enforcer] The reader's launcher withholds the repository
+// variables (a hook's GIT_DIR, say), so every call acts on the clone; git's
+// not naming them refuses the clone with its reason.
 function cloneRepo(
-  launcher: OneShotLauncher,
+  launcher: ReaderLauncher,
   url: string,
   shown: string,
   into: string,
 ): void {
-  const git = (
-    envOverlay: Record<string, string | null>,
-    ...args: string[]
-  ): string => {
+  const vars = launcher.repositoryVars.answer();
+  if (vars.kind === "unknown")
+    throw new Error(repositoryVarsFault(vars.reason));
+  const git = (...args: string[]): string => {
     const run = launcher.launchSync({
       bin: "git",
       args,
-      envOverlay,
+      envOverlay: { GIT_TERMINAL_PROMPT: "0" },
       category: "plugin.git",
     });
     if (!run.ok)
@@ -114,13 +119,7 @@ function cloneRepo(
       );
     return run.stdout;
   };
-  // Overlay: terminal prompts off, and the variables that locate a repository
-  // (named by the tool itself) unset.
-  const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = null;
   git(
-    env,
     "clone",
     "--quiet",
     "--depth",
@@ -132,7 +131,6 @@ function cloneRepo(
     into,
   );
   git(
-    env,
     "-C",
     into,
     "sparse-checkout",
@@ -145,7 +143,7 @@ function cloneRepo(
 // The source as a directory on disk for as long as `use` runs: a path is
 // itself; a git repo is cloned into a temporary directory, removed after.
 function withRepo<T>(
-  { host, launcher }: World,
+  { host, launcher }: ReaderWorld,
   source: PluginSource,
   use: (repo: string) => T,
 ): T {
@@ -291,7 +289,7 @@ const USAGE = "Usage: cc-candybar plugin install <path | owner/repo | git URL>";
 
 // Exit 0 installed, 1 the source or a definition failed, 2 usage or a source
 // naming nothing.
-export function runPlugin(argv: readonly string[], world: World): number {
+export function runPlugin(argv: readonly string[], world: ReaderWorld): number {
   const [verb, arg, ...rest] = argv;
   if (verb !== "install" || arg === undefined || rest.length > 0) {
     console.error(USAGE);

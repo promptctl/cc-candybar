@@ -8,7 +8,7 @@
 
 import { plainEnvironment } from "../src/daemon/foundations/session-env";
 import { VERB_COPY } from "../src/click/wire";
-import { processWorld } from "../src/host";
+import { processWorld, readerWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -72,7 +72,7 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
-const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
+const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), readerWorld(WORLD));
 const pageDaemon = createDaemon({
   ...adapters,
   gates: createGates(),

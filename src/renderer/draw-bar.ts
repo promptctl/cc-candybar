@@ -746,10 +746,12 @@ export function drawRender(
         return `segment:${w.placement}`;
       case "file-events":
         return `${w.kind}:${w.state}`;
+      // A standing fault is named by its source (`lifeline`).
+      case "standing":
+        return w.source;
       case "load":
       case "facts":
       case "config-watch":
-      case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
       case "act-failed":

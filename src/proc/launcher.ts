@@ -57,9 +57,13 @@ export const LAUNCH_CATEGORIES = [
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
   // `cc-candybar plugin install`'s clone of a plugin's repo
-  // (src/plugin-install.ts): three git calls per install, in the CLI's own
+  // (src/plugin-install.ts): two git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
+  // The one ask of which variables locate a repository
+  // (src/proc/repository-vars.ts): at most once per repository reader, so no
+  // rate limit.
+  "repository-vars",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
   // one query per server a second, paced by its own clock, so no rate limit.
   "frames.visibility",
@@ -225,8 +229,12 @@ export function failureText(r: Failed, where = ""): string {
 // `LaunchResult` to return still carries the reason rather than guessing one.
 export type Refusal = Extract<LaunchResult, { ok: false }> & { error: string };
 
-export interface LifelineWarning {
-  readonly kind: "lifeline";
+// [LAW:one-type-per-behavior] A fault the launcher stands behind for as long as
+// it lasts, whatever its source: the lifeline down, or a repository reader
+// whose git named no repository variables, so its children inherit them.
+export interface StandingFault {
+  readonly kind: "standing";
+  readonly source: "lifeline" | "repository-vars";
   readonly message: string;
 }
 
@@ -243,9 +251,9 @@ export interface LaunchPipesFact {
   readonly event: HeldEvent;
 }
 
-// What the launcher stands behind now, whoever draws it: the lifeline's fault
-// while it stands, and the latest pipe event.
-export type LauncherFact = LifelineWarning | LaunchPipesFact;
+// What the launcher stands behind now, whoever draws it: its standing faults,
+// and the latest pipe event.
+export type LauncherFact = StandingFault | LaunchPipesFact;
 
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
@@ -256,18 +264,18 @@ export interface LaunchPipesWarning {
   readonly hold: "held" | "owed";
 }
 
-export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
+export type LauncherWarning = StandingFault | LaunchPipesWarning;
 
 // [LAW:single-enforcer] What the launcher's facts warn a render at `at` for
-// `render`: the lifeline's fault while it stands, and the latest pipe event
-// while the event hold shows it.
+// `render`: a standing fault while it stands, and the latest pipe event while
+// the event hold shows it.
 export function launcherWarningsAt(
   facts: readonly LauncherFact[],
   at: Instant,
   render: Drawing["by"],
 ): LauncherWarning[] {
   return facts.flatMap((fact): LauncherWarning[] => {
-    if (fact.kind === "lifeline") return [fact];
+    if (fact.kind === "standing") return [fact];
     const hold = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render);
     return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
   });

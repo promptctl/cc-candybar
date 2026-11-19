@@ -7,6 +7,7 @@ import path from "node:path";
 import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import { READER_WORLD } from "./helpers/in-worker-daemon";
 import {
   MAIN_RENDERER,
   rendererNameOf,
@@ -70,7 +71,7 @@ describe("a daemon aimed by its paths value", () => {
   test("a profile under a second name writes only under its own directory", async () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
-    const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+    const adapters = productionAdapters(aimed, daemonLog, READER_WORLD);
     const second = adapters.profile(rendererNameOf("second"), () => {});
     second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
     await second.session.flush();
@@ -98,7 +99,7 @@ describe("a daemon aimed by its paths value", () => {
     ).toEqual([]);
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
-      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+      const adapters = productionAdapters(aimed, daemonLog, READER_WORLD);
 
       daemonLog.log("info", "a line");
       await daemonLog.drained();

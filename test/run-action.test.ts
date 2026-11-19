@@ -6,6 +6,7 @@
 // cache over the payload providers, read by the host's collector, drawn from
 // `sessionSource`.
 
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import { holdClickError } from "../src/daemon/foundations/click-error";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
@@ -786,7 +787,7 @@ describe("a click on a run link", () => {
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
     const r = rig(
-      systemLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper)
+      systemLauncher({ withholds: WITHHOLDS_NOTHING, inherited: daemonSessionEnv() }, systemTimekeeper)
         .launch,
     );
     const { view, link } = await drawnLink(r);
@@ -1023,7 +1024,7 @@ describe("the session's process environment", () => {
       facts: SessionFacts,
     ): Promise<Record<string, string>> => {
       const ran = await systemLauncher(
-        { inherited: daemon },
+        { withholds: WITHHOLDS_NOTHING, inherited: daemon },
         systemTimekeeper,
       ).launch({
         bin: "/usr/bin/env",

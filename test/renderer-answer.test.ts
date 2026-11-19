@@ -363,7 +363,8 @@ describe("a statusline request", () => {
       ...daemonFactsOf(),
       launcher: [
         {
-          kind: "lifeline",
+          kind: "standing",
+          source: "lifeline",
           message: "programs launched now would outlive their launcher",
         },
         { kind: "launch-pipes", event },

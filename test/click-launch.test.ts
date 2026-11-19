@@ -2,6 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
@@ -12,7 +13,7 @@ describe("clickLaunch", () => {
     await expect(
       clickLaunch(
         clickLaunchVia(
-          systemLauncher({ inherited: process.env }, systemTimekeeper),
+          systemLauncher({ withholds: WITHHOLDS_NOTHING, inherited: process.env }, systemTimekeeper),
         ),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",

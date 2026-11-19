@@ -1,3 +1,4 @@
+import { WITHHOLDS_NOTHING } from "../../src/proc/repository-vars";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,7 +61,7 @@ beforeEach(() => {
   };
   launcher = systemLauncher(
     {
-      inherited: process.env,
+      withholds: WITHHOLDS_NOTHING, inherited: process.env,
       signal: ending.signal,
       stats,
       observeWarnings: (change) => heard.push(change),

@@ -74,7 +74,8 @@ programs.set("awk", () => RESIDENT);
 // No OS process runs the simulated daemon.
 programs.set("ps", () => ok(""));
 
-// The four commands the git segment runs (src/segments/git.ts); anything else
+// The four commands the git segment runs (src/segments/git.ts) and a reader's
+// one ask of the repository variables; anything else
 // fails as git does, and says so in the console, so a new one is noticed.
 programs.set("git", (args) => {
   const line = args.join(" ");
@@ -92,6 +93,8 @@ programs.set("git", (args) => {
   if (line.startsWith("log -1 --format=%ct")) return ok(`${repo.headTime}\n`);
   if (line.startsWith("describe --tags --abbrev=0")) return ok("v0.4.2\n");
   if (line.startsWith("config --local --get-regexp")) return ok(`remote.origin.url ${REMOTE}\n`);
+  // The repository variables (src/proc/repository-vars.ts), asked at a reader's first launch.
+  if (line === "rev-parse --local-env-vars") return ok("GIT_DIR\nGIT_WORK_TREE\nGIT_INDEX_FILE\nGIT_COMMON_DIR\n");
   console.warn(`simulated git: no answer for \`git ${line}\``);
   return { code: 128, stdout: "", stderr: `fatal: the demo's git does not answer \`${line}\`\n` };
 });

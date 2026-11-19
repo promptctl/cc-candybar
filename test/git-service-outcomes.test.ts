@@ -5,6 +5,7 @@
 // [LAW:types-are-the-program] These assert the states the old
 // catch-and-substitute blocks made unrepresentable.
 
+import { WITHHOLDS_NOTHING } from "../src/proc/repository-vars";
 import { execSync } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -178,7 +179,7 @@ describe("GitService outcome classification", () => {
     const shadowed = new GitService(
       systemLauncher(
         {
-          inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
+          withholds: WITHHOLDS_NOTHING, inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
         },
         systemTimekeeper,
       ),

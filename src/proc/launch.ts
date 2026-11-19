@@ -50,6 +50,7 @@ import { instantOf, type Instant } from "../utils/instant";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
+import type { Withholding } from "./repository-vars";
 import type {
   LaunchCategory,
   LaunchOpts,
@@ -124,20 +125,40 @@ function checkRateLimit(
 
 // [LAW:one-source-of-truth] The environment a child gets is the launch's own
 // (a session's) or else the owner's inherited one (`LaunchScope.inherited`,
-// handed in by the process main or the daemon's root), under the launch's
-// overlay, resolved here for every spawn
-// site. Passing `undefined` lets node read the host process's environment
+// handed in by the process main or the daemon's root) less what the owner
+// withholds, under the launch's overlay, resolved here for every spawn site,
+// the lifeline's included, and copied once per launch. Passing `undefined` lets node read the host process's environment
 // directly, which is a second clock: under a realm boundary (Jest's sandbox
 // copies `process.env` per test file) the two diverge, and a PATH the test set
 // for a `shell` source never reached the shell it spawned
 // (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
 // null removes that variable: node's spawn skips undefined values.
-function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+function childEnv(
+  scope: LaunchScope,
+  opts: Pick<LaunchOpts, "environment" | "envOverlay">,
+): NodeJS.ProcessEnv {
+  // [LAW:single-enforcer] What a child inherits from the process is decided
+  // here, never by editing the process's own environment, which is also what
+  // it reports as a session's. A launch's own environment is a session's, not
+  // the process's: its repository variables are that session's, so it is
+  // taken whole.
+  const env: NodeJS.ProcessEnv =
+    opts.environment === undefined
+      ? inheritedLess(scope)
+      : { ...opts.environment };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
   return env;
 }
+
+const inheritedLess = ({
+  inherited,
+  withholds,
+}: LaunchScope): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...inherited };
+  for (const name of withholds.withheld()) delete env[name];
+  return env;
+};
 
 // [LAW:one-source-of-truth] Whoever aborted a signal said why when they did.
 const refusedAsAborted = ({ reason }: AbortSignal): Refusal => ({
@@ -172,6 +193,10 @@ export interface LaunchScope {
   // `envOverlay`. The owner's root passes the same environment it reads its own
   // facts from, so a daemon has one.
   readonly inherited: NodeJS.ProcessEnv;
+  // What of `inherited` its children do not get: nothing, or, for an owner
+  // whose children read a session's repository, the repository variables
+  // (src/proc/repository-vars.ts).
+  readonly withholds: Withholding;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
   // Hears each change in the launcher's warnings: why the lifeline is down
@@ -386,14 +411,22 @@ function answeredPipeEvent(state: LaunchState, event: HeldEvent): void {
   state.pipeEvent = { ...last, answered: true };
 }
 
-// What the launcher stands behind now: the lifeline's fault while it stands,
-// and the latest pipe event, without the counts its text was made from.
+// What the launcher stands behind now: its owner's withholding's faults, the
+// lifeline's fault while it stands, and the latest pipe event, without the
+// counts its text was made from.
 function standing(state: LaunchState): LauncherFact[] {
   const event = state.pipeEvent;
   return [
+    ...state.scope.withholds.faults(),
     ...(state.fault === null
       ? []
-      : [{ kind: "lifeline" as const, message: lifelineMessage(state.fault) }]),
+      : [
+          {
+            kind: "standing" as const,
+            source: "lifeline" as const,
+            message: lifelineMessage(state.fault),
+          },
+        ]),
     ...(event === null
       ? []
       : [
@@ -419,6 +452,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
+      env: childEnv(state.scope, {}),
     });
   } catch (err) {
     stats?.onEnd("lifeline", elapsedMs(clock, t0));
@@ -1282,12 +1316,13 @@ export interface TestableLauncher extends Launcher {
   __lifelineForTest(): { pid: number | undefined; cut(): void };
 }
 
-// What an owner hands its launcher: the environment its children inherit, and
-// any of the rest of its scope. Nothing here is read from the process, so a
-// launcher a process main builds (bar-pane, the CLI, the daemon's shell before it
-// has a daemon) and the daemon's own differ only in what they are given.
-export type LaunchOwner = Pick<LaunchScope, "inherited"> &
-  Partial<Omit<LaunchScope, "inherited" | "clock">>;
+// What an owner hands its launcher: the environment its children inherit and
+// what of it they do not, and any of the rest of its scope. Nothing here is
+// read from the process, so a launcher a process main builds (bar-pane, the
+// CLI, the daemon's shell before it has a daemon) and the daemon's own differ
+// only in what they are given.
+export type LaunchOwner = Pick<LaunchScope, "inherited" | "withholds"> &
+  Partial<Omit<LaunchScope, "inherited" | "withholds" | "clock">>;
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.

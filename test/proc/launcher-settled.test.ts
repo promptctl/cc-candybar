@@ -1,6 +1,7 @@
 // A launcher's `settled`: what a close's value is made of. Each case aborts its
 // owner, as a close does, and reads what that left running.
 
+import { WITHHOLDS_NOTHING } from "../../src/proc/repository-vars";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +15,7 @@ const scope = () => {
   const closing = new AbortController();
   return {
     closing,
-    launcher: systemLauncher({ inherited: process.env, 
+    launcher: systemLauncher({ withholds: WITHHOLDS_NOTHING, inherited: process.env, 
       signal: closing.signal,
       observeWarnings: () => {},
     }, systemTimekeeper),
