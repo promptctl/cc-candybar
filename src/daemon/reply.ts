@@ -51,7 +51,7 @@ import { claudeConfigDir } from "../claude-settings";
 import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
-import { waitBudgetMs } from "./foundations/request-deadline.js";
+import { renderDeadlines } from "./foundations/request-deadline.js";
 import type { RendererStats } from "../renderer-interface/adapter.js";
 import {
   noteFacts,
@@ -509,6 +509,11 @@ export async function replyTo(
           );
         const tmux = checked.req.hints.tmux;
         if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
+        const { waitEndsAt, clientEndsAt } = renderDeadlines(
+          checked.req.deadline,
+          accepted.at,
+          { epochMs: started.getTime(), monoMs: t0 },
+        );
         answered = await answerStatusline(
           renderer,
           parts.publishFrame,
@@ -523,14 +528,15 @@ export async function replyTo(
           // environment.
           parts.sessionBook.environmentOf(checked.req.hookData.session_id),
           order,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/foundations/request-deadline.ts).
-          t0 +
-            waitBudgetMs(checked.req.deadline, accepted.at, {
-              epochMs: started.getTime(),
-              monoMs: t0,
-            }),
+          {
+            waitEndsAt,
+            // [LAW:no-ambient-temporal-coupling] Loss of the only recipient
+            // comes from the connection's phase or its reply deadline.
+            gone: () =>
+              timedOut() ||
+              clientLeft() ||
+              (clientEndsAt !== null && clock.monotonic() >= clientEndsAt),
+          },
           facts,
         );
         noteFacts(facts, cacheTallyFacts(parts.payloadProviders));

@@ -887,7 +887,7 @@ function statusline(r: Rig, configFile: string) {
       checked.req,
       TEST_ENVIRONMENT,
       ++id as RequestId,
-      systemTimekeeper.monotonic() + 5000,
+      { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
       facts,
     );
     answered.settled(true);

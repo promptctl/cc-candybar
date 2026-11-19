@@ -913,7 +913,7 @@ function productionAnswer(
         checked(),
         TEST_ENVIRONMENT,
         REQUEST,
-        systemTimekeeper.monotonic() + 5000,
+        { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
         [],
       ),
     {
@@ -973,7 +973,7 @@ describe("the session's config, ahead of its request", () => {
       checked(),
       TEST_ENVIRONMENT,
       REQUEST,
-      systemTimekeeper.monotonic() + 5000,
+      { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
       facts as never,
     );
     expect(kinds).toEqual(["context", "config"]);
@@ -1279,7 +1279,7 @@ describe("two requests of one session at different keys", () => {
         checked(pane, `${id}.json5`),
         TEST_ENVIRONMENT,
         id as RequestId,
-        systemTimekeeper.monotonic() + 10_000,
+        { waitEndsAt: systemTimekeeper.monotonic() + 10_000, gone: () => false },
         [],
       );
 
@@ -1396,7 +1396,7 @@ test("overlapping requests draw the latest pane with each client's width, then a
       context,
       TEST_ENVIRONMENT,
       id as RequestId,
-      systemTimekeeper.monotonic() + 10_000,
+      { waitEndsAt: systemTimekeeper.monotonic() + 10_000, gone: () => false },
       [],
     );
 

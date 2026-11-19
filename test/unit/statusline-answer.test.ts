@@ -220,7 +220,7 @@ async function answer(
     REQ,
     TEST_ENVIRONMENT,
     REQUEST,
-    meets.waitEndsAt ?? 0,
+    { waitEndsAt: meets.waitEndsAt ?? 0, gone: () => false },
     facts,
   );
   return { answered, facts: new Map(facts) };
@@ -599,7 +599,7 @@ describe("the request's wait, between its context and its request", () => {
       REQ,
       TEST_ENVIRONMENT,
       REQUEST,
-      5000,
+      { waitEndsAt: 5000, gone: () => false },
       [],
     );
     await drained();
