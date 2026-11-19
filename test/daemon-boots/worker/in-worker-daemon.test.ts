@@ -4,6 +4,7 @@
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
 import type { RequestId } from "../../../src/renderer-interface/interface";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostOf } from "../../helpers/host";
 import os from "node:os";
@@ -22,12 +23,8 @@ import { TEST_ENV } from "../../helpers/session-environment";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
 import {
-  encodeFrame,
-  makeFrameReader,
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
-  type Request,
-  type Response,
 } from "../../../src/daemon/foundations/protocol";
 import {
   DRAW_RESERVE_MS,
@@ -52,8 +49,9 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { heldClock } from "../../helpers/held-clock";
+import { openedOn } from "../../helpers/opened-connection";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { throughout, until } from "../../helpers/until";
+import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
@@ -391,47 +389,35 @@ describe("a daemon in this worker", () => {
   test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
     const sid = "in-worker-stop";
     const stateHome = process.env.XDG_STATE_HOME;
-    daemon = startDaemon(env);
+    const clock = heldClock(new Date());
+    daemon = startDaemon(env, { clock });
     expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
     expect(daemon.log).toBe(logPath(hostOf(env)));
     await render(daemon, sid, projectDir);
 
-    const subscriber = daemon.connect();
-    const frames: Response[] = [];
-    let closed = false;
-    subscriber.on(
-      "data",
-      makeFrameReader(
-        (frame) => {
-          frames.push(frame as Response);
-          return "more";
-        },
-        (err) => {
-          throw err;
-        },
-      ),
-    );
-    subscriber.on("close", () => (closed = true));
-    const subscribe: Request = {
+    const subscriber = openedOn(daemon.connect());
+    const subscriberClosed = once(subscriber.client, "close");
+    subscriber.send({
       v: PROTOCOL_VERSION,
       kind: "subscribe",
       sessionId: sid,
       lane: "statusline",
-    };
-    subscriber.write(encodeFrame(subscribe));
+    });
     // A refusal is a frame too, and it closes the stream, so what shows a
     // subscriber is a frame it drew on a stream still open.
-    await until(() => frames.length > 0, "the subscriber's first frame");
-    expect(frames[0]).toMatchObject({ ok: true });
-    expect(closed).toBe(false);
+    await clock.settle(0);
+    await until(() => subscriber.received.length > 0, "the subscriber's first frame");
+    expect(subscriber.received[0]).toMatchObject({ ok: true });
+    expect(subscriber.client.closed).toBe(false);
     const { stats } = daemon.daemon;
     expect(stats.inFlight).toBe(0);
 
-    // Open and silent: its backstop is armed, and only its stream's close takes
-    // it out of in-flight. A cold render above may have timed out on its own, so
-    // the count is read from here.
+    // The silent connection owns one deadline. Hold time until both peers see
+    // the shutdown, then run past that deadline.
     const timedOut = stats.requestsTimedOut;
-    daemon.connect();
+    const timers = clock.pending();
+    const silentClosed = once(daemon.connect(), "close");
+    expect(clock.pending()).toBe(timers + 1);
     expect(stats.inFlight).toBe(1);
 
     // Logged through the daemon's own log.
@@ -442,13 +428,11 @@ describe("a daemon in this worker", () => {
     daemon = null;
     expect(logLines(log).join("\n")).toContain(last);
 
-    await until(() => closed, "the subscriber hearing the daemon go");
+    await Promise.all([subscriberClosed, silentClosed]);
     expect(stats.inFlight).toBe(0);
-    await throughout(
-      () => stats.requestsTimedOut === timedOut,
-      "the stopped connection's backstop staying quiet",
-      REQUEST_TIMEOUT_MS * 2,
-    );
+    expect(clock.pending()).toBe(0);
+    clock.advance(REQUEST_TIMEOUT_MS);
+    expect(stats.requestsTimedOut).toBe(timedOut);
     expect(process.env.XDG_STATE_HOME).toBe(stateHome);
   });
 });
