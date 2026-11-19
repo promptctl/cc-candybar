@@ -6,13 +6,24 @@
 // its slot came is abandoned, with nothing handed in.
 
 import fs from "node:fs";
-import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+  type RendererName,
+} from "../src/daemon/foundations/renderer-name";
 import os from "node:os";
 import path from "node:path";
 import type { RenderOrigin } from "../src/config-hint";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { diffChanges } from "../src/config/config-changes";
-import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
+import {
+  rendererHost,
+  type HostWorld,
+  type RendererHost,
+} from "../src/daemon/renderer-host";
+import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { locations } from "../src/daemon/paths";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type {
   Effect,
@@ -21,8 +32,10 @@ import type {
   EventInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
-import type { Monotonic } from "../src/time";
+import { systemTimekeeper, type Monotonic } from "../src/time";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
+import { originOf } from "./helpers/config-host";
+import { HOST } from "./helpers/host";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -75,6 +88,10 @@ const output = (
 function hostOver(
   turn: (event: Event) => RendererOutput,
   landed: () => readonly RenderOrigin[] = () => [],
+  bound?: {
+    readonly name: RendererName;
+    readonly configs: HostWorld["configs"];
+  },
 ) {
   const heard: string[] = [];
   const logged: string[] = [];
@@ -94,7 +111,7 @@ function hostOver(
     repoDir: () => null,
   };
   const host = rendererHost(
-    MAIN_RENDERER,
+    bound?.name ?? MAIN_RENDERER,
     CLOCK,
     hostHeld(
       eventRenderer(async ({ event }: EventInput) => {
@@ -115,7 +132,11 @@ function hostOver(
       writableSettings: () => [],
       recorded: () => {},
     },
-    { ...NO_ACTS, stateDir: path.join(dir, "state"), configs },
+    {
+      ...NO_ACTS,
+      stateDir: path.join(dir, "state"),
+      configs: bound?.configs ?? configs,
+    },
   );
   return { host, heard, logged };
 }
@@ -155,6 +176,60 @@ test("each origin a turn's landing moved gets its config turn before the landing
   // Discovery heard of the landing once the change was on disk.
   expect(landedOn).toContain("dawn");
   expect(answered.settled).toEqual([{ kind: "ok" }]);
+});
+
+test("a writer can release an origin in its output and its other holder still reloads", async () => {
+  const origin = originOf(dir, dir, file);
+  const secondary = rendererNameOf("secondary");
+  const watches = new WatcherRegistry({ clock: systemTimekeeper });
+  const hosts = new Map<RendererName, RendererHost>();
+  const discovery = new ConfigDiscovery({
+    locations: locations(HOST),
+    stateDir: path.join(dir, "state"),
+    watchers: watches,
+    log: () => {},
+    moved: (name, origins) => hosts.get(name)?.moved(origins),
+  });
+  try {
+    const change: Effect = {
+      kind: "change",
+      id: 1 as EffectId,
+      session: S,
+      target: { kind: "layer", origin, role: "user" },
+      changes: diffChanges(
+        `{ globals: { theme: "dusk" } }\n`,
+        `{ globals: { theme: "dawn" } }\n`,
+      ),
+    };
+    let writing = false;
+    const main = hostOver(
+      (event) =>
+        writing
+          ? output(event.kind === "due" ? [change] : [], [])
+          : output([], [origin]),
+      undefined,
+      { name: MAIN_RENDERER, configs: discovery.forRenderer(MAIN_RENDERER) },
+    );
+    const other = hostOver(() => output([], [origin]), undefined, {
+      name: secondary,
+      configs: discovery.forRenderer(secondary),
+    });
+    hosts.set(main.host.name, main.host);
+    hosts.set(other.host.name, other.host);
+    const tick = () => ({ kind: "event", event: due }) as const;
+    await main.host.answer(tick);
+    await other.host.answer(tick);
+    writing = true;
+    const answered = await main.host.answer(tick);
+    // A due behind the secondary's queued reload proves it already ran.
+    await other.host.answer(tick);
+    expect(answered.settled).toEqual([{ kind: "ok" }]);
+    expect(main.heard).toEqual(["due", "config", "due", "effect-done ok"]);
+    expect(other.heard).toEqual(["due", "config", "config", "due"]);
+  } finally {
+    discovery.close();
+    watches.closeAll();
+  }
 });
 
 // [LAW:one-source-of-truth] A renderer sent its start holds no config, so

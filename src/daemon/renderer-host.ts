@@ -60,7 +60,7 @@ import {
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
+import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { RendererName } from "./foundations/renderer-name.js";
 
@@ -94,10 +94,7 @@ export type Made = MadeEvent | Failure;
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
-  readonly configs: Pick<
-    ConfigDiscovery,
-    "follow" | "snapshotOf" | "landed" | "path" | "repoDir"
-  >;
+  readonly configs: RendererConfigs;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -293,6 +290,19 @@ export function rendererHost(
               collector.writableSettings,
               world.configs,
             );
+      // [LAW:no-ambient-temporal-coupling] The writer can release an origin
+      // in this output. Identify the written files before taking demands so
+      // other holders still hear the write.
+      const files =
+        landed.kind === "ok"
+          ? changes.flatMap(({ target }) => {
+              const file =
+                target.kind === "layer"
+                  ? world.configs.path(target.origin, target.role)
+                  : target.file;
+              return file === null || file === undefined ? [] : [file];
+            })
+          : [];
       const named = took(subscriptions, frames, stored);
       // [LAW:no-ambient-temporal-coupling] Every origin the output newly
       // names, and every one the landing moved, gets its `config` turn here,
@@ -303,18 +313,7 @@ export function rendererHost(
       const reloaded: Array<Promise<unknown>> = [];
       const moved =
         landed.kind === "ok" && changes.length + answers.length > 0
-          ? world.configs.landed(
-              // A landed layer's origin was followed and its chain held the
-              // role, or the landing was refused.
-              changes.flatMap(({ target }) => {
-                const file =
-                  target.kind === "layer"
-                    ? world.configs.path(target.origin, target.role)
-                    : target.file;
-                return file === null || file === undefined ? [] : [file];
-              }),
-              answers.length > 0,
-            )
+          ? world.configs.landed(files, answers.length > 0)
           : [];
       for (const origin of moved)
         reloaded.push((await configInSlot(origin, "config-landed")).settled);

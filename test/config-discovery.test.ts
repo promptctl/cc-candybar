@@ -19,7 +19,15 @@ import {
   diskFiles,
   type DiscoveryFiles,
 } from "../src/daemon/config-discovery/discovery-files";
-import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import {
+  ConfigDiscovery,
+  type RendererConfigs,
+} from "../src/daemon/config-discovery/config-discovery";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+  type RendererName,
+} from "../src/daemon/foundations/renderer-name";
 import {
   WatcherRegistry,
   type WatcherCounters,
@@ -64,7 +72,7 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig() {
+function discoveryRig(files = diskFiles) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -80,20 +88,29 @@ function discoveryRig() {
   });
   const moved: string[] = [];
   const logged: string[] = [];
-  const discovery = new ConfigDiscovery({
+  const delivered: Array<readonly [RendererName, string]> = [];
+  const service = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: stateDir(HOST),
     watchers,
+    files,
     log: (_level, line) => logged.push(line),
-    moved: (origins) => moved.push(...origins.map(originKey)),
+    moved: (renderer, origins) => {
+      for (const origin of origins) {
+        const key = originKey(origin);
+        moved.push(key);
+        delivered.push([renderer, key]);
+      }
+    },
   });
   cleanups.push(() => watchers.closeAll());
-  cleanups.push(() => discovery.close());
-  return { discovery, counters, moved, logged };
+  cleanups.push(() => service.close());
+  const discovery = service.forRenderer(MAIN_RENDERER);
+  return { service, discovery, counters, moved, logged, delivered };
 }
 
 const textOfLayer = (
-  discovery: ConfigDiscovery,
+  discovery: RendererConfigs,
   origin: RenderOrigin,
   file: string,
 ): string | null => {
@@ -180,13 +197,84 @@ test("an answer to the trust book moves every origin with a repository to ask ab
 });
 
 test("once closed, it follows nothing and lets every watch go", () => {
-  const { discovery, counters } = discoveryRig();
+  const { service, discovery, counters } = discoveryRig();
   const { origin } = named("a");
   discovery.follow([origin]);
-  discovery.close();
+  service.close();
   expect(counters.watchersClosed).toBe(counters.watchersOpened);
   discovery.follow([origin]);
   expect(discovery.snapshotOf(origin)).toBeNull();
+});
+
+test("two named renderers share one read and watch until the last releases", async () => {
+  const { origin, file } = named("shared-origin");
+  const name = rendererNameOf("next");
+  const key = originKey(origin);
+  let reads = 0;
+  const {
+    service,
+    discovery: first,
+    counters,
+    delivered,
+  } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (read === file) reads++;
+      return diskFiles.text(read);
+    },
+  });
+  const second = service.forRenderer(name);
+  first.follow([origin]);
+  const opened = counters.watchersOpened;
+  const closed = counters.watchersClosed;
+  expect(first.snapshotOf(origin)).not.toBeNull();
+  expect(second.snapshotOf(origin)).toBeNull();
+  second.follow([{ ...origin, target: { ...origin.target } }]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+  expect(counters.watchersOpened).toBe(opened);
+  expect(reads).toBe(1);
+
+  let n = 0;
+  const edit = () => fs.writeFileSync(file, `{ globals: { n: ${++n} } }`);
+  await untilHeard(edit, () => delivered.length >= 2, "both renderer names");
+  expect(delivered.slice(0, 2)).toEqual([
+    [MAIN_RENDERER, key],
+    [name, key],
+  ]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+
+  first.follow([]);
+  expect(first.snapshotOf(origin)).toBeNull();
+  expect(first.path(origin, "user")).toBeUndefined();
+  expect(second.path(origin, "user")).toBe(file);
+  expect(counters.watchersClosed).toBe(closed);
+  const began = delivered.length;
+  await untilHeard(
+    edit,
+    () => delivered.length > began,
+    "the remaining renderer",
+  );
+  expect(new Set(delivered.slice(began).map(([renderer]) => renderer))).toEqual(
+    new Set([name]),
+  );
+
+  second.follow([]);
+  expect(second.snapshotOf(origin)).toBeNull();
+  expect(counters.watchersClosed).toBeGreaterThan(closed);
+});
+
+test("a landed write synchronously returns only the writer's reloads and routes all others", () => {
+  const { origin, file } = named("written-origin");
+  const { service, discovery: first, delivered } = discoveryRig();
+  const name = rendererNameOf("next");
+  const second = service.forRenderer(name);
+  first.follow([origin]);
+  second.follow([origin]);
+  fs.writeFileSync(file, "{ globals: {} }");
+  expect(first.landed([file], false)).toEqual([origin]);
+  expect(delivered).toEqual([[name, originKey(origin)]]);
+  expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
+  expect(textOfLayer(second, origin, file)).toBe("{ globals: {} }");
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
