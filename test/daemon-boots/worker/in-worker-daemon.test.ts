@@ -14,6 +14,7 @@ import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error"
 import { systemTimekeeper } from "../../../src/time";
 import { exits } from "../../../src/proc/spawner-fake";
 import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
+import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
@@ -103,6 +104,41 @@ describe("a daemon in this worker", () => {
       "the bar the click widened",
     );
     expect(await renderLines(env, sid, 2)).not.toEqual([]);
+  });
+
+  test.each([
+    { verb: VERB_COPY, bin: "/usr/bin/pbcopy", category: "click.pbcopy" },
+    { verb: VERB_OPEN_VSCODE, bin: "/usr/bin/open", category: "click.open" },
+  ] as const)("the bar reports a rate-limited $verb launch", async ({ verb, bin, category }) => {
+    const sid = "rate-limited-desktop-click";
+    // The launcher measures both clicks in the same interval. Its fake child
+    // exits on the normal event loop, while the daemon's request clock runs.
+    const startedAt = systemTimekeeper.monotonic();
+    let fake: FakeLauncher | undefined;
+    daemon = startDaemon(env, {
+      launcher: (own) => {
+        const launcher = fakeLauncher(
+          { ...systemTimekeeper, monotonic: () => startedAt },
+          own,
+        );
+        launcher.spawner.program((program) => program === bin, exits());
+        fake = launcher;
+        return launcher.launcher;
+      },
+    });
+    await render(daemon, sid, projectDir);
+    const url = drawnLink(daemon, effectsUrl([
+      { verb, args: ["fixture"] },
+      { verb: VERB_SET_STATE, args: [sid, "padding", "4"] },
+    ]));
+    await click(daemon, url);
+    await refusedClick(daemon, url, "threw");
+
+    const after = await render(daemon, sid, projectDir);
+    expect(indicatorOf(after)).toBe("⚠ 1");
+    const messages = await readDiagnostics(daemon, sid, projectDir, after);
+    expect(messages.map(({ text }) => text).join(" ")).toContain(`rate-limited: ${category}`);
+    expect(fake?.started().filter((item) => item.bin === bin)).toHaveLength(1);
   });
 
   // [LAW:verifiable-goals] An answer carries a failed click's error only once
