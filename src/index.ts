@@ -188,11 +188,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     }
 
     // [LAW:one-source-of-truth] The daemon is the *only* renderer. The CLI is
-    // a dumb relay: forward stdin to the daemon, print whatever comes back.
-    // There is no inline render path — two renderers would drift (the CLI has
-    // no shared gitService/usageProvider, no per-session state, no warm
-    // caches). On daemon miss we spawn detached and emit empty output; the
-    // next status-line refresh hits the warm daemon and renders for real.
+    // a relay: forward stdin to the daemon and print its frame. While the
+    // daemon is starting or a reply is overdue, the client can report its
+    // own transport status without gathering or rendering any session data.
     //
     // Terminal dimensions and client identity belong to this tick. The host
     // can derive the other hints from the environment it holds for the session.
@@ -215,7 +213,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // [LAW:dataflow-not-control-flow] planOutcome maps each variant to a
     // plan value (output, kick, debug); the side effects below run against
     // the plan in fixed order. Variability lives in the data.
-    const plan = planOutcome(outcome);
+    const plan = planOutcome(outcome, host.env.XDG_STATE_HOME);
     if (plan.debug !== null) {
       debug(plan.debug);
     }

@@ -8,10 +8,12 @@ and the binary is staged to `bin/cc-candybar` by `scripts/postinstall.mjs`.
 
 ## What it does
 
-- **Render path** (default, when stdin has hook data): connects to the
-  daemon's Unix socket at `~/.claude/powerline/socket`, sends a framed
-  `RenderRequest` (matching `src/daemon/foundations/protocol.ts`), prints the response
-  to stdout. Daemon-miss → spawn detached Node daemon, emit `\n`, exit 0.
+- **Render path** (default, when stdin has hook data): sends a framed
+  `RenderRequest` to the daemon's Unix socket at `/tmp/cc-candybar-<uid>/socket`
+  and prints the response. While the daemon starts, the client shows the last
+  good frame or `Candybar · waiting for daemon…`. On timeout, it prints
+  `Candybar timed out` and a command for reading the daemon log, below the
+  last good frame if available. The next successful response replaces both.
 - **Subcommands** (`install`, `daemon`, `daemon-stats`, `url-handle`,
   `install-url-handler`, `--help`): `execvp`s `node <bin>/../dist/index.mjs`
   and forwards argv. The binary stays minimal; complex logic lives in TS.

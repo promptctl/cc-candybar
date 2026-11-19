@@ -65,6 +65,7 @@ const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
+const TS_OUTCOME = "src/outcome-plan.ts";
 const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -494,6 +495,13 @@ const CHECKS = [
     ts: lit(TS_GLYPH, /const PREFIX = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const PREFIX: &str = "((?:[^"\\]|\\.)*)";/),
   },
+  ...["WAITING_FOR_DAEMON", "RENDER_TIMED_OUT", "DEFAULT_LOG_COMMAND", "XDG_LOG_COMMAND"].map(
+    (name) => ({
+      label: `statusline feedback ${name}`,
+      ts: lit(TS_OUTCOME, new RegExp(`const ${name} =\\s*["'](.+)["'];`)),
+      rust: lit(RS_GLYPH, new RegExp(`const ${name}: &str =\\s*(?:r#)?"(.+)"#?;`)),
+    }),
+  ),
   // The code points the diagnostic sanitizer turns into spaces. The tables
   // alone would not do: a term beside the fold, in the predicate or at its one
   // use, changes the set with the tables still equal — so the second row

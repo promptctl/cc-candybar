@@ -38,6 +38,8 @@ That single command (re-run it any time to update to the latest release):
 
 Restart Claude Code. The statusline appears with the bundled default layout — an identity row (host, directory, gitaculous) over a status row (model, context, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
+While Candybar starts, the statusline shows **Candybar · waiting for daemon…**. If a render times out, the bar shows a `tail` command you can run in your terminal to read the daemon log. The command works even while the daemon is unresponsive. The next successful render replaces the message.
+
 ## Customization
 
 Config layers load in this order, with each layer overriding the ones before it.

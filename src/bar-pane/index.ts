@@ -262,7 +262,10 @@ async function drawBarPane(
       sessionId,
       said,
       follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
-        frame: (resp) => say(planOutcome(renderOutcomeOf(resp)).output),
+        frame: (resp) => {
+          const outcome = renderOutcomeOf(resp);
+          say(planOutcome(outcome, world.host.env.XDG_STATE_HOME).output);
+        },
         off: (resp) => say(resp.error),
         fault: say,
         exit: (reason) => die(new Error(reason)),

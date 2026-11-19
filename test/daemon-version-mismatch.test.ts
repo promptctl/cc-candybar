@@ -477,7 +477,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // identically and the spiral repeats.
 
   test("ok outcome returns the daemon output, no kick, no debug message", () => {
-    const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" });
+    const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" }, undefined);
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
     // The happy path carries no debug message — nothing for the caller to log.
@@ -490,15 +490,12 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
       "io_error",
     ];
     for (const cause of transientCauses) {
-      const plan = planOutcome({
-        kind: "transient",
-        cause,
-        message: "anything",
-      });
+      const plan = planOutcome(
+        { kind: "transient", cause, message: "anything" },
+        undefined,
+      );
       expect(plan.kick).toBe(true);
-      // Empty-line output keeps the statusline non-blank without flicker
-      // while the kick warms a fresh daemon for the next render tick.
-      expect(plan.output).toBe("\n");
+      expect(plan.output).toBe("\x1b[1mCandybar · waiting for daemon…\x1b[0m\n");
       // The debug string is data, not a side effect — the caller decides
       // whether to log it.
       expect(plan.debug).toContain(`transient: ${cause}`);
@@ -508,13 +505,19 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
 
   // The daemon answered, so it is up: a kick would spawn a candidate that
   // loses the bind to it. The Rust client's Busy variant agrees.
-  test("a busy render does not kick: a daemon holds the socket", () => {
-    const plan = planOutcome({
-      kind: "busy",
-      phase: "deadline",
-      message: "anything",
+  test.each([
+    { stateHome: undefined, command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
+    { stateHome: "", command: "tail -n 40 ~/.local/state/cc-candybar/daemon.log" },
+    { stateHome: "/state dir", command: 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"' },
+  ])("a timeout gives an offline log command for state home $stateHome", ({ stateHome, command }) => {
+    const plan = planOutcome(
+      { kind: "busy", phase: "deadline", message: "request exceeded its budget" },
+      stateHome,
+    );
+    expect(plan).toMatchObject({
+      kick: false,
+      output: `\x1b[1mCandybar timed out\x1b[0m · ${command}\n`,
     });
-    expect(plan).toMatchObject({ kick: false, output: "\n" });
     expect(plan.debug).toContain("busy");
   });
 
@@ -526,7 +529,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
       { kind: "permanent", cause: "malformed_response", message: "x" },
     ];
     for (const outcome of permanentOutcomes) {
-      const plan = planOutcome(outcome);
+      const plan = planOutcome(outcome, undefined);
       expect(plan.kick).toBe(false);
       // The output carries the diagnostic glyph rather than a blank line —
       // the user sees what went wrong directly in the statusline.
