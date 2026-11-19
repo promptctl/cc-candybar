@@ -14,16 +14,15 @@ export const FORGE_CLI = {
   gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" },
 } as const satisfies Record<ForgeName, { cli: string; repoEnv: string }>;
 
-// git's repository-local variables: the set `git rev-parse --local-env-vars`
-// prints, which git itself clears before it runs a command in another
-// repository.
+// git's repository-local variables (the set `git rev-parse --local-env-vars`
+// prints, which git clears before it runs a command in another repository)
+// fall in two parts: those that locate a repository or what is read from it,
+// and those that carry config. A test fails when git prints a name in
+// neither.
 // [LAW:one-source-of-truth] exception: git's list is external; the test fails
 // when git adds a name.
-const GIT_REPOSITORY_LOCAL_ENV = [
+const GIT_LOCATING_ENV = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_CONFIG",
-  "GIT_CONFIG_PARAMETERS",
-  "GIT_CONFIG_COUNT",
   "GIT_OBJECT_DIRECTORY",
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -37,25 +36,26 @@ const GIT_REPOSITORY_LOCAL_ENV = [
   "GIT_COMMON_DIR",
 ] as const;
 
-// [LAW:one-source-of-truth] The variables scoped to one repository: git's
-// repository-local set and each forge's repository variable. In a detached
-// process they belong to whichever shell spawned it (a git hook's, a vcsh
-// shell's), never to the directory a child is launched in. Dropping the git
-// config those variables supply (`GIT_CONFIG*`) is intended: it is scoped to
-// the spawning shell's repository, and git drops it the same way when a
-// command crosses into another repository.
-export const REPOSITORY_SCOPED_ENV: readonly string[] = [
-  ...GIT_REPOSITORY_LOCAL_ENV,
-  ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv),
+// The config git's list carries, which names no repository, so it passes: a
+// user's exported config (a container's `safe.directory` through
+// GIT_CONFIG_COUNT and its KEY/VALUE pairs) applies to every repository.
+export const GIT_CONFIG_ENV: readonly string[] = [
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
 ];
 
-// An environment less the variables scoped to a repository.
-export function withoutRepositoryScoped(
-  env: Readonly<NodeJS.ProcessEnv>,
-): NodeJS.ProcessEnv {
-  return Object.fromEntries(
-    Object.entries(env).filter(
-      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
-    ),
-  );
-}
+// [LAW:one-source-of-truth] The variables that name the repository a command
+// acts on ahead of its working directory: git's locating ones and each
+// forge's. A detached process's environment is whichever shell spawned it, and
+// spawned from a git hook, a `rebase --exec` or a vcsh shell it carries these
+// for that shell's repository. A child inheriting them would read every
+// session's branch, status and PR, and clone a plugin, there. So a child that
+// inherits its owner's environment never gets them: its repository is its
+// working directory's. A session's own environment is the session's, and
+// passes as it is. The process's own environment is never edited, because the
+// client reports it whole as its session's.
+export const REPOSITORY_SCOPED_ENV: readonly string[] = [
+  ...GIT_LOCATING_ENV,
+  ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv),
+];

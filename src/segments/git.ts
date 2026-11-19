@@ -46,16 +46,6 @@ export interface PrFieldTypes {
   prEarlier: PrState;
 }
 
-// [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
-// type admits no PR field missing here.
-export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
-  prNumber: true,
-  prState: true,
-  prUrl: true,
-  prError: true,
-  prEarlier: true,
-};
-
 // The branch's PR/MR in any state, as the forge CLI picks it for the branch —
 // gh takes an open one if there is one, else the newest; glab's rule is
 // unverified (see parseGitlabMr) — so a branch whose PR merged reads `merged`
@@ -576,7 +566,7 @@ export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
 //
 // [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
 //   ok + parse ok (any state)       → ok            (the value: open, merged or closed)
-//   ok + parse fails               → failed        (forge answered garbage)
+//   ok + parse fails                → failed        (forge answered garbage)
 //   non-zero + no-PR stderr         → absent        (genuine "none for branch")
 //   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
 //   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)

@@ -6,7 +6,6 @@ import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
-import { withoutRepositoryScoped } from "../repository-cli";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";

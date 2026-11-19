@@ -47,7 +47,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
-import { withoutRepositoryScoped } from "../repository-cli";
+import { REPOSITORY_SCOPED_ENV } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -123,25 +123,36 @@ function checkRateLimit(
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 
+// [LAW:single-enforcer] What a child inherits of its owner's environment: the
+// live `LaunchScope.inherited`, read at each launch so a variable the owner
+// sets later still arrives, less REPOSITORY_SCOPED_ENV. The one place it is
+// removed, for every launch and the lifeline.
+function inheritedEnv(scope: LaunchScope): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(scope.inherited).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
+    ),
+  );
+}
+
 // [LAW:one-source-of-truth] The environment a child gets is the launch's own
-// (a session's) or else the owner's inherited one (`LaunchScope.inherited`,
-// handed in by the process main or the daemon's root), under the launch's
-// overlay, resolved here for every spawn
-// site. Passing `undefined` lets node read the host process's environment
-// directly, which is a second clock: under a realm boundary (Jest's sandbox
-// copies `process.env` per test file) the two diverge, and a PATH the test set
-// for a `shell` source never reached the shell it spawned
-// (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
-// null removes that variable: node's spawn skips undefined values.
+// (a session's) or else what it inherits of its owner's (above), under the
+// launch's overlay, resolved here for every launch. Passing `undefined` lets
+// node read the host process's environment directly, which is a second clock:
+// under a realm boundary (Jest's sandbox copies `process.env` per test file)
+// the two diverge, and a PATH the test set for a `shell` source never reached
+// the shell it spawned (brandon-custom-segments-g5z.3's doc stubs ran as 127).
+// An overlay entry of null removes that variable: node's spawn skips undefined
+// values.
 function childEnv(
   scope: LaunchScope,
   opts: Pick<LaunchOpts, "environment" | "envOverlay">,
 ): NodeJS.ProcessEnv {
-  // [LAW:one-source-of-truth] A session's own environment is honoured as it
-  // is, by design: the session owns its variables, a GIT_DIR in it included.
-  // Only the inherited one lacks the repository-scoped variables, removed
-  // once where the scope is built.
-  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+  // [LAW:dataflow-not-control-flow] One path for both starting environments;
+  // a session's own passes as it is (REPOSITORY_SCOPED_ENV says why).
+  const env: NodeJS.ProcessEnv = {
+    ...(opts.environment ?? inheritedEnv(scope)),
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
   return env;
@@ -176,10 +187,9 @@ function rateLimitedResult(
 
 // Who a launcher's launches belong to.
 export interface LaunchScope {
-  // The environment this owner's children inherit, under each launch's
-  // `envOverlay`. It lacks the variables scoped to a repository: the owner's
-  // root passes the environment it reads its own facts from, and the
-  // launcher removes those from its copy as it is built.
+  // The owner's own environment, live: the one its root reads its own facts
+  // from. Its children inherit it as `inheritedEnv` reads it at each launch,
+  // under the launch's `envOverlay`.
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
@@ -426,7 +436,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: state.scope.inherited,
+      env: inheritedEnv(state.scope),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
@@ -1372,12 +1382,6 @@ function launcherWithState(
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
       ...owner,
-      // [LAW:single-enforcer] The owner's environment is whichever shell
-      // spawned it, so the variables scoped to that shell's repository (a git
-      // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are removed
-      // once, here, and no child inherits them: a child's repository is its
-      // working directory's. The owner's own environment is not edited.
-      inherited: withoutRepositoryScoped(owner.inherited),
       clock,
     },
     lastStartAt: new Map(),

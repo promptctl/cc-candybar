@@ -17,15 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf } from "../../../src/render/frame";
-import {
-  REPOSITORY_SCOPED_ENV,
-  withoutRepositoryScoped,
-} from "../../../src/repository-cli";
-import {
-  inProcessPort,
-  type RendererPort,
-} from "../../../src/daemon/renderer-process";
-import type { RendererBoot } from "../../../src/renderer-interface/wire";
+import { REPOSITORY_SCOPED_ENV } from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -55,9 +47,6 @@ describe("a daemon render carries the branch's PR in every state", () => {
   let dir: string;
   let config: string;
   let daemon: InWorkerDaemon;
-  // What the daemon would boot a renderer process with, read as it prepares
-  // its renderer.
-  let boot: () => RendererBoot;
 
   // A checkout of its own per branch: the daemon's git cache is keyed by repo
   // root and refreshed by a watch on .git/HEAD, so one checkout switching
@@ -66,7 +55,11 @@ describe("a daemon render carries the branch's PR in every state", () => {
   function checkout(branch: string): string {
     const repo = path.join(dir, `repo-${branch}`);
     fs.mkdirSync(repo);
-    const env = withoutRepositoryScoped(process.env);
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
+      ),
+    );
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: repo, env, stdio: "pipe" });
     git("init", "-q", "-b", branch);
@@ -101,11 +94,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
       GIT_WORK_TREE: elsewhere,
       GH_REPO: "other/elsewhere",
     };
-    const renderer: RendererPort = (prepared) => {
-      boot = prepared.boot;
-      return inProcessPort(prepared);
-    };
-    daemon = startDaemon(env, { renderer });
+    daemon = startDaemon(env);
   });
 
   afterAll(async () => {
@@ -140,13 +129,5 @@ describe("a daemon render carries the branch's PR in every state", () => {
     // A remote, but no branch here was ever pushed to it.
     expect(out).toContain("t:none");
     expect((await prFacts(sessionId)).at(-1)).toBe(fact);
-  });
-
-  // A renderer process is the daemon's child, so the environment its boot
-  // hands it lacks the repository-scoped variables as its process does.
-  test("the renderer's boot lacks the daemon's repository-scoped variables", () => {
-    const { env: booted } = boot().host;
-    expect(REPOSITORY_SCOPED_ENV.filter((name) => name in booted)).toEqual([]);
-    expect(booted.PATH).toBe(env.PATH);
   });
 });

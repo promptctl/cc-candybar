@@ -21,8 +21,9 @@ export interface World {
 // [LAW:single-enforcer] The one place src reads the process's environment, home
 // and temporary directory (besides the preload's own main, which runs apart
 // from the rest). The eslint config keeps every other file from naming them.
-// The launcher holds the live `process.env`, not a copy, so a variable the
-// process sets after this still reaches the children it launches. This is also
+// The launcher holds the live `process.env`, not a copy, and reads it at each
+// launch, so a variable the process sets after this still reaches the
+// children it launches (all but REPOSITORY_SCOPED_ENV). This is also
 // the one file that names the real clock (src/time.ts): everything else is
 // handed the world's.
 export function processWorld(): World {

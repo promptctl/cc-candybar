@@ -89,9 +89,9 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // checks out nothing, and repoDefinitions says so. `--` keeps a source
 // spelled like an option from being read as one. With terminal prompts off,
 // a repo that is not there (GitHub asks for credentials) fails rather than
-// waiting on a prompt; a credential helper still answers. A hook's GIT_DIR
-// never reaches git: the launcher withholds the variables that name a
-// repository. `shown` stands for `url` in messages.
+// waiting on a prompt; a credential helper still answers. `shown` stands for
+// `url` in messages.
+// [LAW:single-enforcer] The launcher withholds REPOSITORY_SCOPED_ENV.
 function cloneRepo(
   launcher: OneShotLauncher,
   url: string,

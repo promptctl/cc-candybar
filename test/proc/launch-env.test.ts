@@ -12,7 +12,10 @@ import path from "node:path";
 import { createOneShotLauncher } from "../../src/proc/launch";
 import type { LaunchOpts } from "../../src/proc/launcher";
 import { systemSpawner, type Spawner } from "../../src/proc/spawner";
-import { REPOSITORY_SCOPED_ENV } from "../../src/repository-cli";
+import {
+  GIT_CONFIG_ENV,
+  REPOSITORY_SCOPED_ENV,
+} from "../../src/repository-cli";
 import { systemTimekeeper } from "../../src/time";
 import { until } from "../helpers/until";
 
@@ -20,13 +23,17 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-launch-env-"));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 // An owner's environment as a git hook, a vcsh shell or `gh` would leave it:
-// every repository-scoped name set, beside a variable that must pass.
+// every repository-scoped name set, beside a variable that must pass and a
+// git config the user exported, which names no repository.
 const OWNER_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   ...Object.fromEntries(
     REPOSITORY_SCOPED_ENV.map((name) => [name, `/elsewhere/${name}`]),
   ),
   KEPT: "kept",
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "safe.directory",
+  GIT_CONFIG_VALUE_0: "*",
 };
 
 // A child that prints its whole environment as JSON: to stdout, or to a file
@@ -49,13 +56,16 @@ const scoped = (env: Record<string, string | undefined>) =>
 
 // One case's launcher over the real OS, recording the environment each spawn
 // was handed: the lifeline prints nothing, so what the launcher handed the OS
-// for it is what it ran in. The launcher is closed when the case ends.
+// for it is what it ran in. The owner's environment is the case's own, live,
+// as a process's is. The launcher is closed when the case ends.
 async function withLauncher(
   use: (
     launcher: ReturnType<typeof createOneShotLauncher>,
     handed: ReadonlyArray<{ bin: string; env: NodeJS.ProcessEnv | undefined }>,
+    owner: NodeJS.ProcessEnv,
   ) => Promise<void> | void,
 ): Promise<void> {
+  const owner: NodeJS.ProcessEnv = { ...OWNER_ENV };
   const handed: Array<{ bin: string; env: NodeJS.ProcessEnv | undefined }> = [];
   const recording: Spawner = {
     ...systemSpawner,
@@ -72,11 +82,12 @@ async function withLauncher(
   try {
     await use(
       createOneShotLauncher(
-        { inherited: OWNER_ENV, signal: ending.signal },
+        { inherited: owner, signal: ending.signal },
         systemTimekeeper,
         recording,
       ),
       handed,
+      owner,
     );
   } finally {
     ending.abort();
@@ -84,6 +95,27 @@ async function withLauncher(
 }
 
 describe("a child that inherits its owner's environment", () => {
+  it("gets what the owner sets after its launcher is built, still lacking the rest", () =>
+    withLauncher(async (launcher, _handed, owner) => {
+      owner.LATE = "late";
+      const r = await launcher.launch({ ...printsEnv(), category: "git" });
+      const env = parsed(r.stdout);
+      expect(env.LATE).toBe("late");
+      expect(scoped(env)).toEqual([]);
+    }));
+
+  it("gets the git config the owner exported, and not its GIT_DIR", () =>
+    withLauncher(async (launcher) => {
+      const r = await launcher.launch({ ...printsEnv(), category: "git" });
+      const env = parsed(r.stdout);
+      expect(env).toMatchObject({
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "safe.directory",
+        GIT_CONFIG_VALUE_0: "*",
+      });
+      expect(env.GIT_DIR).toBeUndefined();
+    }));
+
   it("lacks every repository-scoped name, by launch", () =>
     withLauncher(async (launcher) => {
       const r = await launcher.launch({ ...printsEnv(), category: "git" });
@@ -196,11 +228,11 @@ describe("a child launched in a session's own environment", () => {
     }));
 });
 
-// [LAW:one-source-of-truth] git's part of the list is a copy of git's, so a
-// git that adds a repository-local name fails here, not in a session. One way
-// only: an older git that prints fewer names passes.
+// [LAW:one-source-of-truth] git's names are a copy of git's, so a git that
+// adds a repository-local name fails here, not in a session. One way only: an
+// older git that prints fewer names passes.
 describe("the repository-scoped variables", () => {
-  it("hold every name the installed git clears", () => {
+  it("place every name the installed git clears: withheld, or config that passes", () => {
     const gits = execFileSync("git", ["rev-parse", "--local-env-vars"], {
       encoding: "utf8",
     })
@@ -208,7 +240,11 @@ describe("the repository-scoped variables", () => {
       .filter((name) => name !== "");
     expect(gits.length).toBeGreaterThan(0);
     expect(
-      gits.filter((name) => !REPOSITORY_SCOPED_ENV.includes(name)),
+      gits.filter(
+        (name) =>
+          !REPOSITORY_SCOPED_ENV.includes(name) &&
+          !GIT_CONFIG_ENV.includes(name),
+      ),
     ).toEqual([]);
   });
 });
