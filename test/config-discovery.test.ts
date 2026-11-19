@@ -164,7 +164,9 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
+  expect(logged.at(-1)).toMatch(
+    /why=landed followed=2 discovered=1 failed=0 moved=1$/,
+  );
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -528,6 +530,54 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
+test("watch delivery reads only held origins after a pending demand is released", () => {
+  const a = named("released");
+  const b = named("kept");
+  const clock = heldClock(new Date(0));
+  const reads: string[] = [];
+  const roots: string[] = [];
+  const { service, discovery, delivered, logged } = discoveryRig(
+    {
+      ...diskFiles,
+      text(file) {
+        reads.push(file);
+        return diskFiles.text(file);
+      },
+      folders(dir) {
+        roots.push(dir);
+        return diskFiles.folders(dir);
+      },
+    },
+    clock,
+  );
+  const name = rendererNameOf("next");
+  const second = service.forRenderer(name);
+  discovery.follow([a.origin]);
+  second.follow([b.origin]);
+  const next = "{ globals: { padding: 1 } }";
+  const beforeRead = reads.length;
+  for (const { file } of [a, b]) fs.writeFileSync(file, next);
+  clock.advance(POLL_MS);
+  // The real registry has queued a shared delivery window beside its sweep.
+  expect(clock.pending()).toBe(2);
+  discovery.follow([]);
+  clock.advance(DEBOUNCE_MS);
+  expect(reads.slice(beforeRead)).toContain(b.file);
+  expect(reads.slice(beforeRead)).not.toContain(a.file);
+  expect(delivered).toEqual([[name, originKey(b.origin)]]);
+  expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+
+  fs.writeFileSync(b.file, "{}");
+  clock.advance(POLL_MS - DEBOUNCE_MS);
+  expect(clock.pending()).toBe(2);
+  second.follow([]);
+  const beforeDelivery = [reads.length, roots.length, logged.length];
+  expect(clock.pending()).toBe(0);
+  clock.advance(DEBOUNCE_MS);
+  expect([reads.length, roots.length, logged.length]).toEqual(beforeDelivery);
+  expect(delivered).toEqual([[name, originKey(b.origin)]]);
+});
+
 test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
   const a = named("published");
   const b = named("failed-once");
@@ -555,12 +605,17 @@ test("one failed rediscovery leaves the writer and another holder the successful
   refuse = true;
   expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
-  expect(textOfLayer(second, a.origin, a.file)).toBe(next);
-  expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  for (const holder of [writer, second]) {
+    expect(textOfLayer(holder, a.origin, a.file)).toBe(next);
+    expect(textOfLayer(holder, b.origin, b.file)).toBe("{}");
+  }
   expect(logged).toEqual(
     expect.arrayContaining([
       expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
     ]),
+  );
+  expect(logged.at(-1)).toBe(
+    "config discovery why=landed followed=2 discovered=1 failed=1 moved=1",
   );
 
   refuse = false;
@@ -570,7 +625,11 @@ test("one failed rediscovery leaves the writer and another holder the successful
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
-  expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+  for (const holder of [writer, second])
+    expect(textOfLayer(holder, b.origin, b.file)).toBe(next);
+  expect(logged.at(-1)).toBe(
+    "config discovery why=events-resumed followed=2 discovered=2 failed=0 moved=1",
+  );
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
