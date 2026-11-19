@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-862",
+      "ref": "refs/pull/862/merge",
+      "sha": "7c566303ce837497a00298b0e7a57e0bc571f831",
+      "timestamp": "2026-11-19T12:23:07.239Z",
+      "commits": [
+        {
+          "sha": "7c566303ce837497a00298b0e7a57e0bc571f831",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:21Z",
+          "message": "Merge 9a528b7e3e0f2ce2ddd2839cd434dbc6efb61ebe into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
+        },
+        {
+          "sha": "9a528b7e3e0f2ce2ddd2839cd434dbc6efb61ebe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:08:17-07:00",
+          "message": "fix(daemon): restore live sessions on renderer restart\n\nRefs candybar-law-review-ibyq.fqw.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-864",
       "ref": "refs/pull/864/merge",
       "sha": "06f235420058bcb37a5b710b206ba455ae786cc1",
@@ -71,28 +93,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T12:17:28Z",
           "message": "chore(release): set `package.json` to 1.233.0\n\n## [1.233.0](https://github.com/promptctl/cc-candybar/compare/v1.232.15...v1.233.0) (2026-11-19)\n\n### Features\n\n* **config:** offer layered and isolated file selection ([#861](https://github.com/promptctl/cc-candybar/issues/861)) ([c708550](https://github.com/promptctl/cc-candybar/commit/c7085504a53576be27550693c5b9d96a1afd8f94))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-862",
-      "ref": "refs/pull/862/merge",
-      "sha": "bb2d8da0f73648d6bfde00557882ea0dc2e679f3",
-      "timestamp": "2026-11-19T12:14:28.637Z",
-      "commits": [
-        {
-          "sha": "bb2d8da0f73648d6bfde00557882ea0dc2e679f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:13:29Z",
-          "message": "Merge 6b13d28d822de5c4317fe720c0a39e499c80d750 into c7085504a53576be27550693c5b9d96a1afd8f94\n"
-        },
-        {
-          "sha": "6b13d28d822de5c4317fe720c0a39e499c80d750",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:08:17-07:00",
-          "message": "fix(daemon): restore live sessions on renderer restart\n\nRefs candybar-law-review-ibyq.fqw.\n"
         }
       ]
     },
