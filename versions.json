@@ -4,15 +4,22 @@
     {
       "version": "pr-910",
       "ref": "refs/pull/910/merge",
-      "sha": "e169bc4bb4aeb1cea38e4cac61fe409ca3c188c5",
-      "timestamp": "2026-11-19T22:34:59.433Z",
+      "sha": "c54d72e144e0927eee6a6832afce700eebbb6d75",
+      "timestamp": "2026-11-19T22:46:47.702Z",
       "commits": [
         {
-          "sha": "e169bc4bb4aeb1cea38e4cac61fe409ca3c188c5",
+          "sha": "c54d72e144e0927eee6a6832afce700eebbb6d75",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T22:33:54Z",
-          "message": "Merge eb0dbc214f12cb4fa07c9cf89a431d28743c4967 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
+          "timestamp": "2026-11-19T22:45:37Z",
+          "message": "Merge 259f2fadec2e3a3582731fef3b819683caf91fb1 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
+        },
+        {
+          "sha": "259f2fadec2e3a3582731fef3b819683caf91fb1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:45:25-07:00",
+          "message": "test(daemon): prove the connection deadline is cancelled at shutdown\n"
         },
         {
           "sha": "eb0dbc214f12cb4fa07c9cf89a431d28743c4967",
