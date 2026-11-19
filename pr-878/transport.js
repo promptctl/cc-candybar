@@ -412,7 +412,7 @@ var require_events = __commonJS({
       return ret;
     }
     function once2(emitter2, name) {
-      return new Promise(function(resolve, reject2) {
+      return new Promise(function(resolve2, reject2) {
         function errorListener(err) {
           emitter2.removeListener(name, resolver);
           reject2(err);
@@ -421,7 +421,7 @@ var require_events = __commonJS({
           if (typeof emitter2.removeListener === "function") {
             emitter2.removeListener("error", errorListener);
           }
-          resolve([].slice.call(arguments));
+          resolve2([].slice.call(arguments));
         }
         ;
         eventTargetAgnosticAddListener(emitter2, name, resolver, { once: true });
@@ -2496,7 +2496,7 @@ var require_path_browserify = __commonJS({
     }
     var posix = {
       // path.resolve([from ...], to)
-      resolve: function resolve() {
+      resolve: function resolve2() {
         var resolvedPath = "";
         var resolvedAbsolute = false;
         var cwd2;
@@ -3809,11 +3809,11 @@ function __metadata(metadataKey, metadataValue) {
 }
 function __awaiter2(thisArg, _arguments, P2, generator) {
   function adopt(value) {
-    return value instanceof P2 ? value : new P2(function(resolve) {
-      resolve(value);
+    return value instanceof P2 ? value : new P2(function(resolve2) {
+      resolve2(value);
     });
   }
-  return new (P2 || (P2 = Promise))(function(resolve, reject2) {
+  return new (P2 || (P2 = Promise))(function(resolve2, reject2) {
     function fulfilled(value) {
       try {
         step4(generator.next(value));
@@ -3829,7 +3829,7 @@ function __awaiter2(thisArg, _arguments, P2, generator) {
       }
     }
     function step4(result) {
-      result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve2(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step4((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -4020,14 +4020,14 @@ function __asyncValues(o) {
   }, i2);
   function verb(n) {
     i2[n] = o[n] && function(v) {
-      return new Promise(function(resolve, reject2) {
-        v = o[n](v), settle3(resolve, reject2, v.done, v.value);
+      return new Promise(function(resolve2, reject2) {
+        v = o[n](v), settle3(resolve2, reject2, v.done, v.value);
       });
     };
   }
-  function settle3(resolve, reject2, d, v) {
+  function settle3(resolve2, reject2, d, v) {
     Promise.resolve(v).then(function(v2) {
-      resolve({ value: v2, done: d });
+      resolve2({ value: v2, done: d });
     }, reject2);
   }
 }
@@ -6653,14 +6653,14 @@ var require_util2 = __commonJS({
       return filepath;
     };
     exports2.unixify = unixify;
-    var resolve = (filename, base = process_1.default.cwd()) => resolveCrossPlatform(base, filename);
-    exports2.resolve = resolve;
+    var resolve2 = (filename, base = process_1.default.cwd()) => resolveCrossPlatform(base, filename);
+    exports2.resolve = resolve2;
     if (exports2.isWin) {
-      const _resolve = resolve;
-      exports2.resolve = resolve = (filename, base) => (0, exports2.unixify)(_resolve(filename, base));
+      const _resolve = resolve2;
+      exports2.resolve = resolve2 = (filename, base) => (0, exports2.unixify)(_resolve(filename, base));
     }
     var filenameToSteps = (filename, base) => {
-      const fullPath = resolve(filename, base);
+      const fullPath = resolve2(filename, base);
       const fullPathSansSlash = fullPath.substring(1);
       if (!fullPathSansSlash)
         return [];
@@ -8315,11 +8315,11 @@ var require_util3 = __commonJS({
       return fs_core_1.createWatchError;
     } });
     function promisify(fs2, fn, getResult = (input) => input) {
-      return (...args) => new Promise((resolve, reject2) => {
+      return (...args) => new Promise((resolve2, reject2) => {
         fs2[fn].bind(fs2)(...args, (error, result) => {
           if (error)
             return reject2(error);
-          return resolve(getResult(result));
+          return resolve2(getResult(result));
         });
       });
     }
@@ -8356,9 +8356,9 @@ var require_util3 = __commonJS({
     }
     function streamToBuffer(stream) {
       const chunks = [];
-      return new Promise((resolve, reject2) => {
+      return new Promise((resolve2, reject2) => {
         stream.on("data", (chunk3) => chunks.push(chunk3));
-        stream.on("end", () => resolve(buffer_1.Buffer.concat(chunks)));
+        stream.on("end", () => resolve2(buffer_1.Buffer.concat(chunks)));
         stream.on("error", reject2);
       });
     }
@@ -8398,7 +8398,7 @@ var require_glob = __commonJS({
     var glob_to_regex_js_1 = require_lib();
     var util_1 = require_util3();
     var Dirent_1 = require_Dirent();
-    var { basename, dirname: dirname2, isAbsolute: isAbsolute4, join: join4, relative, resolve } = path_1.posix;
+    var { basename, dirname: dirname2, isAbsolute: isAbsolute4, join: join4, relative, resolve: resolve2 } = path_1.posix;
     var internalAssertionError = () => (0, argErrors_1.withCode)(new Error("This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n"), "ERR_INTERNAL_ASSERTION");
     var validateStringArrayOrFunction = (value, name) => {
       if (Array.isArray(value)) {
@@ -8543,7 +8543,7 @@ var require_glob = __commonJS({
     var createExcludeMatcher = (patterns, root) => {
       const regexes = [];
       for (let i2 = 0; i2 < patterns.length; i2++)
-        regexes.push((0, glob_to_regex_js_1.toRegex)(resolve(root, patterns[i2].replace(/\\/g, "/")), OPTS));
+        regexes.push((0, glob_to_regex_js_1.toRegex)(resolve2(root, patterns[i2].replace(/\\/g, "/")), OPTS));
       return (value) => {
         for (let i2 = 0; i2 < regexes.length; i2++)
           if (regexes[i2].test(value))
@@ -8790,7 +8790,7 @@ var require_glob = __commonJS({
       addSubpattern(path31, pattern2) {
         if (this.isExcluded(path31))
           return;
-        const fullpath = resolve(this.root, path31);
+        const fullpath = resolve2(this.root, path31);
         if (this.isExcluded(fullpath + "/") && this.cache.statSync(fullpath)?.isDirectory())
           return;
         const exclude = this.exclude;
@@ -8811,7 +8811,7 @@ var require_glob = __commonJS({
       accept(path31) {
         if (this.results.has(path31))
           return false;
-        if (this.isExcluded(resolve(this.root, path31)))
+        if (this.isExcluded(resolve2(this.root, path31)))
           return false;
         this.results.add(path31);
         return true;
@@ -8820,7 +8820,7 @@ var require_glob = __commonJS({
         if (this.cache.add(path31, pattern2))
           return;
         const cache2 = this.cache;
-        const fullpath = resolve(this.root, path31);
+        const fullpath = resolve2(this.root, path31);
         const stat3 = cache2.statSync(fullpath);
         const last2 = pattern2.last;
         const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
@@ -9534,25 +9534,25 @@ var require_util4 = __commonJS({
         };
       },
       createDeferredPromise: function() {
-        let resolve;
+        let resolve2;
         let reject2;
         const promise = new Promise((res, rej) => {
-          resolve = res;
+          resolve2 = res;
           reject2 = rej;
         });
         return {
           promise,
-          resolve,
+          resolve: resolve2,
           reject: reject2
         };
       },
       promisify(fn) {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           fn((err, ...args) => {
             if (err) {
               return reject2(err);
             }
-            return resolve(...args);
+            return resolve2(...args);
           });
         });
       },
@@ -10339,7 +10339,7 @@ var require_end_of_stream = __commonJS({
         validateBoolean(opts.cleanup, "cleanup");
         autoCleanup = opts.cleanup;
       }
-      return new Promise2((resolve, reject2) => {
+      return new Promise2((resolve2, reject2) => {
         const cleanup = eos(stream, opts, (err) => {
           if (autoCleanup) {
             cleanup();
@@ -10347,7 +10347,7 @@ var require_end_of_stream = __commonJS({
           if (err) {
             reject2(err);
           } else {
-            resolve();
+            resolve2();
           }
         });
       });
@@ -11522,7 +11522,7 @@ var require_readable = __commonJS({
         error = this.readableEnded ? null : new AbortError();
         this.destroy(error);
       }
-      return new Promise2((resolve, reject2) => eos(this, (err) => err && err !== error ? reject2(err) : resolve(null)));
+      return new Promise2((resolve2, reject2) => eos(this, (err) => err && err !== error ? reject2(err) : resolve2(null)));
     };
     Readable.prototype.push = function(chunk3, encoding) {
       return readableAddChunk(this, chunk3, encoding, false);
@@ -12066,12 +12066,12 @@ var require_readable = __commonJS({
     }
     async function* createAsyncIterator(stream, options) {
       let callback = nop;
-      function next2(resolve) {
+      function next2(resolve2) {
         if (this === stream) {
           callback();
           callback = nop;
         } else {
-          callback = resolve;
+          callback = resolve2;
         }
       }
       stream.on("readable", next2);
@@ -13125,7 +13125,7 @@ var require_duplexify = __commonJS({
       );
     };
     function fromAsyncGen(fn) {
-      let { promise, resolve } = createDeferredPromise();
+      let { promise, resolve: resolve2 } = createDeferredPromise();
       const ac = new AbortController2();
       const signal = ac.signal;
       const value = fn(
@@ -13140,7 +13140,7 @@ var require_duplexify = __commonJS({
               throw new AbortError(void 0, {
                 cause: signal.reason
               });
-            ({ promise, resolve } = createDeferredPromise());
+            ({ promise, resolve: resolve2 } = createDeferredPromise());
             yield chunk3;
           }
         })(),
@@ -13151,8 +13151,8 @@ var require_duplexify = __commonJS({
       return {
         value,
         write(chunk3, encoding, cb) {
-          const _resolve = resolve;
-          resolve = null;
+          const _resolve = resolve2;
+          resolve2 = null;
           _resolve({
             chunk: chunk3,
             done: false,
@@ -13160,8 +13160,8 @@ var require_duplexify = __commonJS({
           });
         },
         final(cb) {
-          const _resolve = resolve;
-          resolve = null;
+          const _resolve = resolve2;
+          resolve2 = null;
           _resolve({
             done: true,
             cb
@@ -13616,7 +13616,7 @@ var require_pipeline = __commonJS({
           callback();
         }
       };
-      const wait = () => new Promise2((resolve, reject2) => {
+      const wait = () => new Promise2((resolve2, reject2) => {
         if (error) {
           reject2(error);
         } else {
@@ -13624,7 +13624,7 @@ var require_pipeline = __commonJS({
             if (error) {
               reject2(error);
             } else {
-              resolve();
+              resolve2();
             }
           };
         }
@@ -14270,8 +14270,8 @@ var require_operators = __commonJS({
                 next2 = null;
               }
               if (!done && (queue.length >= highWaterMark || cnt >= concurrency)) {
-                await new Promise2((resolve) => {
-                  resume = resolve;
+                await new Promise2((resolve2) => {
+                  resume = resolve2;
                 });
               }
             }
@@ -14305,8 +14305,8 @@ var require_operators = __commonJS({
               queue.shift();
               maybeResume();
             }
-            await new Promise2((resolve) => {
-              next2 = resolve;
+            await new Promise2((resolve2) => {
+              next2 = resolve2;
             });
           }
         } finally {
@@ -14565,7 +14565,7 @@ var require_promises = __commonJS({
     var { finished } = require_end_of_stream();
     require_stream();
     function pipeline(...streams) {
-      return new Promise2((resolve, reject2) => {
+      return new Promise2((resolve2, reject2) => {
         let signal;
         let end;
         const lastArg = streams[streams.length - 1];
@@ -14580,7 +14580,7 @@ var require_promises = __commonJS({
             if (err) {
               reject2(err);
             } else {
-              resolve(value);
+              resolve2(value);
             }
           },
           {
@@ -14839,8 +14839,8 @@ var require_FileHandle = __commonJS({
             this.closePromise = null;
           });
         } else {
-          this.closePromise = new Promise((resolve, reject2) => {
-            this.closeResolve = resolve;
+          this.closePromise = new Promise((resolve2, reject2) => {
+            this.closeResolve = resolve2;
             this.closeReject = reject2;
           }).finally(() => {
             this.closePromise = null;
@@ -15014,12 +15014,12 @@ var require_util5 = __commonJS({
         throw new TypeError('The "original" argument must be of type function');
       }
       return function(...args) {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           fn.call(this, ...args, (err, result) => {
             if (err) {
               reject2(err);
             } else {
-              resolve(result);
+              resolve2(result);
             }
           });
         });
@@ -15606,9 +15606,9 @@ var require_FsPromises = __commonJS({
         }
         this.eventQueue.push(event);
         if (this.resolveQueue.length > 0) {
-          const { resolve } = this.resolveQueue.shift();
+          const { resolve: resolve2 } = this.resolveQueue.shift();
           const nextEvent = this.eventQueue.shift();
-          resolve({ value: nextEvent, done: false });
+          resolve2({ value: nextEvent, done: false });
         }
       }
       finish(error) {
@@ -15628,11 +15628,11 @@ var require_FsPromises = __commonJS({
         }
         const delivered = error && this.resolveQueue.length > 0;
         while (this.resolveQueue.length > 0) {
-          const { resolve, reject: reject2 } = this.resolveQueue.shift();
+          const { resolve: resolve2, reject: reject2 } = this.resolveQueue.shift();
           if (error) {
             reject2(error);
           } else {
-            resolve({ value: void 0, done: true });
+            resolve2({ value: void 0, done: true });
           }
         }
         if (delivered)
@@ -15651,8 +15651,8 @@ var require_FsPromises = __commonJS({
           const event = this.eventQueue.shift();
           return { value: event, done: false };
         }
-        return new Promise((resolve, reject2) => {
-          this.resolveQueue.push({ resolve, reject: reject2 });
+        return new Promise((resolve2, reject2) => {
+          this.resolveQueue.push({ resolve: resolve2, reject: reject2 });
         });
       }
       async return() {
@@ -15672,11 +15672,11 @@ var require_FsPromises = __commonJS({
         this.fs = fs2;
         this.FileHandle = FileHandle;
         this.constants = fs_node_utils_1.constants;
-        this.cp = (src, dest, options) => new Promise((resolve, reject2) => {
-          this.fs.cp(src, dest, (0, cp_1.getCpOptions)(options), (error) => error ? reject2(error) : resolve());
+        this.cp = (src, dest, options) => new Promise((resolve2, reject2) => {
+          this.fs.cp(src, dest, (0, cp_1.getCpOptions)(options), (error) => error ? reject2(error) : resolve2());
         });
-        this.copyFile = (src, dest, mode) => new Promise((resolve, reject2) => {
-          this.fs.copyFile(src, dest, mode, (error) => error ? reject2(error) : resolve());
+        this.copyFile = (src, dest, mode) => new Promise((resolve2, reject2) => {
+          this.fs.copyFile(src, dest, mode, (error) => error ? reject2(error) : resolve2());
         });
         this.opendir = (0, util_1.promisify)(this.fs, "opendir");
         this.statfs = (0, util_1.promisify)(this.fs, "statfs");
@@ -19382,12 +19382,12 @@ var require_Dir = __commonJS({
         this.levels.push({ entries: link.children[Symbol.iterator](), path: path31, parentPath: path31 });
       }
       readPromise() {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           this.readImpl((err, entry) => {
             if (err)
               reject2(err);
             else
-              resolve(entry ?? null);
+              resolve2(entry ?? null);
           });
         });
       }
@@ -19441,12 +19441,12 @@ var require_Dir = __commonJS({
         if (callback === void 0) {
           if (this.closed)
             return Promise.reject(dirClosed());
-          return new Promise((resolve, reject2) => {
+          return new Promise((resolve2, reject2) => {
             this.close((err) => {
               if (err)
                 reject2(err);
               else
-                resolve();
+                resolve2();
             });
           });
         }
@@ -28282,6 +28282,10 @@ function isPending(value) {
 init_globals();
 var import_node_path = __toESM(require_path_browserify(), 1);
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function detectClaudeConfigDir(env2, cwd2) {
+  const first2 = (env2[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0].trim();
+  return first2 === "" ? void 0 : import_node_path.default.resolve(cwd2, first2);
+}
 function claudeConfigDir(detected, home) {
   return detected ?? import_node_path.default.join(home, ".claude");
 }
@@ -28353,6 +28357,14 @@ function canonical(value) {
 }
 
 // src/daemon/foundations/session-env.ts
+function environmentKey(env2) {
+  const entries = Object.entries(env2).map((pair) => ({
+    name: import_buffer.Buffer.from(pair[0]),
+    pair
+  }));
+  entries.sort((a, b) => a.name.compare(b.name));
+  return digestOf(entries.map(({ pair }) => pair));
+}
 function plainEnvironment(env2) {
   return Object.fromEntries(
     Object.entries(env2).flatMap(
@@ -29028,7 +29040,7 @@ var systemTimekeeper = {
   }
 };
 function sleep(clock, ms, signal) {
-  return new Promise((resolve, reject2) => {
+  return new Promise((resolve2, reject2) => {
     const aborted = () => Object.assign(new Error("The operation was aborted"), {
       name: "AbortError",
       code: "ABORT_ERR",
@@ -29044,7 +29056,7 @@ function sleep(clock, ms, signal) {
     };
     const cancel = clock.after(ms, () => {
       signal?.removeEventListener("abort", onAbort);
-      resolve();
+      resolve2();
     });
     signal?.addEventListener("abort", onAbort, { once: true });
   });
@@ -29539,7 +29551,7 @@ async function launchPiped(state, opts, pipes) {
   if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const { spawner } = state;
     let child;
     try {
@@ -29551,7 +29563,7 @@ async function launchPiped(state, opts, pipes) {
       });
     } catch (err) {
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
-      resolve({
+      resolve2({
         ok: false,
         reason: "spawn-error",
         stdout: "",
@@ -29617,7 +29629,7 @@ async function launchPiped(state, opts, pipes) {
         hold(state, opts.category, input, inputEnd);
       deliver2();
     };
-    const settle3 = (r) => finish(() => resolve(r));
+    const settle3 = (r) => finish(() => resolve2(r));
     const signal = (pid2, sig) => {
       try {
         spawner.signalGroup(pid2, sig);
@@ -30182,11 +30194,25 @@ function emitted(effect, proof) {
 
 // src/click/link-signer.ts
 init_globals();
+
+// src/daemon/foundations/renderer-name.ts
+init_globals();
+var MAIN_RENDERER = "main";
+function rendererNameOf(raw) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+    throw new Error(
+      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
+    );
+  return raw;
+}
+
+// src/click/link-signer.ts
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
+var SOURCE_VERSION = "v1";
 function transitForm(link) {
   return link.toWellFormed().replace(
     /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
@@ -30202,9 +30228,13 @@ function linkMac(key, link) {
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
   ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
-function signLinkWith(key, link) {
+function signLinkWith(key, link, source) {
   const sent = transitForm(link);
-  return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  if (source === void 0)
+    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  const session = encodeURIComponent(JSON.stringify(source.session));
+  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
+  return `${issued}/${linkMac(key, issued)}`;
 }
 function openLinkWith(key, signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
@@ -30213,13 +30243,36 @@ function openLinkWith(key, signed) {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const link = signed.slice(0, mark);
-  const mac = signed.slice(mark + LINK_MAC_MARK.length);
-  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac), import_buffer.Buffer.from(linkMac(key, link)));
-  return proven ? { kind: "ok", value: link } : {
-    kind: "failed",
-    reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
-  };
+  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
+  const mac = signed.slice(proofAt + 1);
+  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
+    import_buffer.Buffer.from(mac),
+    import_buffer.Buffer.from(linkMac(key, signed.slice(0, proofAt)))
+  );
+  if (!proven)
+    return {
+      kind: "failed",
+      reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
+    };
+  const href = signed.slice(0, mark);
+  if (proofAt === mark) return { kind: "ok", value: { href } };
+  const fields2 = signed.slice(mark + 1, proofAt).split("/");
+  const [version, name, encoded] = fields2;
+  if (fields2.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
+    return { kind: "failed", reason: "the link has an unknown frame source" };
+  try {
+    const renderer = rendererNameOf(name);
+    const session = parseSessionId(JSON.parse(decodeURIComponent(encoded)));
+    return session.ok ? {
+      kind: "ok",
+      value: { href, source: { renderer, session: session.id } }
+    } : { kind: "failed", reason: `the link's session ${session.problem}` };
+  } catch (error) {
+    return {
+      kind: "failed",
+      reason: `the link's frame source is malformed: ${String(error)}`
+    };
+  }
 }
 function digest(key, fields2) {
   return createHmac("sha256", key).update(
@@ -30242,12 +30295,13 @@ function linkSigner(key) {
       if (!MAC_SPELLING.test(mac)) return false;
       return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
     },
-    signLink: (link) => {
-      let done = signed.get(link);
+    signLink: (link, source) => {
+      const cacheKey = source === void 0 ? `legacy:${link}` : `frame:${source.renderer}\0${source.session}\0${link}`;
+      let done = signed.get(cacheKey);
       if (done === void 0) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link);
-        signed.set(link, done);
+        done = signLinkWith(key, link, source);
+        signed.set(cacheKey, done);
       }
       return done;
     },
@@ -30269,7 +30323,7 @@ function linkSignerOver(key) {
   return {
     sign: (fields2) => held().sign(fields2),
     verify: (fields2, mac) => held().verify(fields2, mac),
-    signLink: (link) => held().signLink(link),
+    signLink: (link, source) => held().signLink(link, source),
     openLink: (signed) => {
       const asked = loaded();
       return asked.kind === "ok" ? asked.value.openLink(signed) : asked;
@@ -30448,7 +30502,19 @@ var SessionBook = class {
   // [LAW:one-source-of-truth] The environment a program the host runs for
   // the session starts from: its newest request's, or why the host has none.
   environmentOf(session) {
-    return this.environments.get(session) ?? NOT_HEARD;
+    const held = this.environments.get(session) ?? NOT_HEARD;
+    return "execution" in held ? { kind: "ok", value: held.execution } : held;
+  }
+  // A desktop tool or tmux command inherits the working directory and
+  // environment of the same reported session. Only the directory is durable.
+  programContextOf(session) {
+    const durable = this.book.get(session);
+    const environment = this.environmentOf(session);
+    return durable !== void 0 && environment.kind === "ok" ? { cwd: durable.origin.cwd, environment: environment.value } : null;
+  }
+  reportedFor(session, key) {
+    const held = this.environments.get(session);
+    return held && "key" in held && held.key === key ? held : null;
   }
   close() {
     this.phase = "closed";
@@ -30641,19 +30707,6 @@ var Runs = class {
 init_globals();
 init_os();
 var import_node_path5 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/foundations/renderer-name.ts
-init_globals();
-var MAIN_RENDERER = "main";
-function rendererNameOf(raw) {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
-    throw new Error(
-      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
-    );
-  return raw;
-}
-
-// src/daemon/paths.ts
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
@@ -30753,6 +30806,14 @@ var TERMINAL_ENV_VARS = [
   // Where a terminal that reads a config file (Alacritty) finds it.
   "XDG_CONFIG_HOME"
 ];
+function detectTerminalEnv(env2) {
+  return Object.fromEntries(
+    TERMINAL_ENV_VARS.flatMap((name) => {
+      const value = env2[name] ?? "";
+      return value === "" ? [] : [[name, value]];
+    })
+  );
+}
 
 // src/client-hint.ts
 init_globals();
@@ -30760,6 +30821,9 @@ var CLIENT_KINDS = ["native", "node", "frames"];
 
 // src/daemon/foundations/protocol.ts
 var PROTOCOL_VERSION = 3;
+var SESSION_RENDER_KIND = "render-session";
+var ENVIRONMENT_NEEDED = "environment";
+var UNKNOWN_REQUEST_KIND = "unknown kind";
 var CONNECT_TIMEOUT_MS = 50;
 var TOTAL_BUDGET_MS = 150;
 var RENDER_ENCODINGS = ["ansi", "frame"];
@@ -42489,10 +42553,10 @@ function wheel(curve, z) {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
-    const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
+    const keyOf = (color, bound) => `${color.hex} ${bound}`;
     const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
-      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
+      return own2(pair.terminal[side], pair[side]) ? keyOf(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
     const placeOf2 = segmentsOf(drawn);
@@ -42500,10 +42564,10 @@ function wheel(curve, z) {
       const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
         const turn = hueTurned(color, turned(place, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
+        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
-        const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
+        const key = `${keyOf(color, bound)} ${place.row}:${place.centre}`;
         const found2 = written3.get(key) ?? choose(color, bound, place);
         written3.set(key, found2);
         return found2;
@@ -45251,7 +45315,7 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
     const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
     let rejector;
     let pendingPromise = void 0;
-    const promise = new Promise(function(resolve, reject2) {
+    const promise = new Promise(function(resolve2, reject2) {
       let stepId = 0;
       rejector = reject2;
       function onFulfilled(res3) {
@@ -45280,7 +45344,7 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
           return;
         }
         if (ret.done) {
-          return resolve(ret.value);
+          return resolve2(ret.value);
         }
         pendingPromise = Promise.resolve(ret.value);
         return pendingPromise.then(onFulfilled, onRejected);
@@ -45471,9 +45535,9 @@ function whenPromise(predicate, opts) {
   }
   let cancel;
   let abort;
-  const res = new Promise((resolve, reject2) => {
+  const res = new Promise((resolve2, reject2) => {
     var _opts$signal2;
-    let disposer = _when(predicate, resolve, assign({}, opts, {
+    let disposer = _when(predicate, resolve2, assign({}, opts, {
       onError: reject2
     }));
     cancel = () => {
@@ -47481,8 +47545,8 @@ function unread() {
 }
 function pending(why2) {
   let land;
-  const landed = new Promise((resolve) => {
-    land = resolve;
+  const landed = new Promise((resolve2) => {
+    land = resolve2;
   });
   return { kind: "pending", why: why2, landed, land };
 }
@@ -47510,15 +47574,15 @@ function waitWithin(work, ms, late, after, closing) {
   const wait = new AbortController();
   const end = (why2) => () => wait.abort(why2);
   const clear = after(Math.max(0, ms), end("deadline"));
-  const ended = new Promise((resolve, reject2) => {
+  const ended = new Promise((resolve2, reject2) => {
     wait.signal.addEventListener(
       "abort",
-      () => resolve(wait.signal.reason)
+      () => resolve2(wait.signal.reason)
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
     void work(wait.signal).then(
-      () => resolve("answered"),
+      () => resolve2("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own
       // while it listens, its owner's after. Work that answered never
       // rejects, so a wait aborted before it ended at its deadline or close.
@@ -47656,6 +47720,20 @@ var boundOf = (folder) => {
 var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
 var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
 
+// src/daemon/foundations/polled-entry.ts
+init_globals();
+function polledEntryOf(stat3) {
+  const identity2 = `${stat3.mode}:${identityKey(stat3)}`;
+  return stat3.isDirectory() ? identity2 : `${identity2}:${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
+}
+function readPolledEntry(at) {
+  try {
+    return polledEntryOf(lstatSync(at, { bigint: true }));
+  } catch (error) {
+    return `error:${error.code}`;
+  }
+}
+
 // src/daemon/foundations/watch-targets.ts
 init_globals();
 
@@ -47740,6 +47818,7 @@ var failedOf = (d) => ({
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
+var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 var isBelow = (at, root) => at.startsWith(root + import_node_path7.default.sep);
 function dirsBelow(at, held, trusted, unlisted) {
@@ -47757,15 +47836,6 @@ function dirsBelow(at, held, trusted, unlisted) {
     const below = import_node_path7.default.join(at, e.name);
     return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
   });
-}
-function entryAt(at) {
-  try {
-    const s = fs_default.lstatSync(at, { bigint: true });
-    const identity2 = `${s.mode}:${identityKey({ dev: s.dev, ino: s.ino, birthtimeNs: s.birthtimeNs })}`;
-    return s.isDirectory() ? identity2 : `${identity2}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-  } catch (e) {
-    return `error:${e.code}`;
-  }
 }
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
@@ -47789,13 +47859,14 @@ var WatcherRegistry = class {
   // Keys acquired in this window belong to it until their last release.
   batch(completed) {
     const window2 = { pending: null, completed };
-    const acquire = (key, targets, onInvalidate) => this.acquired(key, targets, onInvalidate, window2);
+    const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
     return {
       acquire,
-      follow: (held, spec, onInvalidate) => this.followed(
+      follow: (held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) => this.followed(
         held,
         spec,
-        (key, targets) => acquire(key, targets, onInvalidate)
+        observed2,
+        (key, targets) => acquire(key, targets, onInvalidate, observed2)
       )
     };
   }
@@ -47805,13 +47876,15 @@ var WatcherRegistry = class {
   // original target set (consumers must use a fresh key if they need different
   // targets). A consumer that needs no more than "something changed" ignores
   // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    return this.acquired(key, targets, onInvalidate);
+  acquire(key, targets, onInvalidate, observed2) {
+    return this.acquired(key, targets, onInvalidate, observed2);
   }
-  acquired(key, targets, onInvalidate, window2) {
+  acquired(key, targets, onInvalidate, observed2 = NO_OBSERVATIONS, window2) {
     if (this.closed) {
       return {
         release: () => {
+        },
+        observed: () => {
         },
         deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
           (path31) => ({
@@ -47834,25 +47907,31 @@ var WatcherRegistry = class {
       this.reconciled(shared, "acquire", null);
     }
     this.sighted(
-      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? []),
+      observed2
     );
-    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null });
-    const holder = { onInvalidate };
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null }, observed2);
+    const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
     slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
+    const handle = this.makeHandle(slot, holder);
+    handle.observed(observed2);
+    return handle;
   }
   // The held watch following `spec` (`followWatch`).
-  follow(held, spec, onInvalidate) {
+  follow(held, spec, onInvalidate, observed2 = NO_OBSERVATIONS) {
     return this.followed(
       held,
       spec,
-      (key, targets) => this.acquire(key, targets, onInvalidate)
+      observed2,
+      (key, targets) => this.acquire(key, targets, onInvalidate, observed2)
     );
   }
-  followed(held, spec, acquire) {
+  followed(held, spec, observed2, acquire) {
     const followed = followWatch(held, spec, acquire);
-    if (followed.move === "kept")
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    if (followed.move === "kept") {
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed2);
+      followed.watch.handle.observed(observed2);
+    }
     return followed;
   }
   // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
@@ -47862,15 +47941,15 @@ var WatcherRegistry = class {
   // heard. Only the sweep fires, so the work a path drives stays once a
   // period; a change undone before the holder acquired or followed is one no
   // poll sees.
-  // [LAW:escape-local-minima] exception: seeing a change undone before the
-  // holder looks needs the entry the holder read, which polled consumers do
-  // not yet hand over.
-  sighted(records) {
+  // [LAW:escape-local-minima] exception: a child that does its own reads
+  // cannot supply descriptor evidence to its parent. Its hold still compares
+  // against the registry's best available observation.
+  sighted(records, observed2) {
     for (const record2 of records)
-      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+      if (!observed2.has(record2.path) && record2.entry !== UNSEEN && readPolledEntry(record2.path) !== record2.entry)
         record2.entry = UNSEEN;
   }
-  opened(key, targets, window2) {
+  opened(key, targets, window2, observed2) {
     const slot = {
       key,
       targets: targets.dirs,
@@ -47881,7 +47960,7 @@ var WatcherRegistry = class {
     };
     this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
-      const record2 = this.polledAt(at);
+      const record2 = this.polledAt(at, observed2.get(at));
       record2.slots.add(slot);
       slot.polled.push(record2);
     }
@@ -48131,6 +48210,14 @@ var WatcherRegistry = class {
       },
       // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
       ridesStream: slot.listeners.size > 0,
+      observed: (files) => {
+        if (!slot.holders.has(holder)) return;
+        holder.observed.clear();
+        for (const { path: path31 } of slot.polled) {
+          const seen = files.get(path31);
+          if (seen !== void 0) holder.observed.set(path31, seen);
+        }
+      },
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -48168,14 +48255,12 @@ var WatcherRegistry = class {
     if (this.polled.size === 0) this.disarmSweep();
     if (this.counters) this.counters.watchersClosed++;
   }
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, which the acquire sights.
-  polledAt(at) {
+  polledAt(at, observed2) {
     const held = this.polled.get(at);
     if (held !== void 0) return held;
     const record2 = {
       path: at,
-      entry: entryAt(at),
+      entry: observed2 ?? readPolledEntry(at),
       slots: /* @__PURE__ */ new Set()
     };
     this.polled.set(at, record2);
@@ -48205,11 +48290,19 @@ var WatcherRegistry = class {
   // path, through the slot's debounce, as a directory watch reports a child.
   readPolled() {
     for (const record2 of this.polled.values()) {
-      const now2 = entryAt(record2.path);
-      if (now2 === record2.entry) continue;
+      const now2 = readPolledEntry(record2.path);
+      const previous2 = record2.entry;
       record2.entry = now2;
-      for (const slot of record2.slots)
-        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      for (const slot of record2.slots) {
+        let changed = false;
+        for (const holder of slot.holders) {
+          const seen = holder.observed.get(record2.path) ?? previous2;
+          holder.observed.delete(record2.path);
+          changed ||= now2 !== seen;
+        }
+        if (changed)
+          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      }
     }
   }
   // The slots held now.
@@ -49582,7 +49675,9 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
   const encodeFrom = clock.monotonic();
   let resp;
   try {
-    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
+    resp = RENDER_ANSWERS[req.encoding](
+      publish(presented.frame, { renderer: host.name, session })
+    );
   } catch (e) {
     const failure2 = failureOf(e);
     done(presented, `encoding its frame threw: ${failure2.message}`);
@@ -49605,7 +49700,7 @@ var import_node_path11 = __toESM(require_path_browserify(), 1);
 init_globals();
 var import_node_path10 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? (typeof home === "function" ? home() : home) + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
   return import_node_path10.default.resolve(base, expandHome(p2, home));
@@ -49614,8 +49709,15 @@ function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
 }
 
+// src/client-hints.ts
+init_globals();
+
 // src/config-hint.ts
 init_globals();
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function detectConfigEnv({ env: env2, home }, cwd2) {
+  return explicitConfigPath(cwd2, env2[CONFIG_ENV], home);
+}
 var CONFIG_FLAGS = {
   config: { type: "string" },
   "config-only": { type: "string" }
@@ -49638,6 +49740,78 @@ function originKey({ projectDir, cwd: cwd2, target }) {
 }
 function chainName(paths2, none2 = "bundled default (no config file loaded)") {
   return paths2.join(" < ") || none2;
+}
+
+// src/term-extent.ts
+init_globals();
+function detectTermExtent(envValue, ttyExtent) {
+  if (envValue !== void 0 && /^\+?\d+$/.test(envValue)) {
+    const n = Number(envValue);
+    if (n > 0 && n <= 4294967295) return n;
+  }
+  if (ttyExtent && ttyExtent > 0) return ttyExtent;
+  return void 0;
+}
+
+// src/tmux-hint.ts
+init_globals();
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
+};
+var paneKey = ({
+  socket,
+  pane
+}) => JSON.stringify([socket, pane]);
+function detectTmuxHint(env2) {
+  const tmux3 = env2[TMUX_ENV.socket] ?? "";
+  const pane = env2[TMUX_ENV.pane] ?? "";
+  if (tmux3 === "" || pane === "") return null;
+  const truecolor = env2[TMUX_ENV.truecolor] ?? "";
+  return {
+    socket: tmux3.split(",")[0],
+    pane,
+    truecolor: truecolor === "" ? null : truecolor
+  };
+}
+
+// src/client-hints.ts
+var SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+function terminalObservation(env2, tty) {
+  return {
+    termCols: detectTermExtent(env2.COLUMNS, tty.columns),
+    termRows: detectTermExtent(env2.LINES, tty.rows)
+  };
+}
+function detectClientHints(host, cwd2, tty) {
+  const { env: env2 } = host;
+  return {
+    ...terminalObservation(env2, tty),
+    // [LAW:dataflow-not-control-flow] A fold over the vocabulary — adding a
+    // name is a data edit. TOTAL, unlike the extents: "no SSH var set" is the
+    // affirmative answer "local", so an ABSENT `ssh` hint on the daemon side
+    // means only "this client is too old to answer".
+    ssh: SSH_ENV_VARS.some((name) => (env2[name] ?? "") !== ""),
+    // Total like ssh: `null` is the affirmative "not in tmux", so an absent
+    // hint on the daemon side means only "client too old".
+    tmux: detectTmuxHint(env2),
+    // Conditional like termCols: absent IS "no override", so the daemon
+    // resolves the precedence chain. The daemon reads no env of its own.
+    configEnv: detectConfigEnv(host, cwd2),
+    // Conditional too: absent is the default directory. The daemon reads
+    // settings.json from THIS session's Claude Code directory.
+    claudeConfigDir: detectClaudeConfigDir(env2, cwd2),
+    // Total like tmux: always an object, so an absent hint means only "client
+    // too old". The doctor reads which terminal draws the bar from these
+    // (src/doctor/terminal.ts).
+    terminalEnv: detectTerminalEnv(env2)
+  };
 }
 
 // src/utils/schema-validator.ts
@@ -49861,7 +50035,7 @@ function parseRenderEncoding(raw) {
     problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
   };
 }
-function checkRenderRequest(req, stats, log, home) {
+function checkRenderRequest(req, stats, log, home, lookup2) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path31 of report2.missingRequired) {
@@ -49890,8 +50064,8 @@ function checkRenderRequest(req, stats, log, home) {
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
     );
   }
-  const env2 = parseReportedEnv(req.env);
-  if (env2.kind === "refused") wireProblems.push(env2.problem);
+  const presented = readEnvironment(req);
+  if (presented.kind === "refused") wireProblems.push(presented.problem);
   const encoding = parseRenderEncoding(req.encoding);
   if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
@@ -49899,10 +50073,36 @@ function checkRenderRequest(req, stats, log, home) {
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || env2.kind === "refused")
+  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || presented.kind === "refused")
     return { ok: false, problems: wireProblems };
-  const hints = parseClientHints(req);
-  const parsedArgs = parseRenderArgs(req.args, req.cwd, home, hints.configEnv);
+  let env2;
+  if (presented.kind === "reference") {
+    const previous2 = lookup2?.reportedFor(sessionId2.id, presented.key);
+    if (!previous2) return { need: ENVIRONMENT_NEEDED };
+    env2 = {
+      kind: "reported",
+      env: previous2.reported,
+      key: previous2.key,
+      previous: previous2
+    };
+  } else {
+    env2 = presented;
+  }
+  const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path11.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const rawHints = keyed ? {
+    ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
+    ...req.termCols !== void 0 && { termCols: req.termCols },
+    ...req.termRows !== void 0 && { termRows: req.termRows },
+    client: req.client
+  } : req;
+  const hints = parseClientHints(rawHints);
+  const parsedArgs = parseRenderArgs(
+    req.args,
+    req.cwd,
+    clientHome,
+    hints.configEnv
+  );
   if ("problem" in parsedArgs)
     return { ok: false, problems: [parsedArgs.problem] };
   const { target, refusedArgs } = parsedArgs;
@@ -49914,19 +50114,24 @@ function checkRenderRequest(req, stats, log, home) {
       );
     }
   }
-  const { env: _env, ...rest2 } = req;
   return {
     ok: true,
-    environment: env2.kind === "absent" ? { kind: "failed", reason: UNREPORTED } : {
-      kind: "ok",
-      value: sessionEnvironment(env2.env, {
-        sessionId: sessionId2.id,
-        projectDir: req.hookData.workspace.project_dir,
-        claudeConfigDir: hints.claudeConfigDir
-      })
-    },
+    ...environmentForSession(env2, {
+      sessionId: sessionId2.id,
+      projectDir: req.hookData.workspace.project_dir,
+      claudeConfigDir: hints.claudeConfigDir
+    }),
     req: {
-      ...rest2,
+      v: req.v,
+      kind: "render",
+      cwd: req.cwd,
+      args: req.args,
+      ...hints,
+      // Existing workers show a diagnostic for an explicitly refused hint.
+      // Forward only the declared fields they need for that diagnostic.
+      ...Object.fromEntries(
+        refusedHints(rawHints, hints).map(({ hint, sent }) => [hint, sent])
+      ),
       hookData: { ...req.hookData, session_id: sessionId2.id },
       deadline,
       encoding: encoding.encoding,
@@ -49942,14 +50147,56 @@ function checkRenderRequest(req, stats, log, home) {
   };
 }
 var UNREPORTED = "this session's client sent no environment, so it is older than the daemon; update cc-candybar so its programs can run";
-function parseReportedEnv(raw) {
+var validKey = (key) => typeof key === "string" && key.length === 64 && !/[^a-f0-9]/.test(key);
+function environmentForSession(env2, facts) {
+  if (env2.kind === "absent")
+    return {
+      environment: { kind: "failed", reason: UNREPORTED },
+      registration: null
+    };
+  const { previous: previous2 } = env2;
+  if (previous2 && previous2.projectDir === facts.projectDir && previous2.claudeConfigDir === facts.claudeConfigDir)
+    return {
+      environment: { kind: "ok", value: previous2.execution },
+      registration: previous2
+    };
+  const execution = sessionEnvironment(env2.env, facts);
+  const registration = env2.key === void 0 ? null : {
+    key: env2.key,
+    reported: env2.env,
+    projectDir: facts.projectDir,
+    claudeConfigDir: facts.claudeConfigDir,
+    execution
+  };
+  return { environment: { kind: "ok", value: execution }, registration };
+}
+function readEnvironment(req) {
+  const key = req.envKey;
+  if ((req.kind !== "render" || key !== void 0) && !validKey(key))
+    return {
+      kind: "refused",
+      problem: "request 'envKey' is not a SHA-256 digest"
+    };
+  if (req.kind !== "render") return { kind: "reference", key: req.envKey };
+  const raw = req.env;
+  if (key !== void 0 && raw === void 0)
+    return {
+      kind: "refused",
+      problem: "request 'envKey' has no accompanying environment"
+    };
   if (raw === void 0) return { kind: "absent" };
   if (typeof raw !== "object" || raw === null || Array.isArray(raw) || !Object.values(raw).every((value) => typeof value === "string"))
     return {
       kind: "refused",
       problem: "request 'env' is not an object of strings"
     };
-  return { kind: "reported", env: raw };
+  const env2 = raw;
+  if (key !== void 0 && environmentKey(env2) !== key)
+    return {
+      kind: "refused",
+      problem: "request 'envKey' does not match its environment"
+    };
+  return { kind: "reported", env: env2, key };
 }
 
 // src/daemon/click-reading.ts
@@ -49963,21 +50210,30 @@ function parseClick(url, delivery, links) {
   const opened = links.openLink(url);
   if (opened.kind === "failed")
     return { kind: "refused", problem: opened.reason };
-  const link = parseHandlerUrl(opened.value);
+  const { href, source } = opened.value;
+  const link = parseHandlerUrl(href);
   if (!link.ok) return { kind: "refused", problem: link.problem };
   try {
+    const admitted = admitClick(link.verb, link.value, links);
+    const { click: click2, runEvidence } = admitted;
+    if (source !== void 0 && click2.scope === "session" && click2.session !== source.session)
+      throw new BadVerbArgs(
+        "the link's action and its frame name different sessions"
+      );
     return {
       kind: "link",
-      ...admitClick(link.verb, link.value, links),
-      link: opened.value,
-      delivery
+      click: source !== void 0 && click2.scope === "global" ? { ...click2, session: source.session } : click2,
+      runEvidence,
+      link: href,
+      delivery,
+      ...source === void 0 ? {} : { source }
     };
   } catch (e) {
     if (!(e instanceof BadVerbArgs)) throw e;
     return {
       kind: "refused",
       problem: e.message,
-      signed: { link: opened.value, verb: link.verb }
+      signed: { link: href, verb: link.verb }
     };
   }
 }
@@ -50350,7 +50606,7 @@ function renderRecord(rendered) {
 }
 var replied = (reply) => ({ kind: "reply", ...reply });
 function closingResponse(parts, rawKind, accepted) {
-  const kind = rawKind === "render" || rawKind === "click" ? rawKind : "request";
+  const kind = rawKind === SESSION_RENDER_KIND ? "render" : rawKind === "render" || rawKind === "click" ? rawKind : "request";
   const failure2 = failureOf(new DaemonClosing(kind));
   if (kind === "render" || kind === "click") {
     if (kind === "render") {
@@ -50381,6 +50637,7 @@ function refuseClosingInbound(parts, inbound, accepted) {
 }
 var REPLY_KINDS = {
   render: true,
+  [SESSION_RENDER_KIND]: true,
   "pane-session": true,
   shutdown: true,
   stats: true,
@@ -50441,7 +50698,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   }
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
-    return refuse("BAD_REQUEST", "unknown kind");
+    return refuse("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 async function replyTo(parts, req, timedOut, accepted, clientLeft) {
@@ -50510,13 +50767,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       })
     });
   }
-  if (req.kind === "render") {
+  if (req.kind === "render" || req.kind === SESSION_RENDER_KIND) {
     const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
     const queuedMs = spanMs(accepted.at, t0);
     const facts = [];
-    stats.requestsTotal++;
     const order2 = accepted.id;
     const sighted = (req2, frame2) => renderSightings.see(
       req2.hookData.session_id,
@@ -50552,16 +50808,41 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.log(level, line);
       return reply;
     };
+    const failedDraw = (error) => {
+      const failure2 = renderFailure(failureOf(error));
+      return renderRecord({
+        outcome: failure2,
+        resp: failedWith(failure2.message),
+        settled: NOTHING_TO_SETTLE
+      });
+    };
+    let checked;
+    try {
+      checked = checkRenderRequest(req, stats, parts.log, parts.home, {
+        reportedFor: (session, key) => parts.sessionBook.reportedFor(session, key),
+        accountHome: parts.accountHome
+      });
+    } catch (error) {
+      stats.requestsTotal++;
+      return recorded2(failedDraw(error));
+    }
+    if ("need" in checked) {
+      stats.environmentMisses++;
+      return stay({ ok: true, need: ENVIRONMENT_NEEDED });
+    }
+    stats.requestsTotal++;
     const draw2 = async () => {
       let answered;
       try {
-        const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
         const renderer2 = parts.rendererFor?.(checked.req, checked.environment, order2) ?? parts.renderer;
         sighted(checked.req, "drawing");
         frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-          parts.sessionBook.heard(checked.req, checked.environment);
+          parts.sessionBook.heard(
+            checked.req,
+            checked.registration ?? checked.environment
+          );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
         answered = await answerStatusline(
@@ -50596,12 +50877,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         return rendered;
       } catch (error) {
         answered?.settled(false);
-        const failure2 = renderFailure(failureOf(error));
-        return renderRecord({
-          outcome: failure2,
-          resp: failedWith(failure2.message),
-          settled: NOTHING_TO_SETTLE
-        });
+        return failedDraw(error);
       }
     };
     return recorded2(await draw2());
@@ -50709,7 +50985,7 @@ async function clickOutcome(parts, req, facts, click2) {
     return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
-    parseClick(url, { kind: "cli" }, parts.linkSigner),
+    routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
     facts,
     click2
   );
@@ -50729,11 +51005,11 @@ function readUrlFrame(frame2, links) {
   return parseClick(url, { kind: "forwarder", urlV }, links);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const read2 = readUrlFrame(frame2, parts.linkSigner);
+  const read2 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
   return {
     kind: "url",
     awaitsVerdict: awaitsVerdict(frame2.urlV),
-    verdict: read2.kind === "refused" ? clickReply(badRequest(read2.problem)) : { ok: true, output: "" },
+    verdict: read2.kind === "refused" ? clickReply(read2.failure) : { ok: true, output: "" },
     land: () => clickEvent(
       parts,
       accepted,
@@ -50747,11 +51023,31 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     })
   };
 }
+function routeClick(parts, read2) {
+  if (read2.kind === "refused")
+    return {
+      kind: "refused",
+      failure: badRequest(read2.problem),
+      signed: read2.signed
+    };
+  const { source } = read2;
+  if (source === void 0) return { ...read2, target: parts.renderer };
+  const target = parts.rendererForClick(source.renderer);
+  return target === void 0 ? {
+    kind: "refused",
+    failure: failureOf(
+      new RendererDown(
+        `renderer ${source.renderer} has no statusline client's bundle`
+      )
+    ),
+    signed: { link: read2.link, verb: read2.click.verb }
+  } : { ...read2, target };
+}
 async function ranClick(parts, read2, facts, click2) {
   switch (read2.kind) {
     case "refused":
       if (read2.signed !== void 0) noteFacts(facts, read2.signed);
-      return badRequest(read2.problem);
+      return read2.failure;
     case "link":
       noteFacts(facts, { link: read2.link });
       return handleClick(
@@ -50763,12 +51059,16 @@ async function ranClick(parts, read2, facts, click2) {
       );
   }
 }
-async function handleClick(parts, { click: admitted, runEvidence }, arrival, facts, click2) {
+async function handleClick(parts, {
+  click: admitted,
+  runEvidence,
+  target
+}, arrival, facts, click2) {
   const { verb } = admitted;
-  const session = admitted.scope === "session" ? admitted.session : null;
-  noteFacts(facts, { verb, sid: session ?? "-" });
+  const session = admitted.session ?? null;
+  noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
   if (session !== null) parts.collector.clicked(session);
-  const delivered = await parts.renderer.answerClick(
+  const delivered = await target.answerClick(
     session,
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
@@ -50777,9 +51077,9 @@ async function handleClick(parts, { click: admitted, runEvidence }, arrival, fac
         kind: "click",
         click: admitted,
         arrival,
-        context: session === null ? null : parts.sessionBook.contextOf(
-          session,
-          parts.frameFeeds.latest(session)
+        context: admitted.scope === "global" ? null : parts.sessionBook.contextOf(
+          admitted.session,
+          parts.frameFeeds.latest(admitted.session)
         )
       }
     }
@@ -52031,7 +52331,7 @@ var PricingService = class {
     await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
   }
   static async fetchPricingData() {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const parsedUrl = new U(this.GITHUB_PRICING_URL);
       const request2 = get(
         {
@@ -52046,7 +52346,7 @@ var PricingService = class {
         (response) => {
           if (response.statusCode !== 200) {
             debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
+            resolve2(null);
             return;
           }
           let data = "";
@@ -52058,7 +52358,7 @@ var PricingService = class {
             if (size > MAX_SIZE) {
               debug("Response too large");
               request2.destroy();
-              resolve(null);
+              resolve2(null);
               return;
             }
             data += chunk3;
@@ -52079,30 +52379,30 @@ var PricingService = class {
                   `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
                 );
                 debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
+                resolve2(pricingData);
               } else {
                 debug("Invalid pricing data structure");
-                resolve(null);
+                resolve2(null);
               }
             } catch (error) {
               debug("Failed to parse JSON:", error);
-              resolve(null);
+              resolve2(null);
             }
           });
           response.on("error", (error) => {
             debug("Response error:", error);
-            resolve(null);
+            resolve2(null);
           });
         }
       );
       request2.on("error", (error) => {
         debug("Request error:", error);
-        resolve(null);
+        resolve2(null);
       });
       request2.on("timeout", () => {
         debug("Request timeout");
         request2.destroy();
-        resolve(null);
+        resolve2(null);
       });
       request2.end();
     });
@@ -54852,13 +55152,6 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
     args
   );
 }
-
-// src/tmux-hint.ts
-init_globals();
-var paneKey = ({
-  socket,
-  pane
-}) => JSON.stringify([socket, pane]);
 
 // src/daemon/cache/tmux.ts
 var NAME_PERIOD_MS = 3e4;
@@ -66215,7 +66508,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.234.2";
+var PACKAGE_VERSION = "1.235.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66238,6 +66531,7 @@ var RuntimeStats = class _RuntimeStats {
   clock;
   startedAt;
   requestsTotal = 0;
+  environmentMisses = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
@@ -66485,6 +66779,7 @@ var RuntimeStats = class _RuntimeStats {
       arrayBuffersBytes: mem.arrayBuffers,
       requests: {
         total: this.requestsTotal,
+        environmentMisses: this.environmentMisses,
         errored: this.requestsErrored,
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
@@ -67631,10 +67926,10 @@ function settleWrite(write, delivered) {
   write.done = void 0;
   done?.(delivered);
 }
-function encodeFeed(frame2, publish) {
+function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar)));
-  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff)));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar, source)));
+  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff, source)));
   return { resp, statusline };
 }
 var FrameFeeds = class {
@@ -67799,7 +68094,7 @@ var FrameFeeds = class {
   }
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
-  took(frames, settled3) {
+  took(renderer, frames, settled3) {
     for (const pushed of frames) {
       const { session, frame: frame2 } = pushed;
       const watched = this.watched.get(session);
@@ -67810,7 +68105,10 @@ var FrameFeeds = class {
       let encoded;
       let drawn = frame2.kind === "drawn";
       try {
-        encoded = encodeFeed(frame2, this.deps.publishFrame);
+        encoded = encodeFeed(frame2, this.deps.publishFrame, {
+          renderer,
+          session
+        });
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
@@ -68456,10 +68754,10 @@ function next(waiting) {
 var KeyedSerialQueue = class {
   waiting = /* @__PURE__ */ new Map();
   run(key, task, at = "last") {
-    return new Promise((resolve, reject2) => {
+    return new Promise((resolve2, reject2) => {
       const entry = async () => {
         try {
-          resolve(await task());
+          resolve2(await task());
         } catch (e) {
           reject2(e);
         }
@@ -68528,7 +68826,7 @@ var Acts = class {
     this.deps = deps;
     this.performers = {
       copy: (act) => clickLaunch(
-        deps.launch,
+        deps.programsFor(act.session).launch,
         {
           bin: "/usr/bin/pbcopy",
           stdinInput: act.text,
@@ -68538,7 +68836,7 @@ var Acts = class {
         "copied"
       ),
       open: (act) => clickLaunch(
-        deps.launch,
+        deps.programsFor(act.session).launch,
         {
           bin: "/usr/bin/open",
           args: ["-a", "Visual Studio Code", act.target],
@@ -68548,7 +68846,7 @@ var Acts = class {
         `opened ${act.target}`
       ),
       "type-slash": async (act) => {
-        const typed = await this.typed(act.pane, act.line);
+        const typed = await this.typed(act);
         return typed.kind === "typed" ? did(`typed into ${typed.pane}`) : not({ kind: "refused", reason: typed.reason });
       },
       run: (act) => deps.run(act)
@@ -68574,10 +68872,13 @@ var Acts = class {
       () => on2 ? paneOn(pane, host, edge) : paneOff(pane, edge)
     );
   }
-  typed(pane, line) {
+  typed(act) {
     return this.inPaneTurn(
-      pane,
-      () => typeInPane(this.deps.claudeInput)(pane, line)
+      act.pane,
+      () => typeInPane(this.deps.programsFor(act.session).claudeInput)(
+        act.pane,
+        act.line
+      )
     );
   }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
@@ -68751,7 +69052,7 @@ function authorizeRun(signer, pending2, captures) {
 // src/daemon/foundations/frame-publication.ts
 init_globals();
 function publishingFrames(signer) {
-  return (wire) => {
+  return (wire, source) => {
     const frame2 = parseFrame(wire);
     return {
       ...frame2,
@@ -68760,9 +69061,10 @@ function publishingFrames(signer) {
         runs: row.runs.map(({ link, ...run2 }) => {
           if (link === void 0) return run2;
           const href = publishedHref(link, signer.sign);
+          const issuer = typeof link !== "string" && link.kind !== "href" ? source : void 0;
           return {
             ...run2,
-            link: isBarLink(href) ? signer.signLink(href) : href
+            link: isBarLink(href) ? signer.signLink(href, issuer) : href
           };
         })
       }))
@@ -69973,11 +70275,12 @@ var NO_MOTION = {
   }
 };
 var SessionEffects = class {
-  constructor(key) {
+  constructor(key, kept = NO_MOTION) {
     this.key = key;
+    this.kept = kept;
   }
   key;
-  kept = NO_MOTION;
+  kept;
   // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
@@ -70209,39 +70512,6 @@ var SessionEffects = class {
     };
   }
 };
-var MAX_SESSIONS4 = 256;
-var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS4) {
-    this.maxSessions = maxSessions;
-  }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  // The session's memory as a draw reads it: a session with none kept yet
-  // draws from a fresh one, held only once its frame is kept.
-  of(sessionId2) {
-    return this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
-  }
-  // [LAW:single-enforcer] The one writer: the turn that drew the session's
-  // frame keeps the motion it returned, as the most recently rendered.
-  keep(sessionId2, motion) {
-    const known = this.of(sessionId2);
-    known.keep(motion);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-  }
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats() {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
-  }
-};
 
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
@@ -70396,20 +70666,28 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
     ...notices,
     ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
   ].sort((a, b) => rankOf(a) - rankOf(b));
-  const keys2 = copyKeys(list2);
+  const seen = /* @__PURE__ */ new Map();
   const minted = list2.map(
-    (m, i2) => plain.has(m) ? {
-      ...m,
-      lines: [
-        [
-          diagnosticSpan(
-            m.lines[0][0].text,
-            copyLink(sessionId2, by, keys2[i2], i2 + 1)
-          )
-        ],
-        ...m.lines.slice(1)
-      ]
-    } : m
+    (message2, i2) => {
+      const id2 = identityOf(message2);
+      const occurrence = seen.get(id2) ?? 0;
+      seen.set(id2, occurrence + 1);
+      const stop2 = id2 * OCCURRENCES + Math.min(occurrence, OCCURRENCES - 1);
+      if (!plain.has(message2)) return { ...message2, stop: stop2 };
+      return {
+        ...message2,
+        stop: stop2,
+        lines: [
+          [
+            diagnosticSpan(
+              message2.lines[0][0].text,
+              copyLink(sessionId2, by, pageKey(stop2, 0), i2 + 1)
+            )
+          ],
+          ...message2.lines.slice(1)
+        ]
+      };
+    }
   );
   return minted;
 }
@@ -70417,8 +70695,10 @@ function plainMessage({ about, text: message2, copy: copy2 }, severity) {
   const [first2, ...rest2] = message2.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
   return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy2, lines: [first2, ...rest2] }];
 }
-function copyKeys(list2) {
-  return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
+function diagnosticCopies(list2) {
+  return new Map(
+    list2.map((message2) => [pageKey(message2.stop, 0), message2.copy])
+  );
 }
 function copyLink(sessionId2, by, key, position) {
   return actionTarget(
@@ -70439,17 +70719,9 @@ function identityOf(message2) {
   ).digest("hex");
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
-function stopsOf(list2) {
-  const seen = /* @__PURE__ */ new Map();
-  return list2.map((m) => {
-    const id2 = identityOf(m);
-    const n = seen.get(id2) ?? 0;
-    seen.set(id2, n + 1);
-    return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
-  });
-}
+var pageKey = (stop2, page2) => String(stop2 * PAGES + page2 + 1);
 function viewerKey(list2, at, page2) {
-  return String(stopsOf(list2)[at] * PAGES + page2 + 1);
+  return pageKey(list2[at].stop, page2);
 }
 var INDICATOR_CAP = 9;
 function diagnosticsProjection(list2) {
@@ -70465,7 +70737,8 @@ function diagnosticsProjection(list2) {
 }
 function viewedIndex(raw, list2) {
   const key = Number(raw) - 1;
-  const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
+  const stop2 = Math.floor(key / PAGES);
+  const at = list2.findIndex((message2) => message2.stop === stop2);
   return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
 }
 var MAX_VIEWER_ROWS = 20;
@@ -72532,8 +72805,8 @@ function themeFloor() {
 
 // src/config/option-domain.ts
 var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+function registerBuiltinDomain(name, resolve2, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
 }
 registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
   paletteOf: (option) => paletteForThemeName(option)
@@ -75032,15 +75305,15 @@ function insertTerm(ctx, anchor, relation) {
     relation
   };
   const member = menuMember(applyName);
-  const pageKey = menuPageKey(stateKey);
+  const pageKey2 = menuPageKey(stateKey);
   const identity2 = menuActionName(stateKey, member);
   artifacts.variables[stateKey] = {
     ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
     within: [EDIT_MODE_REF]
   };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
   artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  artifacts.actions[pageKey2] = { set: pageKey2, int: true };
   const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
   const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
   return {
@@ -77155,7 +77428,7 @@ function renderMenu(applyName, displays, options, runtime) {
   const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
   const action2 = runtime.action;
   const stateKey = menuStateKey(placement.placementId, applyName, options.key);
-  const pageKey = menuPageKey(stateKey);
+  const pageKey2 = menuPageKey(stateKey);
   const member = menuMember(applyName);
   const store = renderBinding(action2, "menu").store;
   const open2 = readVar(store, stateKey) === member;
@@ -77166,7 +77439,7 @@ function renderMenu(applyName, displays, options, runtime) {
     actionTarget([
       {
         verb: VERB_SET_STATE,
-        args: [sessionId2, stateKey, successor, pageKey, "0"]
+        args: [sessionId2, stateKey, successor, pageKey2, "0"]
       }
     ]),
     false
@@ -77182,12 +77455,12 @@ function renderMenu(applyName, displays, options, runtime) {
     return renderPicker(
       applyName,
       apply,
-      { key: pageKey, stateVar: pageKey },
+      { key: pageKey2, stateVar: pageKey2 },
       {
         kind: "own",
         writes: [
           [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"]
+          [pageKey2, "0"]
         ],
         onPick: options.closeOnPick
       },
@@ -78983,9 +79256,9 @@ function synthesizePlacementMenus(config, issues) {
         const { apply, options } = call;
         const member = menuMember(apply);
         const stateKey = menuStateKey(id2, apply, options.key);
-        const pageKey = menuPageKey(stateKey);
+        const pageKey2 = menuPageKey(stateKey);
         const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
+        const clashKey = [stateKey, pageKey2].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
         });
@@ -78997,7 +79270,7 @@ function synthesizePlacementMenus(config, issues) {
           continue;
         }
         ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
+        ownerBySynthKey.set(pageKey2, owner);
         const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity2);
@@ -79011,8 +79284,8 @@ function synthesizePlacementMenus(config, issues) {
         claimed.set(identity2, claimant);
         actions[identity2] = disclosureCycleAction(stateKey, member);
         variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-        actions[pageKey] = { set: pageKey, int: true };
+        variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
+        actions[pageKey2] = { set: pageKey2, int: true };
       }
     }
   }
@@ -82745,6 +83018,73 @@ function laneHandoff(sessionId2, writable2, lanes) {
   };
 }
 
+// src/renderer/render-warnings.ts
+init_globals();
+
+// src/renderer-interface/noted-faults.ts
+init_globals();
+var KEPT_FAULTS = "kept";
+var spelledFaults = (faults) => JSON.stringify(faults);
+var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
+
+// src/renderer/render-warnings.ts
+function describeWarning(warning) {
+  const { kind, message: message2 } = warning;
+  let subject;
+  switch (kind) {
+    case "rule":
+      subject = warning.slot;
+      break;
+    case "refresh":
+      subject = warning.variable;
+      break;
+    case "segment":
+      subject = warning.placement;
+      break;
+    case "when":
+      subject = warning.where;
+      break;
+  }
+  return {
+    warning,
+    subject,
+    tag: kind === "when" ? kind : `${kind}:${subject}`,
+    key: JSON.stringify([
+      kind,
+      subject,
+      message2,
+      "error" in warning ? warning.error : null
+    ])
+  };
+}
+function frameWarnings(warnings, faults) {
+  return { warnings, faults: spelledFaults(faults) };
+}
+function warningChanges(next2, prior) {
+  const warnings = prior?.warnings ?? [];
+  return {
+    moved: warnings.length !== next2.warnings.length || warnings.some(({ key }, i2) => key !== next2.warnings[i2]?.key),
+    faults: faultsNote(next2.faults, prior?.faults)
+  };
+}
+function combinedWarnings(records) {
+  const listed = [];
+  const seen = /* @__PURE__ */ new Map();
+  for (const record2 of records) {
+    const earlier = new Map(seen);
+    for (const warning of record2.warnings) {
+      const { key } = warning;
+      const count = earlier.get(key) ?? 0;
+      if (count > 0) earlier.set(key, count - 1);
+      else {
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+        listed.push(warning);
+      }
+    }
+  }
+  return listed;
+}
+
 // src/renderer/draw-bar.ts
 function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare) {
   const facts = [];
@@ -82753,7 +83093,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, copies, lanes, kept } = drawRender(
+      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate } = drawRender(
         parts,
         setup,
         { by: "feed", fps },
@@ -82768,9 +83108,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
       );
       const handoff = statusline === bar ? null : statusline;
       const receipt = prepare({
-        kept,
-        surfaceFrames: setup.view.frames,
-        copies,
+        candidate,
         clickShown: null,
         eventsShown: []
       });
@@ -82894,10 +83232,13 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds) {
-  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
+  const {
+    sessionState,
+    renderCache: { presentations }
+  } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
-  const idleSince = menuIdle.since(sessionId2, readings);
+  const idleSince = presentations.menuIdle.since(sessionId2, readings);
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure2 = view.source.failure();
@@ -82932,18 +83273,20 @@ function drawRender(parts, setup, drawing2, feeds) {
     ),
     said2("click", clickShown?.text)
   ].flatMap(
-    ({ about, text: text4, copy: copy2, ...named2 }) => about && text4 && copy2 ? [{ ...named2, about, text: text4, copy: copy2 }] : []
+    ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
   const configWatch = entry.snapshot.watch;
   const { daemon: daemon2 } = document;
   const launched = launcherWarningsAt(daemon2.launcher, at, drawing2.by);
-  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const launchEvents = launched.flatMap(
+    (warning) => "event" in warning ? [warning] : []
+  );
   const held = [
     daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
     daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
   ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [pipeWarning?.event, ...held.map((w) => w.event)].flatMap(
-    (e) => e === void 0 ? [] : [e]
+  const eventsShown = [...launchEvents, ...held].map(
+    (warning) => warning.event
   );
   const standing2 = [
     ...daemon2.fileEvents,
@@ -82963,7 +83306,8 @@ function drawRender(parts, setup, drawing2, feeds) {
       }
     ]
   ];
-  const scope = { config: state.config };
+  const config = presentations.configOf(state.config);
+  const target = view.presentationTargets[drawing2.by];
   const diagnostics = collectDiagnostics(
     sessionId2,
     drawing2.by,
@@ -82978,10 +83322,10 @@ function drawRender(parts, setup, drawing2, feeds) {
         text: w.message,
         copy: w.message
       })),
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({
-        about: `${w.kind}\0${w.message}`,
-        text: w.message,
-        copy: w.message
+      ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
+        about: key,
+        text: warning.message,
+        copy: warning.message
       }))
     ]
   );
@@ -83005,7 +83349,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     feeds: feedsFact(projected.feeds)
   });
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId2);
+  const effects = presentations.effects(sessionId2);
   const draw2 = () => drawDsl(
     state.config,
     state.compiled,
@@ -83022,7 +83366,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     {
       ...effective,
       effects,
-      record: view.frames.get(drawing2.by)?.record,
+      record: presentations.layout(sessionId2, drawing2.by, target)?.record,
       idleSince: idleSince ?? void 0
     }
   );
@@ -83035,8 +83379,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     cellBreaks,
     rules
   } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
-  const keys2 = copyKeys(diagnostics);
-  const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
+  const copies = diagnosticCopies(diagnostics);
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
@@ -83058,44 +83401,27 @@ function drawRender(parts, setup, drawing2, feeds) {
   const fx = memory.motion.frame;
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  const tagOf = (w) => {
-    switch (w.kind) {
-      case "rule":
-        return `rule:${w.slot}`;
-      case "refresh":
-        return `refresh:${w.variable}`;
-      case "segment":
-        return `segment:${w.placement}`;
-      case "file-events":
-        return `${w.kind}:${w.state}`;
-      case "load":
-      case "facts":
-      case "config-watch":
-      case "lifeline":
-      case "launch-pipes":
-      case "renderer-ended":
-      case "act-failed":
-      case "when":
-        return w.kind;
-    }
-  };
-  const warned = [...standing2, ...drawnWarnings].map(tagOf).join(",") || "-";
+  const warnings = drawnWarnings.map(describeWarning);
+  const warned = [
+    ...standing2.map(
+      (w) => w.kind === "file-events" ? `${w.kind}:${w.state}` : w.kind
+    ),
+    ...warnings.map(({ tag }) => tag)
+  ].join(",") || "-";
   const faults = [
     ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
     ...standing2.map((w) => faultOf("warning", w.kind, w.message)),
-    ...drawnWarnings.map(
-      (w) => faultOf("warning", w.kind, w.message, subjectOf(w))
+    ...warnings.map(
+      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
     )
   ];
-  const warnings = renderWarnings.prepare(
-    sessionId2,
-    drawing2.by,
-    scope,
-    drawnWarnings,
-    faults
+  const diagnosticsRecord = frameWarnings(warnings, faults);
+  const change = warningChanges(
+    diagnosticsRecord,
+    presentations.diagnostics(sessionId2, drawing2.by)
   );
   noteFacts(facts, {
-    faults: warnings.faultsNote,
+    faults: change.faults,
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
     // The rate the session's animation clock ran at for this frame.
@@ -83121,14 +83447,14 @@ function drawRender(parts, setup, drawing2, feeds) {
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: pipeWarning?.hold ?? "-",
+    pipeEvent: launchEvents[0]?.hold ?? "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
     // What the indicator counted, and whether this frame's warnings moved
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
-    warnRecord: warnings.moved ? "new" : "kept",
+    warnRecord: change.moved ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
     viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
   });
@@ -83143,50 +83469,27 @@ function drawRender(parts, setup, drawing2, feeds) {
     cellBreaks,
     clickShown,
     eventsShown,
-    copies,
     lanes,
-    kept: {
+    candidate: {
       session: sessionId2,
       by: drawing2.by,
-      memory,
-      warnings,
-      // What this frame drew is what the session's idle close follows.
-      menu: {
-        tick: readings.tick,
-        shown: frame2.rows.some((row) => row.kind === "menu"),
-        timeoutS: effective.menuTimeout
-      },
-      segments
+      target,
+      frame: {
+        config,
+        layout: { record: memory.record, segments },
+        motion: memory.motion,
+        diagnostics: diagnosticsRecord,
+        copies,
+        menu: {
+          tick: readings.tick,
+          shown: frame2.rows.some((row) => row.kind === "menu"),
+          timeoutS: effective.menuTimeout
+        }
+      }
     }
   };
 }
-function keepDraw(parts, surfaceFrames, kept) {
-  const {
-    session,
-    by,
-    memory: { record: record2, motion },
-    warnings,
-    menu,
-    segments
-  } = kept;
-  surfaceFrames.set(by, { record: record2, segments });
-  parts.effectSessions.keep(session, motion);
-  parts.renderWarnings.keep(session, by, warnings);
-  parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
-}
 var faultOf = (level, kind, message2, subject) => ({ level, kind, subject, message: message2 });
-function subjectOf(w) {
-  switch (w.kind) {
-    case "rule":
-      return w.slot;
-    case "refresh":
-      return w.variable;
-    case "segment":
-      return w.placement;
-    case "when":
-      return w.where;
-  }
-}
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
@@ -83202,7 +83505,7 @@ function answerRequest(parts, req, presentation, facts) {
       facts,
       presentation
     ));
-    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
+    const { drawn, clickShown, eventsShown, lanes, candidate } = drawRender(
       parts,
       setup,
       ANSWERING,
@@ -83217,9 +83520,7 @@ function answerRequest(parts, req, presentation, facts) {
     return {
       frame: frame2,
       delivery: {
-        kept,
-        surfaceFrames: setup.view.frames,
-        copies,
+        candidate,
         clickShown,
         eventsShown
       }
@@ -83230,14 +83531,14 @@ function answerRequest(parts, req, presentation, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function deliver(parts, delivery) {
-  const { kept, surfaceFrames, copies, clickShown, eventsShown } = delivery;
-  const { session, by } = kept;
-  keepDraw(parts, surfaceFrames, kept);
-  parts.renderCache.delivered(session, by, copies);
+function deliver(parts, id2, delivery) {
+  const { candidate, clickShown, eventsShown } = delivery;
+  const accepted = parts.renderCache.acceptFrame(id2, candidate);
+  if (accepted === null) return null;
   if (clickShown !== null)
-    answeredClickError(parts.sessionState, session, clickShown);
+    answeredClickError(parts.sessionState, candidate.session, clickShown);
   for (const event of eventsShown) parts.eventAnswered(event);
+  return accepted;
 }
 function statuslineOf(sessionId2, writable2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
@@ -83339,82 +83640,6 @@ var TurnTime = class {
     now: () => this.at * 1e3,
     after: (ms, run2) => this.after(ms, run2)
   };
-};
-
-// src/renderer/menu-idle.ts
-init_globals();
-var MenuIdle = class {
-  sessions = /* @__PURE__ */ new Map();
-  // What the session's draw at `tick` showed: whether a menu row, and the
-  // timeout its settings resolve to. A menu shown where the last draw showed
-  // none begins its idle period here, so one nobody clicked open (a group
-  // open by default, a reload) is not closed by a click from long ago.
-  drew(sessionId2, tick, shown, timeoutS) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle === void 0) {
-      this.sessions.set(sessionId2, { since: tick, timeoutS, shown });
-      return;
-    }
-    if (shown && !idle.shown) idle.since = tick;
-    idle.shown = shown;
-    idle.timeoutS = timeoutS;
-  }
-  // A click of the session landed: a new idle period begins. A session that
-  // has not drawn has no menu to count down.
-  clicked(sessionId2, tick) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle !== void 0) idle.since = tick;
-  }
-  // When the idle period of the menus the session's last draw showed began,
-  // on the wall the draw is made on, or null while it showed none: a menu
-  // that appears now has only begun.
-  // [LAW:one-source-of-truth] Derived from the period's tick, so the flash
-  // the draw shows ends where the close lands however the wall has stepped.
-  since(sessionId2, { at, tick }) {
-    const idle = this.sessions.get(sessionId2);
-    return idle?.shown === true ? at - (tick - idle.since) : null;
-  }
-  retire(sessionId2) {
-    this.sessions.delete(sessionId2);
-  }
-  // The earliest tick a session's menus close at, or null when none shows a
-  // menu.
-  next(busy) {
-    return earliestOf(
-      [...this.sessions].map(
-        ([session, idle]) => this.expiryOf(session, idle, busy)
-      )
-    );
-  }
-  // [LAW:single-enforcer] A pending click can restart the idle period. Until
-  // it lands, the renderer neither takes nor schedules that session's close.
-  expiryOf(session, idle, busy) {
-    return idle.shown && !busy?.has(session) ? closesAt(idle.since, idle.timeoutS) : null;
-  }
-  // The sessions whose idle period has run out by `tick`, each taken as
-  // closed: what its last draw showed no longer stands, and a new period
-  // begins, so a close that fails is tried again a timeout later, never at
-  // once, and a session that stops drawing is never closed again.
-  due(tick, busy) {
-    const due = [];
-    for (const [session, idle] of this.sessions) {
-      const expiry = this.expiryOf(session, idle, busy);
-      if (expiry === null || expiry > tick) continue;
-      due.push({
-        session,
-        idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
-      });
-      idle.since = tick;
-      idle.shown = false;
-    }
-    return due;
-  }
-  // The sessions whose period is kept, and those with a menu counting down.
-  stats() {
-    let armed = 0;
-    for (const idle of this.sessions.values()) if (idle.shown) armed++;
-    return { sessions: this.sessions.size, armed };
-  }
 };
 
 // src/renderer/feeds.ts
@@ -85047,7 +85272,7 @@ var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLAC
 
 // src/renderer/settings-history.ts
 var MAX_STEPS = 50;
-var MAX_SESSIONS5 = 32;
+var MAX_SESSIONS4 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
@@ -85272,7 +85497,7 @@ var SettingsHistory = class {
     this.state = next2;
   }
   bound(next2) {
-    while (next2.size > MAX_SESSIONS5 || weight(next2) > MAX_BYTES) {
+    while (next2.size > MAX_SESSIONS4 || weight(next2) > MAX_BYTES) {
       const [oldest, h] = next2.entries().next().value;
       if (next2.size > 1) {
         next2.delete(oldest);
@@ -86127,7 +86352,7 @@ function runClick(click2, ctx) {
     foldEffects(
       click2.steps,
       ctx.log,
-      (step4) => globalAct(step4, ctx, null),
+      (step4) => globalAct(step4, ctx, click2.session ?? null),
       () => {
       }
     );
@@ -86416,8 +86641,8 @@ var EditTransactions = class {
     runInAction(() => this.entries.delete(sid));
   }
   update(sid, draft) {
-    const revision2 = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision: revision2 }));
+    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision }));
   }
 };
 
@@ -86425,7 +86650,7 @@ var EditTransactions = class {
 init_globals();
 var EMPTY4 = { visits: [], cursor: 0 };
 var MAX_VISITS = 20;
-var MAX_SESSIONS6 = 32;
+var MAX_SESSIONS5 = 32;
 var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
 var menuKeys = /* @__PURE__ */ new WeakMap();
 function capture3(store, sid, { gate: gate2, edit }) {
@@ -86560,89 +86785,11 @@ var NavigationHistory = class {
         this.timelines.delete(sid);
         if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
       }
-      while (this.timelines.size > MAX_SESSIONS6)
+      while (this.timelines.size > MAX_SESSIONS5)
         this.timelines.delete(this.timelines.keys().next().value);
     });
   }
 };
-
-// src/renderer/render-warnings.ts
-init_globals();
-
-// src/renderer-interface/noted-faults.ts
-init_globals();
-var KEPT_FAULTS = "kept";
-var spelledFaults = (faults) => JSON.stringify(faults);
-var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
-
-// src/renderer/render-warnings.ts
-var MAX_RECORDS = 512;
-var RENDERERS = ["request", "feed"];
-var RenderWarningRecords = class {
-  constructor(maxRecords = MAX_RECORDS) {
-    this.maxRecords = maxRecords;
-  }
-  maxRecords;
-  records = /* @__PURE__ */ new Map();
-  generations = /* @__PURE__ */ new WeakMap();
-  nextGeneration = 0;
-  generationOf(config) {
-    const held = this.generations.get(config);
-    if (held !== void 0) return held;
-    const next2 = this.nextGeneration++;
-    this.generations.set(config, next2);
-    return next2;
-  }
-  // The warnings `by` last recorded for `sessionId`; none before its first.
-  of(sessionId2, by) {
-    return this.records.get(keyOf(sessionId2, by))?.warnings ?? [];
-  }
-  // The session's warnings as `by` draws them in `scope`: its own record, and
-  // every other renderer's drawn from the same config, each warning once
-  // across renderers (a warning two renderers met is one fact).
-  ofSession(sessionId2, by, scope) {
-    const generation = this.generationOf(scope.config);
-    const listed = [];
-    for (const renderer of RENDERERS) {
-      const held = this.records.get(keyOf(sessionId2, renderer));
-      const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
-      const earlier = listed.map((w) => JSON.stringify(w));
-      for (const w of own2) {
-        const at = earlier.indexOf(JSON.stringify(w));
-        if (at === -1) listed.push(w);
-        else earlier.splice(at, 1);
-      }
-    }
-    return listed;
-  }
-  // Whether a frame that warned `warnings` changes what the renderer's next
-  // frame shows.
-  prepare(sessionId2, by, scope, warnings, faults) {
-    const prior = this.records.get(keyOf(sessionId2, by));
-    const spelled2 = spelledFaults(faults);
-    return {
-      record: {
-        generation: this.generationOf(scope.config),
-        warnings,
-        faults: spelled2
-      },
-      moved: JSON.stringify(prior?.warnings ?? []) !== JSON.stringify(warnings),
-      faultsNote: faultsNote(spelled2, prior?.faults)
-    };
-  }
-  // [LAW:single-enforcer] Only a delivered frame supplies the baseline
-  // for the next frame's warnings and fault comparison.
-  keep(sessionId2, by, prepared) {
-    const key = keyOf(sessionId2, by);
-    this.records.delete(key);
-    this.records.set(key, prepared.record);
-    for (const oldest of this.records.keys()) {
-      if (this.records.size <= this.maxRecords) break;
-      this.records.delete(oldest);
-    }
-  }
-};
-var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/renderer/acts.ts
 init_globals();
@@ -86800,6 +86947,238 @@ function sessionSource(deps) {
 
 // src/renderer/render-cache.ts
 init_globals();
+
+// src/renderer/presented-frames.ts
+init_globals();
+
+// src/renderer/menu-idle.ts
+init_globals();
+function idleAfterDraw(prior, menu) {
+  const { tick, shown, timeoutS } = menu;
+  if (prior === void 0) return { since: tick, shown, timeoutS };
+  if (tick < prior.since) return prior;
+  const since = shown && !prior.shown ? tick : prior.since;
+  return { since, shown, timeoutS };
+}
+var MenuIdle = class {
+  constructor(sessions = /* @__PURE__ */ new Map()) {
+    this.sessions = sessions;
+  }
+  sessions;
+  // What the session's draw at `tick` showed: whether a menu row, and the
+  // timeout its settings resolve to. A menu shown where the last draw showed
+  // none begins its idle period here, so one nobody clicked open (a group
+  // open by default, a reload) is not closed by a click from long ago.
+  drew(sessionId2, tick, shown, timeoutS) {
+    this.sessions.set(
+      sessionId2,
+      idleAfterDraw(this.sessions.get(sessionId2), { tick, shown, timeoutS })
+    );
+  }
+  // A click of the session landed: a new idle period begins. A session that
+  // has not drawn has no menu to count down.
+  clicked(sessionId2, tick) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle !== void 0)
+      this.sessions.set(sessionId2, { ...idle, since: tick });
+  }
+  // When the idle period of the menus the session's last draw showed began,
+  // on the wall the draw is made on, or null while it showed none: a menu
+  // that appears now has only begun.
+  // [LAW:one-source-of-truth] Derived from the period's tick, so the flash
+  // the draw shows ends where the close lands however the wall has stepped.
+  since(sessionId2, { at, tick }) {
+    const idle = this.sessions.get(sessionId2);
+    return idle?.shown === true ? at - (tick - idle.since) : null;
+  }
+  retire(sessionId2) {
+    this.sessions.delete(sessionId2);
+  }
+  // The earliest tick a session's menus close at, or null when none shows a
+  // menu.
+  next(busy) {
+    return earliestOf(
+      [...this.sessions.entries()].map(
+        ([session, idle]) => this.expiryOf(session, idle, busy)
+      )
+    );
+  }
+  // [LAW:single-enforcer] A pending click can restart the idle period. Until
+  // it lands, the renderer neither takes nor schedules that session's close.
+  expiryOf(session, idle, busy) {
+    return idle.shown && !busy?.has(session) ? closesAt(idle.since, idle.timeoutS) : null;
+  }
+  // The sessions whose idle period has run out by `tick`, each taken as
+  // closed: what its last draw showed no longer stands, and a new period
+  // begins, so a close that fails is tried again a timeout later, never at
+  // once, and a session that stops drawing is never closed again.
+  due(tick, busy) {
+    const due = [];
+    for (const [session, idle] of this.sessions.entries()) {
+      const expiry = this.expiryOf(session, idle, busy);
+      if (expiry === null || expiry > tick) continue;
+      due.push({
+        session,
+        idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
+      });
+      this.sessions.set(session, { ...idle, since: tick, shown: false });
+    }
+    return due;
+  }
+  // The sessions whose period is kept, and those with a menu counting down.
+  stats() {
+    let sessions = 0;
+    let armed = 0;
+    for (const [, idle] of this.sessions.entries()) {
+      sessions++;
+      if (idle.shown) armed++;
+    }
+    return { sessions, armed };
+  }
+};
+
+// src/renderer/presented-frames.ts
+var SURFACES = ["request", "feed"];
+var MAX_SESSIONS6 = 256;
+var latestOf = ({ surfaces: { request: request2, feed: feed2 } }) => request2 !== void 0 && (feed2 === void 0 || request2.id > feed2.id) ? request2 : feed2;
+var PresentedFrames = class {
+  constructor(evicted = () => {
+  }, maxSessions = MAX_SESSIONS6) {
+    this.evicted = evicted;
+    this.maxSessions = maxSessions;
+  }
+  evicted;
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  configs = /* @__PURE__ */ new WeakMap();
+  menuIdle = new MenuIdle({
+    get: (session) => this.sessions.get(session)?.idle,
+    set: (session, idle) => {
+      const prior = this.sessions.get(session) ?? { surfaces: {} };
+      this.store(session, { ...prior, idle });
+    },
+    delete: (session) => {
+      const prior = this.sessions.get(session);
+      if (prior !== void 0)
+        this.sessions.set(session, { ...prior, idle: void 0 });
+    },
+    entries: () => this.idleEntries()
+  });
+  *idleEntries() {
+    for (const [session, { idle }] of this.sessions)
+      if (idle !== void 0) yield [session, idle];
+  }
+  store(session, value) {
+    if (this.sessions.has(session)) {
+      this.sessions.set(session, value);
+      return;
+    }
+    this.sessions.set(session, value);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
+      this.evicted(oldest);
+    }
+  }
+  // [LAW:no-shared-mutable-globals] The token identifies a config without
+  // holding that config alive once its view's layout has retired.
+  configOf(config) {
+    const held = this.configs.get(config);
+    if (held !== void 0) return held;
+    const token = /* @__PURE__ */ Symbol();
+    this.configs.set(config, token);
+    return token;
+  }
+  accept(id2, { session, by, target, frame: frame2 }) {
+    const prior = this.sessions.get(session) ?? { surfaces: {} };
+    const previous2 = prior.surfaces[by];
+    if (previous2 !== void 0 && id2 <= previous2.id) return null;
+    const latest = latestOf(prior);
+    const { motion, menu, ...surface } = frame2;
+    const next2 = { ...surface, id: id2, target };
+    const newer = latest === void 0 || id2 > latest.id;
+    const change = warningChanges(surface.diagnostics, previous2?.diagnostics);
+    this.sessions.delete(session);
+    this.store(session, {
+      surfaces: { ...prior.surfaces, [by]: next2 },
+      // [LAW:one-source-of-truth] Keep one motion cache, even when both
+      // surfaces retain their layout. An older receipt cannot rewind it.
+      motion: newer ? motion : prior.motion,
+      idle: newer ? idleAfterDraw(prior.idle, menu) : prior.idle
+    });
+    return { faults: change.faults === KEPT_FAULTS ? null : change.faults };
+  }
+  on(session, by) {
+    return this.sessions.get(session)?.surfaces[by];
+  }
+  layout(session, by, target) {
+    const held = this.on(session, by);
+    return held?.target === target ? held.layout ?? void 0 : void 0;
+  }
+  diagnostics(session, by) {
+    return this.on(session, by)?.diagnostics;
+  }
+  warnings(session, by, config) {
+    return combinedWarnings(
+      SURFACES.flatMap((surface) => {
+        const held = this.on(session, surface);
+        return held !== void 0 && (surface === by || held.config === config) ? [held.diagnostics] : [];
+      })
+    );
+  }
+  effects(session) {
+    return new SessionEffects(session, this.sessions.get(session)?.motion);
+  }
+  copy(session, by, key) {
+    return this.on(session, by)?.copies?.get(key);
+  }
+  retireView(session, targets, successor) {
+    const prior = this.sessions.get(session);
+    if (prior === void 0) return;
+    const surfaces = { ...prior.surfaces };
+    for (const by of SURFACES) {
+      const held = surfaces[by];
+      if (held === void 0 || successor && held.target !== targets[by])
+        continue;
+      surfaces[by] = {
+        ...held,
+        layout: null,
+        copies: successor ? held.copies : null
+      };
+    }
+    this.sessions.set(session, { ...prior, surfaces });
+  }
+  stopDrawing(session, by) {
+    const prior = this.sessions.get(session);
+    const held = prior?.surfaces[by];
+    if (prior === void 0 || held === void 0) return;
+    this.sessions.set(session, {
+      ...prior,
+      surfaces: {
+        ...prior.surfaces,
+        [by]: { ...held, layout: null, copies: null }
+      }
+    });
+  }
+  retire(session) {
+    this.sessions.delete(session);
+  }
+  stats() {
+    let sessions = 0;
+    let effects = 0;
+    let passages = 0;
+    for (const held of this.sessions.values()) {
+      if (held.motion !== void 0) {
+        sessions++;
+        for (const effectsOfRow of held.motion.made.values())
+          effects += effectsOfRow.size;
+      }
+      for (const by of SURFACES)
+        passages += held.surfaces[by]?.layout?.record.passages?.size ?? 0;
+    }
+    return { effects: { sessions, effects }, passages };
+  }
+};
 
 // src/daemon/foundations/gates.ts
 init_globals();
@@ -87627,7 +88006,7 @@ function openView(state, cwd2, facts, { source: sourceOf, changed, log }, curren
     source,
     requested: request2.update,
     facts: request2.read,
-    frames: /* @__PURE__ */ new Map(),
+    presentationTargets: { request: /* @__PURE__ */ Symbol(), feed: /* @__PURE__ */ Symbol() },
     retire: stopChanged,
     dispose: () => {
       stopChanged();
@@ -87672,14 +88051,13 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
-  // delivered copies, by the key its copy click names (src/render/
-  // diagnostics.ts), one map per renderer, since a request and a feed frame
-  // list different messages and a click names the surface it came from. Held
-  // by session, not by view, because a frame on screen outlives the view it
-  // was drawn from (a reload's successor); dropped when the session has no
-  // view. No link carries the text it copies.
-  copies = /* @__PURE__ */ new Map();
+  presentations = new PresentedFrames((session) => {
+    const view = this.views.get(session);
+    if (view !== void 0) {
+      view.presentationTargets.request = /* @__PURE__ */ Symbol();
+      view.presentationTargets.feed = /* @__PURE__ */ Symbol();
+    }
+  });
   // Every view the cache serves or served, until reclaimed.
   viewHolds = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -87985,7 +88363,12 @@ var RenderCache = class {
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
-    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
+    const successor = this.views.has(view.sessionId);
+    this.presentations.retireView(
+      view.sessionId,
+      view.presentationTargets,
+      successor
+    );
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -88006,6 +88389,7 @@ var RenderCache = class {
     this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
+    this.presentations.retire(sessionId2);
     this.dropDraft(sessionId2);
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
@@ -88093,10 +88477,6 @@ var RenderCache = class {
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
-    let passages = 0;
-    for (const view of this.views.values())
-      for (const { record: record2 } of view.frames.values())
-        passages += record2.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -88105,7 +88485,7 @@ var RenderCache = class {
       views: this.views.size,
       pinned: this.pins.size,
       retiredViews,
-      passages,
+      passages: this.presentations.stats().passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes()
     };
@@ -88252,26 +88632,24 @@ var RenderCache = class {
   latestView() {
     return [...this.views.values()].at(-1) ?? null;
   }
-  // The renderer `by` delivered a frame of the session's bar listing
-  // `copies`. A session with no view is closed: nothing it delivers is kept.
-  delivered(sessionId2, by, copies) {
-    if (!this.views.has(sessionId2)) return;
-    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    this.copies.set(sessionId2, drawn.set(by, copies));
+  // [LAW:single-enforcer] Receipt targets live as long as their view and
+  // surface do. The owner accepts only an observation from the current one.
+  acceptFrame(id2, candidate) {
+    const { session, by, target } = candidate;
+    return this.views.get(session)?.presentationTargets[by] === target ? this.presentations.accept(id2, candidate) : null;
   }
   // What the diagnostic under `key` copies in the frame renderer `by` last
   // delivered for the session; undefined while that renderer's last frame
   // did not list it. Reads, never opens, like latestView.
   drawnCopy(sessionId2, by, key) {
-    return this.copies.get(sessionId2)?.get(by)?.get(key);
+    return this.presentations.copy(sessionId2, by, key);
   }
-  // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale, and the surface's next
-  // frame, if it opens again, is a first frame that fades nothing in.
+  // Closing a feed retires that surface's presentation and the receipts
+  // still on their way to it.
   stopDrawing(sessionId2, by) {
-    this.copies.get(sessionId2)?.delete(by);
-    this.views.get(sessionId2)?.frames.delete(by);
+    const view = this.views.get(sessionId2);
+    if (view !== void 0) view.presentationTargets[by] = /* @__PURE__ */ Symbol();
+    this.presentations.stopDrawing(sessionId2, by);
   }
 };
 
@@ -88623,7 +89001,6 @@ function mainRenderer(parts, pushed, drained) {
       case "retire":
         opening.delete(event.session);
         parked = parked.filter((click2) => click2.session !== event.session);
-        menuIdle.retire(event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -88636,7 +89013,11 @@ function mainRenderer(parts, pushed, drained) {
             `effect-done for effect ${event.of}, which is no present, change or act on its way`
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") deliver(parts, delivery);
+        if (event.outcome.kind === "ok") {
+          const accepted = deliver(parts, event.of, delivery);
+          if (delivery.candidate.by === "feed" && accepted !== null && accepted.faults !== null)
+            record2.push(["surface", "feed"], ["faults", accepted.faults]);
+        }
         return;
       }
       case "click": {
@@ -88790,7 +89171,6 @@ function mainRendererOf(inputs, host) {
   const { gates } = inputs;
   const time = new TurnTime();
   const now2 = () => time.at;
-  const menuIdle = new MenuIdle();
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
   for (const sid of Object.keys(inputs.stored.sessions))
@@ -88811,8 +89191,6 @@ function mainRendererOf(inputs, host) {
   const actFailed = (session, reason) => holdClickError(sessionState, session, reason, now2());
   const acts = new ActsOnTheirWay(mint, actFailed);
   const navigationHistory = new NavigationHistory();
-  const effectSessions = new EffectSessions();
-  const renderWarnings = new RenderWarningRecords();
   const worldStates = new WorldStates();
   const renderCache = new RenderCache(
     {
@@ -88860,6 +89238,7 @@ function mainRendererOf(inputs, host) {
       }
     }
   );
+  const { menuIdle } = renderCache.presentations;
   const pin = (sessionId2) => {
     const unhold = renderCache.pin(sessionId2);
     const unwatch = reaction(
@@ -88892,9 +89271,6 @@ function mainRendererOf(inputs, host) {
     sessionState: edits.view,
     renderCache,
     worldStates,
-    renderWarnings,
-    effectSessions,
-    menuIdle,
     feeds
   };
   const verbCtx = {
@@ -88925,7 +89301,7 @@ function mainRendererOf(inputs, host) {
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
+            effectCache: renderCache.presentations.stats().effects,
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
@@ -88939,7 +89315,7 @@ function mainRendererOf(inputs, host) {
       case "debug":
         return {
           kind: "debug",
-          snapshot: debugOf(renderCache.latestView(), push.what)
+          snapshot: debugOf(renderCache, push.what)
         };
       // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
       // runs whole, so none is in flight.
@@ -88966,8 +89342,17 @@ function mainRendererOf(inputs, host) {
     drained
   );
 }
-function debugOf(view, what) {
-  const frame2 = view?.frames.get("request") ?? view?.frames.get("feed");
+function debugOf(cache2, what) {
+  const view = cache2.latestView();
+  const frame2 = view === null ? void 0 : cache2.presentations.layout(
+    view.sessionId,
+    "request",
+    view.presentationTargets.request
+  ) ?? cache2.presentations.layout(
+    view.sessionId,
+    "feed",
+    view.presentationTargets.feed
+  );
   return buildDebugSnapshot(
     what,
     view === null ? null : {
@@ -89481,9 +89866,6 @@ function contentAt({ resolution, locations: locations2 }, place, files) {
 init_globals();
 var MAX_ENTRIES4 = 256;
 var MAX_BYTES2 = 4 * 1024 * 1024;
-function revision(stat3) {
-  return `${stat3.size}:${stat3.mtimeNs}:${stat3.ctimeNs}`;
-}
 var ConfigText = class {
   constructor(open2 = withRegularTextFile) {
     this.open = open2;
@@ -89494,28 +89876,28 @@ var ConfigText = class {
   read(file) {
     return this.open(file, (opened) => {
       const key = identityKey(opened.observed);
-      const version = revision(opened.observed);
+      const entry = polledEntryOf(opened.observed);
       const held = this.held.get(key);
       if (held !== void 0) {
         this.held.delete(key);
-        if (held.revision === version) {
+        if (held.entry === entry) {
           this.held.set(key, held);
-          return held.text;
+          return held;
         }
         this.bytes -= held.bytes;
       }
       const text4 = opened.text();
       const bytes = text4.length * 2;
-      if (bytes <= MAX_BYTES2 && revision(opened.stat()) === version) {
-        this.held.set(key, { revision: version, text: text4, bytes });
+      if (bytes <= MAX_BYTES2 && polledEntryOf(opened.stat()) === entry) {
+        this.held.set(key, { entry, text: text4, bytes });
         this.bytes += bytes;
-        for (const [oldest, entry] of this.held) {
+        for (const [oldest, entry2] of this.held) {
           if (this.held.size <= MAX_ENTRIES4 && this.bytes <= MAX_BYTES2) break;
           this.held.delete(oldest);
-          this.bytes -= entry.bytes;
+          this.bytes -= entry2.bytes;
         }
       }
-      return text4;
+      return { entry, text: text4 };
     });
   }
   clear() {
@@ -89583,7 +89965,7 @@ var ConfigDiscovery = class {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = this.shared();
+      const shared = this.batch();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -89660,7 +90042,7 @@ var ConfigDiscovery = class {
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = this.shared();
+    const shared = this.batch();
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
@@ -89685,14 +90067,20 @@ var ConfigDiscovery = class {
     );
     return moved2;
   }
-  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
-  // one physical-text owner reuses bytes once the descriptor proves its revision.
-  shared() {
-    return readShared(this.deps, {
+  // [LAW:single-enforcer] The observation supplied to a poll watch comes
+  // from the same descriptor as the snapshot's text.
+  batch() {
+    const observed2 = /* @__PURE__ */ new Map();
+    const facts = readShared(this.deps, {
       ...diskFiles,
-      text: textFrom((file) => this.texts.read(file)),
+      text: textFrom((path31) => {
+        const read2 = this.texts.read(path31);
+        observed2.set(path31, read2.entry);
+        return read2.text;
+      }),
       ...this.deps.files?.()
     });
+    return { facts, observed: observed2 };
   }
   // What discovery finds at `origin` now, with its watch following the
   // targets that finding names, and what that watch cannot hear in the
@@ -89703,7 +90091,7 @@ var ConfigDiscovery = class {
         ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd
       },
-      shared
+      shared.facts
     );
     const key = originKey(origin);
     const paths2 = watchTargetsFor(found2);
@@ -89711,9 +90099,14 @@ var ConfigDiscovery = class {
       ...paths2,
       key: `config:${JSON.stringify(key)}:${paths2.key}`
     };
-    const { watch: watch2, move } = this.watches.follow(held, spec, () => {
-      this.invalidated.add(key);
-    });
+    const { watch: watch2, move } = this.watches.follow(
+      held,
+      spec,
+      () => {
+        this.invalidated.add(key);
+      },
+      shared.observed
+    );
     if (move === "rebound") this.bound(origin, paths2);
     const snapshot = {
       ...found2.snapshot,
@@ -89944,9 +90337,19 @@ function createDaemon(inputs) {
     environmentOf: (session) => sessionBook.environmentOf(session),
     clock
   });
+  const programs2 = (edge) => ({
+    launch: clickLaunchVia(edge),
+    claudeInput: inputs.claudeInput(edge)
+  });
+  const desktopPrograms = programs2(launcher);
   const acts = new Acts({
-    launch: clickLaunchVia(launcher),
-    claudeInput: inputs.claudeInput(launcher),
+    programsFor: (session) => {
+      const context = session === null ? null : sessionBook.programContextOf(session);
+      if (context === null) return desktopPrograms;
+      return programs2({
+        launch: (options) => launcher.launch({ ...options, ...context })
+      });
+    },
     run: (run2) => runs.start(run2),
     barPane: {
       edge: inputs.barPaneEdge(launcher),
@@ -90171,7 +90574,7 @@ function createDaemon(inputs) {
             settled3(frame2, false);
             return false;
           });
-          frameFeeds.took(routed, settled3);
+          frameFeeds.took(name, routed, settled3);
         },
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
@@ -90265,6 +90668,7 @@ function createDaemon(inputs) {
     return target.renderer;
   };
   const parts = {
+    accountHome: inputs.accountHome,
     closing: cancelWork.signal,
     home: host.home,
     launcher,
@@ -90289,6 +90693,8 @@ function createDaemon(inputs) {
     limits,
     collector,
     renderer: primary.renderer,
+    // [LAW:single-enforcer] Only a render request binds or starts a bundle.
+    rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor
   };
   fileEvents.subscribe((notice) => {
@@ -90467,10 +90873,10 @@ function idOf3(st) {
 }
 function writeAt(fd, bytes) {
   return new Promise(
-    (resolve, reject2) => fs_default.write(
+    (resolve2, reject2) => fs_default.write(
       fd,
       bytes,
-      (err, written3) => err === null ? resolve(written3) : reject2(err)
+      (err, written3) => err === null ? resolve2(written3) : reject2(err)
     )
   );
 }
@@ -90562,7 +90968,7 @@ var DaemonLog = class {
   // unwritable).
   drained() {
     if (!this.flushing) return Promise.resolve();
-    return new Promise((resolve) => this.drainedWaiters.push(resolve));
+    return new Promise((resolve2) => this.drainedWaiters.push(resolve2));
   }
   // What is waiting, written now, synchronously: for a caller about to block
   // the loop on the way to a death that may come with no exit event (a heap
@@ -90609,16 +91015,16 @@ var DaemonLog = class {
     this.closeSink();
     await fs_default.promises.mkdir(import_node_path34.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
-      (resolve, reject2) => fs_default.open(
+      (resolve2, reject2) => fs_default.open(
         this.filePath,
         "a",
-        (err, opened2) => err === null ? resolve(opened2) : reject2(err)
+        (err, opened2) => err === null ? resolve2(opened2) : reject2(err)
       )
     );
     const opened = await new Promise(
-      (resolve, reject2) => fs_default.fstat(
+      (resolve2, reject2) => fs_default.fstat(
         fd,
-        (err, stats) => err === null ? resolve(stats) : reject2(err)
+        (err, stats) => err === null ? resolve2(stats) : reject2(err)
       )
     );
     this.sink = { path: this.filePath, fd, id: idOf3(opened) };
@@ -90647,7 +91053,7 @@ var DaemonLog = class {
     } finally {
       this.flushing = false;
       if (this.disposed) this.closeSink();
-      for (const resolve of this.drainedWaiters.splice(0)) resolve();
+      for (const resolve2 of this.drainedWaiters.splice(0)) resolve2();
     }
   }
   // Everything waiting, after the count of the lines dropped before it.
@@ -90741,6 +91147,7 @@ var DaemonLog = class {
 
 // src/daemon/production-adapters.ts
 init_globals();
+init_os();
 
 // src/daemon/session-state-file.ts
 init_globals();
@@ -91244,7 +91651,9 @@ function inProcessRenderer(name, build2, reaches, clock) {
 
 // src/daemon/production-adapters.ts
 function productionAdapters(paths2, daemonLog, machine) {
+  let accountHome;
   return {
+    accountHome: () => accountHome ??= userInfo().homedir,
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     profile: (name, log) => fileStorage(profilePaths(paths2, name), log, machine),
