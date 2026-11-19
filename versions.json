@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-864",
+      "ref": "refs/pull/864/merge",
+      "sha": "85910a90abfcd77cbe6d7788b12dcf06cb4102aa",
+      "timestamp": "2026-11-19T12:55:47.659Z",
+      "commits": [
+        {
+          "sha": "85910a90abfcd77cbe6d7788b12dcf06cb4102aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:54:30Z",
+          "message": "Merge b4c6a5cca3c7fdd831bc5a88f31b98c7acc31da7 into 16eb7713b80a9c10567f515cf183025faeca7db4\n"
+        },
+        {
+          "sha": "b4c6a5cca3c7fdd831bc5a88f31b98c7acc31da7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:49:28-07:00",
+          "message": "test(host): measure named ingress from the built daemon\n"
+        },
+        {
+          "sha": "90e7db4f10762d4fd75354926b52a9a5b361efff",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:28:48-07:00",
+          "message": "fix(daemon): prepare the renderer before host timers start\n"
+        },
+        {
+          "sha": "67c76d8302a2060e5179f810329c201137bb0dcd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:20:10-07:00",
+          "message": "fix(daemon): admit named renderers from statusline push clients\n"
+        },
+        {
+          "sha": "e9379c7af21812ab4b880e7986a7e3179d0a9fee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:06-07:00",
+          "message": "style(test): format the named renderer process fixture\n"
+        },
+        {
+          "sha": "f8d17a3c9cc1c0cdfcd4932d5f0b4b1d8458f2b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:11:10-07:00",
+          "message": "feat(daemon): route named renderers through one shared host\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "16eb7713b80a9c10567f515cf183025faeca7db4",
@@ -42,56 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:28:42-07:00",
           "message": "refactor(cli): retire the standalone config check (ibyq.9lr)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-864",
-      "ref": "refs/pull/864/merge",
-      "sha": "cea9415b703e0c5e918773f0d99f7adeffd54918",
-      "timestamp": "2026-11-19T12:50:30.006Z",
-      "commits": [
-        {
-          "sha": "cea9415b703e0c5e918773f0d99f7adeffd54918",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:49:34Z",
-          "message": "Merge da3ef074ef295881049e3ddd99fa1fbc88c51592 into 23c326f89ca153631c98d23faf4844e8803a63d5\n"
-        },
-        {
-          "sha": "da3ef074ef295881049e3ddd99fa1fbc88c51592",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:49:28-07:00",
-          "message": "test(host): measure named ingress from the built daemon\n"
-        },
-        {
-          "sha": "11a2a2c3fa4e1757d3d1f9c6ed9fe7b51f33410b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:28:48-07:00",
-          "message": "fix(daemon): prepare the renderer before host timers start\n"
-        },
-        {
-          "sha": "e9abacd86a13998a90db479410f808a2ce33abaa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:20:10-07:00",
-          "message": "fix(daemon): admit named renderers from statusline push clients\n"
-        },
-        {
-          "sha": "2a751ce5940540295fe4b26e661b773a5faa2664",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:18:06-07:00",
-          "message": "style(test): format the named renderer process fixture\n"
-        },
-        {
-          "sha": "667fa11d301c8fbfad43a1b2d60bb47c42d10120",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:11:10-07:00",
-          "message": "feat(daemon): route named renderers through one shared host\n"
         }
       ]
     },
