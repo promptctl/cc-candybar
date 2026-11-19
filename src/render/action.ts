@@ -66,6 +66,8 @@ import {
   type Effect,
 } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { DrawnLink } from "./drawn-link.js";
+import { styleWithLink } from "./link-style.js";
 import {
   LAYER_ROLES,
   layerRoleOf,
@@ -746,20 +748,19 @@ function evalTemplate(tpl: Template<RichText>, scope: object): string {
 }
 
 // [LAW:single-enforcer] One link-span constructor for both action and picker
-// cells — a Style carrying the OSC-8 url, `active` riding as bold.
+// cells — a Style carrying the drawn link, with `active` riding as bold.
 export function linkFragment(
   text: string,
-  url: string,
+  link: DrawnLink,
   active: boolean,
   base?: Style,
 ): RichText {
-  // [LAW:one-source-of-truth] Build the link span exactly as rich-js's `link`
-  // does: a Style carrying the OSC-8 url. `active` rides as bold so the
-  // currently-selected value reads as current — a value on the span, not a
-  // branch in the walk. `base` is the cell's own colouring (a band item's
-  // state-region Style), which the link and current-mark ride on top of.
+  // The link and current mark ride on the cell's own colouring.
   const rt = new RichText(text, {
-    style: Style.combine([base, new Style({ link: url, bold: active })]),
+    style: Style.combine([
+      base,
+      styleWithLink(new Style({ bold: active }), link),
+    ]),
   });
   rt.overflow = "ignore";
   rt.end = "";

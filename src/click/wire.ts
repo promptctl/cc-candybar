@@ -1,8 +1,8 @@
 // [LAW:single-enforcer] THE click-wire codec. A click is an ordered list of
 // effects; this module is the one place that serializes that list to a URL and
-// parses it back. The renderer (every click emitter) calls effectsUrl; the
-// daemon's `dispatch` verb calls parseEffects. Encode and decode live together
-// so the format cannot drift between the two halves [LAW:one-source-of-truth].
+// parses it back. The frame publisher calls effectsUrl for typed targets,
+// and existing URL producers use the same codec. Encode and decode live
+// together so the format cannot drift [LAW:one-source-of-truth].
 //
 // [LAW:dataflow-not-control-flow] N effects ride one URL the SAME way for N=1 and
 // N=100 — a lone click is the degenerate one-element list. There is no

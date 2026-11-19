@@ -3,6 +3,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { ColorSpec, type ColorRgba } from "@promptctl/rich-js";
 import { linksOf } from "../../src/click/read";
+import { hrefOfDrawnLink } from "../../src/render/drawn-link";
 import { plainOf, type Frame, type Run } from "../../src/render/frame";
 
 /** The URL of every link the frame draws, in order. */
@@ -18,11 +19,15 @@ export const boldUrls = ({ rows }: Pick<Frame, "rows">): string[] =>
   rows.flatMap(({ runs }) =>
     runs
       .filter(({ text }) => text !== "")
-      .flatMap(({ link, attrs }, i, drawn) =>
-        link !== undefined &&
-        link !== drawn[i - 1]?.link &&
+      .map(({ link, attrs }) => ({
+        attrs,
+        url: link === undefined ? undefined : hrefOfDrawnLink(link),
+      }))
+      .flatMap(({ url, attrs }, i, drawn) =>
+        url !== undefined &&
+        url !== drawn[i - 1]?.url &&
         attrs?.includes("bold") === true
-          ? [link]
+          ? [url]
           : [],
       ),
   );

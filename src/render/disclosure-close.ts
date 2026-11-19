@@ -9,16 +9,15 @@
 // picker.ts): that one also resets the page cursor because a picker pages; a
 // body does not, so this write is the pair alone.
 //
-// [LAW:effects-at-boundaries] A pure description — a link span carrying the
-// click URL — built from the view's session; the click itself happens in
-// the daemon's verb handler like every other affordance on the bar.
+// [LAW:effects-at-boundaries] The draw supplies the state write's arguments.
+// The host publishes the address and admits the click.
 
 import type { RichText } from "@promptctl/rich-js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../config/disclosure.js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
+import { VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment } from "./action.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -28,12 +27,13 @@ export function disclosureCloseFragment(
 ): RichText {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
-      {
+    {
+      kind: "action",
+      effect: {
         verb: VERB_SET_STATE,
         args: [sessionId, key, DISCLOSURE_CLOSED],
       },
-    ]),
+    },
     false,
   );
 }

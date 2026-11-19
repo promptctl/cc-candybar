@@ -62,6 +62,7 @@ import {
 import { ccCandybarFuncs, formatterFuncs, relativeTimeFuncs } from "./funcs.js";
 import type { Clock, ClockFactory } from "./clock.js";
 import { dateOf, type Instant } from "../utils/instant.js";
+import { authoredLinks } from "../render/link-style.js";
 
 // [LAW:no-shared-mutable-globals] The draw in progress: the one record every
 // clock function reads, owned here and written only by `bindClock`, which binds
@@ -286,7 +287,7 @@ export function createCcCandybarEngine(opts: {
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
-      ...richTextFuncs(depth),
+      ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
           name,
