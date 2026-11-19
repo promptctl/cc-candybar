@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-882",
+      "ref": "refs/pull/882/merge",
+      "sha": "efd4451c2117266fa346d07183747bfe0f27b2b6",
+      "timestamp": "2026-11-19T14:55:58.037Z",
+      "commits": [
+        {
+          "sha": "efd4451c2117266fa346d07183747bfe0f27b2b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:54:51-07:00",
+          "message": "Merge 82e4d916c5edfe3837fa3ce17e236f382113977d into ba64a50c816d01574c923bb0ef96182d56914d25\n"
+        },
+        {
+          "sha": "82e4d916c5edfe3837fa3ce17e236f382113977d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:42:39-07:00",
+          "message": "fix(daemon): drain live renderers before closing links\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ba64a50c816d01574c923bb0ef96182d56914d25",
