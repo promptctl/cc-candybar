@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-910",
+      "ref": "refs/pull/910/merge",
+      "sha": "0d007e81f65262f85b646aff299086ce0b3951ac",
+      "timestamp": "2026-11-19T22:14:47.601Z",
+      "commits": [
+        {
+          "sha": "0d007e81f65262f85b646aff299086ce0b3951ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:13:40-07:00",
+          "message": "Merge 00d7e1f2b6e82925144d8a3f1f19b6cfc7586133 into 6815d8573c5c838d7ac874225c050015cf78201b\n"
+        },
+        {
+          "sha": "00d7e1f2b6e82925144d8a3f1f19b6cfc7586133",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:12:49-07:00",
+          "message": "fix(renderer): preserve answers across diagnostic boundary faults\n"
+        },
+        {
+          "sha": "9a103d065ed52f0b36e3565fa961cb721b06fcb6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:54:49-07:00",
+          "message": "refactor(renderer): return diagnostics with the owning answer\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6815d8573c5c838d7ac874225c050015cf78201b",
