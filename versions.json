@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-919",
-      "ref": "refs/pull/919/merge",
-      "sha": "00a76035b02ac8f71ab11ef5253b65fb90b61983",
-      "timestamp": "2026-11-20T16:39:57.197Z",
+      "version": "pr-920",
+      "ref": "refs/pull/920/merge",
+      "sha": "7e685f03b6094b905d91fdfdbe703faec7e8c538",
+      "timestamp": "2026-11-20T17:08:08.421Z",
       "commits": [
         {
-          "sha": "00a76035b02ac8f71ab11ef5253b65fb90b61983",
+          "sha": "7e685f03b6094b905d91fdfdbe703faec7e8c538",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T16:38:49Z",
-          "message": "Merge e00a205d0ed38b336813161505fc2f84e711b07f into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T10:07:01-07:00",
+          "message": "Merge 0a9966109ab1c6d5afac991fa1ba3452e84f52f9 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "e00a205d0ed38b336813161505fc2f84e711b07f",
+          "sha": "0a9966109ab1c6d5afac991fa1ba3452e84f52f9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T09:38:36-07:00",
-          "message": "fix(daemon): managed storage holds a throw asking of a folder, so a config hand-off always lands\n\nReview pass 1 of #919. A throw rechecking plugin storage reached whoever\ntriggered the recheck: a watch window's delivery fault, or a write's lost\nhand-off. Managed storage now holds it as the folder's fault, as it holds\nevery other, so the rediscovery tail runs straight through again.\n\n- Git: a thrown pass answers its PR with the failure, and writes one\n  refresh line carrying the throw's detail.\n- Config discovery: the shared read runs once per batch with its outcome\n  kept; a first follow rechecks storage for every origin it committed; the\n  snapshot field is `discoveryFault`.\n- Watch delivery: a window's fault leaves with its last slot, and listeners\n  hear only a fault that moved, once per delivery, through one `Listeners`\n  shape shared with file-event delivery.\n"
-        },
-        {
-          "sha": "28d25643122762cfcaceaee1147f8a28db23b58b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T09:13:21-07:00",
-          "message": "fix(daemon): hold a throw on the path to the bar by what failed, and show it until it clears\n\nA throw on the path from a watch or a git refresh to the bar was only\nlogged, so no bar said the config or git value it drew might be stale, and\na throw between a config entry's write and its hand-off lost the change.\n\nEach fault is now state held by the thing whose work failed, and the bar's\nview is derived from that owner, so it ends with its owner:\n- a git pass that throws stores the failure as the repo's read and records\n  a failed refresh; the next clean pass replaces it\n- a config origin whose rediscovery throws keeps its last snapshot, which\n  says why in a new `discovery` field drawn as an error; the next clean\n  rediscovery clears it, and the batch's other origins still land\n- the managed-storage recheck runs before the hand-off in a try whose\n  finally publishes, so a recheck throw cannot lose the change\n- a watch delivery that throws stands on its holder or window, derived into\n  the daemon's facts and drawn as an error until a delivery returns or the\n  watch is released\n"
+          "timestamp": "2026-11-20T10:06:41-07:00",
+          "message": "fix(daemon): hold a throw between the disk and the bar where its work started\n\nEvery expected failure on these paths is already a value, so a throw is a\ndefect. Each is now caught at the boundary of its unit of work and stands as\nthat unit's fault on the bar, and each unit runs its fallible steps before\nits one commit, so a throw leaves nothing half-moved.\n\n- A git refresh pass derives its watch spec before it follows, and a pass\n  that throws settles as the repo's failed read through the usual drop check.\n- A watch delivery that throws stands on its holder or its window until a\n  clean delivery or its release, and reaches every bar as a red error through\n  the daemon's world state.\n- Config discovery finds every origin before committing any. A rediscovery\n  that throws keeps the origin's last snapshot and watch with the reason on\n  its bar; a first follow that throws leaves the renderer's origins as they\n  were.\n\nTicket: candybar-law-review-ibyq.09z\n"
         }
       ]
     },
