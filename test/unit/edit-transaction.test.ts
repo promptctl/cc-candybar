@@ -38,7 +38,7 @@ function snapshot(standing: Standing): ConfigSnapshot {
           {
             scope: "repo",
             path: "/checkout/sample.json5",
-            definition: { kind: "text", text: "{}", dir: origin.cwd },
+            definition: { kind: "text", text: "{}", dir: origin.cwd, storage: `${origin.cwd}/session` },
           },
         ]
       : [],

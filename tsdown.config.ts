@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
+import { mayImport, mayLoadRendererModule, zoneOf } from './scripts/import-zones.mjs';
 import pkg from './package.json' with { type: 'json' };
 import { sourceDigest } from './src/source-digest.ts';
 
@@ -51,7 +52,38 @@ export default defineConfig([{
 	// URL handler copy can run without node_modules.
 	noExternal: [/./],
 	define,
-	plugins: [sourceDigestPlugin()],
+	plugins: [sourceDigestPlugin(), {
+		name: 'cc-candybar:renderer-boundary',
+		// [LAW:effects-at-boundaries] Only the renderer's graph is bounded in
+		// this shared CLI bundle. Follow packages and dynamic imports as well.
+		generateBundle() {
+			const entry = path.join(SRC, 'renderer-process.ts');
+			if (!this.getModuleInfo(entry)) {
+				this.error('Cannot check the renderer boundary: renderer entry is missing');
+			}
+			const paths = new Map([[entry, [path.relative(ROOT, entry)]]]);
+			for (const [module, chain] of paths) {
+				const info = this.getModuleInfo(module);
+				if (!info) {
+					this.error(`Cannot check renderer import chain ${chain.join(' -> ')}: module information is missing`);
+				}
+				for (const id of [...info.importedIds, ...info.dynamicallyImportedIds]) {
+					const label = path.isAbsolute(id) ? path.relative(ROOT, id) : id;
+					const next = [...chain, label];
+					if (!mayLoadRendererModule(id, module === entry)) {
+						const facility = /^(?:node:)?fs(?:\/|$)/.test(id) ? 'the filesystem' : id.replace(/^node:/, '');
+						this.error(`Renderer imports ${facility} through ${next.join(' -> ')}`);
+					}
+					if (paths.has(id)) continue;
+					const projectModule = id.startsWith(ROOT + path.sep) && !label.split(path.sep).includes('node_modules');
+					if (projectModule && !mayImport('renderer-process', zoneOf(label))) {
+						this.error(`Renderer imports a host module through ${next.join(' -> ')}`);
+					}
+					paths.set(id, next);
+				}
+			}
+		},
+	}],
 	// The attach launcher lane B restarts Claude Code under
 	// (scripts/vendor-cc-extra.mjs), beside the bundle that runs it: an
 	// install stages dist/cc-extra with dist/index.mjs.

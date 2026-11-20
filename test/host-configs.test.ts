@@ -22,6 +22,10 @@ import {
   type RendererHost,
 } from "../src/daemon/renderer-host";
 import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import {
+  writeConfigFile,
+  type WriteConfigFile,
+} from "../src/daemon/file-rewrites";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { locations } from "../src/daemon/paths";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -77,7 +81,8 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs, wake: null },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
+  wake: null,
   record: [],
   frames: [],
 });
@@ -88,24 +93,29 @@ const output = (
 // event the renderer heard, in order, and `logged` every line.
 function hostOver(
   turn: (event: Event) => RendererOutput,
-  landed: () => readonly RenderOrigin[] = () => [],
+  landed: HostWorld["configs"]["landed"] = () => [],
   bound?: {
     readonly name: RendererName;
     readonly configs: HostWorld["configs"];
+    readonly writeConfigFile?: WriteConfigFile;
   },
 ) {
   const heard: string[] = [];
   const logged: string[] = [];
+  const follows: Array<readonly RenderOrigin[]> = [];
+  const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
+    ...NO_ACTS.configs,
     follow: (origins) => {
+      follows.push(origins);
       followed = origins;
     },
     snapshotOf: (origin) =>
       followed.some((o) => o.projectDir === origin.projectDir)
         ? SNAPSHOT
         : null,
-    landed: () => landed(),
+    landed,
     // Every origin's one layer is the test's file: a landing's origin is
     // one an earlier output named.
     path: (_origin, role) => (role === "user" ? file : null),
@@ -127,7 +137,7 @@ function hostOver(
     ),
     (level, line) => logged.push(`${level} ${line}`),
     {
-      subscribed: () => {},
+      subscribed: (value) => void declarations.push(value),
       frames: () => {},
       holding: () => () => {},
       stored: () => {},
@@ -137,10 +147,11 @@ function hostOver(
       ...NO_ACTS,
       stateDir: path.join(dir, "state"),
       configs: bound?.configs ?? configs,
+      writeConfigFile: bound?.writeConfigFile,
       unheard: (text) => void logged.push(`unheard ${text}`),
     },
   );
-  return { host, heard, logged };
+  return { host, heard, logged, follows, declarations };
 }
 
 const due = { kind: "due" } as const;
@@ -153,7 +164,35 @@ test("an origin a turn newly names gets its config turn in that turn's slot, ahe
   expect(heard).toEqual(["due", "config", "due"]);
 });
 
-function themeChange(origin = ORIGIN): Effect {
+test("the host takes a declaration once, drops its origins on replacement, and takes the same first plan after restart", async () => {
+  const opened = output([], [ORIGIN]);
+  const empty = output([], []);
+  let current = opened;
+  const { host, heard, follows, declarations } = hostOver(() => current);
+  const dueTurn = () => host.answer(() => ({ kind: "event", event: due }));
+  await dueTurn();
+  await dueTurn();
+  expect(heard).toEqual(["due", "config", "due"]);
+  expect(follows).toEqual([[ORIGIN]]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  current = empty;
+  await dueTurn();
+  expect(follows).toEqual([[ORIGIN], []]);
+  expect(declarations).toEqual([opened.subscriptions, empty.subscriptions]);
+  await dueTurn();
+  await host.answer(() => ({
+    kind: "event",
+    event: { kind: "start", viewers: {}, sessions: [] },
+  }));
+  expect(follows).toEqual([[ORIGIN], []]);
+  expect(declarations).toEqual([
+    opened.subscriptions,
+    empty.subscriptions,
+    empty.subscriptions,
+  ]);
+});
+
+function themeChange(origin = ORIGIN): Extract<Effect, { kind: "change" }> {
   const id = 1 as EffectId;
   return {
     kind: "change",
@@ -183,6 +222,100 @@ test("each origin a turn's landing moved gets its config turn before the landing
   expect(landedOn).toContain("dawn");
   expect(answered.settled).toEqual([{ kind: "ok" }]);
 });
+
+test.each(["unreadable", "restored", "unrestored"] as const)(
+  "only unrestored paths go to discovery before failed effects (%s)",
+  async (restore) => {
+    const destinations = {
+      user: file,
+      project: path.join(dir, "project.json5"),
+      local: path.join(dir, "local.json5"),
+    };
+    const prior = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(destinations.project, prior);
+    fs.writeFileSync(destinations.local, prior);
+    const roles = ["user", "project", "local"] as const;
+    const changes = roles.map((role, i) => {
+      const change = themeChange();
+      return {
+        ...change,
+        id: (i + 1) as EffectId,
+        target: { ...change.target, role },
+      };
+    });
+    const attempts: string[] = [];
+    const observed: Array<readonly string[]> = [];
+    const { host, heard } = hostOver(
+      (event) => output(event.kind === "due" ? changes : [], [ORIGIN]),
+      undefined,
+      {
+        name: MAIN_RENDERER,
+        configs: {
+          ...NO_ACTS.configs,
+          follow: () => {},
+          snapshotOf: () => SNAPSHOT,
+          path: (_origin, role) => destinations[role],
+          readText: (at) => {
+            if (restore === "unreadable" && at === destinations.local)
+              throw new Error("could not read local");
+            return readTextIfPresent(at);
+          },
+          landed: (paths) => {
+            observed.push(paths);
+            return [ORIGIN];
+          },
+        },
+        writeConfigFile: (at, text) => {
+          attempts.push(at);
+          if (at === destinations.local)
+            throw new Error("could not publish local");
+          if (
+            restore === "unrestored" &&
+            at === destinations.project &&
+            text === prior
+          )
+            throw new Error("could not put project bytes back");
+          writeConfigFile(at, text);
+        },
+      },
+    );
+
+    const answer = await host.answer(() => ({ kind: "event", event: due }));
+    expect(attempts).toEqual(
+      restore === "unreadable"
+        ? []
+        : [
+            file,
+            destinations.project,
+            destinations.local,
+            destinations.project,
+            file,
+          ],
+    );
+    expect(fs.readFileSync(file, "utf8")).toBe(prior);
+    expect(observed).toEqual(
+      restore === "unrestored" ? [[destinations.project]] : [],
+    );
+    expect(heard).toEqual([
+      "due",
+      "config",
+      ...(restore === "unrestored" ? ["config"] : []),
+      "effect-done failed",
+      "effect-done failed",
+      "effect-done failed",
+    ]);
+    expect(answer.settled).toEqual(
+      roles.map(() => ({
+        kind: "failed",
+        reason: expect.stringContaining(
+          restore === "unreadable"
+            ? "config read failed"
+            : "could not publish local",
+        ),
+      })),
+    );
+  },
+);
 
 test("failed rediscovery reports its own failure after the successful write", async () => {
   const change = themeChange();
@@ -249,20 +382,36 @@ test("a write through a config symlink reloads the remaining holder after the wr
   }
 });
 
-// [LAW:one-source-of-truth] A renderer sent its start holds no config, so
-// every origin it names after gets its config turn, though the start failed.
-test("a start the renderer did not answer still leaves every origin it names after new", async () => {
-  const { host, heard } = hostOver((event) => {
-    if (event.kind === "start") throw new Error("the renderer went down");
-    return output([], [ORIGIN]);
+// [LAW:one-source-of-truth] The accepted origin survives a failed replacement.
+// Its next successful replacement receives the held observation in START.
+test("an unanswered start keeps the previous declaration until the next successful start", async () => {
+  const opened = output([], [ORIGIN]);
+  let fail = true;
+  const { host, heard, declarations } = hostOver((event) => {
+    if (event.kind === "start") {
+      expect(event.configs).toEqual([{ origin: ORIGIN, config: SNAPSHOT }]);
+      if (fail) throw new Error("the renderer went down");
+    }
+    return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  await host.answer(() => ({
+  const start = () => host.answer(() => ({
     kind: "event",
     event: { kind: "start", viewers: {}, sessions: [] },
   }));
+  const refused = {
+    kind: "threw",
+    failure: { message: "the renderer went down" },
+  };
+  expect(await start()).toMatchObject(refused);
+  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(heard).toEqual(["due", "config", "start"]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  fail = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
   await host.answer(() => ({ kind: "event", event: due }));
-  expect(heard).toEqual(["due", "config", "start", "due", "config"]);
+  expect(heard).toEqual(["due", "config", "start", "start", "due"]);
+  expect(declarations).toEqual([opened.subscriptions, opened.subscriptions]);
 });
 
 test("an origin a watch moved that the renderer let go by its slot is abandoned, and no config is handed in", async () => {

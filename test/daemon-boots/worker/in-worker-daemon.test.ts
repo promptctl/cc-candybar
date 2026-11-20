@@ -4,32 +4,33 @@
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
 import type { RequestId } from "../../../src/renderer-interface/interface";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../../../src/time";
-import { exits } from "../../../src/proc/spawner-fake";
+import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
+import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
+import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";
 import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
 import {
-  encodeFrame,
-  makeFrameReader,
   PROTOCOL_VERSION,
-  type Request,
-  type Response,
+  type ReaderRenderRequest,
 } from "../../../src/daemon/foundations/protocol";
 import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
 } from "../../../src/daemon/foundations/request-deadline";
-import { textOf, type Frame } from "../../../src/render/frame";
+import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import {
   click,
   findUrl,
@@ -48,8 +49,9 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { heldClock } from "../../helpers/held-clock";
+import { openedOn } from "../../helpers/opened-connection";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { throughout, until } from "../../helpers/until";
+import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
@@ -163,6 +165,93 @@ describe("a daemon in this worker", () => {
 
     const events = await renderLines(env, sid, 3);
     expect(events.at(-1)).toContain(" clickError=over ");
+  });
+
+  test("a confirmed statusline write answers the daemon's act and launch pipe warnings", async () => {
+    const sid = "warning-owners";
+    const bin = "/usr/bin/pbcopy";
+    const spawner = fakeSpawner(systemTimekeeper);
+    spawner.program(
+      (program, args) => program === "awk" && args[0] === LIFELINE_PROGRAM,
+      readsStdin("until-end"),
+    );
+    spawner.program((program) => program === bin, exits(1));
+    // [LAW:effects-at-boundaries] Only the child and its inherited stream
+    // are simulated. The launcher owns the late read failure and its receipt.
+    const pipe = Object.assign(new PassThrough(), { unref() {} });
+    let now = Date.now();
+    const running = startDaemon(env, {
+      clock: { ...systemTimekeeper, now: () => now },
+      launcher: (owner) =>
+        createLauncher(owner, systemTimekeeper, {
+          ...spawner,
+          spawn: (program, args, options) => {
+            const child = spawner.spawn(program, args, options);
+            return program === bin
+              ? Object.assign(child, { stdout: pipe })
+              : child;
+          },
+        }),
+    });
+    daemon = running;
+    const pipeEvent = () =>
+      running.daemon.launcher
+        .standing()
+        .find((fact) => fact.kind === "launch-pipes")?.event;
+    const pending = async () => {
+      const { resp, settled } = await running.daemon.reply(
+        {
+          ...renderBody(sid, projectDir),
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          encoding: "frame",
+        } as ReaderRenderRequest,
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      if (!resp.ok || !("frame" in resp))
+        throw new Error(`expected a frame: ${JSON.stringify(resp)}`);
+      return { frame: parseFrame(resp.frame), settled };
+    };
+    try {
+      const url = drawnLink(
+        running,
+        effectsUrl([{ verb: VERB_COPY, args: ["copy failure"] }]),
+      );
+      await refusedClick(running, url, "threw");
+      expect(spawner.spawned.find((child) => child.bin === bin)?.stdin).toBe(
+        "copy failure",
+      );
+      pipe.destroy(new Error("fixture cannot read the inherited pipe"));
+      await until(
+        () => pipeEvent() !== undefined,
+        "the actual launcher's pipe warning",
+      );
+      expect(pipeEvent()).toMatchObject({
+        answered: false,
+        text: expect.stringContaining("output failed to read"),
+      });
+
+      // Only a confirmed write can clear either event from the statusline's
+      // owed state after its hold. No other render confirms while we check it.
+      const dropped = await pending();
+      expect(indicatorOf(dropped.frame)).toBe("⚠ 2");
+      dropped.settled(false);
+      now += (DAEMON_EVENT_HOLD_S + 1) * 1000;
+      const owed = await pending();
+      expect(indicatorOf(owed.frame)).toBe("⚠ 2");
+      expect(pipeEvent()?.answered).toBe(false);
+      owed.settled(false);
+
+      expect(indicatorOf(await render(running, sid, projectDir))).toBe("⚠ 2");
+      expect(pipeEvent()?.answered).toBe(true);
+      const after = await pending();
+      expect(indicatorOf(after.frame)).toBeNull();
+      after.settled(false);
+    } finally {
+      pipe.destroy();
+    }
   });
 
   // [LAW:one-source-of-truth] A request's budget is its deadline less its
@@ -300,47 +389,35 @@ describe("a daemon in this worker", () => {
   test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
     const sid = "in-worker-stop";
     const stateHome = process.env.XDG_STATE_HOME;
-    daemon = startDaemon(env);
+    const clock = heldClock(new Date());
+    daemon = startDaemon(env, { clock });
     expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
     expect(daemon.log).toBe(logPath(hostOf(env)));
     await render(daemon, sid, projectDir);
 
-    const subscriber = daemon.connect();
-    const frames: Response[] = [];
-    let closed = false;
-    subscriber.on(
-      "data",
-      makeFrameReader(
-        (frame) => {
-          frames.push(frame as Response);
-          return "more";
-        },
-        (err) => {
-          throw err;
-        },
-      ),
-    );
-    subscriber.on("close", () => (closed = true));
-    const subscribe: Request = {
+    const subscriber = openedOn(daemon.connect());
+    const subscriberClosed = once(subscriber.client, "close");
+    subscriber.send({
       v: PROTOCOL_VERSION,
       kind: "subscribe",
       sessionId: sid,
       lane: "statusline",
-    };
-    subscriber.write(encodeFrame(subscribe));
+    });
     // A refusal is a frame too, and it closes the stream, so what shows a
     // subscriber is a frame it drew on a stream still open.
-    await until(() => frames.length > 0, "the subscriber's first frame");
-    expect(frames[0]).toMatchObject({ ok: true });
-    expect(closed).toBe(false);
+    await clock.settle(0);
+    await until(() => subscriber.received.length > 0, "the subscriber's first frame");
+    expect(subscriber.received[0]).toMatchObject({ ok: true });
+    expect(subscriber.client.closed).toBe(false);
     const { stats } = daemon.daemon;
     expect(stats.inFlight).toBe(0);
 
-    // Open and silent: its backstop is armed, and only its stream's close takes
-    // it out of in-flight. A cold render above may have timed out on its own, so
-    // the count is read from here.
+    // The silent connection owns one deadline. Hold time until both peers see
+    // the shutdown, then run past that deadline.
     const timedOut = stats.requestsTimedOut;
-    daemon.connect();
+    const timers = clock.pending();
+    const silentClosed = once(daemon.connect(), "close");
+    expect(clock.pending()).toBe(timers + 1);
     expect(stats.inFlight).toBe(1);
 
     // Logged through the daemon's own log.
@@ -351,13 +428,11 @@ describe("a daemon in this worker", () => {
     daemon = null;
     expect(logLines(log).join("\n")).toContain(last);
 
-    await until(() => closed, "the subscriber hearing the daemon go");
+    await Promise.all([subscriberClosed, silentClosed]);
     expect(stats.inFlight).toBe(0);
-    await throughout(
-      () => stats.requestsTimedOut === timedOut,
-      "the stopped connection's backstop staying quiet",
-      REQUEST_TIMEOUT_MS * 2,
-    );
+    expect(clock.pending()).toBe(0);
+    clock.advance(REQUEST_TIMEOUT_MS);
+    expect(stats.requestsTimedOut).toBe(timedOut);
     expect(process.env.XDG_STATE_HOME).toBe(stateHome);
   });
 });

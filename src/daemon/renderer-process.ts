@@ -10,16 +10,18 @@
 // live → down → starting …`, and every input asks the state where it goes.
 
 import { streamedToFile } from "./streamed-file.js";
+import type { RendererRecording } from "./renderer-recording.js";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import { writeLogLines, type DaemonLogger } from "../utils/logger.js";
+import { isPlainObject } from "../config/loader/validate-core.js";
+import { eventLine, type Field } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
-  rendererOf,
-  type AdapterInput,
-  type AdapterOutput,
+  isCommand,
+  sessionOfEvent,
   type EffectId,
   type EventInput,
   type RendererBoot,
@@ -27,13 +29,10 @@ import {
   type TimedRenderer,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
+  rendererDiagnosticsFrom,
   rendererOverLines,
   rendererWireVersionProblem,
   RENDERER_WIRE_VERSION,
@@ -45,6 +44,7 @@ import {
   DaemonClosing,
   RendererDown,
   failureOf,
+  failureKindOf,
 } from "./foundations/verb-error.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
@@ -56,6 +56,9 @@ export interface RendererLink {
   serve(): void;
   // Starts the renderer's process: nothing in process.
   arm(): void;
+  // The owner invokes this between turns. The fresh worker sends its usual
+  // start before it takes another session input.
+  restart(): Promise<void>;
   // [LAW:types-are-the-program] The transition stops restarts and says
   // whether this link retains a live renderer for the host's drain.
   beginClose(): "closing" | "closed";
@@ -85,6 +88,7 @@ export type RendererPort = (prepared: {
   readonly name: RendererName;
   // Read for each spawn so a replacement receives the current profile.
   readonly boot: () => RendererBoot;
+  readonly recording?: () => RendererRecording | undefined;
   // The executable entry and the Node invocation which loads it.
   readonly entry: string;
   readonly node: readonly string[];
@@ -94,14 +98,13 @@ export type RendererPort = (prepared: {
 export function processPort(
   run: Pick<ProcessOwner, "launcher" | "cwd" | "heapCapMb">,
 ): RendererPort {
-  return ({ name, boot, node, entry }) => ({
+  return ({ name, boot, node, entry, recording }) => ({
     start: (own) =>
-      processRenderer({ ...own, ...run, name, node, entry, boot }),
+      processRenderer({ ...own, ...run, name, node, entry, boot, recording }),
   });
 }
 
-// What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `context` and who
+// What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
 // watches each session through the host's one path to the renderer,
 // resolving once its turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
@@ -109,7 +112,6 @@ export function processPort(
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
 export interface LinkOwner {
-  readonly reaches: AdapterToHost;
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
@@ -131,6 +133,7 @@ export interface ProcessOwner extends LinkOwner {
   readonly cwd: string;
   readonly heapCapMb: number;
   readonly boot: () => RendererBoot;
+  readonly recording?: () => RendererRecording | undefined;
   readonly name: RendererName;
 }
 
@@ -183,12 +186,16 @@ interface Link {
   readonly spawnedAt: number;
   // That the supervisor ended it for not answering.
   hung: boolean;
-  // Why it refused its boot, which its end says.
-  refusal: string | null;
-  // That it started and answered its start: from then the next renderer is
-  // handed what it holds.
-  tookOver: boolean;
-  readonly held: Held;
+  // Admission belongs to the connection and survives close while its
+  // remaining stdout is drained. It makes no lifecycle decision.
+  compatible: boolean;
+  // A failed boot or restoration ends this generation with its original reason.
+  failure: string | null;
+  // Each host receipt is meaningful only to the worker that issued it.
+  readonly receipts: Map<EffectId, EffectId>;
+  // Boot data is held only until the recording's construction result arrives.
+  recordingBoot?: RendererBoot;
+  readonly recording?: RendererRecording;
   usage: MemorySizes | null;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
@@ -196,6 +203,11 @@ interface Link {
 
 type Phase =
   | { readonly kind: "idle" }
+  | {
+      readonly kind: "replacing";
+      readonly link: Link;
+      readonly ended: Promise<void>;
+    }
   | {
       readonly kind: "starting";
       readonly link: Link;
@@ -221,19 +233,6 @@ type Phase =
 // steps, and any other is closed.
 type Begun = Extract<Phase, { kind: "closing" | "closed" }>;
 
-// [LAW:one-source-of-truth] What one renderer holds in the host, each of its
-// own ids to the host's, released once the next renderer has answered its
-// start, or at close: the owner every id the host minted for it names.
-interface Held {
-  readonly holds: Map<StorageHoldId, StorageHoldId>;
-}
-
-// A renderer's own id, as the host minted its own for it.
-interface Minted<T> {
-  readonly by: Held;
-  readonly id: T;
-}
-
 export function processRenderer(own: ProcessOwner): RendererLink {
   const { clock, log, name } = own;
   let phase: Phase = { kind: "idle" };
@@ -242,14 +241,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   let young = 0;
   // Inputs refused while none was live, said once the next one is.
   let refused = 0;
-  // Links that ended, whose holds the next start releases.
-  const gone: Link[] = [];
-  // [LAW:one-source-of-truth] The host's ids for what renderers mint: an id
-  // the host sees is its own, never repeated across renderers, and names the
-  // link and the renderer's own id.
-  let minted = 0;
-  const mint = <T extends number>(): T => ++minted as T;
-  const effects = new Map<EffectId, Minted<EffectId>>();
+  // Host receipts stay distinct across generations, even if a renderer starts
+  // numbering its effects and feed presentations at one again.
+  let lastReceipt = 0;
 
   const current = (): Link | null =>
     phase.kind === "starting" ||
@@ -258,7 +252,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       ? phase.link
       : null;
   const unavailable = (
-    at: Extract<Phase, { kind: "idle" | "down" | "closed" }>,
+    at: Extract<Phase, { kind: "idle" | "down" | "closed" | "replacing" }>,
   ): DaemonClosing | RendererDown => {
     switch (at.kind) {
       case "closed":
@@ -267,45 +261,42 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         return new RendererDown(`renderer ${name} is down: ${at.why}`);
       case "idle":
         return new RendererDown(`renderer ${name} has not started`);
+      case "replacing":
+        return new RendererDown(
+          `renderer ${name} is starting a fresh generation`,
+        );
     }
   };
-
-  // The host's reaches as one renderer reaches them: the ids it mints for
-  // storage holds become the host's, held by its link.
-  const reachesFor = (held: Held): AdapterToHost => ({
-    ...own.reaches,
-    storage: {
-      // Every load of a state holds its folders again, under the same id.
-      hold: (id, folders) => {
-        const host = held.holds.get(id) ?? mint<StorageHoldId>();
-        held.holds.set(id, host);
-        own.reaches.storage.hold(host, folders);
-      },
-      release: (id) => {
-        const host = hostIdOf(name, held.holds, id);
-        held.holds.delete(id);
-        own.reaches.storage.release(host);
-      },
-    },
-  });
-
-  const release = ({ held }: Link): void => {
-    for (const host of held.holds.values()) own.reaches.storage.release(host);
-    for (const [host, effect] of effects)
-      if (effect.by === held) effects.delete(host);
-  };
-  // [LAW:no-ambient-temporal-coupling] What an ended renderer that took over
-  // held stays held until the next one takes over, so a storage folder both hold is
-  // never closed and reopened: a directory watch leaks on macOS when it is. A
-  // renderer that never took over hands nothing on, so at most one waits. At
-  // close, everything goes.
-  const releaseGone = (): void => gone.splice(0).forEach(release);
 
   const write = (channel: Channel, line: HostLine): void =>
     channel.write(`${JSON.stringify(line)}\n`);
 
+  const restore = async (link: Link): Promise<void> => {
+    try {
+      await own.start();
+    } catch (thrown) {
+      const failure = failureOf(thrown);
+      if (failure.kind === "closing") return;
+      log(
+        "error",
+        `renderer ${name}[${link.generation}] start failed: ${failure.detail}`,
+      );
+      // [LAW:no-ambient-temporal-coupling] A late failure belongs only to its
+      // own live generation. The usual exit path supplies the retry and backoff.
+      if (
+        (phase.kind === "starting" || phase.kind === "live") &&
+        phase.link === link &&
+        link.failure === null
+      ) {
+        link.failure = `failed to start: ${failure.message}`;
+        link.kill.abort(new Error(link.failure));
+      }
+    }
+  };
+
   const spawn = (): void => {
     const generationOf = ++generation;
+    const boot = own.boot();
     const kill = new AbortController();
     // A channel's output arrives on a later turn, so the link its lines reach
     // is set before the child can have said anything.
@@ -326,51 +317,41 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       signal: kill.signal,
       heard: { stdout: stdout.push, stderr: stderr.push },
     });
-    const held: Held = { holds: new Map() };
+    const recording = own.recording?.();
     const link: Link = {
+      recording,
+      recordingBoot: recording?.snapshot(boot),
       generation: generationOf,
       channel,
       kill,
       spawnedAt: clock.monotonic(),
       hung: false,
-      refusal: null,
-      tookOver: false,
-      held,
+      compatible: false,
+      failure: null,
+      receipts: new Map(),
       usage: null,
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
-        host: reachesFor(held),
-        fault: (message) =>
-          log("error", `renderer ${name}[${generationOf}]: ${message}`),
+        fault: (message) => {
+          recording?.fail(
+            "renderer wire output could not be decoded faithfully",
+          );
+          log("error", `renderer ${name}[${generationOf}]: ${message}`);
+        },
       }),
     };
     phase = { kind: "starting", link, queued: [] };
     write(channel, {
       kind: "boot",
       wireVersion: RENDERER_WIRE_VERSION,
-      boot: own.boot(),
+      boot,
     });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
-    // A failed or cancelled start does not transfer the previous renderer's
-    // holds. A close is already recorded as such by the host's turn.
-    const start = (async (): Promise<boolean> => {
-      try {
-        await own.start();
-        return true;
-      } catch (thrown) {
-        const failure = failureOf(thrown);
-        if (failure.kind !== "closing")
-          log(
-            "error",
-            `renderer ${name}[${generationOf}] start failed: ${failure.detail}`,
-          );
-        return false;
-      }
-    })();
-    heardBy = (text) => heard(link, start, text);
+    heardBy = (text) => heard(link, text);
+    void restore(link);
     void channel.ended.then((result) => {
       stdout.end();
       stderr.end();
@@ -378,62 +359,121 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         link,
         link.hung
           ? `stopped answering for ${HUNG_AFTER_MS / 1000} s`
-          : link.refusal !== null
-            ? `refused its boot: ${link.refusal}`
-            : result.ok
-              ? "exited"
-              : whyFailed(result),
+          : (link.failure ?? (result.ok ? "exited" : whyFailed(result))),
       );
     });
   };
 
-  const heard = (link: Link, start: Promise<boolean>, text: string): void => {
-    if (link.refusal !== null) return;
-    let line: RendererLine;
+  const heard = (link: Link, text: string): void => {
+    if (link.failure !== null) return;
+    let raw: unknown;
     try {
-      line = JSON.parse(text) as RendererLine;
+      raw = JSON.parse(text);
     } catch {
       // [LAW:no-silent-failure] A line that is not the wire's is said.
       log("warn", `renderer ${name}[${link.generation}]: ${text}`);
       return;
     }
-    switch (line.kind) {
-      case "started":
-        started(link, start, line.wireVersion);
-        return;
-      case "refused":
-        refusedBoot(link, line.failure.message, line.failure.detail);
-        return;
-      default:
-        link.lines.heard(line);
-    }
-  };
-
-  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
-  // The stack is the log's alone, and the first refusal owns the reason.
-  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
-    link.refusal = reason;
-    log(
-      "error",
-      `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
-    );
-  };
-
-  const started = (
-    link: Link,
-    start: Promise<boolean>,
-    version: unknown,
-  ): void => {
-    if (phase.kind !== "starting" || phase.link !== link) return;
-    // [LAW:parse-dont-validate] The wire's attestation admits this link.
-    // Queued input and pings wait for that agreement.
-    const mismatch = rendererWireVersionProblem("renderer", version);
-    if (mismatch !== null) {
-      refusedBoot(link, mismatch);
-      link.kill.abort(new Error(mismatch));
+    if (!isPlainObject(raw)) {
+      log(
+        "warn",
+        `renderer ${name}[${link.generation}] sent a non-object line`,
+      );
       return;
     }
-    const { queued } = phase;
+    if (phase.kind === "starting" && phase.link === link) {
+      // The peer may speak an older protocol. Only the boot answer is
+      // considered before the worker attests to this connection's version.
+      if (raw.kind === "started" || raw.kind === "refused")
+        acceptBoot(phase, raw);
+      return;
+    }
+    if (link.compatible && raw.kind !== "started" && raw.kind !== "refused")
+      link.lines.heard(raw as RendererLine);
+  };
+
+  const acceptBoot = (
+    starting: Extract<Phase, { kind: "starting" }>,
+    raw: Readonly<Record<string, unknown>>,
+  ): void => {
+    const { link, queued } = starting;
+    let refusal: { readonly message: string; readonly detail: string } | null =
+      null;
+    if (raw.kind === "started") {
+      // [LAW:parse-dont-validate] Inspect only the version until this peer
+      // attests to the private protocol. Other versions' fields are opaque.
+      const mismatch = rendererWireVersionProblem("renderer", raw.wireVersion);
+      if (mismatch !== null) {
+        rejectBoot(link, mismatch);
+        return;
+      }
+      if (
+        typeof raw.pid !== "number" ||
+        !Number.isSafeInteger(raw.pid) ||
+        raw.pid <= 0
+      ) {
+        rejectBoot(link, "renderer boot has an invalid pid");
+        return;
+      }
+    } else {
+      const failure = raw.failure;
+      // A refusal can be from a different protocol version. Its reason is
+      // the stable part of the envelope, including across version mismatch.
+      if (
+        !isPlainObject(failure) ||
+        typeof failure.message !== "string" ||
+        typeof failure.detail !== "string"
+      ) {
+        rejectBoot(link, "renderer boot has an invalid refusal");
+        return;
+      }
+      refusal = { message: failure.message, detail: failure.detail };
+    }
+    const diagnostics = rendererDiagnosticsFrom(
+      raw.wireVersion === RENDERER_WIRE_VERSION ? raw.diagnostics : undefined,
+      () => {
+        link.recording?.fail(
+          "renderer construction diagnostics could not be decoded faithfully",
+        );
+        log(
+          "warn",
+          `renderer ${name}[${link.generation}] boot has invalid diagnostics`,
+        );
+      },
+    );
+    if (diagnostics !== undefined) writeLogLines(log, diagnostics);
+    if (link.recordingBoot !== undefined) {
+      const input = link.recordingBoot;
+      delete link.recordingBoot;
+      // The live admission above checks versions and diagnostic shapes.
+      // A refused construction still has a replayable semantic answer.
+      if (raw.wireVersion !== RENDERER_WIRE_VERSION)
+        link.recording?.fail(
+          "renderer wire version differs from the recording format",
+        );
+      else if (raw.kind === "started")
+        link.recording?.constructed(input, {
+          kind: "built",
+          ...(diagnostics && { diagnostics }),
+        });
+      else {
+        const kind = isPlainObject(raw.failure)
+          ? failureKindOf(raw.failure.kind)
+          : undefined;
+        if (kind !== undefined && refusal !== null)
+          link.recording?.constructed(input, {
+            kind: "refused",
+            failure: { kind, ...refusal },
+            ...(diagnostics && { diagnostics }),
+          });
+        else link.recording?.fail("invalid renderer construction failure");
+      }
+    }
+    if (refusal !== null) {
+      refusedBoot(link, refusal.message, refusal.detail);
+      return;
+    }
+    link.compatible = true;
     phase = { kind: "live", link };
     // [LAW:nothing-unseen] The start, with what was refused while none ran.
     log(
@@ -442,27 +482,58 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
     refused = 0;
     for (const send of queued) send(link);
-    // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
-    // this one has started and taken its start, and stays if it ends first.
-    void start.then((answered) => {
-      if (!answered || current() !== link) return;
-      link.tookOver = true;
-      releaseGone();
-    });
     // Its memory is read at once, not a period after its boot.
     ping(link);
   };
 
+  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
+  // The stack is the log's alone, and the first refusal owns the reason.
+  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
+    link.failure = `refused its boot: ${reason}`;
+    log(
+      "error",
+      `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
+    );
+  };
+
+  const rejectBoot = (link: Link, reason: string): void => {
+    refusedBoot(link, reason);
+    link.kill.abort(new Error(reason));
+  };
+
   const ended = (link: Link, how: string): void => {
-    link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
-    if (link.tookOver) gone.push(link);
-    else release(link);
+    const interrupted = link.lines.ended(
+      new RendererDown(`renderer ${name} ${how}`),
+    );
+    for (const { n, input } of interrupted) {
+      const fields: Field[] = [
+        ["renderer", name],
+        ["generation", String(link.generation)],
+        ["wire", String(n)],
+      ];
+      const session = sessionOfEvent(input.event);
+      fields.push(["input", input.event.kind]);
+      if (session !== null) fields.push(["sid", session]);
+      if (input.event.kind === "request")
+        fields.push(["request", String(input.event.id)]);
+      fields.push(["error", how]);
+      log("warn", eventLine("renderer input interrupted", fields));
+    }
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
     // remaining steps would wait on its boot.
     // [LAW:nothing-unseen] Said all the same, and as a warning unless the
     // close had ended it and it exited: one the close had not yet ended went
     // before its close steps ran, and one that did not exit went mid-flush.
+    if (phase.kind === "replacing" && phase.link === link) {
+      log(
+        "info",
+        `renderer ${name}[${link.generation}] ended for a requested recording`,
+      );
+      return;
+    }
+    if (phase.kind !== "closing" && phase.kind !== "closed")
+      link.recording?.interrupted();
     const level =
       phase.kind === "closing" || how !== "exited" ? "warn" : "info";
     if (phase.kind === "closing")
@@ -554,6 +625,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // runs or starts.
   const beginClose = (): Begun => {
     switch (phase.kind) {
+      case "replacing":
+        return (phase = { kind: "closed", ended: phase.ended });
       case "live":
         return (phase = { kind: "closing", link: phase.link });
       // A boot holds nothing to flush, and the close's steps would wait on it:
@@ -604,37 +677,91 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
+  const answer = (input: EventInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;
       if (e.kind === "effect-done") {
-        const effect = effects.get(e.of);
+        const effect = link.receipts.get(e.of);
         // [LAW:no-silent-failure] The renderer that owed this one is gone, so
         // there is no one to tell.
-        if (effect === undefined || effect.by !== link.held)
+        if (effect === undefined)
           throw new RendererDown(
             `renderer ${name}: effect ${e.of} was returned by a renderer that has ended`,
           );
-        effects.delete(e.of);
-        toSend = { ...input, event: { ...e, of: effect.id } };
+        link.receipts.delete(e.of);
+        toSend = { ...input, event: { ...e, of: effect } };
       }
-      const output = await link.lines.renderer.answer(toSend);
-      // A turn that threw carries the effects its acts made too.
+      const output = link.recording?.active
+        ? await link.recording.turn(toSend, link.lines.renderer.answer)
+        : await link.lines.renderer.answer(toSend);
+      // Inspection and teardown have no presentation or action to settle.
+      // Leave any malformed fields for the host to report.
+      if (
+        isCommand(e) ||
+        (output.effects.length === 0 && output.frames.length === 0)
+      )
+        return output;
+      // [LAW:single-enforcer] Effects and feed frames share one receipt
+      // namespace. Either can be returned by a turn that subsequently threw.
+      const receiptFor = (local: EffectId): EffectId => {
+        const host = ++lastReceipt as EffectId;
+        link.receipts.set(host, local);
+        return host;
+      };
       return {
         ...output,
-        effects: output.effects.map((effect) => {
-          const host = mint<EffectId>();
-          effects.set(host, { by: link.held, id: effect.id });
-          return { ...effect, id: host };
-        }),
+        effects: output.effects.map((effect) => ({
+          ...effect,
+          id: receiptFor(effect.id),
+        })),
+        frames:
+          output.frames.length === 0
+            ? output.frames
+            : output.frames.map((pushed) => {
+                const { frame } = pushed;
+                return frame.kind === "drawn"
+                  ? {
+                      ...pushed,
+                      frame: { ...frame, receipt: receiptFor(frame.receipt) },
+                    }
+                  : pushed;
+              }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
-    sent((link) => link.lines.renderer.answer(input));
-
   return {
-    renderer: rendererOf({ event, adapter }),
+    renderer: { answer },
+    restart: async () => {
+      switch (phase.kind) {
+        case "idle":
+          return; // arm will start the first generation.
+        case "down":
+          phase.cancelRetry();
+          spawn();
+          return;
+        case "starting":
+          // A start that still holds the mailbox completes before a recording
+          // control slot. A retry can have started in the meantime.
+          for (const send of phase.queued.splice(0))
+            send(new RendererDown(`renderer ${name} is being replaced`));
+          break;
+        case "live":
+          break;
+        default:
+          throw new DaemonClosing(`renderer ${name} replacement`);
+      }
+      const link = phase.link;
+      const retiring = {
+        kind: "replacing",
+        link,
+        ended: ending(link),
+      } as const;
+      phase = retiring;
+      await retiring.ended;
+      if (phase !== retiring)
+        throw new DaemonClosing(`renderer ${name} replacement`);
+      spawn();
+    },
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;
@@ -648,7 +775,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       phase = { kind: "closed", ended };
       stopPings();
       await ended;
-      releaseGone();
     },
     process: () => {
       const link = current();
@@ -671,15 +797,4 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           };
     },
   };
-}
-
-// [LAW:no-silent-failure] A renderer naming an id it never handed the host is
-// a renderer's bug, said.
-function hostIdOf<T>(name: RendererName, held: ReadonlyMap<T, T>, id: T): T {
-  const host = held.get(id);
-  if (host === undefined)
-    throw new Error(
-      `renderer ${name} named ${String(id)}, which it holds none of`,
-    );
-  return host;
 }

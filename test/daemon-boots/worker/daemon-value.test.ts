@@ -35,7 +35,6 @@ import {
   type RendererName,
 } from "../../../src/daemon/foundations/renderer-name";
 import {
-  rendererOf,
   type RendererBoot,
 } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
@@ -76,7 +75,7 @@ const WORKTREE = rendererNameOf("worktree");
 // renderer boot waiting for the child, with end and crash under the test's clock.
 function waitingRenderer(waitingFor: RendererName) {
   const launches: Array<(result: LaunchResult) => void> = [];
-  const pushes: Array<[RendererName, string]> = [];
+  const commands: Array<[RendererName, string]> = [];
   const closed: RendererName[] = [];
   const supervised = processPort({
     cwd: "/",
@@ -105,13 +104,14 @@ function waitingRenderer(waitingFor: RendererName) {
         const link = chosen(prepared).start(own);
         return {
           ...link,
-          renderer: rendererOf({
-            event: (input) => link.renderer.answer(input),
-            adapter: (input) => {
-              pushes.push([prepared.name, input.push.kind]);
+          renderer: {
+            answer: (input) => {
+              const { kind } = input.event;
+              if (kind === "close-journal" || kind === "close-views")
+                commands.push([prepared.name, kind]);
               return link.renderer.answer(input);
             },
-          }),
+          },
           close: async () => {
             await link.close();
             closed.push(prepared.name);
@@ -120,7 +120,7 @@ function waitingRenderer(waitingFor: RendererName) {
       },
     };
   };
-  return { port, launches, pushes, closed };
+  return { port, launches, commands, closed };
 }
 
 jest.setTimeout(30_000);
@@ -306,7 +306,7 @@ describe("the daemon is a value", () => {
     open = built.daemon;
     openLogs.push(built.daemonLog);
     expect(boots.map((boot) => Object.keys(boot).sort())).toEqual([
-      ["locations", "memoryLimitBytes", "stored"],
+      ["locations", "memoryLimitBytes", "region", "stored"],
     ]);
     expect(boots).toMatchObject([
       {
@@ -385,7 +385,7 @@ describe("the daemon is a value", () => {
 
     await close(daemon);
 
-    expect(renderer.pushes).toEqual([]);
+    expect(renderer.commands).toEqual([]);
     expect(renderer.closed).toEqual([MAIN_RENDERER]);
     await Promise.all(openLogs.map((log) => log.drained()));
     const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
@@ -428,7 +428,7 @@ describe("the daemon is a value", () => {
     await close(daemon);
     await clock.settle(60_000);
 
-    expect(renderer.pushes).toEqual([
+    expect(renderer.commands).toEqual([
       [MAIN_RENDERER, "close-journal"],
       [MAIN_RENDERER, "close-views"],
     ]);
@@ -470,24 +470,18 @@ describe("the daemon is a value", () => {
         const link = local(prepared).start(own);
         return {
           ...link,
-          renderer: rendererOf({
-            event: async (input) => {
+          renderer: {
+            answer: async (input) => {
               if (
                 input.event.kind === "context" &&
                 input.event.context.hookData.session_id === session
               )
                 await context.wait();
-              return link.renderer.answer(input);
-            },
-            adapter: async (input) => {
-              if (
-                prepared.name === WORKTREE &&
-                input.push.kind === "close-journal"
-              )
+              if (prepared.name === WORKTREE && input.event.kind === "close-journal")
                 await journal.wait();
               return link.renderer.answer(input);
             },
-          }),
+          },
         };
       },
     });

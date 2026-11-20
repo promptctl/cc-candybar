@@ -20,6 +20,7 @@ import {
   type Consequence,
 } from "../../src/renderer/config-writes";
 import {
+  configEffectOutcome,
   performChanges,
   type ApproveRepo,
   type ConfigWriteFiles,
@@ -212,7 +213,7 @@ class LandingAtOnce extends ConfigWrites {
     super.seal(effects, session, consequence);
     const landing = effects.splice(from);
     if (landing.length === 0) return;
-    const outcome = performChanges(
+    const landed = performChanges(
       landing.filter((e): e is ConfigChange => e.kind === "change"),
       {
         stateDir: this.stateDir,
@@ -223,7 +224,8 @@ class LandingAtOnce extends ConfigWrites {
       },
       this.places,
     );
-    if (outcome.kind === "ok") this.landed();
+    if ("files" in landed) this.landed();
+    const outcome = configEffectOutcome(landed);
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
@@ -384,6 +386,7 @@ export function actingWorld(
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard,
   };
 }

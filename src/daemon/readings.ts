@@ -2,6 +2,10 @@
 // collector declares and reads, over the providers that own each source.
 
 import { inspect } from "node:util";
+import {
+  environmentOutput,
+  isEnvironmentOutput,
+} from "./environment-output.js";
 import type { ClientHints } from "./foundations/protocol.js";
 import type { TranscriptLanes } from "./cache/transcript-lanes.js";
 import type { GitInfo } from "../segments/git.js";
@@ -27,12 +31,13 @@ import {
   type LaneDiagnostic,
   shortDigest,
 } from "../facts/world-state.js";
-import type { ContextProvider } from "../segments/context.js";
-import type { MetricsFold, MetricsProvider } from "../segments/metrics.js";
+import type { ContextProvider } from "./cache/context-provider.js";
+import type { MetricsFold } from "../segments/metrics.js";
+import type { MetricsProvider } from "./cache/metrics-provider.js";
 import type { TranscriptUsage } from "../segments/session.js";
 import type { ActivityInfo, ActivityProvider } from "../segments/activity.js";
 import type { TmuxService } from "./cache/tmux.js";
-import type { HostService } from "../segments/host.js";
+import type { HostService } from "./cache/host-identity.js";
 import type { AutoCompactProvider } from "./cache/autocompact.js";
 import type { AutoCompactWindow } from "../segments/autocompact.js";
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
@@ -407,10 +412,17 @@ export function readingsOf(
       [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
     ),
     runs: new Map(
-      [...lanes.runs].map(([digest, lane]) => [
-        digest,
-        { reading: lane.current(), fault: lane.fault() },
-      ]),
+      [...lanes.runs].map(([digest, lane]) => {
+        const reading = lane.current();
+        return [
+          digest,
+          environmentOutput(
+            { reading, fault: lane.fault() },
+            (reading.kind === "ok" || reading.kind === "failed") &&
+              isEnvironmentOutput(lane),
+          ),
+        ];
+      }),
     ),
     env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()])),
   };

@@ -558,7 +558,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
       chmodSync(dirname(durable.configPath), 0o755);
     }
     expect(lastClickError(r.sessionState, SID)?.text).toMatch(
-      /config write failed.*nothing was written/,
+      /^config write failed: (?:EACCES|EPERM)\b.* — no file changes kept$/,
     );
     expect(durable.history(SID).past).toHaveLength(depth);
     expect(durable.text()).toBe(before);

@@ -7,6 +7,7 @@
 // `sessionSource`.
 
 import { holdClickError } from "../src/daemon/foundations/click-error";
+import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -73,8 +74,12 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { DiscoveringCache, originOf } from "./helpers/config-host";
-import { loadDiscovered } from "./helpers/config-host";
+import {
+  DiscoveringCache,
+  followManagedStorage,
+  loadDiscovered,
+  originOf,
+} from "./helpers/config-host";
 
 const S2 = sessionIdOf("s2");
 const S9 = sessionIdOf("s9");
@@ -238,7 +243,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       locations: locs(),
       sessionState,
       watchers,
-      storage: providers.managedStorage,
+      reloaded: (folders) => providers.managedStorage.recheck(folders),
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -252,6 +257,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
   served.serve(cache);
+  const stopFollowing = followManagedStorage(cache, providers.managedStorage);
   const runs = new Runs({
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
@@ -269,6 +275,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   cleanups.push(() => {
     runs.close();
     cache.close();
+    stopFollowing();
     for (const [, close] of providers.closes) close();
     watchers.closeAll();
   });
@@ -279,7 +286,9 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     runs,
     lines,
     hold: (configFile, sid) => {
-      const facts = heardRequest(sid, dir);
+      const facts = heardRequest(sid, dir, {
+        claudeConfigDir: path.join(dir, "claude"),
+      });
       return served.config(facts, () =>
         cache.holdSession(originOf(dir, dir, configFile), facts),
       );
@@ -887,10 +896,12 @@ describe("the run owner", () => {
     const ended = o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect((await ended).outcome).toEqual({
+    const { outcome } = await ended;
+    expect(outcome).toMatchObject({
       kind: "failed",
       reason: "exited with code 3: it broke",
     });
+    expect(isEnvironmentOutput(outcome)).toBe(true);
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,

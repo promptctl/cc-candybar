@@ -20,7 +20,6 @@ import os from "node:os";
 import path from "node:path";
 import { pluginLoadLine } from "../src/renderer/render-cache";
 import { SessionState } from "../src/renderer/session-state";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";

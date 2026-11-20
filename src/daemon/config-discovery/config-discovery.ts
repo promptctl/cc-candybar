@@ -8,9 +8,11 @@
 // and watch, until the last renderer lets it go.
 
 import { originKey, type RenderOrigin } from "../../config-hint.js";
-import type {
-  ConfigSnapshot,
-  LayerRole,
+import type { ConfigSelection } from "../../renderer-interface/interface.js";
+import {
+  retainsConfig,
+  type ConfigSnapshot,
+  type LayerRole,
 } from "../../config/config-snapshot.js";
 import {
   discover,
@@ -31,6 +33,7 @@ import {
 } from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { resolvedTarget } from "../../utils/atomic-write.js";
+import { directoryEntries } from "../../utils/directory-entry.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
@@ -43,33 +46,42 @@ import {
   type PathsWatch,
 } from "../foundations/watch-targets.js";
 
-// What discovery found at an origin, its digest, and the watch over where
-// that can change.
-interface Observation {
+interface ObservedConfig {
+  readonly origin: RenderOrigin;
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
-  readonly watch: HeldWatch;
-  readonly filePaths: readonly string[];
+  readonly managedFolders: ReadonlySet<string>;
 }
 
-// [LAW:one-source-of-truth] One hold stays live while any renderer needs this
-// origin. Its watch queues the hold itself as the observation changes.
-interface Followed {
-  readonly origin: RenderOrigin;
+// One origin followed: what discovery found there last, and the watch over
+// where that can change.
+interface ObservedOrigin extends ObservedConfig {
+  readonly watch: HeldWatch;
+  readonly landingPaths: ReadonlySet<string>;
+}
+
+interface Followed extends ObservedOrigin {
   readonly renderers: Set<RendererName>;
-  readonly invalidate: () => void;
-  observed: Observation;
+  // One selected committed input per renderer; null represents a fallback
+  // entry. Absence is a followed origin with no entry to reconstruct.
+  readonly selected: Map<RendererName, ObservedConfig | null>;
 }
 
 interface DiscoveryBatch {
   readonly facts: SharedFacts;
   readonly observed: FileObservations;
+  readonly landingPath: (file: string) => string;
 }
 
 // The config facts available to one renderer and the demands it can replace.
 export interface RendererConfigs {
   follow(origins: readonly RenderOrigin[]): void;
   snapshotOf(origin: RenderOrigin): ConfigSnapshot | null;
+  selected(
+    entries: readonly ConfigSelection[],
+    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+  ): void;
+  retainedOf(origin: RenderOrigin): ConfigSnapshot | "current" | undefined;
   path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
   repoDir(origin: RenderOrigin): string | null | undefined;
   readText(file: string): string | null;
@@ -77,6 +89,8 @@ export interface RendererConfigs {
 }
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
+  // One physical discovery batch can repair source watches for several renderers.
+  readonly reloaded?: (folders: ReadonlySet<string>) => void;
   readonly watchers: Pick<WatcherRegistry, "batch">;
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
@@ -91,8 +105,11 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
 
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
+  // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
+  // snapshot. A weak key cannot hold an old revision after its last owner.
+  private readonly observations = new WeakMap<ConfigSnapshot, ObservedConfig>();
   private readonly watches: ReturnType<WatcherRegistry["batch"]>;
-  private readonly invalidated = new Set<Followed>();
+  private readonly invalidated = new Set<string>();
   private readonly texts: ConfigText;
   private closed = false;
 
@@ -103,9 +120,12 @@ export class ConfigDiscovery {
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
     this.watches = deps.watchers.batch(() => {
-      const origins = [...this.invalidated];
+      // Take only current holds before starting any filesystem observation.
+      const held = [...this.invalidated].flatMap(
+        (key) => this.followed.get(key) ?? [],
+      );
       this.invalidated.clear();
-      this.heard(origins, "config-watch");
+      this.heard(held, "config-watch", "observed");
     });
   }
 
@@ -115,13 +135,14 @@ export class ConfigDiscovery {
   forRenderer(renderer: RendererName): RendererConfigs {
     const held = (origin: RenderOrigin): ConfigSnapshot | undefined => {
       const followed = this.followed.get(originKey(origin));
-      return followed?.renderers.has(renderer)
-        ? followed.observed.snapshot
-        : undefined;
+      return followed?.renderers.has(renderer) ? followed.snapshot : undefined;
     };
     return {
       follow: (origins) => this.follow(renderer, origins),
       snapshotOf: (origin) => held(origin) ?? null,
+      selected: (entries, delivered) =>
+        this.select(renderer, entries, delivered),
+      retainedOf: (origin) => this.retainedOf(renderer, origin),
       path: (origin, role) => {
         const snapshot = held(origin);
         return snapshot === undefined
@@ -142,6 +163,43 @@ export class ConfigDiscovery {
     };
   }
 
+  // [LAW:single-enforcer] Only discoveries held by this renderer can
+  // introduce a folder. A still-declared folder can outlive a discovery when
+  // a last-good or retired in-flight config uses it. Once let go, that prior
+  // admission gives no authority to acquire it anew.
+  admitManagedFolders(
+    renderer: RendererName,
+    requested: readonly string[],
+    previous: ReadonlySet<string> | undefined,
+  ): ReadonlySet<string> {
+    if (this.closed) return new Set();
+    const wanted = new Set(requested);
+    if (
+      previous?.size === wanted.size &&
+      [...wanted].every((f) => previous.has(f))
+    )
+      return previous;
+    const admitted = new Set<string>();
+    const take = (known: ReadonlySet<string>): void => {
+      for (const folder of wanted)
+        if (known.has(folder)) {
+          wanted.delete(folder);
+          admitted.add(folder);
+        }
+    };
+    if (previous !== undefined) take(previous);
+    for (const followed of this.followed.values()) {
+      if (wanted.size === 0) break;
+      if (!followed.renderers.has(renderer)) continue;
+      take(followed.managedFolders);
+      const retained = this.retainedOf(renderer, followed.origin);
+      if (retained === "current" || retained === undefined) continue;
+      const observation = this.observations.get(retained);
+      if (observation !== undefined) take(observation.managedFolders);
+    }
+    return admitted;
+  }
+
   // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
   // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
@@ -154,30 +212,28 @@ export class ConfigDiscovery {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
+      const observed: ObservedConfig[] = [];
       for (const [key, origin] of fresh) {
-        // The registry calls current holders at delivery time, then calls
-        // the batch completion synchronously. A released hold never joins it.
-        const invalidate = () => {
-          this.invalidated.add(hold);
-        };
-        const hold: Followed = {
-          origin,
+        const found = this.discovered(origin, shared, null);
+        this.followed.set(key, {
+          ...found,
           renderers: new Set([renderer]),
-          invalidate,
-          observed: this.discovered(origin, shared, null, invalidate),
-        };
-        this.followed.set(key, hold);
+          selected: new Map(),
+        });
+        observed.push(found);
       }
+      this.reloaded(observed);
     }
     let released = 0;
-    for (const [key, { renderers, observed }] of this.followed) {
+    for (const [key, { renderers, selected, watch }] of this.followed) {
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
+      selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
-      observed.watch.handle.release();
+      watch.handle.release();
       released++;
     }
     if (fresh.length + released === 0) return;
@@ -187,40 +243,108 @@ export class ConfigDiscovery {
     );
   }
 
-  // Rediscover origins watching one of the files the turn actually wrote.
+  // [LAW:single-enforcer] The renderer can keep its earlier selection or
+  // select an input actually delivered to it. Resolve the whole declaration
+  // before replacing its references, including a release with no selection.
+  private select(
+    renderer: RendererName,
+    entries: readonly ConfigSelection[],
+    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+  ): void {
+    if (this.closed) return;
+    const next = new Map<string, ObservedConfig | null>();
+    for (const { origin, digest } of entries) {
+      const key = originKey(origin);
+      const followed = this.followed.get(key);
+      if (!followed?.renderers.has(renderer))
+        throw new Error(`selected config origin is not followed: ${key}`);
+      if (digest === null) {
+        next.set(key, null);
+        continue;
+      }
+      const previous = followed.selected.get(renderer);
+      const offered = delivered(origin);
+      const observation =
+        previous?.digest === digest
+          ? previous
+          : offered === undefined
+            ? undefined
+            : this.observations.get(offered);
+      if (
+        observation?.digest !== digest ||
+        originKey(observation.origin) !== key
+      )
+        throw new Error(`selected config revision was not delivered: ${key}`);
+      const shared = [...followed.selected.values()].find(
+        (held) => held?.digest === digest,
+      );
+      next.set(key, shared ?? observation);
+    }
+    for (const [key, { selected }] of this.followed) {
+      const observation = next.get(key);
+      if (observation === undefined) selected.delete(renderer);
+      else selected.set(renderer, observation);
+    }
+  }
+
+  private retainedOf(
+    renderer: RendererName,
+    origin: RenderOrigin,
+  ): ConfigSnapshot | "current" | undefined {
+    const followed = this.followed.get(originKey(origin));
+    const old = followed?.selected.get(renderer);
+    if (followed === undefined || old === undefined) return undefined;
+    if (old === null || old.digest === followed.digest) return "current";
+    return retainsConfig(
+      origin.target,
+      old.snapshot.repo,
+      followed.snapshot.repo,
+    )
+      ? old.snapshot
+      : "current";
+  }
+
+  // Rediscover origins watching a file the turn wrote or could not restore.
   // The writer reloads in this slot; the other holders get their own turns.
   private landed(
     writer: RendererName,
     files: readonly string[],
   ): readonly RenderOrigin[] {
-    const changed = new Set(files);
-    const touched = [...this.followed.values()].filter(({ observed }) =>
-      observed.filePaths.some((file) => changed.has(file)),
+    const landingPath = directoryEntries();
+    const changed = files.flatMap((file) => [file, landingPath(file)]);
+    const touched = [...this.followed.values()].filter(({ landingPaths }) =>
+      changed.some((file) => landingPaths.has(file)),
     );
-    return this.publish(this.rediscovered(touched, "landed"), writer);
+    return this.publish(
+      this.rediscovered(touched, "landed", "observed"),
+      writer,
+    );
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why: string): void {
-    this.heard([...this.followed.values()], why);
+    this.heard([...this.followed.values()], why, "moved");
   }
 
   close(): void {
     if (this.closed) return;
     this.closed = true;
     this.invalidated.clear();
-    for (const { observed } of this.followed.values())
-      observed.watch.handle.release();
+    for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
     this.texts.clear();
   }
 
-  // A watch heard these origins may have changed. A moved snapshot goes to
-  // its renderers.
-  private heard(origins: readonly Followed[], why: string): void {
+  // A watch heard these held origins may have changed: those whose snapshot
+  // moved go to the renderer.
+  private heard(
+    held: readonly Followed[],
+    why: string,
+    recover: "observed" | "moved",
+  ): void {
     if (this.closed) return;
-    this.publish(this.rediscovered(origins, why), null);
+    this.publish(this.rediscovered(held, why, recover), null);
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients
@@ -245,37 +369,57 @@ export class ConfigDiscovery {
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
   private rediscovered(
-    origins: readonly Followed[],
+    held: readonly Followed[],
     why: string,
+    recover: "observed" | "moved",
   ): readonly Followed[] {
-    if (origins.length === 0) return [];
+    if (held.length === 0) return [];
     const shared = this.batch();
     const moved: Followed[] = [];
+    const observed: ObservedConfig[] = [];
     let failed = 0;
-    for (const held of origins) {
-      const { origin, observed: was, invalidate } = held;
+    for (const was of held) {
+      const key = originKey(was.origin);
       // [LAW:no-silent-failure] An origin that cannot be observed keeps the
       // last snapshot for a retry. Its failure cannot suppress a sibling's
       // already-observed change or reverse a successful write.
       try {
-        const now = this.discovered(origin, shared, was.watch, invalidate);
-        held.observed = now;
-        if (now.digest !== was.digest) moved.push(held);
+        const found = this.discovered(was.origin, shared, was.watch);
+        const now = {
+          ...found,
+          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
+          renderers: was.renderers,
+          selected: was.selected,
+        };
+        this.followed.set(key, now);
+        observed.push(now);
+        if (now.digest !== was.digest) moved.push(now);
       } catch (thrown) {
         failed++;
         this.deps.log(
           "error",
-          `config discovery why=${why} origin=${JSON.stringify(originKey(origin))} failed: ${failureOf(thrown).detail}`,
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
         );
       }
     }
-    // [LAW:nothing-unseen] Each live origin was observed or failed. Moved
-    // counts only observations with a new digest, including zero on a retry.
+    // [LAW:nothing-unseen] Count completed observations, their failures and
+    // changed snapshots from the same batch that published them.
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${origins.length - failed} failed=${failed} moved=${moved.length}`,
+      `config discovery why=${why} followed=${this.followed.size} discovered=${observed.length} failed=${failed} moved=${moved.length}`,
     );
+    // A targeted watch or write can retry even if the snapshot is unchanged.
+    // A broad catch-up already has its own storage recovery trigger.
+    this.reloaded(recover === "observed" ? observed : moved);
     return moved;
+  }
+
+  private reloaded(observed: readonly ObservedConfig[]): void {
+    if (this.deps.reloaded === undefined) return;
+    const folders = new Set<string>();
+    for (const { managedFolders } of observed)
+      for (const folder of managedFolders) folders.add(folder);
+    if (folders.size > 0) this.deps.reloaded(folders);
   }
 
   // [LAW:single-enforcer] The observation supplied to a poll watch comes
@@ -300,7 +444,11 @@ export class ConfigDiscovery {
         return text;
       },
     });
-    return { facts, observed };
+    return {
+      facts,
+      observed,
+      landingPath: directoryEntries(facts.files.realpath),
+    };
   }
 
   // What discovery finds at `origin` now, with its watch following the
@@ -310,8 +458,7 @@ export class ConfigDiscovery {
     origin: RenderOrigin,
     shared: DiscoveryBatch,
     held: HeldWatch | null,
-    invalidate: () => void,
-  ): Observation {
+  ): ObservedOrigin {
     const found = discover(
       {
         ...configQuery(origin.projectDir, origin.target),
@@ -335,7 +482,9 @@ export class ConfigDiscovery {
     const { watch, move } = this.watches.follow(
       held,
       spec,
-      invalidate,
+      () => {
+        this.invalidated.add(key);
+      },
       shared.observed,
     );
     if (move === "rebound") this.bound(origin, paths);
@@ -343,11 +492,27 @@ export class ConfigDiscovery {
       ...found.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch }, null),
     };
-    return {
+    const managedFolders = new Set(
+      pluginFiles(snapshot).flatMap(({ definition }) =>
+        definition.kind === "text" ? [definition.storage] : [],
+      ),
+    );
+    const observed = {
+      origin,
       snapshot,
       digest: digestOf(snapshot),
+      managedFolders,
+    };
+    this.observations.set(snapshot, observed);
+    return {
+      ...observed,
       watch,
-      filePaths: paths.targets.polled,
+      landingPaths: new Set(
+        paths.targets.polled.flatMap((file) => [
+          file,
+          shared.landingPath(file),
+        ]),
+      ),
     };
   }
 
@@ -382,11 +547,15 @@ function watchTargetsFor(found: Discovered): PathsWatch {
     named: [
       ...targets.files,
       ...roots,
-      ...snapshot.plugins.map((p) => p.path),
-      ...snapshot.chain.flatMap((l) =>
-        Object.values(l.listed).map((p) => p.path),
-      ),
+      ...pluginFiles(snapshot).map((p) => p.path),
     ],
     whole: roots,
   });
+}
+
+function pluginFiles(snapshot: ConfigSnapshot) {
+  return [
+    ...snapshot.plugins,
+    ...snapshot.chain.flatMap((layer) => Object.values(layer.listed)),
+  ];
 }

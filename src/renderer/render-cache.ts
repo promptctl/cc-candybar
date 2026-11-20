@@ -1,8 +1,10 @@
+import { type RegionalSettings } from "../utils/region.js";
 import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
 import {
   compareShallow,
   makeObservable,
   observable,
+  observableRef,
   reaction,
   runInAction,
 } from "mobx";
@@ -14,10 +16,6 @@ import type {
   Subscription,
   Subscriptions,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   CrossedFailure,
@@ -26,8 +24,10 @@ import {
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
   layerForRole,
+  retainsConfig,
   writable,
   type ConfigSnapshot,
+  type RepoQuestion,
 } from "../config/config-snapshot.js";
 import type { Drawing, LaneSwitches } from "../config/lanes.js";
 import { laneDefaultsAfterReset } from "./lane-handoff.js";
@@ -149,15 +149,12 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 export const MAX_ENTRIES = 256;
 const MAX_UNPINNED_FAILURES = 256;
 
-// [LAW:single-enforcer] These are the cache-and-registry deps — session state
-// (for declareState atoms) and the host's storage owner. Daemon-
-// owned data providers like the SessionUsageStore/git provider/etc. live in
-// the session source (src/renderer/session-source.ts) a view's payload is
-// derived through; they are not part of cache identity or lifecycle.
+// [LAW:single-enforcer] Cache entries compile host-supplied facts. A view
+// reads its session's values through the session source.
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
-> {
+> extends Pick<StateDeps, "region"> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -168,9 +165,6 @@ export interface RenderDeps<
     origin: RenderOrigin,
     session: SessionId,
   ) => ConfigSnapshot | null;
-  // The host's storage owner, which holds the folders each served state's
-  // latest load named (`holdFolders`), from its first load to its reclaim.
-  storage: AdapterToHost["storage"];
   // The gates a load builds against (StateDeps).
   gates: Gates;
   // What a view draws from (src/renderer/session-source.ts); a test drawing no
@@ -187,6 +181,7 @@ export interface RenderDeps<
 
 // What building one config's state needs.
 export interface StateDeps {
+  readonly region?: RegionalSettings;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
   readonly clock: TurnClock;
@@ -465,10 +460,23 @@ export interface CacheEntry {
   // are read off it.
   snapshot: ConfigSnapshot;
   digest: string;
+  selected: SelectedState;
   lastError: string | null;
   lastWarnings: readonly string[];
-  state: DslRenderState;
+  readonly state: DslRenderState;
 }
+
+// [LAW:types-are-the-program] An authored build carries its revision and
+// approval through a failed reload. A bundled build follows each current
+// observation, with no earlier authored revision or approval to retain.
+type SelectedState =
+  | {
+      readonly kind: "authored";
+      readonly state: DslRenderState;
+      readonly digest: string;
+      readonly repo: RepoQuestion | null;
+    }
+  | { readonly kind: "bundled"; readonly state: DslRenderState };
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
 // owns (brandon-unfiled-3248.6rc): the renders holding it across their
@@ -479,8 +487,6 @@ export interface CacheEntry {
 // render — which otherwise resumed on a disposed store, every chained read
 // recomputed untracked.
 interface StateHold {
-  // The id the state's storage folders are held under at the host.
-  readonly id: StorageHoldId;
   holders: number;
   retired: Teardown | null;
 }
@@ -620,7 +626,7 @@ function plugins(p: LoadedFile["plugins"]) {
     loaded: p.loaded,
     dropped: p.dropped,
     reached: [...p.reached].sort(),
-    rendering: [...p.rendering].sort(([a], [b]) => a.localeCompare(b)),
+    rendering: [...p.rendering].sort(([a], [b]) => (a < b ? -1 : 1)),
   } satisfies Projection<LoadedFile["plugins"]>;
 }
 
@@ -661,7 +667,7 @@ function loadKey(inputs: LoadInputs): string {
       placed: null,
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([name, folder]) => [name, folder] as const),
   } satisfies Projection<LoadInputs>);
 }
@@ -740,6 +746,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
+    deps.region,
   );
 
   let registration: Registration;
@@ -899,17 +906,16 @@ export function loadOrigin(
   return settle(snapshot, resolved.warnings, attempt);
 }
 
-// [LAW:single-enforcer] What a config that fails its FIRST load renders: the
-// bundled default, over the plugins discovery found. The bar already carries
-// the failed load's advisories, and the default earns none by program invariant.
+// [LAW:single-enforcer] Without an allowed last-good build, render the bundled
+// default with the currently discovered plugins. The bar carries the authored
+// load's diagnostic independently of this fallback.
 function fallbackState(
   cwd: string,
   snapshot: ConfigSnapshot,
   deps: StateDeps,
+  served: DslRenderState | null,
 ): DslRenderState {
-  // The failed load's approved project: the seed draws the plugins it ships,
-  // as the load would have.
-  const built = loadOrigin(cwd, { ...snapshot, chain: [] }, deps);
+  const built = loadOrigin(cwd, { ...snapshot, chain: [] }, deps, served);
   // [LAW:no-silent-failure] The default validates by program invariant
   // (test/default-dsl-config.test.ts); a throw is a daemon bug.
   if (built.kind === "failed")
@@ -1152,7 +1158,9 @@ export class RenderCache<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
 > {
-  private readonly entries = new Map<string, CacheEntry>();
+  private readonly entries = observable.map<string, CacheEntry>(undefined, {
+    deep: false,
+  });
   // [LAW:one-source-of-truth] The latest delivery of each retained origin
   // gates admission and writes, including controls on an already live view.
   private readonly configDeliveries = observable.map<string, ArrivedConfig>(
@@ -1168,12 +1176,18 @@ export class RenderCache<
     return this.closing.aborted;
   }
   // Every state the map serves or served, until reclaimed.
-  private readonly holds = new Map<DslRenderState, StateHold>();
-  // The last storage hold id minted.
-  private storageHolds = 0;
+  private readonly holds = observable.map<DslRenderState, StateHold>(
+    undefined,
+    {
+      deep: false,
+    },
+  );
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<SessionId, SessionView<S, F>>();
+  private readonly views = observable.map<SessionId, SessionView<S, F>>(
+    undefined,
+    { deep: false },
+  );
   readonly presentations = new PresentedFrames((session) => {
     const view = this.views.get(session);
     if (view !== undefined) {
@@ -1302,20 +1316,14 @@ export class RenderCache<
       if (draft !== null) key = draftKey(editing);
     }
     const existing = this.entries.get(key);
-    const priorRepo = existing?.snapshot.repo;
-    // [LAW:types-are-the-program] A draft can fall back to its last good
-    // render only while that render's repository approval still holds.
-    const lostApproval =
-      draft !== null &&
-      priorRepo?.standing === "approved" &&
-      (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
     if (
       existing !== undefined &&
-      !lostApproval &&
       originKey(existing.origin) === originKey(origin)
     ) {
-      this.entries.delete(key);
-      this.entries.set(key, existing);
+      runInAction(() => {
+        this.entries.delete(key);
+        this.entries.set(key, existing);
+      });
       if (draft !== null && existing.snapshot !== draft)
         this.reloadInto(
           existing,
@@ -1326,34 +1334,34 @@ export class RenderCache<
     }
     if (existing !== undefined) this.drop(key, existing, "evict");
 
-    const { snapshot, digest } =
+    const held =
       draft === null
         ? this.held(origin)
         : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd } = origin;
-    const loaded = this.load(origin, snapshot, null);
+    const { loaded, selected } = this.selectState(origin, held, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    // [LAW:no-silent-failure] A config that fails its FIRST load still yields
-    // a bar: the bundled default, built exactly here and only then — the error
-    // is counted by the indicator beside its settings door, loud, and the
-    // settings menu is the door back to the file. The default validates by program invariant
-    // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
-    // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
       origin,
       get configLayers() {
         return configPaths(this.snapshot);
       },
-      snapshot,
-      digest,
+      snapshot: held.snapshot,
+      digest: held.digest,
+      selected,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
-      state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
+      get state() {
+        return this.selected.state;
+      },
     };
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
-    makeObservable(entry, { lastError: observable });
+    makeObservable(entry, {
+      selected: observableRef,
+      lastError: observable,
+    });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
@@ -1364,8 +1372,7 @@ export class RenderCache<
     // The bound is a fact about the MAP, complete at insertion: nothing later
     // (including an observer throwing) can skip it.
     // [LAW:dataflow-not-control-flow]
-    this.entries.set(key, entry);
-    this.holdFolders(entry.state);
+    runInAction(() => this.entries.set(key, entry));
     this.fit(entry);
     this.log(
       "info",
@@ -1479,6 +1486,11 @@ export class RenderCache<
     );
   }
 
+  // The shared committed state, without changing the cache's use order.
+  committedState(origin: RenderOrigin): DslRenderState | null {
+    return this.entries.get(originKey(origin))?.state ?? null;
+  }
+
   // `held` with `lease` on `view` beside it, both released by the one
   // `using`. Nothing in it throws, so `held` is never stranded.
   private holdViewOf(
@@ -1554,8 +1566,10 @@ export class RenderCache<
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
-      this.views.delete(sessionId);
-      this.views.set(sessionId, current);
+      runInAction(() => {
+        this.views.delete(sessionId);
+        this.views.set(sessionId, current);
+      });
       // A request is the one the view draws by from here.
       current.requested?.(facts);
       return current;
@@ -1565,7 +1579,7 @@ export class RenderCache<
     // most recently used, as a kept view moves there. The old view is retired
     // whether or not the new one opens: the session's render resolved to
     // another entry either way.
-    this.views.delete(sessionId);
+    runInAction(() => this.views.delete(sessionId));
     let view: SessionView<S, F>;
     try {
       view = this.opened(entry, state, facts, by);
@@ -1616,7 +1630,7 @@ export class RenderCache<
       throw error;
     }
     this.openFailures.delete(sessionId);
-    this.views.set(sessionId, view);
+    runInAction(() => this.views.set(sessionId, view));
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
@@ -1659,7 +1673,7 @@ export class RenderCache<
   // last render holding it returns.
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
+      runInAction(() => this.views.delete(view.sessionId));
     const successor = this.views.has(view.sessionId);
     this.presentations.retireView(
       view.sessionId,
@@ -1695,9 +1709,8 @@ export class RenderCache<
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their storage folders, the runs
   // its `shell` and `file` sources name, and the variables of the session's
-  // environment its `env` sources read. Read
-  // off the views each turn, so a view that opened, moved or closed is the
-  // next output's.
+  // environment its `env` sources read. A declaration observes the current
+  // views and what each sources from the host.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's
   // config is held as long as an entry at it lives, not as long as a session:
   // a session retires when idle while its entry stays to draw it again.
@@ -1709,6 +1722,25 @@ export class RenderCache<
         ),
       ).values(),
     ];
+  }
+
+  // [LAW:one-source-of-truth] A retired state can still serve an in-flight
+  // draw. Its folders go with its last holder, just like its compile.
+  managedFolders(): readonly string[] {
+    const folders = new Set<string>();
+    for (const state of this.holds.keys())
+      for (const folder of state.sources.values()) folders.add(folder);
+    return [...folders].sort();
+  }
+
+  configSelections() {
+    return [...this.entries]
+      .filter(([key, entry]) => key === originKey(entry.origin))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([, { origin, selected }]) => ({
+        origin,
+        digest: selected.kind === "authored" ? selected.digest : null,
+      }));
   }
 
   subscriptions(): Pick<Subscriptions, "sources"> {
@@ -1740,18 +1772,48 @@ export class RenderCache<
     );
   }
 
-  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
-  // cache refuses every way one would be built — a new entry, a reload, a
-  // `config` turn after the close.
+  // [LAW:single-enforcer] Opening an entry, reloading a committed config,
+  // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  private load(
+  private selectState(
     origin: RenderOrigin,
-    snapshot: ConfigSnapshot,
-    served: DslRenderState | null,
-  ): LoadOutcome {
+    { snapshot, digest }: HeldSnapshot,
+    previous: SelectedState | null,
+  ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(origin.cwd, snapshot, this.deps, served);
+    const retained =
+      previous?.kind === "authored" &&
+      retainsConfig(origin.target, previous.repo, snapshot.repo)
+        ? previous
+        : null;
+    const bundled = previous?.kind === "bundled" ? previous : null;
+    const { cwd } = origin;
+    const { repo } = snapshot;
+    const loaded = loadOrigin(
+      cwd,
+      snapshot,
+      this.deps,
+      (retained ?? bundled)?.state ?? null,
+    );
+    if (loaded.state !== null)
+      return {
+        loaded,
+        selected: { kind: "authored", state: loaded.state, digest, repo },
+      };
+    if (retained !== null) return { loaded, selected: retained };
+    // [LAW:carrying-cost] The same load identity keeps the bundled state and
+    // views when an authored edit only changes the diagnostic.
+    const state = fallbackState(
+      cwd,
+      snapshot,
+      this.deps,
+      bundled?.state ?? null,
+    );
+    return {
+      loaded,
+      selected: bundled?.state === state ? bundled : { kind: "bundled", state },
+    };
   }
 
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
@@ -1780,7 +1842,7 @@ export class RenderCache<
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    this.entries.delete(key);
+    runInAction(() => this.entries.delete(key));
     for (const [session, failure] of this.openFailures)
       if (failure.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
@@ -1856,24 +1918,13 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    this.holds.set(state, {
-      id: ++this.storageHolds as StorageHoldId,
-      holders: 0,
-      retired: null,
-    });
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
     this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
       );
-  }
-
-  // The host holds the storage folders a served state's latest load named.
-  private holdFolders(state: DslRenderState): void {
-    // [LAW:single-enforcer] The host keys each folder once, however many
-    // sources name it.
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -1931,8 +1982,7 @@ export class RenderCache<
   // without dispose leaks every handle the config declared.
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
-    this.holds.delete(state);
-    this.deps.storage.release(hold.id);
+    runInAction(() => this.holds.delete(state));
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
     // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
     // so a compile no state left there carries has no render to draw it.
@@ -1951,8 +2001,8 @@ export class RenderCache<
   // Re-populate `entry` from `snapshot`, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
-  // - Load failure: keep the prior state (the bundled default before any
-  //   config has loaded), set lastError.
+  // - Load failure: keep the prior state if still approved, otherwise serve
+  //   the current snapshot's bundled default. Both report the load error.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
   // new DslConfig retires the old state, and `reclaim` disposes its
@@ -1965,7 +2015,7 @@ export class RenderCache<
   // arm the load took.
   private reloadInto(
     entry: CacheEntry,
-    { snapshot, digest }: HeldSnapshot,
+    held: HeldSnapshot,
     cause: LoadCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
@@ -1979,25 +2029,25 @@ export class RenderCache<
     ];
     // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
-    const loaded = this.load(entry.origin, snapshot, served);
-    entry.snapshot = snapshot;
-    entry.digest = digest;
+    const { loaded, selected } = this.selectState(
+      entry.origin,
+      held,
+      entry.selected,
+    );
+    entry.snapshot = held.snapshot;
+    entry.digest = held.digest;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
+      entry.selected = selected;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (loaded.kind === "built") {
-      entry.state = loaded.state;
-      this.serve(loaded.state);
+    if (selected.state !== served) {
+      this.serve(selected.state);
+      this.retire(served, "reload", entry);
     }
-    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
-    // The successor's hold precedes its predecessor's release, so a folder
-    // both name is never closed and reopened.
-    this.holdFolders(entry.state);
-    if (loaded.kind === "built") this.retire(served, "reload", entry);
-    if (loaded.state !== null)
+    if (selected.state !== served || loaded.state !== null)
       for (const [session, failure] of retry)
         this.reopen(entry, session, failure.requestOf);
     // A reload can move the entry onto a compile no other entry carries, and

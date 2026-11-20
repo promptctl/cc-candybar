@@ -4,6 +4,7 @@
 // silent renderer is ended, and whose ids cross.
 
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -26,14 +27,13 @@ import {
   type HostLine,
   type RendererLine,
 } from "../../src/renderer-interface/wire";
-import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
-  AdapterInput,
-  AdapterOutput,
+  EventInput,
   EffectId,
   RendererOutput,
   Timed,
 } from "../../src/renderer-interface/interface";
+import type { WireFrame } from "../../src/render/frame";
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -44,7 +44,11 @@ import {
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
-import { inertHost } from "../helpers/renderer-parts";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../helpers/oversized-renderer-history";
+import type { LogLine } from "../../src/utils/logger";
 
 // One renderer process as the test plays it: what the host wrote to it, and
 // what it says back.
@@ -81,6 +85,7 @@ const RENDERER_BOOT = {
     dataHome: "/data",
     dataDirs: [],
   },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1,
   stored: EMPTY_STORED_STATE,
 } satisfies Extract<HostLine, { kind: "boot" }>["boot"];
@@ -91,7 +96,6 @@ function rig(start: () => Promise<void> = async () => {}) {
   const logs: string[] = [];
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
-  const held: Array<["hold" | "release", StorageHoldId]> = [];
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -122,13 +126,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
-    reaches: {
-      ...inertHost(),
-      storage: {
-        hold: (id) => held.push(["hold", id]),
-        release: (id) => held.push(["release", id]),
-      },
-    },
     log: (level, msg) => {
       logs.push(msg);
       levels.push(level);
@@ -158,7 +155,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     logs,
     levels,
     ends,
-    held,
     link,
     inputs,
   };
@@ -170,21 +166,57 @@ const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
-const pin: AdapterInput = {
-  kind: "adapter",
-  push: { kind: "close-journal" },
+const pin: EventInput = {
+  kind: "event",
+  event: { kind: "close-journal" },
   at: 0 as Instant,
   tick: 0 as Tick,
 };
-const PINNED: Timed<AdapterOutput> = {
-  kind: "replied",
+const PINNED: Timed<RendererOutput> = {
+  kind: "answered",
+  record: [],
+  frames: [],
+  effects: [],
   stored: [],
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+  wake: null,
   turnMs: 0,
 };
 
 describe("a renderer process's start", () => {
+  test.each(["started", "refused"] as const)(
+    "takes %s boot diagnostics before the boot record, once",
+    (kind) => {
+      const { link, children, logs, levels } = rig();
+      const diagnostic: LogLine = { level: "warn", line: "construction warning" };
+      link.arm();
+      const child = children[0]!;
+      const boot: RendererLine =
+        kind === "started"
+          ? {
+              kind,
+              pid: 9001,
+              wireVersion: RENDERER_WIRE_VERSION,
+              diagnostics: [diagnostic],
+            }
+          : {
+              kind,
+              wireVersion: RENDERER_WIRE_VERSION,
+              failure: failureOf(new Error("refused by fixture")),
+              diagnostics: [diagnostic],
+            };
+      child.say(boot);
+      child.say(boot);
+      const index = logs.indexOf(diagnostic.line);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(levels[index]).toBe(diagnostic.level);
+      expect(logs[index + 1]).toContain(
+        kind === "started" ? "started pid=" : "refused its boot:",
+      );
+      expect(logs.filter((line) => line === diagnostic.line)).toHaveLength(1);
+    },
+  );
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the wire version", () => {
     const { link, children } = rig();
     link.arm();
@@ -233,8 +265,9 @@ describe("a renderer process's start", () => {
       const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
         "renderer wire version mismatch",
       );
+      const diagnostics = [{ level: "warn", line: "diagnostics in an unaccepted protocol" }];
       child.opts.heard.stdout(
-        `${JSON.stringify({ kind: "started", pid: 9001, ...fields })}\n`,
+        `${JSON.stringify({ kind: "started", pid: 9001, diagnostics, ...fields })}\n`,
       );
       // A later acknowledgment cannot rescue the rejected process during teardown.
       child.say(startedLine(9001));
@@ -243,6 +276,7 @@ describe("a renderer process's start", () => {
       expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
       const mismatch = `renderer wire version mismatch (renderer sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`;
       expect(logs).toContainEqual(expect.stringContaining(mismatch));
+      expect(logs).not.toContain(diagnostics[0]?.line);
       expect(ends[0]?.text).toContain(mismatch);
       clock.advance(BACKOFF_FIRST_MS - 1);
       expect(children).toHaveLength(1);
@@ -271,9 +305,9 @@ describe("a renderer process's start", () => {
   });
 
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
-    const unpin: AdapterInput = {
+    const unpin: EventInput = {
       ...pin,
-      push: { kind: "close-views" },
+      event: { kind: "close-views" },
     };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);
@@ -290,6 +324,7 @@ describe("a renderer process's start", () => {
     link.arm();
     children[0]!.say({
       kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
       failure: failureOf(new Error("the session state cannot be read")),
     });
     children[0]!.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
@@ -301,6 +336,100 @@ describe("a renderer process's start", () => {
     ]);
   });
 
+  test.each([
+    ["boot", null],
+    ["output", "not a diagnostic batch"],
+    ["output", [{ level: "verbose", line: "discard this" }]],
+    ["output", [{ level: "info", line: 12 }]],
+  ])(
+    "a malformed %s diagnostic leaves the valid answer usable",
+    async (at, diagnostics) => {
+      const { link, children, inputs, logs } = rig();
+      link.arm();
+      const child = children[0]!;
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          ...startedLine(9001),
+          ...(at === "boot" ? { diagnostics } : {}),
+        })}\n`,
+      );
+      const answered = link.renderer.answer(pin);
+      const [sent] = inputs(child);
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          kind: "output",
+          n: sent!.n,
+          output: { ...PINNED, ...(at === "output" ? { diagnostics } : {}) },
+        })}\n`,
+      );
+      await expect(answered).resolves.toEqual(PINNED);
+      expect(
+        logs.filter((line) => line.includes("invalid diagnostics")),
+      ).toHaveLength(1);
+      expect(logs).not.toContain("discard this");
+    },
+  );
+
+  test("a refused boot after readiness cannot change this link or write its diagnostics", async () => {
+    const { link, children, inputs, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say(startedLine(9001));
+    child.say({
+      kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
+      failure: failureOf(new Error("obsolete refusal")),
+      diagnostics: [{ level: "warn", line: "obsolete log" }],
+    });
+    const answered = link.renderer.answer(pin);
+    child.say({ kind: "output", n: inputs(child)[0]!.n, output: PINNED });
+    await expect(answered).resolves.toEqual(PINNED);
+    expect(child.opts.signal?.aborted).toBe(false);
+    expect(logs.join("\n")).not.toContain("obsolete");
+  });
+
+  test.each([
+    [
+      { kind: "started", pid: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid pid",
+    ],
+    [
+      { kind: "refused", failure: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid refusal",
+    ],
+  ])(
+    "a malformed required boot field refuses the worker immediately",
+    async (raw, why) => {
+      const { link, children } = rig();
+      link.arm();
+      const child = children[0]!;
+      const refused = expect(link.renderer.answer(pin)).rejects.toThrow(why);
+      child.opts.heard.stdout(`${JSON.stringify(raw)}\n`);
+      await refused;
+      expect(child.opts.signal?.aborted).toBe(true);
+      expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
+    },
+  );
+
+  test("an incompatible refusal can explain the version without publishing its diagnostics", async () => {
+    const { link, children, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
+      "incompatible boot",
+    );
+    child.opts.heard.stdout(
+      `${JSON.stringify({
+        kind: "refused",
+        wireVersion: RENDERER_WIRE_VERSION - 1,
+        failure: failureOf(new Error("incompatible boot")),
+        diagnostics: [{ level: "info", line: "foreign diagnostic" }],
+      })}\n`,
+    );
+    child.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
+    await refused;
+    expect(logs.join("\n")).not.toContain("foreign diagnostic");
+  });
   test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
     const { link } = rig();
     link.arm();
@@ -337,6 +466,34 @@ describe("a renderer process's start", () => {
     ]);
     expect(children[0]!.opts.signal?.aborted).toBe(true);
   });
+});
+
+test("the in-process link logs construction diagnostics once before its first answer", async () => {
+  const logs: LogLine[] = [];
+  const link = inProcessRenderer()({
+    name: MAIN_RENDERER,
+    boot: () => ({ ...RENDERER_BOOT, stored: oversizedRendererHistory() }),
+    entry: "/app/index.mjs",
+    node: ["/bin/node"],
+  }).start({
+    log: (level, line) => void logs.push({ level, line }),
+    clock: heldClock(new Date(0)),
+    start: async () => {},
+    ended: () => {},
+  });
+  link.serve();
+  link.serve();
+  expect(logs).toEqual([
+    {
+      level: "info",
+      line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+    },
+  ]);
+  const answered = await link.renderer.answer(pin);
+  expect(answered).not.toHaveProperty("diagnostics");
+  expect(answered.stored).toEqual([
+    { store: "settings-history", key: oversizedSession, value: null },
+  ]);
 });
 
 describe("a renderer process's end", () => {
@@ -410,145 +567,141 @@ describe("a renderer process's end", () => {
   });
 });
 
+test("a failed restoration ends that generation and starts its successor after backoff", async () => {
+  let attempt = 0;
+  const { link, children, clock, logs, ends } = rig(async () => {
+    if (++attempt === 1) throw new Error("unavailable config snapshot");
+  });
+  link.arm();
+  children[0]!.say(startedLine(9001));
+  await settled();
+  expect(children[0]!.opts.signal?.aborted).toBe(true);
+  expect(logs).toContainEqual(expect.stringContaining("start failed:"));
+  expect(ends[0]?.text).toContain("failed to start: unavailable config snapshot");
+  clock.advance(BACKOFF_FIRST_MS);
+  children[1]!.say(startedLine(9002));
+  await settled();
+  expect(attempt).toBe(2);
+  expect(link.process()?.pid).toBe(9002);
+});
+
 describe("ids a renderer mints", () => {
-  test("cross as the host's own, never repeated across renderers, and a gone renderer's holds go once the next has started", async () => {
-    let started: () => void = () => {};
-    const { link, children, clock, held } = rig(
-      () => new Promise<void>((resolve) => (started = resolve)),
-    );
-    link.arm();
-    const first = children[0]!;
-    first.say(startedLine(9001));
-    first.say({ kind: "notice", reach: "storage.hold", args: [1, ["/f"]] });
-    first.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f", "/g"]],
-    });
-    started();
+  const due: EventInput = { ...pin, event: { kind: "due" } };
+  const { reply: _reply, ...NOTIFIED } = PINNED;
+  const bar: WireFrame = {
+    depth: "truecolor",
+    rows: [],
+    motion: "still",
+    nextChange: null,
+    pending: [],
+  };
+  const drawn = (receipt: number) => ({
+    session: SESSION,
+    frame: {
+      kind: "drawn" as const,
+      receipt: receipt as EffectId,
+      bar,
+      handoff: null,
+    },
+  });
+  const dropped = {
+    session: SESSION,
+    frame: { kind: "failed" as const, message: "no frame drawn" },
+  };
+  const done = (of: EffectId): EventInput => ({
+    ...due,
+    event: { kind: "effect-done", session: SESSION, of, outcome: { kind: "ok" } },
+  });
+  const reply = async (
+    { inputs, link }: ReturnType<typeof rig>,
+    child: Child,
+    input: EventInput,
+    output: Timed<RendererOutput>,
+  ) => {
+    const outstanding = link.renderer.answer(input);
     await settled();
+    child.say({ kind: "output", n: inputs(child).at(-1)!.n, output });
+    return outstanding;
+  };
+  const effect = {
+    kind: "copy" as const,
+    id: 2 as EffectId,
+    session: SESSION,
+    text: "copy",
+  };
+
+  test("an effect and a drawn frame each settle by their own id despite colliding numbers", async () => {
+    const host = rig();
+    host.link.arm();
+    const child = host.children[0]!;
+    child.say(startedLine(9001));
+    const output = await reply(host, child, due, {
+      ...NOTIFIED,
+      effects: [effect],
+      frames: [dropped, drawn(1)],
+    });
+    expect(output.frames[0]).toEqual(dropped);
+    const hostEffect = output.effects[0]!.id;
+    const hostFrame = output.frames[1]!.frame;
+    if (hostFrame.kind !== "drawn") throw new Error("output lost its frame");
+    expect(hostFrame.receipt).not.toBe(hostEffect);
+    await reply(host, child, done(hostFrame.receipt), NOTIFIED);
+    await reply(host, child, done(hostEffect), NOTIFIED);
+    expect(host.inputs(child).slice(1).map(({ input }) => input.event)).toEqual([
+      { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
+      { kind: "effect-done", session: SESSION, of: 2, outcome: { kind: "ok" } },
+    ]);
+    await expect(
+      host.link.renderer.answer(done(hostFrame.receipt)),
+    ).rejects.toBeInstanceOf(RendererDown);
+    expect(host.inputs(child)).toHaveLength(3);
+  });
+
+  test("a malformed command allocates no host effect or frame receipt", async () => {
+    const host = rig();
+    host.link.arm();
+    const child = host.children[0]!;
+    child.say(startedLine(9001));
+    await reply(host, child, pin, {
+      ...PINNED,
+      effects: [effect],
+      frames: [drawn(7)],
+    });
+    const valid = await reply(host, child, due, {
+      ...NOTIFIED,
+      frames: [drawn(7)],
+    });
+    const frame = valid.frames[0]!.frame;
+    if (frame.kind !== "drawn") throw new Error("output lost its frame");
+    expect(frame.receipt).toBe(1);
+  });
+
+  test("a late pane receipt cannot settle a restarted renderer's frame", async () => {
+    const host = rig();
+    host.link.arm();
+    const first = host.children[0]!;
+    first.say(startedLine(9001));
+    const draw = (child: Child) =>
+      reply(host, child, due, { ...NOTIFIED, frames: [drawn(7)] });
+    const previous = (await draw(first)).frames[0]!.frame;
+    if (previous.kind !== "drawn") throw new Error("the first frame was lost");
     first.exit(CRASHED);
     await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    const second = children[1]!;
+    host.clock.advance(BACKOFF_FIRST_MS);
+    const second = host.children[1]!;
     second.say(startedLine(9002));
-    second.say({ kind: "notice", reach: "storage.hold", args: [1, ["/g"]] });
-    await settled();
-    // The first renderer's hold stands until the second has started; the
-    // second's own id 1 is a new host id.
-    expect(held).toEqual([
-      ["hold", 1],
-      ["hold", 1],
-      ["hold", 2],
-    ]);
-    started();
-    await settled();
-    expect(held.at(-1)).toEqual(["release", 1]);
-  });
-
-  test("a gone renderer's holds stand while the next ends before its start answers, and go once one answers", async () => {
-    const starts: Array<() => void> = [];
-    const { link, children, clock, held } = rig(
-      () => new Promise<void>((resolve) => starts.push(resolve)),
-    );
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
+    const next = (await draw(second)).frames[0]!.frame;
+    if (next.kind !== "drawn") throw new Error("the next frame was lost");
+    expect(next.receipt).not.toBe(previous.receipt);
+    await expect(
+      host.link.renderer.answer(done(previous.receipt)),
+    ).rejects.toBeInstanceOf(RendererDown);
+    expect(host.inputs(second)).toHaveLength(1);
+    await reply(host, second, done(next.receipt), NOTIFIED);
+    expect(host.inputs(second)[1]!.input.event).toMatchObject({
+      kind: "effect-done",
+      of: 7,
     });
-    starts[0]!();
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    children[1]!.exit(CRASHED);
-    starts[1]!();
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say(startedLine(9003));
-    starts[2]!();
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a refused start keeps the last renderer's storage hold", async () => {
-    let attempt = 0;
-    const { link, children, clock, held, logs } = rig(async () => {
-      if (++attempt === 2) throw new Error("start refused");
-    });
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    expect(logs).toContainEqual(expect.stringContaining("start refused"));
-
-    children[1]!.exit(CRASHED);
-    await settled();
-    clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say(startedLine(9003));
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a renderer that never took over releases what it held as it ends", async () => {
-    const { link, children, held } = rig();
-    link.arm();
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a start with nothing to await releases no holds before its renderer has booted", async () => {
-    const { link, children, clock, held } = rig();
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
   });
 
   test("an effect's id is the host's, and its done goes back by the renderer's", async () => {
@@ -576,7 +729,8 @@ describe("ids a renderer mints", () => {
       stored: [],
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+      subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+      wake: null,
       frames: [],
       turnMs: 0,
     };
@@ -627,7 +781,8 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+        subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+        wake: null,
         frames: [],
         turnMs: 0,
       },

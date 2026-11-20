@@ -17,6 +17,7 @@ import type { RendererName } from "./foundations/renderer-name.js";
 import type { RequestId } from "../renderer-interface/interface.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { RecordingCommand } from "./foundations/recording-command.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -27,6 +28,7 @@ import type { Locate } from "./statusline-answer.js";
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
 // its own.
 export interface DaemonParts {
+  readonly recordRenderer: (command: RecordingCommand) => Promise<string>;
   readonly accountHome: () => string;
   // The user's home: the default Claude Code directory is under it.
   readonly home: string;

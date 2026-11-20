@@ -12,6 +12,7 @@
 // one click is ever landing.
 
 import { diffChanges } from "../config/config-changes.js";
+import { makeObservable, observableRef, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   BadVerbArgs,
@@ -108,7 +109,9 @@ export class ConfigWrites {
   private layersOf: () => ClickLayers = noLayers;
   private layers: ClickLayers | null = null;
 
-  constructor(private readonly mint: () => EffectId) {}
+  constructor(private readonly mint: () => EffectId) {
+    makeObservable<this, "inFlight">(this, { inFlight: observableRef });
+  }
 
   // A click's journal opens over its session's layers: refused once the
   // daemon's close has begun, so a click the close cut off writes nothing.
@@ -239,11 +242,13 @@ export class ConfigWrites {
         answer,
       })),
     ];
-    this.inFlight = {
-      of: { session, origin, files, consequence },
-      owed: new Set(landing.map((c) => c.id)),
-      missed: null,
-    };
+    runInAction(() => {
+      this.inFlight = {
+        of: { session, origin, files, consequence },
+        owed: new Set(landing.map((c) => c.id)),
+        missed: null,
+      };
+    });
     effects.push(...landing);
   }
 
@@ -255,7 +260,9 @@ export class ConfigWrites {
     if (landing === null || !landing.owed.delete(id)) return undefined;
     if (outcome.kind !== "ok") landing.missed ??= outcome;
     if (landing.owed.size > 0) return "owed";
-    this.inFlight = null;
+    runInAction(() => {
+      this.inFlight = null;
+    });
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
 

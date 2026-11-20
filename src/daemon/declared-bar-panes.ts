@@ -33,6 +33,7 @@ const RETRY_MS = 1000;
 // renderer's effective settings, independent of which input changed them.
 export class DeclaredBarPanes {
   private readonly held = new Map<string, HeldPane>();
+  private lanes: Readonly<Record<SessionId, LaneSwitches>> = {};
 
   constructor(
     private readonly paneOf: (session: SessionId) => ReportedPane | undefined,
@@ -42,10 +43,34 @@ export class DeclaredBarPanes {
   ) {}
 
   declare(lanes: Readonly<Record<SessionId, LaneSwitches>>): void {
+    this.lanes = lanes;
+    this.reconcileDemands();
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A statusline request moves the host's
+  // pane observation, and can retry its effect, under an unchanged policy.
+  // Re-elect demand only when a session changed panes or can take ownership.
+  reported(session: SessionId, previous: TmuxHint | null): void {
+    if (!Object.hasOwn(this.lanes, session)) return;
+    const reported = this.paneOf(session);
+    if (reported === undefined && previous === null) return;
+    if (reported !== undefined && previous !== null) {
+      const key = paneKey(reported.pane);
+      const held = this.held.get(key);
+      if (paneKey(previous) === key && held?.demand.session === session) {
+        held.demand = { ...reported, session, on: held.demand.on };
+        this.reconcile(key, held);
+        return;
+      }
+    }
+    this.reconcileDemands();
+  }
+
+  private reconcileDemands(): void {
     const next = new Map<string, Demand>();
     // A pane can begin another session while the old view is still held.
     // Its newest request selects the effective setting for the pane.
-    for (const [session, switches] of Object.entries(lanes) as Array<
+    for (const [session, switches] of Object.entries(this.lanes) as Array<
       [SessionId, LaneSwitches]
     >) {
       const reported = this.paneOf(session);

@@ -7,8 +7,8 @@
 //
 // [LAW:no-ambient-temporal-coupling] A feed's schedule is state: the tick its
 // next frame falls due, or none while its session has no view to draw. A wake
-// brings it forward, never closer to the last frame than the feed's spacing,
-// and the renderer's wake (`Subscriptions.wake`) is the earliest of them.
+// brings an ordinary frame forward, never closer to the last frame than the
+// feed's spacing. A thrown draw has a retry tick wakes cannot move.
 
 import {
   distributionOf,
@@ -36,7 +36,7 @@ import {
   type SessionViewers,
   type Viewers,
 } from "../renderer-interface/interface.js";
-import type { Level } from "../renderer-interface/adapter.js";
+import type { LogLevel } from "../utils/logger.js";
 import {
   earliestOf,
   type Instant,
@@ -97,7 +97,7 @@ export interface FeedDraw {
   readonly evaluated: number;
   // How many strip items dividing cells too wide for a line added.
   readonly cellBreaks: number;
-  readonly failure: { readonly level: Level; readonly line: string } | null;
+  readonly failure: { readonly level: LogLevel; readonly line: string } | null;
 }
 
 export interface FeedDeps {
@@ -119,18 +119,25 @@ export interface FeedDeps {
   // feed's open to its close, and wakes the feed whenever the session's own
   // state changes: the feed being open is what keeps them.
   readonly pin: (sessionId: SessionId) => () => void;
-  readonly log: (level: Level, line: string) => void;
+  readonly log: (level: LogLevel, line: string) => void;
   readonly periods: FeedPeriods;
 }
+
+// [LAW:no-ambient-temporal-coupling] One deadline, including a retry. Only an
+// ordinary scheduled frame can refer to the wall instant of a bar change.
+type FeedSchedule =
+  | { readonly kind: "waiting"; readonly next: null }
+  | {
+      readonly kind: "frame";
+      readonly next: Tick;
+      readonly change: Instant | null;
+    }
+  | { readonly kind: "retry"; readonly next: Tick };
 
 interface Feed {
   readonly sessionId: SessionId;
   viewers: SessionViewers;
-  // When the next frame falls due; null while the session has no view, until
-  // the event that opens one wakes it.
-  next: Tick | null;
-  // The wall instant of the change the next frame was set for, if any.
-  change: Instant | null;
+  schedule: FeedSchedule;
   // The tick the last frame was drawn at: what a wake is spaced from.
   last: Tick;
   // The last frame drawn, which a lane's rate counts changes against.
@@ -236,19 +243,21 @@ export class Feeds {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.woke[cause]++;
+    const { kind, next } = feed.schedule;
     const soonest = Math.max(tick, feed.last + this.spacingOf(feed)) as Tick;
-    if (feed.next !== null && feed.next <= soonest) {
+    if (kind === "retry" || (next !== null && next <= soonest)) {
       feed.coalesced++;
       return;
     }
-    feed.next = soonest;
-    feed.change = null;
+    feed.schedule = { kind: "frame", next: soonest, change: null };
   }
 
   // The earliest tick a feed's next frame falls due, or null when none waits
   // on a tick.
   next(): Tick | null {
-    return earliestOf([...this.feeds.values()].map((feed) => feed.next));
+    return earliestOf(
+      [...this.feeds.values()].map((feed) => feed.schedule.next),
+    );
   }
 
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
@@ -264,11 +273,10 @@ export class Feeds {
     const { tick } = readings;
     runEach(
       [...this.feeds.values()]
-        .flatMap((feed) =>
-          feed.next !== null && feed.next <= tick
-            ? [{ feed, next: feed.next }]
-            : [],
-        )
+        .flatMap((feed) => {
+          const { next } = feed.schedule;
+          return next !== null && next <= tick ? [{ feed, next }] : [];
+        })
         .map(({ feed, next }) => () => {
           recordMs(feed.lateness, (tick - next) * 1000);
           try {
@@ -277,7 +285,10 @@ export class Feeds {
             if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
               this.summarize(feed, "running", tick);
           } catch (thrown) {
-            feed.next = (tick + this.deps.periods.still / 1000) as Tick;
+            feed.schedule = {
+              kind: "retry",
+              next: (tick + this.deps.periods.still / 1000) as Tick,
+            };
             throw thrown;
           }
         }),
@@ -320,8 +331,7 @@ export class Feeds {
     const feed: Feed = {
       sessionId,
       viewers,
-      next: tick,
-      change: null,
+      schedule: { kind: "frame", next: tick, change: null },
       last: -Infinity as Tick,
       frame: null,
       rates: new Map(),
@@ -380,11 +390,10 @@ export class Feeds {
     const { at, tick } = readings;
     // A frame due for a change is drawn for that change's instant when the
     // due's wall reading falls just short of it.
+    const change = feed.schedule.kind === "frame" ? feed.schedule.change : null;
     const drawAt =
-      feed.change !== null &&
-      feed.change >= at &&
-      feed.change - at <= TIMER_RESOLUTION_S
-        ? feed.change
+      change !== null && change >= at && change - at <= TIMER_RESOLUTION_S
+        ? change
         : at;
     const drawn = this.deps.draw(
       feed.sessionId,
@@ -398,8 +407,7 @@ export class Feeds {
     // the event that opens one wakes it. A frame not drawn spaces nothing.
     if (drawn === null) {
       feed.noView++;
-      feed.next = null;
-      feed.change = null;
+      feed.schedule = { kind: "waiting", next: null };
       return null;
     }
     feed.last = tick;
@@ -451,8 +459,11 @@ export class Feeds {
     if (shownPeriod < still && shown) feed.moving++;
     if (shownPeriod < still && !shown) feed.unseen++;
     const period = shown ? shownPeriod : still;
-    feed.next = (tick + period / 1000) as Tick;
-    feed.change = Number.isFinite(nextChange) ? (nextChange as Instant) : null;
+    feed.schedule = {
+      kind: "frame",
+      next: (tick + period / 1000) as Tick,
+      change: Number.isFinite(nextChange) ? (nextChange as Instant) : null,
+    };
   }
 
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they

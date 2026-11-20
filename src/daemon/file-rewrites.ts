@@ -1,7 +1,13 @@
 // [LAW:single-enforcer] The config files and repository decisions from one
-// turn land together. Each rewrite carries the bytes its plan observed.
+// turn share a batch and its reverse-order restoration. Each rewrite carries
+// the bytes its plan observed.
 import fs from "node:fs";
-import { asError, resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
+import {
+  asError,
+  filePermissions,
+  resolvedTarget,
+  writeAtomic,
+} from "../utils/atomic-write.js";
 
 export interface FileRewrite {
   readonly file: string;
@@ -17,20 +23,54 @@ export interface FileRetirement {
   readonly to: string;
 }
 
-const writeText = (file: string, text: string | null): void =>
+// [LAW:effects-at-boundaries] A publication replaces one file or leaves its
+// prior bytes in place. Restoration uses the same operation as publication.
+export type WriteConfigFile = (
+  file: string,
+  text: string | null,
+  mode?: number,
+) => void;
+
+export const writeConfigFile: WriteConfigFile = (file, text, mode) =>
   text === null
     ? fs.rmSync(resolvedTarget(file), { force: true })
-    : writeAtomic(file, text);
+    : writeAtomic(file, text, mode);
+
+interface RestoreFailure {
+  readonly file: string;
+  readonly error: Error;
+}
+
+// [LAW:types-are-the-program] A failed publication with failed restorations
+// carries the specific paths that need to be observed again.
+export type RevisionWrite =
+  | { readonly kind: "ok"; readonly files: readonly string[] }
+  | { readonly kind: "failed"; readonly error: Error }
+  | {
+      readonly kind: "incomplete";
+      readonly error: Error;
+      readonly unrestored: readonly [RestoreFailure, ...RestoreFailure[]];
+    };
 
 export function writeRevisions(
   rewrites: Iterable<FileRewrite>,
   retire: FileRetirement | null,
-): readonly string[] {
-  const written: FileRewrite[] = [];
+  write: WriteConfigFile = writeConfigFile,
+): RevisionWrite {
+  const written: Array<
+    FileRewrite & { readonly removedMode: number | undefined }
+  > = [];
   try {
     for (const rewrite of rewrites) {
-      writeText(rewrite.file, rewrite.will);
-      written.push(rewrite);
+      // [LAW:effects-at-boundaries] A removed file loses its mode with its
+      // directory entry. Capture it before unlink so restoration can stage
+      // the original permissions before making the file visible again.
+      const removedMode =
+        rewrite.will === null && rewrite.was !== null
+          ? filePermissions(rewrite.file)
+          : undefined;
+      write(rewrite.file, rewrite.will);
+      written.push({ ...rewrite, removedMode });
     }
     const files = written.map(({ file }) => file);
     if (retire !== null) {
@@ -39,22 +79,23 @@ export function writeRevisions(
       fs.renameSync(retire.from, retire.to);
       files.push(retire.from, retire.to);
     }
-    return files;
+    return { kind: "ok", files };
   } catch (cause) {
     const error = asError(cause);
     // [LAW:no-silent-failure] Try every restore and name each failure.
-    const failed: string[] = [];
-    for (const { file, was } of written.reverse()) {
+    const failed: RestoreFailure[] = [];
+    for (const { file, was, will, removedMode } of written.reverse()) {
+      // Removing a file already absent leaves no previous entry to restore.
+      if (will === null && removedMode === undefined) continue;
       try {
-        writeText(file, was);
+        write(file, was, removedMode);
       } catch (rollback) {
-        failed.push(asError(rollback).message);
+        failed.push({ file, error: asError(rollback) });
       }
     }
-    error.message +=
-      failed.length === 0
-        ? " — nothing was written"
-        : `; and putting back what was written failed, so it is half-written: ${failed.join("; ")}`;
-    throw error;
+    const [first, ...remaining] = failed;
+    return first === undefined
+      ? { kind: "failed", error }
+      : { kind: "incomplete", error, unrestored: [first, ...remaining] };
   }
 }

@@ -5,7 +5,7 @@
 // these in.
 
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { holdable, hostHeld, NO_PUSHES, NOTHING_STORED } from "./renderers";
+import { holdable, hostHeld, NOTHING_STORED } from "./renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -16,6 +16,7 @@ import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper, type Timekeeper } from "../../src/time";
 import { TurnTime } from "../../src/renderer/turn-time";
+import { TurnLog } from "../../src/renderer/turn-log";
 import { MenuIdle } from "../../src/renderer/menu-idle";
 import {
   verbsOver,
@@ -48,6 +49,7 @@ export function clickParts(
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard: () => {},
   },
   clock: Timekeeper = systemTimekeeper,
@@ -61,6 +63,7 @@ export function clickParts(
   menuIdle: MenuIdle;
 } {
   const time = new TurnTime();
+  const turnLog = new TurnLog();
   const menuIdle = new MenuIdle();
   // A click's turn reads the verbs and, for its output, the open views'
   // subscriptions: this rig opens none.
@@ -69,6 +72,7 @@ export function clickParts(
     // renderer wires it.
     verbs: verbsOver({
       ...verbCtx,
+      log: turnLog.add,
       clickLanded: (sessionId) => {
         verbCtx.clickLanded(sessionId);
         menuIdle.clicked(sessionId, time.tick);
@@ -79,6 +83,8 @@ export function clickParts(
     renderCache: {
       subscriptions: () => ({ sources: {} }),
       origins: () => [],
+      configSelections: () => [],
+      managedFolders: () => [],
       holdView: () => null,
       configDelivery: (origin) => {
         const snapshot = verbCtx.snapshotFor(origin);
@@ -87,7 +93,13 @@ export function clickParts(
       prune: () => {},
     } satisfies Pick<
       MainRendererParts["renderCache"],
-      "subscriptions" | "origins" | "holdView" | "configDelivery" | "prune"
+      | "subscriptions"
+      | "origins"
+      | "configSelections"
+      | "managedFolders"
+      | "holdView"
+      | "configDelivery"
+      | "prune"
     >,
     // No session renders here: no world state is held, and a session's
     // context is the one the rig's book holds.
@@ -98,8 +110,8 @@ export function clickParts(
     },
     sessionState: verbCtx.sessionState,
     edits: verbCtx.edits,
-    // The renderer says what it does on the log its verbs write to.
-    log: verbCtx.log,
+    turnLog,
+    configWrites: verbCtx.configWrites,
     // No view is open, so no lane is read.
     // The readings each input carries, and the idle periods a `due` closes.
     time,
@@ -109,24 +121,12 @@ export function clickParts(
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
   } as unknown as MainRendererParts;
-  // The teardown's journal step, answered as the main renderer answers it, in
-  // its place in the mailbox: no other push is a click's.
-  const held = holdable(
-    mainRenderer(
-      parts,
-      (push) => {
-        if (push.kind !== "close-journal") return NO_PUSHES();
-        verbCtx.configWrites.close();
-        return { kind: "close-journal" };
-      },
-      NOTHING_STORED,
-    ),
-  );
+  const held = holdable(mainRenderer(parts, NOTHING_STORED));
   const renderer = rendererHost(
     MAIN_RENDERER,
     clock,
     hostHeld(held.renderer, clock.monotonic),
-    () => {},
+    verbCtx.log,
     {
       subscribed: () => {},
       frames: () => {},

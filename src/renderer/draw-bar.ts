@@ -5,6 +5,7 @@ import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
+  type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -58,7 +59,6 @@ import {
   type LaneFeeds,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { type AdapterToHost } from "../renderer-interface/adapter.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { TurnTime } from "./turn-time.js";
@@ -95,14 +95,11 @@ import {
   warningChanges,
 } from "./render-warnings.js";
 import type { Acceptance, FrameCandidate } from "./presented-frames.js";
-import { failureOf } from "../daemon/foundations/verb-error.js";
+import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { renderFailure } from "../daemon/foundations/render-answers";
 
-// The renderer's parts: its own state, and what it reaches in the host
-// (`AdapterToHost`, src/renderer-interface/adapter.ts), each by the methods it
-// calls. `worldStates` holds the world states the host handed in, which its
-// views read.
-export interface RendererState {
+// The renderer's own state, including the world state its views were handed.
+export interface RendererParts {
   // The turn's time, handed in by the host: no draw reads a clock.
   readonly time: TurnTime;
   readonly sessionState: SessionStateRW;
@@ -112,8 +109,6 @@ export interface RendererState {
   // answer hands the bar to and shows the rate of.
   readonly feeds: Pick<Feeds, "following" | "feedsOf">;
 }
-
-export type RendererParts = RendererState & AdapterToHost;
 
 // One frame of a subscribed session, drawn from its latest request at this
 // instant, by the render a request gets. The host presents the bar or its
@@ -144,12 +139,8 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, lanes, candidate } = drawRender(
-      parts,
-      setup,
-      { by: "feed", fps },
-      feeds,
-    );
+    const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
+      drawRender(parts, setup, { by: "feed", fps }, feeds);
     const bar = drawn.body;
     const statusline = statuslineOf(
       setup,
@@ -161,16 +152,21 @@ export function renderFrame(
     const receipt = prepare({
       candidate,
       clickShown: null,
-      eventsShown: [],
     });
     return {
-      frame: { kind: "drawn", receipt, bar, handoff },
+      frame: {
+        kind: "drawn",
+        receipt,
+        bar,
+        handoff,
+        displayedEvents: eventsShown,
+      },
       evaluated,
       cellBreaks,
       failure: null,
     };
   } catch (error) {
-    const outcome = renderFailure(failureOf(error));
+    const outcome = renderFailure(rendererFailureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
     return {
       frame: { kind: "failed", message: outcome.message },
@@ -186,23 +182,23 @@ export function renderFrame(
 export function viewLanes(
   parts: RendererParts,
   sessionId: SessionId,
-  committed: SessionStateRW,
-  editing: boolean,
+  committed: {
+    readonly settings: SessionStateRW;
+    readonly state: DslRenderState;
+  } | null,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
   if (hold === null) return null;
-  if (!editing) return laneSwitches(hold.view.source.effective());
+  if (committed === null) return laneSwitches(hold.view.source.effective());
 
   // [LAW:effects-at-boundaries] Only committed settings declare a live
   // host surface. A draft changes the bar's preview until Save lands.
-  const { config, authoredRoots } = renderCache.getOrCreate(
-    hold.entry.origin,
-  ).state;
+  const { config, authoredRoots } = committed.state;
   return laneSwitches(
     resolveEffectiveGlobals(
       config,
-      (key) => committed.get(sessionId, key),
+      (key) => committed.settings.get(sessionId, key),
       (preset) => authoredRoots.has(preset),
     ),
   );
@@ -408,7 +404,7 @@ export function drawRender(
   clickShown: ClickErrorRecord | null;
   // The held events this draw showed (the launcher's pipe event, the last
   // renderer's end), which an answer carrying them marks answered.
-  eventsShown: readonly HeldEvent[];
+  eventsShown: readonly DisplayedEvent[] | undefined;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
   candidate: FrameCandidate;
@@ -519,8 +515,10 @@ export function drawRender(
     daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
     daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
   ].flatMap((w) => (w === undefined ? [] : [w]));
-  const eventsShown = [...launchEvents, ...held].map(
-    (warning) => warning.event,
+  // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
+  // warning's display hold still runs after the host has confirmed it.
+  const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
+    event.answered ? [] : [{ kind, event }],
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
@@ -767,7 +765,7 @@ export function drawRender(
     evaluated,
     cellBreaks,
     clickShown,
-    eventsShown,
+    eventsShown: eventsShown.length > 0 ? eventsShown : undefined,
     lanes,
     candidate: {
       session: sessionId,
@@ -882,6 +880,7 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
+  readonly displayedEvents?: readonly DisplayedEvent[];
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -921,41 +920,35 @@ export function answerRequest(
   });
   return {
     frame,
+    displayedEvents: eventsShown,
     delivery: {
       candidate,
       clickShown,
-      eventsShown,
     },
   };
 }
 
 // What a frame that reached its client showed, which its delivery records:
-// what its copy clicks copy, and the click error and the held events it
-// carried.
+// what its copy clicks copy and the session's click error.
 export interface Delivery {
   readonly candidate: FrameCandidate;
   readonly clickShown: ClickErrorRecord | null;
-  readonly eventsShown: readonly HeldEvent[];
 }
 
 export type PrepareDelivery = (delivery: Delivery) => EffectId;
 
-// [LAW:single-enforcer] The one record of a delivery. An answer carrying the
-// click error or a daemon-wide held event that reaches its client is the one
-// that delivered it (src/utils/event-hold.ts).
+// [LAW:single-enforcer] Only the current surface's accepted receipt may
+// commit the renderer's layout or answer its session's click error.
 export function deliver(
   parts: RendererParts,
   id: EffectId,
   delivery: Delivery,
 ): Acceptance | null {
-  const { candidate, clickShown, eventsShown } = delivery;
+  const { candidate, clickShown } = delivery;
   const accepted = parts.renderCache.acceptFrame(id, candidate);
   if (accepted === null) return null;
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);
-  // Daemon-wide: one session's answer having shown the event is what makes
-  // it not silent.
-  for (const event of eventsShown) parts.eventAnswered(event);
   return accepted;
 }
 

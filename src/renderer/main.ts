@@ -26,6 +26,7 @@ import {
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
+import { TurnLog } from "./turn-log.js";
 import { runEach } from "../utils/run-each.js";
 import { FEED_PERIODS, Feeds } from "./feeds.js";
 import type { LaneSwitches } from "../config/lanes.js";
@@ -48,12 +49,6 @@ import {
   type DurableContext,
   type SessionContext,
 } from "../renderer-interface/request-context.js";
-import type {
-  AdapterPush,
-  AdapterReply,
-  AdapterToHost,
-  RendererStats,
-} from "../renderer-interface/adapter.js";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -80,24 +75,37 @@ import {
   EMPTY_RENDER_MAP,
   serializeSegmentCells,
 } from "./debug.js";
-import { earliestOf } from "../utils/instant.js";
+import { earliestOf, type Tick } from "../utils/instant.js";
 import {
   CrossedFailure,
-  failureOf,
+  rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error.js";
 import {
-  rendererOf,
+  isCommand,
+  type Command,
   type Effect,
+  type TurnFailure,
+  type TurnFinalizer,
   type EffectId,
   type Event,
+  type Notification,
   type PushedFrame,
+  type ReplyTo,
   type Renderer,
   type RendererBoot,
+  type RendererConstruction,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
-import { reaction, runInAction } from "mobx";
+import { Kept } from "../var-system/store.js";
+import {
+  compareStructural,
+  computed,
+  observable,
+  reaction,
+  runInAction,
+} from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
 // A click waiting for config keeps its action and session identity.
@@ -110,22 +118,24 @@ type ParkedClick = {
 );
 
 // How a turn ended, apart from what it returned.
-type Ended<T> =
-  | { readonly kind: "answered"; readonly value: T }
-  | { readonly kind: "threw"; readonly failure: Failure };
+type Ended<T> = { readonly kind: "answered"; readonly value: T } | TurnFailure;
+
+type CommandKind = Command["kind"];
+type CommandByKind = {
+  [K in CommandKind]: Extract<Command, { readonly kind: K }>;
+};
+type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
+
+type StoreDrains = Readonly<
+  Record<StoreWrite["store"], () => readonly StoreWrite[]>
+>;
 
 export function mainRenderer(
   parts: MainRendererParts,
-  // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
-  // in its own turn, synchronously.
-  pushed: (
-    push: AdapterPush,
-    turns: RendererStats["rendererTurns"],
-  ) => AdapterReply,
-  // What the stores moved since the last turn ended.
-  drained: () => readonly StoreWrite[],
+  // What each store moved since its last successful drain.
+  drains: StoreDrains,
 ): Renderer {
-  const { time, feeds, menuIdle } = parts;
+  const { time, turnLog, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
@@ -139,14 +149,21 @@ export function mainRenderer(
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
+    managedFolders: [],
+    configSelections: [],
     lanes: {},
     configs: [],
-    wake: null,
   };
+  let wake: Tick | null = null;
   // [LAW:no-ambient-temporal-coupling] Waiting work carries its intent and
   // session. Its origin and live request are read when it resumes.
   const opening = new Set<SessionId>();
-  let parked: readonly ParkedClick[] = [];
+  const parked = observable.box<readonly ParkedClick[]>([], { deep: false });
+  const keepParked = (keep: (click: ParkedClick) => boolean): void => {
+    const prior = parked.get();
+    const next = prior.filter(keep);
+    if (next.length !== prior.length) runInAction(() => parked.set(next));
+  };
 
   const parkedContext = (click: ParkedClick): SessionContext => {
     const { session } = click;
@@ -165,7 +182,7 @@ export function mainRenderer(
     matches: (click: ParkedClick) => boolean,
   ): ParkedClick[] => {
     const ready: ParkedClick[] = [];
-    parked = parked.filter((click) => {
+    keepParked((click) => {
       if (!matches(click)) return true;
       ready.push(click);
       return false;
@@ -206,7 +223,7 @@ export function mainRenderer(
         holdClickError(
           parts.sessionState,
           click.session,
-          failureOf(thrown).message,
+          rendererFailureOf(thrown).message,
           time.at,
         );
         throw thrown;
@@ -214,7 +231,48 @@ export function mainRenderer(
     });
 
   const parkedClickSessions = (): Set<SessionId> =>
-    new Set(parked.map((click) => click.session));
+    new Set(parked.get().map((click) => click.session));
+
+  // [LAW:types-are-the-program] Every command has a handler with its own
+  // input and required reply. Notification handlers cannot answer a command.
+  const commands: {
+    readonly [K in CommandKind]: (event: CommandByKind[K]) => ReplyByKind[K];
+  } = {
+    stats: () => ({
+      kind: "stats",
+      stats: {
+        renderCache: parts.renderCache.stats,
+        effectCache: parts.renderCache.presentations.stats().effects,
+        sessionState: parts.sessionStats(),
+        menuIdle: menuIdle.stats(),
+        rendererTurns: {
+          parked: opening.size + parked.get().length,
+          presents: deliveries.size,
+          deferrals: time.deferrals(),
+        },
+        framesDrawn: feeds.drawn(),
+      },
+    }),
+    debug: ({ what }) => ({
+      kind: "debug",
+      snapshot: debugOf(parts.renderCache, what),
+    }),
+    // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+    // runs whole, so none is in flight.
+    "close-journal": () => {
+      parts.configWrites.close();
+      return { kind: "close-journal" };
+    },
+    "close-views": () => {
+      // The feeds release their pins before the corresponding views close.
+      feeds.closeAll(time.tick);
+      parts.renderCache.close();
+      return { kind: "close-views" };
+    },
+  };
+  const command = <K extends CommandKind>(
+    event: CommandByKind[K] & { readonly kind: K },
+  ): ReplyByKind[K] => commands[event.kind](event);
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -222,32 +280,60 @@ export function mainRenderer(
   // [LAW:no-ambient-temporal-coupling] A turn runs whole: it awaits nothing,
   // so the host's mailbox, which sends the next input only once this one has
   // answered, is the one order of the renderer's turns.
-  const turn = (
-    event: Event,
+  const notify = (
+    event: Notification,
     record: RequestFacts,
     effects: Effect[],
     frames: PushedFrame[],
   ): void => {
     switch (event.kind) {
-      case "start":
+      case "start": {
+        const configs = new Map(
+          event.configs.map((offer) => [originKey(offer.origin), offer]),
+        );
+        // [LAW:no-ambient-temporal-coupling] A replacement opens its views
+        // against the offered facts in the first turn. An older selected
+        // input establishes the state the ordinary latest attempt reloads.
+        const offered = (at: RenderOrigin): void => {
+          const key = originKey(at);
+          const offer = configs.get(key);
+          if (offer === undefined) return;
+          configs.delete(key);
+          const { origin, config, retained } = offer;
+          if (typeof retained === "object") {
+            parts.renderCache.configure(origin, retained);
+            parts.renderCache.getOrCreate(origin);
+          }
+          parts.renderCache.configure(origin, config);
+        };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
         // each whatever another's opening, or a feed, threw.
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(
-            ({ context, worldState }) =>
-              () =>
-                turn(
-                  { kind: "context", context, worldState },
-                  record,
-                  effects,
-                  frames,
-                ),
-          ),
+          ...event.sessions.map(({ context, worldState }) => () => {
+            offered(context.requested);
+            notify(
+              { kind: "context", context, worldState },
+              record,
+              effects,
+              frames,
+            );
+          }),
+          // A live session gets its cache entry before idle entries warm,
+          // so they cannot take the budget a pinned view needs.
+          () =>
+            runEach(
+              [...configs.values()].map(({ origin, retained }) => () => {
+                offered(origin);
+                if (retained !== undefined)
+                  parts.renderCache.getOrCreate(origin);
+              }),
+            ),
         ]);
         return;
+      }
       case "context": {
         const { context, worldState } = event;
         const session = context.hookData.session_id;
@@ -310,7 +396,7 @@ export function mainRenderer(
           try {
             parts.renderCache.configure(event.origin, event.config);
           } catch (thrown) {
-            const failure = failureOf(thrown);
+            const failure = rendererFailureOf(thrown);
             parts.renderCache.rejectConfig(event.origin, failure);
             failClicks(ready, failure);
             throw new CrossedFailure(failure);
@@ -340,7 +426,7 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery } = answerRequest(
+        const { frame, delivery, displayedEvents } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -353,6 +439,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          displayedEvents,
         });
         return;
       }
@@ -362,7 +449,7 @@ export function mainRenderer(
         return;
       case "retire":
         opening.delete(event.session);
-        parked = parked.filter((click) => click.session !== event.session);
+        keepParked((click) => click.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -401,12 +488,14 @@ export function mainRenderer(
           if (configForTurn(origin).kind === "pending") {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
-            parked = [
-              ...parked,
-              live === null
-                ? { ...waiting, kind: "cold", durable: context.durable }
-                : { ...waiting, kind: "live" },
-            ];
+            runInAction(() =>
+              parked.set([
+                ...parked.get(),
+                live === null
+                  ? { ...waiting, kind: "cold", durable: context.durable }
+                  : { ...waiting, kind: "live" },
+              ]),
+            );
             record.push(["parked", "click"]);
             return;
           }
@@ -437,132 +526,208 @@ export function mainRenderer(
     }
   };
 
-  const subscribed = (): Subscriptions => {
-    const views = parts.renderCache.subscriptions().sources;
-    // [LAW:one-source-of-truth] Read off the same open views: a session whose
-    // view closes stops being named, so its switches go.
-    const lanes: Record<SessionId, LaneSwitches> = {};
-    for (const session of Object.keys(views) as SessionId[]) {
-      const editing = parts.edits.draft(session) !== null;
-      if (editing) {
-        const { requested } = parts.worldStates.requestOf(session);
-        // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
-        // through a failed delivery. Keep its last committed lane switches
-        // until the host can supply the committed config again.
-        if (parts.renderCache.configDelivery(requested).kind === "failed") {
-          const held = subscriptions.lanes[session];
-          if (held !== undefined) lanes[session] = held;
-          continue;
+  const sources = computed(() => parts.renderCache.subscriptions().sources, {
+    equals: compareStructural,
+  });
+  const managedFolders = computed(() => parts.renderCache.managedFolders(), {
+    equals: compareStructural,
+  });
+  const configSelections = computed(
+    () => parts.renderCache.configSelections(),
+    {
+      equals: compareStructural,
+    },
+  );
+  const laneDeclaration = computed(
+    () => {
+      // [LAW:one-source-of-truth] Read off the same open views: a session whose
+      // view closes stops being named, so its switches go.
+      const lanes: Record<SessionId, LaneSwitches> = {};
+      const unprepared = new Map<string, RenderOrigin>();
+      for (const session of Object.keys(sources.get()) as SessionId[]) {
+        const editing = parts.edits.draft(session) !== null;
+        let committed = null;
+        if (editing) {
+          const { requested } = parts.worldStates.requestOf(session);
+          // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
+          // through a failed delivery. Keep its last committed lane switches
+          // until the host can supply the committed config again.
+          const delivery = parts.renderCache.configDelivery(requested);
+          const state = parts.renderCache.committedState(requested);
+          if (delivery.kind !== "received" || state === null) {
+            if (delivery.kind === "received")
+              unprepared.set(originKey(requested), requested);
+            const held = subscriptions.lanes[session];
+            if (held !== undefined) lanes[session] = held;
+            continue;
+          }
+          committed = { settings: parts.edits.committed, state };
+        }
+        const switches = viewLanes(parts, session, committed);
+        if (switches !== null) lanes[session] = switches;
+      }
+      return { lanes, unprepared: [...unprepared.values()] };
+    },
+    { equals: compareStructural },
+  );
+  const configOrigins = computed(
+    (): Subscriptions["configs"] => {
+      // [LAW:one-source-of-truth] The origins whose config the renderer holds:
+      // each live session's, from its context until its retire, each a cache
+      // entry loads from until its eviction, the one whose click's consequence
+      // waits on its landing, and each a parked event waits on, once each.
+      const configs = new Map<string, RenderOrigin>();
+      const landing = parts.verbs.landing();
+      for (const origin of [
+        ...parts.worldStates.sessions().flatMap((session) => {
+          const context = parts.worldStates.contextOf(session);
+          return context === null ? [] : [context.durable.origin];
+        }),
+        ...(landing === null ? [] : [landing]),
+      ])
+        configs.set(originKey(origin), origin);
+      for (const origin of parts.renderCache.origins())
+        configs.set(originKey(origin), origin);
+      for (const click of parked.get()) {
+        const origin = parkedContext(click).durable.origin;
+        configs.set(originKey(origin), origin);
+      }
+      return [...configs]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([, origin]) => origin);
+    },
+    { equals: compareStructural },
+  );
+
+  // [LAW:carrying-cost] Keep this observed until the views close. A draw
+  // that only moves its next wake does not rewalk views or origins.
+  const declaration = new Kept("renderer subscriptions", () => {
+    const { lanes, unprepared } = laneDeclaration.get();
+    return {
+      plan: {
+        sources: sources.get(),
+        managedFolders: managedFolders.get(),
+        lanes,
+        configs: configOrigins.get(),
+        configSelections: configSelections.get(),
+      },
+      unprepared,
+    };
+  });
+  let observed: ReturnType<typeof declaration.read> | undefined;
+  // [LAW:no-ambient-temporal-coupling] An offered delivery still needs
+  // pruning if collection throws and the next turn retains the same origins.
+  let pruneOwed = false;
+  const declare = (configOffered: boolean): void => {
+    pruneOwed ||= configOffered;
+    let next = declaration.read();
+    if (next !== observed && next.unprepared.length > 0) {
+      // [LAW:effects-at-boundaries] An edit can outlive eviction of its
+      // committed entry. Reload that entry only when dependencies change,
+      // outside the derivation: the load can itself retire other views.
+      for (const origin of next.unprepared)
+        parts.renderCache.getOrCreate(origin);
+      next = declaration.read();
+    }
+    if (pruneOwed || subscriptions.configs !== next.plan.configs) {
+      parts.renderCache.prune(new Set(next.plan.configs.map(originKey)));
+      pruneOwed = false;
+    }
+    observed = next;
+    subscriptions = next.plan;
+  };
+
+  // [LAW:one-source-of-truth] The exhaustive drain record supplies both
+  // the store order and the name of each drain's diagnostic.
+  const storeOrder = Object.keys(drains) as Array<keyof StoreDrains>;
+
+  // [LAW:single-enforcer] Every turn ends here:
+  // each successful store drain belongs to this answer even if another
+  // finalizer throws. Standing declarations advance only after collection.
+  const ending = <T>(event: Event, run: () => T) => {
+    let outcome: Ended<T>;
+    try {
+      outcome = { kind: "answered", value: run() };
+    } catch (thrown) {
+      outcome = { kind: "threw", failure: rendererFailureOf(thrown) };
+    }
+    const stored: StoreWrite[] = [];
+    // [LAW:no-silent-failure] The first classified failure owns the outcome.
+    // Each remaining finalizer still runs and contributes its own failure.
+    const collect = (stage: TurnFinalizer, read: () => void): void => {
+      try {
+        read();
+      } catch (thrown) {
+        const failure = rendererFailureOf(thrown);
+        if (outcome.kind === "answered") outcome = { kind: "threw", failure };
+        else {
+          const after = { stage, failure };
+          outcome = {
+            ...outcome,
+            secondary:
+              outcome.secondary === undefined
+                ? [after]
+                : [...outcome.secondary, after],
+          };
         }
       }
-      const switches = viewLanes(
-        parts,
-        session,
-        parts.edits.committed,
-        editing,
-      );
-      if (switches !== null) lanes[session] = switches;
-    }
-    // [LAW:one-source-of-truth] The origins whose config the renderer holds:
-    // each live session's, from its context until its retire, each a cache
-    // entry loads from until its eviction, the one whose click's consequence
-    // waits on its landing, and each a parked event waits on, once each.
-    const configs = new Map<string, RenderOrigin>();
-    const landing = parts.verbs.landing();
-    for (const origin of [
-      ...parts.worldStates.sessions().flatMap((session) => {
-        const context = parts.worldStates.contextOf(session);
-        return context === null ? [] : [context.durable.origin];
-      }),
-      ...(landing === null ? [] : [landing]),
-    ])
-      configs.set(originKey(origin), origin);
-    for (const origin of parts.renderCache.origins())
-      configs.set(originKey(origin), origin);
-    for (const click of parked) {
-      const origin = parkedContext(click).durable.origin;
-      configs.set(originKey(origin), origin);
-    }
-    return {
-      sources: views,
-      lanes,
-      configs: [...configs.values()],
-      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
-      // at: the earliest any owner of a tick holds.
-      wake: earliestOf([
-        time.next(),
-        menuIdle.next(parked.length === 0 ? undefined : parkedClickSessions()),
-        feeds.next(),
-      ]),
     };
+
+    for (const store of storeOrder)
+      collect(store, () => stored.push(...drains[store]()));
+    collect("subscriptions", () => declare(event.kind === "config"));
+    // [LAW:one-source-of-truth] The wake has its own collector. A failed
+    // subscription declaration leaves the last one standing and the next
+    // due turn still receives the current tick.
+    collect("wake", () => {
+      wake = earliestOf([
+        time.next(),
+        menuIdle.next(
+          parked.get().length === 0 ? undefined : parkedClickSessions(),
+        ),
+        feeds.next(),
+      ]);
+    });
+    // [LAW:no-ambient-temporal-coupling] The declaration's lifetime ends in
+    // the close-views turn even if an earlier finalizer failed.
+    if (event.kind === "close-views")
+      collect("release-subscriptions", () =>
+        runInAction(() => declaration.release()),
+      );
+
+    return { outcome, subscriptions, wake, stored };
   };
 
-  // What the turn that ended last moved of the stores.
-  let stored: readonly StoreWrite[] = [];
-  // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
-  // what the renderer needs read, when it next wants a turn, and what it
-  // moved of its stores are read as they stand when it ends, however it
-  // ended: a write before a throw is real. Read as part of the turn, so a
-  // read that throws fails it, and the subscriptions last returned stand.
-  const ending = <T>(run: () => T): Ended<T> => {
-    try {
-      let value: T;
-      try {
-        value = run();
-      } finally {
-        stored = drained();
-        subscriptions = subscribed();
-        // [LAW:one-source-of-truth] The deliveries held are exactly the
-        // origins the output names, as the host follows exactly those.
-        const origins = new Set(subscriptions.configs.map(originKey));
-        parts.renderCache.prune(origins);
-      }
-      return { kind: "answered", value };
-    } catch (thrown) {
-      // [LAW:single-enforcer] Classified here, where it was thrown: a class
-      // crosses no process.
-      return { kind: "threw", failure: failureOf(thrown) };
-    }
+  return {
+    answer: async (input) =>
+      turnLog.during(() =>
+        time.during(input, () => {
+          const record: RequestFacts = [];
+          const effects: Effect[] = [];
+          const frames: PushedFrame[] = [];
+          const { event } = input;
+          const { outcome, ...declaration } = ending(event, () =>
+            isCommand(event)
+              ? command(event)
+              : notify(event, record, effects, frames),
+          );
+          return {
+            ...(outcome.kind === "answered"
+              ? {
+                  kind: "answered" as const,
+                  ...(outcome.value === undefined
+                    ? {}
+                    : { reply: outcome.value }),
+                }
+              : outcome),
+            effects,
+            record,
+            frames,
+            ...declaration,
+          };
+        }),
+      ),
   };
-
-  return rendererOf({
-    // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
-    // after it lands after its writes.
-    adapter: async (input) =>
-      time.during(input, () => {
-        const ended = ending(() =>
-          pushed(input.push, {
-            parked: opening.size + parked.length,
-            presents: deliveries.size,
-            deferrals: time.deferrals(),
-          }),
-        );
-        return {
-          ...(ended.kind === "answered"
-            ? { kind: "replied" as const, reply: ended.value }
-            : ended),
-          subscriptions,
-          stored,
-        };
-      }),
-    event: async (input) =>
-      time.during(input, () => {
-        const record: RequestFacts = [];
-        const effects: Effect[] = [];
-        const frames: PushedFrame[] = [];
-        const ended = ending(() => turn(input.event, record, effects, frames));
-        return {
-          ...(ended.kind === "answered"
-            ? { kind: "answered" as const }
-            : ended),
-          effects,
-          record,
-          subscriptions,
-          frames,
-          stored,
-        };
-      }),
-  });
 }
 
 // The sessions whose idle period has run out by the turn's tick, their menus
@@ -584,9 +749,9 @@ function closeIdleMenus(
         effects,
       );
     } catch (thrown) {
-      const failure = failureOf(thrown);
+      const failure = rendererFailureOf(thrown);
       // A close the daemon's close cut off is a refusal, as a click's is.
-      parts.log(
+      parts.turnLog.add(
         failure.kind === "closing" ? "info" : "error",
         `menu-idle: close failed (session=${session}): ${failure.detail}`,
       );
@@ -594,20 +759,26 @@ function closeIdleMenus(
   }
 }
 
-// [LAW:single-enforcer] The main renderer, built over the host's parts it
-// reaches and the stored state it is handed.
-export function mainRendererOf(
-  inputs: RendererBoot,
-  host: AdapterToHost,
-): Renderer {
+// [LAW:single-enforcer] The main renderer is built from its supplied state.
+export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
+  const turnLog = new TurnLog();
+  return turnLog.during<RendererConstruction>(() => {
+    try {
+      return { kind: "built", renderer: build(inputs, turnLog) };
+    } catch (thrown) {
+      return { kind: "refused", failure: rendererFailureOf(thrown) };
+    }
+  });
+}
+
+function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
   const now = () => time.at;
-  // [LAW:single-enforcer] The renderer's lines go to the host's one log.
-  const { log } = host;
+  const log = turnLog.add;
   const sessionState = new SessionState(inputs.stored.sessions);
   // A legacy edit-mode flag has no draft after a restart.
   for (const sid of Object.keys(inputs.stored.sessions))
@@ -618,12 +789,6 @@ export function mainRendererOf(
     log,
     inputs.stored.history,
   );
-  // [LAW:one-source-of-truth] What the turn moved of every store, in the
-  // order each store's entries last moved.
-  const drained = (): StoreWrite[] => [
-    ...sessionState.drain(),
-    ...settingsHistory.drain(),
-  ];
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint);
@@ -638,11 +803,11 @@ export function mainRendererOf(
     {
       clock: time.clock,
       locations: inputs.locations,
+      region: inputs.region,
       sessionState: edits.view,
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
-      storage: host.storage,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -718,7 +883,6 @@ export function mainRendererOf(
     periods: FEED_PERIODS,
   });
   const parts: RendererParts = {
-    ...host,
     time,
     sessionState: edits.view,
     renderCache,
@@ -748,58 +912,23 @@ export function mainRendererOf(
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  // [LAW:types-are-the-program] Exhaustive over the pushes: a new arm is a
-  // compile error here until the renderer answers it.
-  const pushed = (
-    push: AdapterPush,
-    rendererTurns: RendererStats["rendererTurns"],
-  ): AdapterReply => {
-    switch (push.kind) {
-      case "stats":
-        return {
-          kind: "stats",
-          stats: {
-            renderCache: renderCache.stats,
-            effectCache: renderCache.presentations.stats().effects,
-            sessionState: {
-              sessions: sessionState.size(),
-              observers: sessionState.observers(),
-              revision: sessionState.latestRevision(),
-            },
-            menuIdle: menuIdle.stats(),
-            rendererTurns,
-            framesDrawn: feeds.drawn(),
-          },
-        };
-      case "debug":
-        return {
-          kind: "debug",
-          snapshot: debugOf(renderCache, push.what),
-        };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
-      // runs whole, so none is in flight.
-      case "close-journal":
-        configWrites.close();
-        return { kind: "close-journal" };
-      case "close-views":
-        // The feeds first: each releases its pin on a view the close ends.
-        feeds.closeAll(time.tick);
-        renderCache.close();
-        return { kind: "close-views" };
-    }
-  };
   return mainRenderer(
     {
       ...parts,
+      turnLog,
       menuIdle,
       feeds,
       verbs: verbsOver(verbCtx),
       edits,
       mint,
       acts,
+      configWrites,
+      sessionStats: () => sessionState.stats(),
     },
-    pushed,
-    drained,
+    {
+      "session-state": () => sessionState.drain(),
+      "settings-history": () => settingsHistory.drain(),
+    },
   );
 }
 

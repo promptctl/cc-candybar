@@ -106,7 +106,7 @@ function taken(link: () => void): Linked["outcome"] {
 
 // Beside the file, so the publish stays on one filesystem. A pid alone is
 // shared by two writes in one process and repeats across pid namespaces.
-function stagedName(file: string): string {
+export function stagedName(file: string): string {
   return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
 }
 
@@ -148,13 +148,13 @@ function noted(e: unknown, staged: string, removal: Error | null): Error {
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(at);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const kept = fs.statSync(file, { throwIfNoEntry: false })?.mode;
+  publishByRename(file, text, mode ?? filePermissions(file));
+}
+
+export function filePermissions(file: string): number | undefined {
+  const mode = fs.statSync(file, { throwIfNoEntry: false })?.mode;
   // A file's permission bits, never its type's.
-  publishByRename(
-    file,
-    text,
-    mode ?? (kept === undefined ? undefined : kept & 0o777),
-  );
+  return mode === undefined ? undefined : mode & 0o777;
 }
 
 // [LAW:single-enforcer] The file a write to `at` lands in: the last hop of

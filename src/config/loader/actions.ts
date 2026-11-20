@@ -126,7 +126,8 @@ function validateActionDecl(
     );
     return null;
   }
-  if (!(layers as readonly unknown[]).includes(layer)) {
+  const chosen = layers.find((choice) => choice === layer);
+  if (chosen === undefined) {
     issue(
       ctx,
       `${path}.layer`,
@@ -135,7 +136,9 @@ function validateActionDecl(
     return null;
   }
   const parsed = parse(ctx, path, rest, home);
-  return parsed === null ? null : ({ ...parsed, layer } as ActionDecl);
+  // [LAW:types-are-the-program] LAYER_CHOICES checks the layer against this
+  // action key. Indexing the two tables at runtime loses that type relation.
+  return parsed === null ? null : ({ ...parsed, layer: chosen } as ActionDecl);
 }
 
 // [LAW:types-are-the-program] Where an action table is declared: the directory

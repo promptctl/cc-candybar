@@ -1,3 +1,4 @@
+import { systemRegion } from "../utils/region.js";
 import fs from "node:fs";
 import net from "node:net";
 import v8 from "node:v8";
@@ -199,6 +200,7 @@ async function boot(): Promise<void> {
 
   // Prepare before binding. The socket winner loads prior state in onListening.
   const daemon = createDaemon({
+    region: systemRegion(),
     rendererName: MAIN_RENDERER,
     rendererEntry: processEntry(),
     ...productionAdapters(paths, daemonLog, world.clock),

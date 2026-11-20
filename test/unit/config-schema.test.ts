@@ -112,6 +112,10 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     } }`,
   ],
   [
+    "shell environment names use ASCII identifiers",
+    `{ variables: { probe: { kind: "shell", command: "true", cache: {never: true}, env: ["_EXTRA", "name2"] } } }`,
+  ],
+  [
     "cycle action (2de.4 toggle form)",
     `{
       segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
@@ -208,6 +212,10 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   [
     "a reset asks to choose a layer",
     `{ actions: { a: { reset: "palette", layer: "ask" } } }`,
+  ],
+  [
+    "a shell environment name contains punctuation",
+    `{ variables: { probe: { kind: "shell", command: "true", cache: {never: true}, env: ["bad-name"] } } }`,
   ],
   ["unknown top-level key", `{ segmnets: {} }`],
   [

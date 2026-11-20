@@ -5,6 +5,7 @@
 
 import { userInfo } from "node:os";
 import { SESSION_BOOK_FILE } from "./session-book.js";
+import { openRecordingFile } from "./recording-file.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
@@ -18,6 +19,7 @@ import { realLimitsDeps } from "./limits";
 import type { DaemonLog } from "./log";
 import { profilePaths, type DaemonPaths } from "./paths";
 import { checkoutFiles } from "../utils/git-root.js";
+import { writeConfigFile } from "./file-rewrites.js";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
@@ -31,6 +33,7 @@ export function productionAdapters(
 ): DaemonAdapters {
   let accountHome: string | undefined;
   return {
+    openRecording: openRecordingFile,
     accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
@@ -58,5 +61,6 @@ export function productionAdapters(
     },
     stat: fs.statSync,
     checkoutFiles,
+    writeConfigFile,
   };
 }

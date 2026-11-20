@@ -4,7 +4,7 @@
 // frame presented for it, in the encoding the client asked for.
 
 import type {
-  Event,
+  Notification,
   Present,
   RequestId,
   TurnOutcome,
@@ -148,7 +148,7 @@ export async function answerStatusline(
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
   // closing the views it would open or draw into.
-  const unlessClosing = (event: Event) => (): Made =>
+  const unlessClosing = (event: Notification) => (): Made =>
     closing.aborted
       ? failureOf(new DaemonClosing("render"))
       : { kind: "event", event };

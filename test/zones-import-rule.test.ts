@@ -29,6 +29,7 @@ console.log(JSON.stringify(out));
 
 const IN_RENDERER = "src/renderer/probe.ts";
 const IN_START = "src/renderer/main.ts";
+const IN_PROCESS = "src/renderer-process.ts";
 const IN_REST = "src/daemon/probe.ts";
 const IN_SHARED = "src/utils/probe.ts";
 const IN_FOUNDATIONS = "src/daemon/foundations/probe.ts";
@@ -44,6 +45,10 @@ const REFUSED = {
   },
   rendererToRestDotted: { file: IN_RENDERER, code: imp("./../daemon/x") },
   rendererToRestTypeOnly: { file: IN_RENDERER, code: typeImp("../daemon/x") },
+  rendererToAbsoluteHostType: { file: IN_RENDERER, code: typeImp(path.join(ROOT, "src/host")) },
+  rendererToHostIdentity: { file: IN_RENDERER, code: imp("../daemon/cache/host-identity") },
+  rendererToOperatingSystem: { file: IN_RENDERER, code: imp("node:os") },
+  rendererToProcess: { file: IN_RENDERER, code: imp("node:process") },
   rendererToRestReexport: {
     file: IN_RENDERER,
     code: `export { x } from "../daemon/x";\n`,
@@ -64,6 +69,10 @@ const REFUSED = {
     file: IN_RENDERER,
     code: `export const x = require("../daemon/x");\n`,
   },
+  processToHost: { file: IN_PROCESS, code: imp("./daemon/pane-visibility") },
+  processToHostType: { file: IN_PROCESS, code: typeImp("./host") },
+  processToEntry: { file: IN_PROCESS, code: imp("./index") },
+  processToOperatingSystem: { file: IN_PROCESS, code: imp("node:os") },
   rendererToRestTemplate: {
     file: IN_RENDERER,
     code: "export const m = import(`../daemon/x`);\n",
@@ -118,20 +127,22 @@ const ALLOWED = {
   rendererToRenderer: { file: IN_RENDERER, code: imp("./draw-bar") },
   rendererToShared: {
     file: IN_RENDERER,
-    code: imp("../renderer-interface/adapter"),
+    code: imp("../renderer-interface/interface"),
   },
   restToStart: { file: IN_REST, code: imp("../renderer/main") },
   startToRenderer: { file: IN_START, code: imp("./draw-bar") },
   startToContract: {
     file: IN_START,
-    code: imp("../renderer-interface/adapter"),
+    code: imp("../renderer-interface/interface"),
   },
-  restToContract: { file: IN_REST, code: imp("../renderer-interface/adapter") },
+  restToContract: { file: IN_REST, code: imp("../renderer-interface/interface") },
   restToShared: { file: IN_REST, code: imp("../utils/outcome") },
-  rootToRenderer: {
-    file: "src/renderer-process.ts",
+  processToRenderer: {
+    file: IN_PROCESS,
     code: imp("./renderer/draw-bar"),
   },
+  rendererToUrlParser: { file: IN_RENDERER, code: imp("node:url") },
+  processToTransport: { file: IN_PROCESS, code: imp("node:process") },
   entryToRoot: { file: "src/index.ts", code: imp("./renderer-process") },
   foundationsInside: { file: IN_FOUNDATIONS, code: imp("./gates") },
   foundationsToShared: {

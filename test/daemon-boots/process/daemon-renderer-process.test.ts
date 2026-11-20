@@ -15,9 +15,18 @@ import {
   VERB_RUN,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { RENDERER_WIRE_VERSION, type HostLine } from "../../../src/renderer-interface/wire";
+import {
+  RENDERER_WIRE_VERSION,
+  type HostLine,
+  type RendererLine,
+} from "../../../src/renderer-interface/wire";
+import type { Event, RequestId } from "../../../src/renderer-interface/interface";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
+import { RendererDown } from "../../../src/daemon/foundations/verb-error";
+import { systemLauncher } from "../../../src/proc/system-launcher";
+import { systemTimekeeper } from "../../../src/time";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import {
   DISCLOSURE_CLOSED,
@@ -41,6 +50,13 @@ import {
   type IsolatedDaemonHandle,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
+import {
+  oversizedRendererHistory,
+  oversizedSession,
+} from "../../helpers/oversized-renderer-history";
+import type { Instant, Tick } from "../../../src/utils/instant";
+import { fieldsOf } from "../../../src/utils/logfmt";
+import { heardRequest } from "../../helpers/click";
 
 jest.setTimeout(30_000);
 
@@ -54,6 +70,7 @@ const COMPATIBLE_BOOT = {
       dataHome: "/home/.local/share",
       dataDirs: [],
     },
+    region: { locale: "en-US", timeZone: "UTC" },
     memoryLimitBytes: 1,
   },
 } satisfies Omit<Extract<HostLine, { kind: "boot" }>, "kind">;
@@ -75,6 +92,11 @@ function bootChild(...lines: readonly object[]) {
 describe("the renderer wire handshake", () => {
   test.each([
     ["no version", {}, "no version"],
+    [
+      "a previous worktree build",
+      { wireVersion: RENDERER_WIRE_VERSION - 1 },
+      `version ${RENDERER_WIRE_VERSION - 1}`,
+    ],
     [
       "a different version",
       { wireVersion: RENDERER_WIRE_VERSION + 1 },
@@ -114,6 +136,40 @@ describe("the renderer wire handshake", () => {
     );
   });
 
+  test("the packaged renderer boots without discovering the process's home or temp directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-renderer-boot-"));
+    try {
+      const probe = path.join(dir, "refuse-host.cjs");
+      fs.writeFileSync(
+        probe,
+        `const os = require("node:os");
+for (const name of ["homedir", "tmpdir"]) {
+  os[name] = () => { throw new Error("renderer bootstrap read os." + name); };
+}
+require("node:module").syncBuiltinESMExports();`,
+      );
+      // [LAW:behavior-not-structure] The real CLI entry can start from its
+      // boot message alone while process-level location reads are refused.
+      const child = spawnSync(
+        process.execPath,
+        ["--require", probe, path.resolve("dist/index.mjs"), "renderer"],
+        {
+          encoding: "utf8",
+          timeout: 10_000,
+          input: `${JSON.stringify({ kind: "boot", ...COMPATIBLE_BOOT })}\n`,
+        },
+      );
+      expect(child.stderr).toBe("");
+      expect(child.status).toBe(0);
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: "started",
+        wireVersion: RENDERER_WIRE_VERSION,
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a matching version with no resolved locations refuses before readiness", () => {
     const child = bootChild({
       ...COMPATIBLE_BOOT,
@@ -122,9 +178,257 @@ describe("the renderer wire handshake", () => {
     expect(child.status).toBe(1);
     expect(JSON.parse(child.stdout)).toMatchObject({
       kind: "refused",
-      failure: { message: "renderer boot has no resolved locations" },
+      failure: {
+        kind: "threw",
+        message: "renderer boot has no resolved locations",
+        detail: "Error: renderer boot has no resolved locations",
+      },
     });
   });
+
+  test("a built child reports history trimmed at boot on readiness alone", () => {
+    const child = bootChild(
+      {
+        ...COMPATIBLE_BOOT,
+        boot: { ...COMPATIBLE_BOOT.boot, stored: oversizedRendererHistory() },
+      },
+      {
+        kind: "input",
+        n: 1,
+        input: {
+          kind: "event",
+          at: 0 as Instant,
+          tick: 0 as Tick,
+          event: { kind: "start", viewers: {}, sessions: [], configs: [] },
+        },
+      } satisfies HostLine,
+    );
+    expect(child.status).toBe(0);
+    const lines = child.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(lines).toEqual([
+      expect.objectContaining({
+        kind: "started",
+        diagnostics: [
+          {
+            level: "info",
+            line: `settings-history: trimmed an old step for session ${oversizedSession}`,
+          },
+        ],
+      }),
+      expect.objectContaining({
+        kind: "output",
+        n: 1,
+        output: expect.objectContaining({
+          kind: "answered",
+          stored: [
+            { store: "settings-history", key: oversizedSession, value: null },
+          ],
+        }),
+      }),
+    ]);
+    expect(lines[1]?.output).not.toHaveProperty("diagnostics");
+  });
+});
+
+test("a built renderer answers command and draw events on the same numbered stream", () => {
+  const events: readonly Event[] = [
+    { kind: "start", viewers: {}, sessions: [], configs: [] },
+    { kind: "stats" },
+    { kind: "due" },
+    { kind: "debug", what: "config" },
+    { kind: "close-journal" },
+    { kind: "close-views" },
+  ];
+  const lines: HostLine[] = events.map((event, index) => ({
+    kind: "input",
+    n: index + 1,
+    input: { kind: "event", at: 0 as Instant, tick: 0 as Tick, event },
+  }));
+  const child = bootChild(COMPATIBLE_BOOT, ...lines);
+  expect(child.status).toBe(0);
+  const output = child.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as RendererLine);
+  expect(output.map((line) => line.kind)).toEqual([
+    "started",
+    ...events.map(() => "output"),
+  ]);
+  const answers = output.flatMap((line) =>
+    line.kind === "output" ? [line] : [],
+  );
+  expect(answers.map(({ n, output }) => [n, output.kind])).toEqual(
+    events.map((_, index) => [index + 1, "answered"]),
+  );
+  expect(
+    answers.map(({ output }) =>
+      output.kind === "answered" ? output.reply : undefined,
+    ),
+  ).toEqual([
+    undefined,
+    {
+      kind: "stats",
+      stats: expect.objectContaining({
+        framesDrawn: 0,
+        rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
+      }),
+    },
+    undefined,
+    { kind: "debug", snapshot: { what: "config", config: null } },
+    { kind: "close-journal" },
+    { kind: "close-views" },
+  ]);
+});
+
+test("the same failed turn returns identical data from different worker paths", () => {
+  const relocated = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-replay-worker-"));
+  try {
+    const built = path.resolve("dist/index.mjs");
+    const second = path.join(relocated, "index.mjs");
+    // A relocated entry with a different source line offset runs the same code.
+    const source = fs.readFileSync(built, "utf8");
+    expect(source.startsWith("#!")).toBe(true);
+    fs.writeFileSync(second, source.replace("\n", "\n\n"));
+    const answer = (bundle: string, session: string) => {
+      const lines: readonly HostLine[] = [
+        { kind: "boot", ...COMPATIBLE_BOOT },
+        {
+          kind: "input",
+          n: 1,
+          input: {
+            kind: "event",
+            at: 0 as Instant,
+            tick: 0 as Tick,
+            event: {
+              kind: "request",
+              id: 1 as RequestId,
+              context: heardRequest(session),
+            },
+          },
+        },
+      ];
+      const result = spawnSync(process.execPath, [bundle, "renderer"], {
+        encoding: "utf8",
+        env: {},
+        timeout: 10_000,
+        input: lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+      });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      const [started, reply] = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as RendererLine);
+      expect(started?.kind).toBe("started");
+      if (reply?.kind !== "output" || reply.output.kind !== "threw")
+        throw new Error(
+          `the worker did not answer its missing context: ${result.stdout}`,
+        );
+      // Transport time records each execution. Replay compares the answer
+      // itself, including its complete failure and diagnostics.
+      const { turnMs: _elapsed, ...output } = reply.output;
+      return output;
+    };
+
+    const first = answer(built, "missing-context");
+    expect(first.failure.message).toContain('"missing-context"');
+    expect(JSON.stringify(answer(second, "missing-context"))).toBe(
+      JSON.stringify(first),
+    );
+    const different = answer(second, "another-context");
+    expect(different.failure.message).toContain('"another-context"');
+    expect(different.failure.detail).not.toBe(first.failure.detail);
+  } finally {
+    fs.rmSync(relocated, { recursive: true, force: true });
+  }
+});
+
+test("the supervisor names the unanswered input when its built worker is killed", async () => {
+  const cancel = new AbortController();
+  const launcher = systemLauncher(
+    { inherited: process.env, signal: cancel.signal },
+    systemTimekeeper,
+  );
+  const ready = Promise.withResolvers<void>();
+  const sent = Promise.withResolvers<number>();
+  const logged: string[] = [];
+  const session = sessionIdOf("interrupted-session");
+  const readings = { at: 0 as Instant, tick: 0 as Tick };
+  const link: RendererLink = processRenderer({
+    launcher: {
+      launchChannel: (options) => {
+        const channel = launcher.launchChannel(options);
+        return {
+          ...channel,
+          write: (text) => {
+            channel.write(text);
+            const line = JSON.parse(text) as HostLine;
+            if (
+              line.kind === "input" &&
+              line.input.kind === "event" &&
+              line.input.event.kind === "retire" &&
+              line.input.event.session === session
+            )
+              sent.resolve(line.n);
+          },
+        };
+      },
+    },
+    clock: systemTimekeeper,
+    name: MAIN_RENDERER,
+    entry: path.join(process.cwd(), "dist", "index.mjs"),
+    cwd: process.cwd(),
+    heapCapMb: 256,
+    node: [process.execPath],
+    boot: () => COMPATIBLE_BOOT.boot,
+    log: (_level, line) => void logged.push(line),
+    ended: (event) => ready.reject(new Error(event.text)),
+    start: async () => {
+      const answer = await link.renderer.answer({
+        kind: "event",
+        ...readings,
+        event: { kind: "start", sessions: [], viewers: {}, configs: [] },
+      });
+      if (answer.kind !== "answered") throw new Error(answer.failure.detail);
+      ready.resolve();
+    },
+  });
+  try {
+    link.arm();
+    await ready.promise;
+    const child = link.process();
+    if (child === null) throw new Error("renderer lost after its START");
+    process.kill(child.pid, "SIGSTOP");
+    const unanswered = expect(
+      link.renderer.answer({
+        kind: "event",
+        ...readings,
+        event: { kind: "retire", session },
+      }),
+    ).rejects.toThrow(RendererDown);
+    const n = await sent.promise;
+    process.kill(child.pid, "SIGKILL");
+    await unanswered;
+    const interrupted = logged.filter((line) =>
+      line.startsWith("renderer input interrupted "),
+    );
+    expect(interrupted).toHaveLength(1);
+    expect(Object.fromEntries(fieldsOf(interrupted[0]!))).toEqual({
+      renderer: MAIN_RENDERER,
+      generation: "1",
+      wire: String(n),
+      input: "retire",
+      sid: session,
+      error: "killed by SIGKILL",
+    });
+  } finally {
+    await link.close();
+    cancel.abort();
+    await launcher.settled();
+  }
 });
 
 // Every renderer start the daemon logged, by pid, in order.
@@ -225,6 +529,20 @@ describe("the daemon's renderer process", () => {
     );
     expect(log).toMatch(
       /renderer main\[1\] killed by SIGKILL after \d+ s; next start in 1 s/,
+    );
+    const profileLoads = log
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes(" config loaded ") &&
+          line.includes(`files=${profileConfig} `),
+      );
+    expect(profileLoads).toHaveLength(2);
+    expect(log.indexOf(profileLoads[0]!)).toBeLessThan(
+      log.indexOf("renderer main[1] killed by SIGKILL"),
+    );
+    expect(log.indexOf(profileLoads[1]!)).toBeGreaterThan(
+      log.indexOf("renderer main[2] started pid="),
     );
   });
 

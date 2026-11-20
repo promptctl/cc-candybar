@@ -12,7 +12,6 @@ import {
   eventRenderer,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -20,6 +19,7 @@ import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
 import { observable, reaction, runInAction, type IObservableValue } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { valueOf } from "../src/utils/logfmt";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -76,6 +76,7 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import {
   configHost,
+  followManagedStorage,
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
@@ -85,7 +86,7 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { NOTHING_READ } from "../src/dsl/view-source";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import { rendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
@@ -172,11 +173,9 @@ interface Rig {
   readonly warnings: IObservableValue<DaemonFacts["fileEvents"]>;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
-  // The cache's storage notices, in the order sent: `hold <id>` or
-  // `release <id>`.
-  readonly storageCalls: string[];
   readonly collector: Collector;
   readonly worldStates: WorldStates;
+  readonly route: (host: RendererHost) => void;
   // A request's turn as the main renderer takes one: the world state the
   // collector read at its keys taken, the session's view held, and the
   // cache's subscriptions handed back to the collector.
@@ -233,7 +232,7 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const warnings = observable.box<DaemonFacts["fileEvents"]>([], { deep: false });
   const reloads = new ReloadSignal();
-  const storageCalls: string[] = [];
+  const hints = { claudeConfigDir: path.join(dir, "claude") };
   const served = collected(
     {
       owners: providers,
@@ -247,16 +246,6 @@ function rig(): Rig {
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,
-      storage: {
-        hold: (id, folders) => {
-          storageCalls.push(`hold ${id}`);
-          providers.managedStorage.hold(id, folders);
-        },
-        release: (id) => {
-          storageCalls.push(`release ${id}`);
-          providers.managedStorage.release(id);
-        },
-      },
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -270,14 +259,17 @@ function rig(): Rig {
     { budgetBytes: () => 1024 * 1024 * 1024, observers: reloads.observers },
   );
   served.serve(cache);
+  const stopFollowing = followManagedStorage(cache, providers.managedStorage);
   const configs = configHost(cache, {
     locations: locations(host),
     stateDir: stateDir(host),
     watchers,
     log,
+    reloaded: (folders) => providers.managedStorage.recheck(folders),
   });
   cleanups.push(() => {
     cache.close();
+    stopFollowing();
     configs.close();
     // The watch-less trigger built over them, then every provider's own.
     providers.transcriptLanes.close();
@@ -294,17 +286,17 @@ function rig(): Rig {
     warnings,
     reloads,
     lines,
-    storageCalls,
     collector: served.collector,
     worldStates: served.worldStates,
+    route: served.route,
     hold: (configFile, sid = "s1") => {
-      const facts = heardRequest(sid, dir);
+      const facts = heardRequest(sid, dir, hints);
       return served.config(facts, () =>
         cache.holdSession(configs.at(dir, dir, configFile), facts),
       );
     },
     inTurn: (configFile, read) => {
-      const facts = heardRequest("s1", dir);
+      const facts = heardRequest("s1", dir, hints);
       let seen: ReturnType<typeof read> | undefined;
       const held = served.config(facts, () => {
         const opened = cache.holdSession(
@@ -837,8 +829,7 @@ function statusline(r: Rig, configFile: string) {
       sessionState: r.sessionState,
       worldStates: r.worldStates,
     }),
-    NO_PUSHES,
-    NOTHING_STORED,
+      NOTHING_STORED,
   );
   const host = rendererHost(
     MAIN_RENDERER,
@@ -857,6 +848,8 @@ function statusline(r: Rig, configFile: string) {
     unfollowedCollector(r.collector),
     { ...NO_ACTS, configs: r.configs.discovery },
   );
+  r.route(host);
+  cleanups.push(host.closeWake);
   let id = 0;
   return async (): Promise<{ text: string; facts: RequestFacts }> => {
     const { hookData } = viewFacts(dir, "s1");
@@ -867,6 +860,7 @@ function statusline(r: Rig, configFile: string) {
         hookData,
         args: ["cc-candybar", "--config", configFile],
         cwd: dir,
+        claudeConfigDir: path.join(dir, "claude"),
         encoding: "frame",
         env: TEST_ENV,
       },
@@ -1177,24 +1171,29 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("a built reload holds its successor's folders before it releases its predecessor's; a kept one holds again under the same id", async () => {
+  test("a replaced state's managed folder stays declared until its in-flight draw returns", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
-    // No render holds the state through the reload: a held one's release
-    // waits for that render's return.
-    const held = r.hold(file);
-    await answered(held.view);
-    held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
-    expect(r.storageCalls).toEqual(["hold 1"]);
-    fs.appendFileSync(file, "\n// a comment keeps the state\n");
-    r.configs.again();
-    expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
-    const edited = fs
-      .readFileSync(file, "utf8")
-      .replace(`template: "mine"`, `template: "mine, edited"`);
-    await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
-    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
+    const origin = r.configs.at(dir, dir, file);
+    const entry = r.cache.getOrCreate(origin);
+    const folder = storageOf();
+    const closed = () =>
+      r.lines.filter((line) =>
+        line.includes(`dir watch closed path=${valueOf(folder)} `),
+      ).length;
+    expect(r.cache.managedFolders()).toEqual([folder]);
+    expect(fs.statSync(folder).isDirectory()).toBe(true);
+    {
+      using draw = r.cache.hold(origin);
+      const edited = `{ segments: { mine: { template: "replaced" } }, root: { h: ["mine"] } }`;
+      await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
+      expect(entry.state).not.toBe(draw.state);
+      expect(r.cache.managedFolders()).toEqual([folder]);
+      expect(closed()).toBe(0);
+    }
+    expect(r.cache.managedFolders()).toEqual([]);
+    expect(closed()).toBe(1);
+    expect(r.providers.managedStorage.stats().folders).toBe(0);
   });
 
   test("a refused watch's fault clears at the config's reload", async () => {
@@ -1215,6 +1214,35 @@ describe("a storage folder's watch", () => {
       () => draw(view).text.includes("home=/recovered"),
       "the write after the reload",
     );
+  });
+
+  test("a config observation retries only the managed folders it observed", () => {
+    const roots = [path.join(dir, "left", "p"), path.join(dir, "right", "p")];
+    const folders = roots.map((root) => path.join(root, "session"));
+    fakeWatches(new Set(folders));
+    cleanups.push(() => jest.restoreAllMocks());
+    const r = rig();
+    const origins = roots.map((root, i) => {
+      const definition = plugin("", root);
+      const file = write(
+        `selected-${i}.json5`,
+        JSON.stringify({
+          plugins: [definition],
+          segments: { mine: { template: "mine" } },
+          root: { h: ["mine"] },
+        }),
+      );
+      return r.configs.at(dir, dir, file);
+    });
+    for (const origin of origins) r.cache.getOrCreate(origin);
+    expect(r.cache.managedFolders()).toEqual(folders);
+    expect(r.providers.managedStorage.stats().faults.refused).toBe(2);
+
+    jest.restoreAllMocks();
+    const opened = fakeWatches();
+    fs.appendFileSync(path.join(dir, "selected-0.json5"), "\n// physical edit\n");
+    r.configs.again();
+    expect(opened.map((watch) => watch.path)).toEqual([folders[0]]);
   });
 
   test("a reload keeps it open", async () => {

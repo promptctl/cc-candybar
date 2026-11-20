@@ -10,6 +10,7 @@ import { textOf } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
 import {
   click,
   findUrl,
@@ -25,6 +26,7 @@ import { linksOf } from "../../../src/click/read";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
+import { readProbe, readsOf, type Read } from "../../helpers/daemon-read-probe";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import {
@@ -38,7 +40,24 @@ import {
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 
-const WORKTREE_MODEL = "Worktree renderer";
+const BUNDLE = path.resolve("dist/index.mjs");
+const builtDaemon = (env: NodeJS.ProcessEnv) => ({
+  bin: process.execPath,
+  args: daemonArgs(BUNDLE, env),
+});
+
+let worktreeDir: string;
+let worktreeBuilt: string;
+
+beforeAll(() => {
+  worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-alternate-renderer-"));
+  worktreeBuilt = path.join(worktreeDir, "index.mjs");
+  execFileSync(process.execPath, [path.resolve("test/helpers/build-named-renderer.mjs"), worktreeBuilt]);
+});
+
+afterAll(() => {
+  fs.rmSync(worktreeDir, { recursive: true, force: true });
+});
 
 function cacheEntry(id: string, timestamp: string): string {
   return (
@@ -53,82 +72,6 @@ function cacheEntry(id: string, timestamp: string): string {
       },
     }) + "\n"
   );
-}
-
-// The release bundle's own renderer, with one deliberately different piece
-// of display code. It still exercises the production process and boot wire,
-// config compiler, templates, and source subscriptions.
-function worktreeBundle(file: string): void {
-  const built = fs.readFileSync(
-    path.join(process.cwd(), "dist", "index.mjs"),
-    "utf8",
-  );
-  const declaration = /function composePayload\([^,]+,([^,]+),[^)]+\)\{/g;
-  const matches = [...built.matchAll(declaration)];
-  if (matches.length !== 1)
-    throw new Error("expected one bundled payload composer");
-  const [prefix, inputs] = matches[0]!;
-  const changed = `${inputs}={...${inputs},hookData:{...${inputs}.hookData,model:{...${inputs}.hookData.model,display_name:${JSON.stringify(WORKTREE_MODEL)}}}};`;
-  fs.writeFileSync(
-    file,
-    built.replace(prefix, () => prefix + changed),
-  );
-}
-
-interface Read {
-  readonly file: string;
-  readonly pid: number;
-  readonly operation: string;
-}
-
-// The probe counts filesystem calls for the exact
-// fixture paths. Child renderers inherit the preload as well.
-function readProbe(
-  file: string,
-  output: string,
-  selected: Readonly<Record<string, readonly string[]>>,
-): void {
-  fs.writeFileSync(
-    file,
-    `
-    const fs = require("node:fs");
-    const fsp = require("node:fs/promises");
-    const { syncBuiltinESMExports } = require("node:module");
-    const wanted = ${JSON.stringify(selected)};
-    const append = fs.appendFileSync;
-    const tracked = new Map();
-    const record = (file, operation) => append(${JSON.stringify(output)}, JSON.stringify({file,pid:process.pid,operation}) + "\\n");
-    for (const [api, name] of [[fs,"openSync"], [fsp,"open"], [fsp,"readFile"]]) {
-      const original = api[name];
-      api[name] = function (file, ...rest) {
-        const result = original.call(this, file, ...rest);
-        if (typeof file === "string" && wanted[file]?.includes(name)) record(file, name);
-        if (name === "openSync" && typeof file === "string" && wanted[file]?.includes("payload")) tracked.set(result, file);
-        return result;
-      };
-    }
-    const readFileSync = fs.readFileSync;
-    fs.readFileSync = function (file, ...rest) {
-      const payload = typeof file === "string" && wanted[file]?.includes("payload") ? file : tracked.get(file);
-      if (payload !== undefined) record(payload, "payload");
-      return readFileSync.call(this, file, ...rest);
-    };
-    const closeSync = fs.closeSync;
-    fs.closeSync = function (fd) {
-      tracked.delete(fd);
-      return closeSync.call(this, fd);
-    };
-    syncBuiltinESMExports();
-  `,
-  );
-}
-
-function readsOf(file: string): Read[] {
-  return fs
-    .readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Read);
 }
 
 test("two named renderer processes draw separately and share config, transcript and plugin-source reads", async () => {
@@ -189,7 +132,7 @@ test("two named renderer processes draw separately and share config, transcript 
         transcript,
         cacheEntry("initial", "2026-11-19T12:00:00.000Z"),
       );
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     const shared = [config, definition, source];
     readProbe(probe, reads, {
       [config]: ["openSync", "payload"],
@@ -208,10 +151,7 @@ test("two named renderer processes draw separately and share config, transcript 
           .filter(Boolean)
           .join(" "),
       },
-      (env) => ({
-        bin: process.execPath,
-        args: daemonArgs(path.join(process.cwd(), "dist", "index.mjs"), env),
-      }),
+      builtDaemon,
     );
 
     const args = ["cc-candybar", "--config", config];
@@ -495,6 +435,15 @@ test("two named renderer processes draw separately and share config, transcript 
       "the primary feed stays live during worktree recovery",
       8000,
     );
+    // Both subscriptions survived the change of process. A fresh file
+    // observation reaches its existing feed without another render request.
+    const afterRecovery = "existing-feeds-after-worktree-restart";
+    fs.writeFileSync(source, `${afterRecovery}\n`);
+    await until(
+      () => delivered(afterRecovery),
+      "both existing feeds draw after the renderer restart",
+      8_000,
+    );
     expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(
       1,
     );
@@ -545,9 +494,9 @@ test("one project approval from an earlier frame covers both renderers, a config
   let daemon: RunningDaemon | undefined;
   try {
     execFileSync("git", ["init", "-q", project]);
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     writeProject("PROJECT-APPROVED");
-    daemon = await spawnDaemonWithEnv(isolated.env);
+    daemon = await spawnDaemonWithEnv(isolated.env, builtDaemon);
     const before = await draw("main");
     expect(textOf(before)).not.toContain("PROJECT-APPROVED");
     expect(textOf(await draw("worktree"))).not.toContain("PROJECT-APPROVED");
@@ -591,7 +540,7 @@ test("one project approval from an earlier frame covers both renderers, a config
       answerFile,
       JSON.stringify({ [project + path.sep]: "approved" }),
     );
-    daemon = await spawnDaemonWithEnv(isolated.env);
+    daemon = await spawnDaemonWithEnv(isolated.env, builtDaemon);
     await bothSee(edited, true);
     const after = await readDiagnostics(
       isolated.sockPath,
@@ -613,14 +562,63 @@ test("one project approval from an earlier frame covers both renderers, a config
   }
 }, 30_000);
 
+test("a delivered pane frame settles in the subprocess that drew it", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-pane-receipt", builtDaemon);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pane-receipt-"));
+  try {
+    const session = "pane-receipt";
+    const config = path.join(dir, "config.json5");
+    const text = "settle this pane";
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { experimentalPane: true },
+        segments: { sample: { template: text } },
+        root: { h: ["sample"] },
+      }),
+    );
+    const args = ["cc-candybar", "--config", config];
+    const statusline = await frameRequest(
+      daemon.sockPath,
+      renderBody(session, dir, {}, args),
+    );
+    expect(textOf(statusline)).toContain(text);
+
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await pane.waitFor((line) => line.includes(text), text);
+      let pending: number | undefined;
+      await until(
+        async () => {
+          const response = await sendDaemonRequest(daemon.sockPath, {
+            v: PROTOCOL_VERSION,
+            kind: "stats",
+          });
+          if (!response.ok || !("stats" in response))
+            throw new Error(`no daemon stats: ${JSON.stringify(response)}`);
+          pending = response.stats.rendererTurns.presents;
+          return response.stats.frameFeeds.drawn > 0 && pending === 0;
+        },
+        () => `the delivered pane frame settled (${pending} pending)`,
+        2_000,
+      );
+    } finally {
+      pane.close();
+    }
+  } finally {
+    await daemon.cleanup();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the named renderer receives its pane control and earlier statusline run", async () => {
-  const daemon = await spawnIsolatedDaemon("ccb-named-clicks");
+  const daemon = await spawnIsolatedDaemon("ccb-named-clicks", builtDaemon);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-click-source-"));
   try {
     const config = path.join(dir, "config.json5");
     const alternate = path.join(dir, "worktree.mjs");
     const record = path.join(dir, "run.json");
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     fs.writeFileSync(
       config,
       JSON.stringify({
