@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
-      "timestamp": "2026-11-20T11:19:59.344Z",
-      "commits": [
-        {
-          "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:18:46-07:00",
-          "message": "fix(sources): distinguish invalid inputs from typed empty values (#897)\n\n* fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n\n* fix(config): preserve unchanged variable declarations (ibyq.r86)\n\n* test(config): catch lost synthesized variable bindings"
-        }
-      ]
-    },
-    {
       "version": "pr-907",
       "ref": "refs/pull/907/merge",
-      "sha": "d71dbb66fc84c6937ae199b75d01329a911f5e8c",
-      "timestamp": "2026-11-20T11:16:36.103Z",
+      "sha": "aaae2613f93b88f02a847e86e995403df86da755",
+      "timestamp": "2026-11-20T11:21:10.578Z",
       "commits": [
         {
-          "sha": "d71dbb66fc84c6937ae199b75d01329a911f5e8c",
+          "sha": "aaae2613f93b88f02a847e86e995403df86da755",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T11:15:33Z",
-          "message": "Merge 8fdfd0ecfedff17a3d5c7ade65660a5b5e13ac48 into e0fb86a050d4b6a420d8de916d4add0b0ef0ec89\n"
+          "timestamp": "2026-11-20T11:20:05Z",
+          "message": "Merge 04e8295af35bcf1109d6e15acaa0726a9c9e6b83 into c957046c1280833322d322ac37f7edd30d094ff7\n"
+        },
+        {
+          "sha": "04e8295af35bcf1109d6e15acaa0726a9c9e6b83",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:18:57-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into grv-integration\n"
         },
         {
           "sha": "8fdfd0ecfedff17a3d5c7ade65660a5b5e13ac48",
@@ -112,6 +104,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
+      "timestamp": "2026-11-20T11:19:59.344Z",
+      "commits": [
+        {
+          "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:18:46-07:00",
+          "message": "fix(sources): distinguish invalid inputs from typed empty values (#897)\n\n* fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n\n* fix(config): preserve unchanged variable declarations (ibyq.r86)\n\n* test(config): catch lost synthesized variable bindings"
         }
       ]
     },

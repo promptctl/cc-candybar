@@ -50035,15 +50035,54 @@ function literalValueSpec() {
     }
   };
 }
+var DEFAULT_VARIABLE_TYPE = "string";
+var VARIABLE_TYPES = [DEFAULT_VARIABLE_TYPE, "number", "boolean"];
+var VARIABLE_TYPE = optionalEnumSpec(VARIABLE_TYPES);
 function typedDefaultSpec() {
   return {
     required: false,
     json: { type: ["string", "number", "boolean"] },
     parse: (ctx, path31, _field, raw) => {
-      const t2 = raw.type;
-      const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
+      const expected = VARIABLE_TYPES.find((type3) => type3 === raw.type) ?? DEFAULT_VARIABLE_TYPE;
       return optionalTypedDefault(ctx, path31, raw, expected);
     }
+  };
+}
+function hasResolvedType(decl) {
+  return decl.kind !== "input" && decl.kind !== "template" || decl.type !== void 0;
+}
+function hasResolvedTypes(decls) {
+  return Object.values(decls).every(hasResolvedType);
+}
+function resolveTypes(decls) {
+  if (hasResolvedTypes(decls)) return decls;
+  return Object.fromEntries(
+    Object.entries(decls).map(
+      ([name, decl]) => [
+        name,
+        hasResolvedType(decl) ? decl : { ...decl, type: DEFAULT_VARIABLE_TYPE }
+      ]
+    )
+  );
+}
+function usesResolvedLocals(segment, locals) {
+  return segment.vars === locals;
+}
+function resolveSegmentTypes(segment) {
+  const locals = segment.vars === void 0 ? void 0 : resolveTypes(segment.vars);
+  return usesResolvedLocals(segment, locals) ? segment : { ...segment, vars: locals };
+}
+function resolveVariableTypes(config) {
+  return {
+    variables: resolveTypes(config.variables),
+    segments: Object.fromEntries(
+      Object.entries(config.segments).map(
+        ([name, segment]) => [
+          name,
+          resolveSegmentTypes(segment)
+        ]
+      )
+    )
   };
 }
 var PARSE_SCHEMA = {
@@ -50133,7 +50172,7 @@ function inputPathSpec() {
 }
 var INPUT_FIELDS = {
   path: inputPathSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
+  type: VARIABLE_TYPE,
   default: typedDefaultSpec()
 };
 var ENV_FIELDS = {
@@ -50159,7 +50198,7 @@ function noCachePolicy(why) {
 }
 var TEMPLATE_FIELDS = {
   template: requireStringSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
+  type: VARIABLE_TYPE,
   default: typedDefaultSpec()
 };
 var TEMPLATE_VAR_REMOVED = noCachePolicy(
@@ -62608,7 +62647,11 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     ])
   );
   return {
-    config: { ...withChrome, actions },
+    config: {
+      ...withChrome,
+      ...resolveVariableTypes(withChrome),
+      actions
+    },
     dropped,
     placed: merged,
     warnings: notices
@@ -65573,19 +65616,14 @@ function coerceToType(raw, type3) {
   if (type3 === "number") return toNumber(raw);
   return toBool(raw);
 }
-function zeroValue(type3) {
-  if (type3 === "number") return 0;
-  if (type3 === "boolean") return false;
-  return "";
-}
+var EMPTY_INPUT = { string: "", number: 0, boolean: false };
 var SourceRegistry = class _SourceRegistry {
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
+  // defaultEmptyValue is the config's cosmetic `default_empty_value`.
   //
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null, region = systemRegion()) {
+  constructor(store, defaultEmptyValue = EMPTY_INPUT.string, sessionState, parent = null, region = systemRegion()) {
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
@@ -65785,8 +65823,8 @@ var SourceRegistry = class _SourceRegistry {
       () => this.inputAt(name, path31, type3, varDefault)
     );
   }
-  // [LAW:single-enforcer] The one reading of an input: its path's value cast
-  // to its type, else the fallback chain with the failure recorded.
+  // [LAW:single-enforcer] Cast a present input or report its failed read.
+  // An answered payload with a missing path has its own empty-value policy.
   inputAt(name, path31, type3, varDefault) {
     const resolved = this.inputs.get().read(path31);
     if (resolved.kind === "pending") {
@@ -65798,24 +65836,15 @@ var SourceRegistry = class _SourceRegistry {
     }
     const raw = resolved.value;
     if (raw === void 0) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        `input path "${path31}" not found in payload`
-      );
+      this.recordError(name, `input path "${path31}" not found in payload`);
+      return varDefault ?? this.emptyInput(type3);
     }
     try {
       const value = coerceToType(raw, type3);
       this.lastErrors.delete(name);
       return value;
     } catch (e) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        e instanceof Error ? e.message : String(e)
-      );
+      return this.failedScalar(name, e, varDefault);
     }
   }
   // env: a variable of the session's environment, which the host holds and
@@ -65823,7 +65852,7 @@ var SourceRegistry = class _SourceRegistry {
   // it is handed in; an unset variable is the fallback, with the reason on
   // the variable. Always a string: env vars are text by nature.
   declareEnv(name, envVar, varDefault) {
-    const fallback = this.stringInitial(varDefault);
+    const fallback = varDefault ?? this.defaultEmptyValue;
     this.store.defineBox(name, "string", pendingOf("unread"));
     runInAction(() => this.envNames.push(envVar));
     this.cleanups.push(
@@ -65936,7 +65965,7 @@ var SourceRegistry = class _SourceRegistry {
     }
   }
   scalarPublisher(name, varDefault) {
-    const fallback = this.stringInitial(varDefault);
+    const fallback = varDefault ?? this.defaultEmptyValue;
     this.store.defineBox(name, "string", fallback);
     return (outcome) => {
       this.noteOutcome(name, outcome);
@@ -66038,12 +66067,7 @@ var SourceRegistry = class _SourceRegistry {
           this.lastErrors.delete(name);
           throw pending2;
         }
-        const message = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message);
-        if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message}`);
-        }
-        return fallback;
+        return this.failedScalar(name, e, fallback);
       }
     });
   }
@@ -66062,7 +66086,7 @@ var SourceRegistry = class _SourceRegistry {
       );
     }
     const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(void 0);
+    const fallback = opts.varDefault ?? this.defaultEmptyValue;
     this.store.defineComputed(name, "string", () => {
       const value = sessionState.get(this.session(), opts.key);
       return value !== null ? value : fallback;
@@ -66204,25 +66228,22 @@ var SourceRegistry = class _SourceRegistry {
       return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last2)) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
     };
   }
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
-  fallbackOf(name, type3, varDefault, errorMessage) {
-    this.recordError(name, errorMessage);
-    if (varDefault !== void 0) return varDefault;
+  // [LAW:no-silent-failure] Only a variable's own default tolerates a failed
+  // input cast or derivation. The failure still appears in variable diagnostics.
+  failedScalar(name, cause, fallback) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    this.recordError(name, message);
+    if (fallback === void 0)
+      throw new Error(`variable "${name}": ${message}`);
+    return fallback;
+  }
+  emptyInput(type3) {
     try {
       return coerceToType(this.defaultEmptyValue, type3);
-    } catch {
-      return zeroValue(type3);
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e;
+      return EMPTY_INPUT[type3];
     }
-  }
-  // Initial string value for shell/file boxes before the first async run.
-  stringInitial(varDefault) {
-    if (varDefault !== void 0) return varDefault;
-    if (typeof this.defaultEmptyValue === "string")
-      return this.defaultEmptyValue;
-    return "";
   }
   recordError(name, message) {
     this.lastErrors.set(name, {
@@ -69354,7 +69375,7 @@ function declareOne(registry, name, decl, cwd2, derivation) {
       registry.declareInput(
         name,
         decl.path,
-        decl.type ?? "string",
+        decl.type,
         decl.default,
         derivation
       );
@@ -69379,7 +69400,7 @@ function declareOne(registry, name, decl, cwd2, derivation) {
       break;
     case "template":
       registry.declareTemplate(name, decl.template, {
-        type: decl.type ?? "string",
+        type: decl.type,
         varDefault: decl.default,
         derivation
       });
