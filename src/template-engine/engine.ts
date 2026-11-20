@@ -46,7 +46,6 @@ import {
   sprigStrings,
   sprigLists,
   sprigMath,
-  sprigDatetime,
   sprigConversions,
   sprigFlow,
   sprigDicts,
@@ -62,6 +61,7 @@ import {
 } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs, relativeTimeFuncs } from "./funcs.js";
 import type { Clock, ClockFactory } from "./clock.js";
+import { DATE_CLOCK_FUNCTIONS, dateFunctions } from "./datetime.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import { authoredLinks } from "../render/link-style.js";
 
@@ -183,29 +183,7 @@ function animationPair(
 // readout of real time — the lane toggles' spinner, which shows frames arriving
 // at 30 a second and would read frozen at 20x (brandon-menus-sjhy.nt2)
 // [LAW:one-type-per-behavior].
-// sprig's datetime vocabulary bundles functions of their arguments with the
-// two that read its clock; only those two are clock functions. The rest are
-// built over a clock that refuses, so a release of sprig that reads the clock
-// in another is a loud error rather than a projection nobody knows of
-// [LAW:no-silent-failure].
-const SPRIG_CLOCK_READERS = new Set(["now", "ago"]);
-
-function sprigDatetimeWhere(clock: () => Date, readsClock: boolean): FuncMap {
-  return Object.fromEntries(
-    Object.entries(sprigDatetime(clock)).filter(
-      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock,
-    ),
-  );
-}
-
-const SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS",
-  );
-}, false);
-
 const CLOCK_FACTORIES: readonly ClockFactory[] = [
-  (clock) => sprigDatetimeWhere(clock.now, true),
   (clock) => animationPair(clock.frame, clock.timeline),
   (clock) =>
     Object.fromEntries(
@@ -227,9 +205,10 @@ function clockFuncs(factories: readonly ClockFactory[]): FuncMap {
 // at load (src/config/loader/projections.ts). A compile's engine adds the
 // render's own clock factories (the swatch row's `?`) to its instance; only a
 // segment's templates can call those.
-export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set(
-  Object.keys(clockFuncs(CLOCK_FACTORIES)),
-);
+export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set([
+  ...DATE_CLOCK_FUNCTIONS,
+  ...Object.keys(clockFuncs(CLOCK_FACTORIES)),
+]);
 
 // The clock functions of an engine built with `extra` clock factories beside
 // its own — a compile's, whose segment templates can call the swatch row's.
@@ -265,7 +244,7 @@ export function createCcCandybarEngine(opts: {
   const depth = (): DrawnAt => ({ depth: drawnAt() });
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
-    toString: (rt) => rt.plain,
+    toString: (rt) => (rt instanceof Date ? rt.toString() : rt.plain),
     // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
     // prints as Go prints a map, instead of leaking the object into the
     // fragments as if it were text.
@@ -288,26 +267,7 @@ export function createCcCandybarEngine(opts: {
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...SPRIG_DATE_FUNCS,
-      // [LAW:effects-at-boundaries] Local date functions use the zone supplied
-      // by the host, through the library’s existing explicitly zoned variants.
-      date: {
-        ...SPRIG_DATE_FUNCS.date!,
-        fn: (layout: string, value: unknown) =>
-          Reflect.apply(SPRIG_DATE_FUNCS.dateInZone!.fn, undefined, [
-            layout,
-            value,
-            region.timeZone,
-          ]),
-      },
-      htmlDate: {
-        ...SPRIG_DATE_FUNCS.htmlDate!,
-        fn: (value: unknown) =>
-          Reflect.apply(SPRIG_DATE_FUNCS.htmlDateInZone!.fn, undefined, [
-            value,
-            region.timeZone,
-          ]),
-      },
+      ...dateFunctions(region.timeZone, CLOCK.now),
       ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
