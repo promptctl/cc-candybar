@@ -294,6 +294,115 @@ describe("WatcherRegistry", () => {
           .ridesStream,
       ).toBe(true);
     });
+
+    // A delivery that throws is its consumer's defect: the fault stands on
+    // the recipient, and the registry tells its listeners only as one moves.
+    describe("a delivery that throws", () => {
+      let logs: string[];
+      let told: number;
+      let f: string;
+      let edits: number;
+      const targets = (): { dirs: []; polled: string[] } => ({
+        dirs: [],
+        polled: [f],
+      });
+      const edited = (): void => {
+        fs.writeFileSync(f, "x".repeat(++edits));
+        swept();
+      };
+      const errors = (): string[] => logs.filter((l) => l.startsWith("error"));
+      beforeEach(() => {
+        reg.closeAll();
+        logs = [];
+        told = 0;
+        edits = 0;
+        f = path.join(dir, "f");
+        fs.writeFileSync(f, "");
+        reg = new WatcherRegistry({
+          clock,
+          logger: (level, line) => logs.push(`${level} ${line}`),
+        });
+        reg.subscribe(() => told++);
+      });
+
+      test("stands on its holder until a clean delivery, logged as it starts and as it clears", () => {
+        let failing = true;
+        reg.acquire("k", targets(), () => {
+          if (failing) throw new Error("boom");
+        });
+        edited();
+        const about = `watch on ${f}`;
+        expect(reg.standing()).toEqual([
+          { about, message: `${about}: delivery threw boom` },
+        ]);
+        expect(told).toBe(1);
+        expect(errors()).toEqual([
+          expect.stringMatching(/^error watch delivery threw about=.* failed=boom/),
+        ]);
+
+        edited();
+        expect(told).toBe(1);
+        expect(errors()).toHaveLength(1);
+
+        failing = false;
+        edited();
+        expect(reg.standing()).toEqual([]);
+        expect(told).toBe(2);
+        expect(logs.at(-1)).toMatch(/^info watch delivery recovered about=/);
+      });
+
+      test("leaves with its holder's release while the watch stays held", () => {
+        const failing = reg.acquire("k", targets(), () => {
+          throw new Error("boom");
+        });
+        reg.acquire("k", targets(), () => {});
+        edited();
+        expect(reg.standing()).toHaveLength(1);
+        failing.release();
+        expect(reg.size()).toBe(1);
+        expect(reg.standing()).toEqual([]);
+        expect(told).toBe(2);
+      });
+
+      test("on a window's completion leaves with its last slot, and a slot joining it again meets none", () => {
+        const window = reg.batch("config discovery", () => {
+          throw new Error("late");
+        });
+        const held = window.acquire("k", targets(), () => {});
+        edited();
+        expect(reg.standing()).toEqual([
+          {
+            about: "config discovery",
+            message: "config discovery: delivery threw late",
+          },
+        ]);
+        held.release();
+        expect(reg.standing()).toEqual([]);
+        expect(told).toBe(2);
+        window.acquire("k", targets(), () => {});
+        expect(reg.standing()).toEqual([]);
+        expect(told).toBe(2);
+      });
+
+      test("from a recipient its own callback ended leaves no fault", () => {
+        let holder: { release(): void } | null = null;
+        holder = reg.acquire("held", targets(), () => {
+          holder?.release();
+          throw new Error("after release");
+        });
+        let windowed: { release(): void } | null = null;
+        const window = reg.batch("ending", () => {
+          windowed?.release();
+          throw new Error("after its last slot");
+        });
+        windowed = window.acquire("windowed", targets(), () => {});
+        edited();
+        expect(reg.size()).toBe(0);
+        expect(reg.standing()).toEqual([]);
+        expect(told).toBe(0);
+        expect(errors()).toEqual([]);
+      });
+    });
   });
 
   test("refcount: release closes watchers when refcount hits zero", async () => {

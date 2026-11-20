@@ -38,6 +38,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import { rootNode, rootOf } from "../src/config/root";
+import { configSnapshot } from "./helpers/config-snapshot";
 
 const FILE = "/tmp/test.json5";
 
@@ -2698,7 +2699,7 @@ describe("a snapshot's listed definitions", () => {
   // load's error, naming the entry and the file that lists it.
   test("an entry missing from the layer's listed definitions is a ConfigError naming it and the layer", () => {
     const file = "/home/u/.config/cc-candybar/config.json5";
-    const snapshot: ConfigSnapshot = {
+    const snapshot: ConfigSnapshot = configSnapshot({
       chain: [
         {
           role: "user",
@@ -2713,7 +2714,7 @@ describe("a snapshot's listed definitions", () => {
       checkout: { root: "/home/u", git: false },
       notices: [],
       watch: null,
-    };
+    });
     let caught: unknown;
     try {
       loadSnapshot(snapshot, "/home/u", DEFAULT_DSL_CONFIG, {

@@ -598,7 +598,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("one failed rediscovery leaves the writer and another holder the successful change, says why, and can retry", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -623,24 +623,99 @@ test("one failed rediscovery leaves the writer and another holder the successful
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
   refuse = true;
-  expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
-  expect(delivered).toEqual([[name, originKey(a.origin)]]);
+  // The failed origin moves too: its last snapshot now says why it is last.
+  expect(writer.landed([a.file, b.file])).toEqual([a.origin, b.origin]);
+  expect(delivered).toEqual([
+    [name, originKey(a.origin)],
+    [name, originKey(b.origin)],
+  ]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
+  expect(second.snapshotOf(a.origin)?.discoveryFault).toBeNull();
+  expect(second.snapshotOf(b.origin)?.discoveryFault).toBe(
+    "config discovery threw: rediscovery failed",
   );
+  expect(
+    logged.filter((line) => line.startsWith("config discovery threw")),
+  ).toEqual([
+    expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
+  ]);
+
+  // The same fault again is not news.
+  service.again("events-resumed");
+  expect(delivered).toHaveLength(2);
+  expect(
+    logged.filter((line) => line.startsWith("config discovery threw")),
+  ).toHaveLength(1);
 
   refuse = false;
   service.again("events-resumed");
   expect(delivered).toEqual([
     [name, originKey(a.origin)],
+    [name, originKey(b.origin)],
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+  expect(second.snapshotOf(b.origin)?.discoveryFault).toBeNull();
+});
+
+// Reads `file` from disk until `refuse()` says it fails.
+const refusing = (file: string, refuse: () => boolean): typeof diskFiles => ({
+  ...diskFiles,
+  text(read) {
+    if (refuse() && read === file) throw new Error("read failed");
+    return diskFiles.text(read);
+  },
+});
+
+test("a rediscovery that throws keeps the origin's watch, which hears the next edit", () => {
+  const { origin, file } = named("kept");
+  const clock = heldClock(new Date(0));
+  let refuse = false;
+  const { discovery, watchers, counters } = discoveryRig(
+    refusing(file, () => refuse),
+    clock,
+  );
+  discovery.follow([origin]);
+  const slots = watchers.size();
+  const opened = counters.watchersOpened;
+
+  refuse = true;
+  fs.writeFileSync(file, "{ globals: {} }");
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(discovery.snapshotOf(origin)?.discoveryFault).toBe(
+    "config discovery threw: read failed",
+  );
+  expect(textOfLayer(discovery, origin, file)).toBe("{}");
+  expect(watchers.size()).toBe(slots);
+  expect(counters.watchersOpened).toBe(opened);
+
+  refuse = false;
+  const next = "{ globals: { padding: 1 } }";
+  fs.writeFileSync(file, next);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(discovery.snapshotOf(origin)?.discoveryFault).toBeNull();
+  expect(textOfLayer(discovery, origin, file)).toBe(next);
+});
+
+test("a first follow that throws finding one origin fails loudly and leaves the renderer's origins as they were", () => {
+  const before = named("before");
+  const fresh = named("fresh");
+  const broken = named("broken");
+  const { discovery, watchers, counters } = discoveryRig(
+    refusing(broken.file, () => true),
+  );
+  discovery.follow([before.origin]);
+  const slots = watchers.size();
+  const opened = counters.watchersOpened;
+  expect(() =>
+    discovery.follow([before.origin, fresh.origin, broken.origin]),
+  ).toThrow("read failed");
+  expect(discovery.snapshotOf(before.origin)).not.toBeNull();
+  expect(discovery.snapshotOf(fresh.origin)).toBeNull();
+  expect(watchers.size()).toBe(slots);
+  expect(counters.watchersOpened).toBe(opened);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {

@@ -31,6 +31,7 @@ import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
 import { daemonFactsOf } from "../helpers/daemon-facts";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
@@ -607,7 +608,7 @@ test("a config named by a command reaches the renderer before the next queued ev
       configs: {
         ...NO_ACTS.configs,
         follow: () => {},
-        snapshotOf: () => ({
+        snapshotOf: () => configSnapshot({
           chain: [],
           repo: null,
           plugins: [],
@@ -636,21 +637,15 @@ test("failed replacement starts leave the accepted declaration until a complete 
     cwd: "/p",
     target: { source: "search" as const },
   };
-  const config = {
-    chain: [],
-    repo: null,
-    plugins: [],
-    strays: [],
+  const config = configSnapshot({
     checkout: { root: origin.cwd, git: false },
-    notices: [],
-    watch: null,
-  };
+  });
   const context = heardRequest("added", "/added");
   const added = context.requested;
-  const addedConfig: ConfigSnapshot = {
+  const addedConfig: ConfigSnapshot = configSnapshot({
     ...config,
     checkout: { root: added.cwd, git: false },
-  };
+  });
   const absent = { ...ABSENT, at: instantOf(new Date(0)) };
   const worldState = {
     v: FACTS_VERSION,

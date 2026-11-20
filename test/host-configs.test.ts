@@ -41,6 +41,7 @@ import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
+import { configSnapshot } from "./helpers/config-snapshot";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -55,7 +56,7 @@ const ORIGIN: RenderOrigin = {
   cwd: "/p",
   target: { source: "search" },
 };
-const SNAPSHOT: ConfigSnapshot = {
+const SNAPSHOT: ConfigSnapshot = configSnapshot({
   chain: [],
   repo: null,
   plugins: [],
@@ -63,7 +64,7 @@ const SNAPSHOT: ConfigSnapshot = {
   checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
-};
+});
 
 let dir: string;
 let file: string;

@@ -24,6 +24,7 @@ import type {
 } from "../../src/renderer/settings-history";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
+import { configSnapshot } from "./config-snapshot";
 
 // A history's files with no click around it: the chain's layers at the paths
 // `layers` names, read from and written to the disk at once, with no home to
@@ -69,7 +70,7 @@ export function soleLayer(file: string, home: string): WriteLayer {
   } as const;
   return {
     ...layer,
-    snapshot: {
+    snapshot: configSnapshot({
       chain: [layer],
       repo: null,
       plugins: [],
@@ -77,7 +78,7 @@ export function soleLayer(file: string, home: string): WriteLayer {
       checkout: { root: path.dirname(file), git: false },
       notices: [],
       watch: null,
-    },
+    }),
     home,
   };
 }

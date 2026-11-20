@@ -32,6 +32,7 @@ import { heldClock } from "../helpers/held-clock";
 import { NO_LAYERS } from "../helpers/history-step";
 import { rendererParts } from "../helpers/renderer-parts";
 import { NO_ACTS } from "../helpers/renderers";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 const SESSION = sessionIdOf("session");
 const SOURCES: Subscriptions["sources"] = {
@@ -506,7 +507,7 @@ test("a failed prune of an offered config is retried even when the declared orig
     projectDir: "/unused",
     target: { source: "search" },
   };
-  const config: ConfigSnapshot = {
+  const config: ConfigSnapshot = configSnapshot({
     chain: [],
     repo: null,
     plugins: [],
@@ -514,7 +515,7 @@ test("a failed prune of an offered config is retried even when the declared orig
     checkout: { root: origin.projectDir, git: false },
     notices: [],
     watch: null,
-  };
+  });
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   blocked = true;
   expect(

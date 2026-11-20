@@ -21,6 +21,10 @@ import {
   type Deafness,
 } from "../foundations/watch-targets";
 import { followWatch } from "../foundations/watch-targets";
+import type { WatchDeliveryFault } from "../foundations/watch-targets";
+import { failureOf } from "../foundations/verb-error";
+import { Listeners } from "../../utils/listeners";
+import type { Release } from "../../utils/holds";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -108,13 +112,52 @@ interface PolledPath {
   readonly slots: Set<WatcherSlot>;
 }
 
-interface Holder {
+// [LAW:one-source-of-truth] A delivery's fault is held by its recipient: why
+// its callback last threw, null once it returns. A recipient that leaves
+// takes its fault with it.
+interface Recipient {
+  fault: string | null;
+}
+
+interface Holder extends Recipient {
   readonly onInvalidate: (invalidation: Invalidation) => void;
   readonly observed: Map<string, string>;
 }
 
+// What a consumer that shares one window runs once the window's holders have
+// heard, named by that consumer.
+interface Completion extends Recipient {
+  readonly name: string;
+  readonly run: () => void;
+}
+
+// A watch as a reader knows it: the paths it watches.
+function watchName(slot: WatcherSlot): string {
+  return `watch on ${[
+    ...slot.targets.map((dir) => dir.path),
+    ...slot.polled.map((record) => record.path),
+  ].join(", ")}`;
+}
+
+function deliveryFault(
+  about: string,
+  reasons: readonly string[],
+): WatchDeliveryFault[] {
+  return reasons.length === 0
+    ? []
+    : [
+        {
+          about,
+          message: `${about}: delivery threw ${[...new Set(reasons)].join("; ")}`,
+        },
+      ];
+}
+
+const faultOf = ({ fault }: Recipient): string[] =>
+  fault === null ? [] : [fault];
+
 interface InvalidationWindow {
-  readonly completed?: () => void;
+  readonly completed?: Completion;
   pending: {
     readonly changes: Map<WatcherSlot, Gathering>;
     readonly cancel: () => void;
@@ -236,6 +279,7 @@ function dirsBelow(
 
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
+  private readonly faultListeners = new Listeners<void>();
   private readonly dirs = new Map<string, DirWatch>();
   private readonly polled = new Map<string, PolledPath>();
   // The next sweep's cancel, armed exactly while a path is polled.
@@ -269,8 +313,14 @@ export class WatcherRegistry {
   // [LAW:single-enforcer] A consumer that reloads several slots together can
   // share their delivery window. Each slot still receives only its own paths.
   // Keys acquired in this window belong to it until their last release.
-  batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
-    const window: InvalidationWindow = { pending: null, completed };
+  batch(
+    name: string,
+    completed: () => void,
+  ): Pick<WatcherRegistry, "acquire" | "follow"> {
+    const window: InvalidationWindow = {
+      pending: null,
+      completed: { name, run: completed, fault: null },
+    };
     const acquire: WatcherRegistry["acquire"] = (
       key,
       targets,
@@ -353,7 +403,7 @@ export class WatcherRegistry {
     const slot =
       shared ??
       this.opened(key, targets, window ?? { pending: null }, observed);
-    const holder: Holder = { onInvalidate, observed: new Map() };
+    const holder: Holder = { onInvalidate, observed: new Map(), fault: null };
     slot.holders.add(holder);
     const handle = this.makeHandle(slot, holder);
     handle.observed(observed);
@@ -695,14 +745,31 @@ export class WatcherRegistry {
           DEBOUNCE_MS,
           () => {
             window.pending = null;
+            let moved = false;
             for (const [changed, gathered] of changes) {
               if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered);
               for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+                moved =
+                  this.notify(
+                    holder,
+                    () => watchName(changed),
+                    () => holder.onInvalidate(heard),
+                    () => changed.holders.has(holder),
+                  ) || moved;
             }
-            if (window.completed !== undefined)
-              this.notify(null, window.completed);
+            const { completed } = window;
+            if (completed !== undefined)
+              moved =
+                this.notify(
+                  completed,
+                  () => completed.name,
+                  completed.run,
+                  () => this.rides(window),
+                ) || moved;
+            // [LAW:no-ambient-temporal-coupling] Told once the whole delivery
+            // has run, so every recipient hears before any listener runs.
+            if (moved) this.faultListeners.tell();
           },
           { unref: true },
         ),
@@ -720,14 +787,82 @@ export class WatcherRegistry {
     );
   }
 
-  private notify(key: string | null, take: () => void): void {
+  // [LAW:no-silent-failure] The boundary of one delivery: a callback that
+  // throws is its consumer's defect, and it throws again on the next
+  // delivery, so its fault stands on its recipient, logged as it starts, as
+  // its reason changes and as it clears, never once per delivery. A
+  // recipient the callback itself ended keeps nothing. Answers whether a
+  // fault moved.
+  private notify(
+    to: Recipient,
+    about: () => string,
+    take: () => void,
+    live: () => boolean,
+  ): boolean {
+    let fault: string | null = null;
+    let detail = "";
     try {
       take();
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      ({ message: fault, detail } = failureOf(thrown));
     }
+    if (fault === to.fault || !live()) return false;
+    if (fault === null)
+      this.logger("info", `watch delivery recovered about=${valueOf(about())}`);
+    else
+      this.logger(
+        "error",
+        `watch delivery threw about=${valueOf(about())} failed=${valueOf(fault)} detail=${valueOf(detail)}`,
+      );
+    to.fault = fault;
+    return true;
+  }
+
+  // A recipient that leaves takes its fault with it, logged as it clears.
+  // Answers whether it held one.
+  private faultLeft(to: Recipient, about: string): boolean {
+    if (to.fault === null) return false;
+    this.logger("info", `watch delivery fault left about=${valueOf(about)}`);
+    to.fault = null;
+    return true;
+  }
+
+  private rides(window: InvalidationWindow): boolean {
+    for (const slot of this.slots.values())
+      if (slot.window === window) return true;
+    return false;
+  }
+
+  // [LAW:one-source-of-truth] A window's fault leaves with the last slot that
+  // rides it, so a slot that joins it later meets no fault of a delivery it
+  // never had.
+  private windowLeft(window: InvalidationWindow): boolean {
+    const { completed } = window;
+    return completed !== undefined && !this.rides(window)
+      ? this.faultLeft(completed, completed.name)
+      : false;
+  }
+
+  // Each delivery that keeps throwing, from its recipients: a slot's holders,
+  // under the watch they share, and each window a live slot rides.
+  standing(): readonly WatchDeliveryFault[] {
+    const slots = [...this.slots.values()];
+    const windows = new Set(
+      slots.flatMap((slot) => slot.window.completed ?? []),
+    );
+    return [
+      ...slots.flatMap((slot) =>
+        deliveryFault(watchName(slot), [...slot.holders].flatMap(faultOf)),
+      ),
+      ...[...windows].flatMap((window) =>
+        deliveryFault(window.name, faultOf(window)),
+      ),
+    ];
+  }
+
+  // Told whenever what `standing` derives moved.
+  subscribe(listener: () => void): Release {
+    return this.faultListeners.subscribe(listener);
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -748,10 +883,14 @@ export class WatcherRegistry {
         }
       },
       release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
+        if (!slot.holders.delete(holder)) return;
+        let moved = this.faultLeft(holder, watchName(slot));
+        if (slot.holders.size === 0 && this.slots.get(slot.key) === slot) {
+          this.closeSlot(slot, "last release");
+          this.slots.delete(slot.key);
+          moved = this.windowLeft(slot.window) || moved;
+        }
+        if (moved) this.faultListeners.tell();
       },
     };
   }
@@ -868,7 +1007,16 @@ export class WatcherRegistry {
   closeAll(): void {
     this.closed = true;
     this.disarmSweep();
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    const slots = [...this.slots.values()];
+    for (const slot of slots) this.closeSlot(slot, "close");
     this.slots.clear();
+    // Every recipient ends with its slot, and takes its fault with it.
+    let moved = false;
+    for (const slot of slots) {
+      for (const holder of slot.holders)
+        moved = this.faultLeft(holder, watchName(slot)) || moved;
+      moved = this.windowLeft(slot.window) || moved;
+    }
+    if (moved) this.faultListeners.tell();
   }
 }

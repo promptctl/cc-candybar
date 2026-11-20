@@ -32,6 +32,7 @@ import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { viewFacts } from "../helpers/view-facts";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 const AT = instantOf(new Date(1_700_000_000_000));
 const READ = { at: AT, tick: 0 as Tick };
@@ -109,7 +110,7 @@ function worldStateOf(session: SessionId): WorldState {
   };
 }
 
-const snapshotOf = (text: string): ConfigSnapshot => ({
+const snapshotOf = (text: string): ConfigSnapshot => configSnapshot({
   chain: [
     {
       role: "user",

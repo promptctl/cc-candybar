@@ -43,6 +43,7 @@ import {
 import type { WorldState } from "../../src/facts/world-state";
 import type { Monotonic } from "../../src/time";
 import { ABSENT } from "../../src/utils/outcome";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -458,7 +459,7 @@ test("a new session context retries its failed config with the same declaration,
       configs: {
         ...NO_ACTS.configs,
         follow,
-        snapshotOf: () => ({
+        snapshotOf: () => configSnapshot({
           chain: [],
           repo: null,
           plugins: [],

@@ -38,6 +38,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import { configSnapshot } from "./helpers/config-snapshot";
 
 const SID_1 = sessionIdOf("sid-1");
 
@@ -244,7 +245,7 @@ describe("check", () => {
   });
 });
 
-const NO_SNAPSHOT: ConfigSnapshot = {
+const NO_SNAPSHOT: ConfigSnapshot = configSnapshot({
   chain: [],
   repo: null,
   plugins: [],
@@ -252,7 +253,7 @@ const NO_SNAPSHOT: ConfigSnapshot = {
   checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
-};
+});
 
 const loadedEntry: ReloadedEntry = {
   origin: originOf("/p", "/p", undefined),

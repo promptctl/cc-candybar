@@ -3,6 +3,7 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { EditTransactions } from "../../src/renderer/edit-transaction";
 import { SessionState } from "../../src/renderer/session-state";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 type Standing = NonNullable<ConfigSnapshot["repo"]>["standing"];
 const origin: RenderOrigin = {
@@ -29,7 +30,7 @@ const project: Layer = {
 
 function snapshot(standing: Standing): ConfigSnapshot {
   const approved = standing === "approved";
-  return {
+  return configSnapshot({
     chain: approved ? [user, project] : [user],
     repo: { standing, dir: origin.cwd, unproven: null },
     checkout: { root: origin.cwd, git: true },
@@ -45,7 +46,7 @@ function snapshot(standing: Standing): ConfigSnapshot {
     strays: [],
     notices: [],
     watch: null,
-  };
+  });
 }
 
 test("the draft keeps its edits but follows live repository trust", () => {

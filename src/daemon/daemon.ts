@@ -282,13 +282,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
   });
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
+  // world state carries them: whether file events are heard, which watch
+  // deliveries keep throwing, and what the launcher stands behind, each read
+  // from its owner. Restated whenever one may have moved, and
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      watchDelivery: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+    },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] How the last renderer process ended, and the
@@ -300,6 +307,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        watchDelivery: watcherRegistry.standing(),
         launcher: launcher.standing(),
         rendererEnded,
         actFailed,
@@ -912,6 +920,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     rendererFor,
   };
 
+  // [LAW:one-source-of-truth] The registry holds each watch delivery's fault
+  // and says when one moved; the facts restate it from there.
+  // [LAW:no-ambient-temporal-coupling] Subscribed once the launcher the
+  // restatement reads exists.
+  watcherRegistry.subscribe(restateFaults);
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // found when they resume: every followed origin is discovered again, and
   // each one that moved gets its `config` turn. Every feed redraws when

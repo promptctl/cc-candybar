@@ -178,6 +178,13 @@ export interface WatchSpec {
 }
 
 // A watch a consumer holds: the handle and the key it was acquired under.
+// A watch delivery that keeps throwing, as every bar shows it: `about` names
+// the watch, so a viewer stays on it while its reason changes.
+export interface WatchDeliveryFault {
+  readonly about: string;
+  readonly message: string;
+}
+
 export interface HeldWatch {
   readonly key: string;
   readonly handle: WatcherHandle;

@@ -22,6 +22,7 @@ import {
   type WatchSpec,
 } from "../foundations/watch-targets";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
+import { failureOf, type Failure } from "../foundations/verb-error";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
 import { Period, backedOffMs, type Every } from "../../utils/period";
@@ -145,6 +146,23 @@ function prPeriodOf({ failures }: PrAnswer): number {
 // moved while nothing held the repo, keyed once something does; `unkeyed` a
 // pass that read no branch to key it by.
 type PrMove = "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
+
+// [LAW:types-are-the-program] What a pass's fallible steps met: the watch's
+// move and the two reads, or the throw that stopped them.
+type PassRead =
+  | {
+      readonly kind: "read";
+      readonly watch: WatchMove;
+      readonly outcome: Outcome<GitRead>;
+      readonly remote: Outcome<string>;
+    }
+  | { readonly kind: "threw"; readonly failure: Failure };
+
+// What a pass's commit did, for its refresh event.
+interface PassLanded {
+  readonly failures: ReadonlySet<string>;
+  readonly pr: PrMove;
+}
 
 // What asked for a pass, beside the period: a watch fire, the repo's first
 // ask, a reader of a value a change went by, or a hold's return to a PR whose
@@ -284,7 +302,7 @@ function composed({ value, pr }: RepoState): Current<GitInfo> {
 const CLOSED = failed("git cache closed", "read");
 
 function threw(label: string): (e: unknown) => Outcome<never> {
-  return (e) => failed(`${label} threw: ${String(e)}`, "read");
+  return (e) => failed(`${label} threw: ${failureOf(e).message}`, "read");
 }
 
 export class GitDataProvider {
@@ -515,7 +533,7 @@ export class GitDataProvider {
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null).watch,
+      watch: this.firstWatch(root),
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }, this.clock),
@@ -528,31 +546,52 @@ export class GitDataProvider {
     return state;
   }
 
-  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
-  // state's build and for every pass: the git directories resolved from the
-  // root as they stand now, followed by the registry's one rule. A pass calls
-  // it first, before any await, so the watch follows the repo's paths.
-  private followWatch(
-    root: string,
-    held: HeldWatch | null,
-  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+  // [LAW:one-source-of-truth] The one derivation of a repo's watch spec, for
+  // the state's build and for every pass: the git directories resolved from
+  // the root as they stand now.
+  private watchSpecOf(root: string): WatchSpec {
     const gitDir = this.inner.resolveGitDir(root);
-    const spec = watchSpec(gitDir, this.inner.resolveCommonGitDir(gitDir));
-    // A pass between a worktree's removal and its re-add keeps the watch it
-    // holds (`follow`), and the period rebinds once the path names a
-    // directory again. The build holds nothing, and a slot the OS refused is
-    // the registry's period to retry.
-    const followed = this.watchers.follow(held, spec, () => this.changed(root));
-    // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
-    // and which the repo hears now: a change that fires nothing is read
-    // against this line, as the config cache's bind line.
-    if (followed.move === "rebound") {
-      this.logger(
-        "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} polled=${spec.targets.polled.join(",")} deaf=${followed.watch.handle.deaf.length}`,
-      );
-    }
-    return followed;
+    return watchSpec(gitDir, this.inner.resolveCommonGitDir(gitDir));
+  }
+
+  // A repo's first watch, acquired as its state is built.
+  private firstWatch(root: string): HeldWatch {
+    const spec = this.watchSpecOf(root);
+    const followed = this.watchers.follow(null, spec, () => this.changed(root));
+    this.bound(root, spec, followed);
+    return followed.watch;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A pass's watch follows the repo's
+  // paths before any read, so no change between the read and the watch goes
+  // unheard. The spec is derived first, since deriving it can throw; the
+  // follow and its storing are one step, so the state never holds a handle
+  // the follow released. A pass between a worktree's removal and its re-add
+  // keeps the watch it holds, and the period rebinds once the path names a
+  // directory again.
+  private followWatch(state: RepoState): WatchMove {
+    const spec = this.watchSpecOf(state.root);
+    const followed = this.watchers.follow(state.watch, spec, () =>
+      this.changed(state.root),
+    );
+    state.watch = followed.watch;
+    this.bound(state.root, spec, followed);
+    return followed.move;
+  }
+
+  // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
+  // and which the repo hears now: a change that fires nothing is read
+  // against this line, as the config cache's bind line.
+  private bound(
+    root: string,
+    spec: WatchSpec,
+    followed: { readonly watch: HeldWatch; readonly move: WatchMove },
+  ): void {
+    if (followed.move !== "rebound") return;
+    this.logger(
+      "info",
+      `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} polled=${spec.targets.polled.join(",")} deaf=${followed.watch.handle.deaf.length}`,
+    );
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -569,7 +608,10 @@ export class GitDataProvider {
     try {
       await this.pass(state);
     } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+      this.logger(
+        "error",
+        `git refresh threw root=${logfmtValue(state.root)} detail=${logfmtValue(failureOf(e).detail)}`,
+      );
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -632,23 +674,59 @@ export class GitDataProvider {
     return state;
   }
 
-  // One pass: read the repo and the remote beside the branch it read; store
-  // the outcome, log each failure once, and move the PR's key — all in one
-  // turn once the reads land, so no read sees a branch's value beside another
-  // branch's PR. Each pass that lands writes one refresh event.
+  // One pass, the boundary of its unit of work: everything that can throw
+  // (the watch's follow and the reads), then one drop check for whatever it
+  // met, then the commit, and the one refresh event every pass that lands
+  // writes. [LAW:no-silent-failure] A throw is a defect of this owner, caught
+  // here where the pass started: it lands as the repo's failed read, so
+  // every bar reading the repo says why until a pass runs clean.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = this.clock.monotonic();
     const asked = [...state.asked];
     state.asked.clear();
-    const followed = this.followWatch(state.root, state.watch);
-    state.watch = followed.watch;
+    const read = await this.read(state).catch(
+      (thrown: unknown): PassRead => ({
+        kind: "threw",
+        failure: failureOf(thrown),
+      }),
+    );
+    // Dropped or closed while the read was out: nothing of it is stored.
+    if (this.repos.get(state.root) !== state) return;
+    const landed = this.committed(state, read);
+    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
+    // reason it met on the one event; a read of the stored value never logs
+    // it again.
+    this.gitRefreshes.recorded(
+      `${state.root} asked=${asked.join(",") || "-"} pr=${landed.pr} ${read.kind === "read" ? `watch=${read.watch}` : `threw=${logfmtValue(read.failure.detail)}`}`,
+      triggerOf(asked),
+      landed.failures.size === 0
+        ? ok(null)
+        : failed([...landed.failures].join("; "), "read"),
+      elapsedMs(this.clock, startedAt),
+    );
+  }
+
+  // The steps of a pass that can throw: follow the watch, then read the repo
+  // and the remote beside the branch it read. Nothing here is stored.
+  private async read(state: RepoState): Promise<PassRead> {
+    const watch = this.followWatch(state);
     const [outcome, remote] = await Promise.all([
       this.inner.getGitInfo(state.root).catch(threw("git fetch")),
       this.remoteOf(state),
     ]);
-    // Dropped or closed while the read was out: nothing of it is stored.
-    if (this.repos.get(state.root) !== state) return;
+    return { kind: "read", watch, outcome, remote };
+  }
+
+  // The commit: store the outcome and move the PR's key in one turn, so no
+  // read sees a branch's value beside another branch's PR. A pass that threw
+  // stores its failure as the outcome, beside a PR that answers it and stays
+  // owed for the next pass that reads a branch.
+  private committed(state: RepoState, read: PassRead): PassLanded {
+    const outcome: Outcome<GitRead> =
+      read.kind === "read"
+        ? read.outcome
+        : failed(`git refresh threw: ${read.failure.message}`, "read");
     const failures = new Set<string>();
     state.value.missed = false;
     settle(state.value, outcome);
@@ -660,20 +738,13 @@ export class GitDataProvider {
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
     const branch = branchOf(outcome);
-    const prMove: PrMove =
-      branch === undefined
+    if (read.kind === "threw") owe(state.pr);
+    const pr: PrMove =
+      branch === undefined || read.kind === "threw"
         ? unkeyedPr(state.pr, failures)
-        : this.movePr(state, branch, remote);
+        : this.movePr(state, branch, read.remote);
     this.held(state);
-    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
-    // reason it met on the one event; a read of the stored value never logs
-    // it again.
-    this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
-      triggerOf(asked),
-      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
-      elapsedMs(this.clock, startedAt),
-    );
+    return { failures, pr };
   }
 
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the

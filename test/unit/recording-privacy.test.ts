@@ -42,6 +42,7 @@ import { pending, type Current } from "../../src/utils/reading";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { viewFacts } from "../helpers/view-facts";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 const SESSION = sessionIdOf("recording-privacy");
 const ROOT = "/nowhere/project";
@@ -131,7 +132,7 @@ function facts(
 }
 
 function snapshot(text: string): ConfigSnapshot {
-  return {
+  return configSnapshot({
     chain: [
       {
         role: "user",
@@ -146,7 +147,7 @@ function snapshot(text: string): ConfigSnapshot {
     strays: [],
     notices: [],
     watch: null,
-  };
+  });
 }
 
 const input = (event: Event): EventInput => ({

@@ -91,8 +91,12 @@ class StubGitService extends GitService {
     return root === null ? ABSENT : ok(root);
   }
 
+  // A defect inside a pass: resolving the git directory throws.
+  public gitDirThrows = false;
+
   override resolveGitDir(workingDir: string): string {
     this.gitDirCalls.push(workingDir);
+    if (this.gitDirThrows) throw new Error("gitdir bug");
     if (workingDir in this.gitDirByDir) return this.gitDirByDir[workingDir]!;
     return `${workingDir}/.git`;
   }
@@ -1181,11 +1185,40 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
       "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+      expect.stringMatching(/^git refresh threw root=\/repo detail=".*logger bug/),
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
+  });
+});
+
+describe("GitDataProvider holds a pass that throws as the repo's failed read", () => {
+  test("its value and PR answer the failure, its watch stays, and one refresh line carries the throw until a pass runs clean", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await gitOf(svc, holds, "/repo");
+    const watched = svc.getWatcherRegistry().watchedDirs();
+
+    inner.gitDirThrows = true;
+    svc.changed("/repo");
+    await tick();
+    expect(svc.declare(holds, "/repo").current()).toEqual(
+      failed("git refresh threw: gitdir bug", "read"),
+    );
+    expect(logs.filter((l) => l.includes("gitdir bug"))).toEqual([
+      expect.stringMatching(
+        /^git refresh \/repo asked=\S+ pr=unkeyed threw=".*gitdir bug.*" by=\S+ outcome=failed reason="git refresh threw: gitdir bug"/,
+      ),
+    ]);
+    expect(svc.getWatcherRegistry().watchedDirs()).toEqual(watched);
+
+    inner.gitDirThrows = false;
+    svc.changed("/repo");
+    await tick();
+    expect(await gitOf(svc, holds, "/repo")).toEqual(
+      ok({ ...inner.stubInfo, pullRequest: inner.stubPr }),
+    );
   });
 });
 

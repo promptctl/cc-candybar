@@ -60,6 +60,7 @@ import { instantOf, readingsAt, type Tick } from "../../src/utils/instant";
 import type { LogLine } from "../../src/utils/logger";
 import { ABSENT } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
+import type { DaemonFacts } from "../../src/facts/world-state";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { heldClock } from "../helpers/held-clock";
 import { unexpectedTimingProblem } from "../helpers/renderers";
@@ -68,6 +69,7 @@ import {
   oversizedSession,
 } from "../helpers/oversized-renderer-history";
 import { viewFacts } from "../helpers/view-facts";
+import { configSnapshot } from "../helpers/config-snapshot";
 
 const AT = instantOf(new Date(1_700_000_000_000));
 const READ = { at: AT, tick: 0 as Tick };
@@ -254,7 +256,7 @@ function worldStateOf(session: SessionId): WorldState {
 }
 
 // What discovery would hand in for the user's file holding `text`.
-const snapshotOf = (text: string): ConfigSnapshot => ({
+const snapshotOf = (text: string): ConfigSnapshot => configSnapshot({
   chain: [
     {
       role: "user",
@@ -263,12 +265,7 @@ const snapshotOf = (text: string): ConfigSnapshot => ({
       listed: {},
     },
   ],
-  repo: null,
-  plugins: [],
-  strays: [],
   checkout: { root: PROJECT, git: false },
-  notices: [],
-  watch: null,
 });
 
 const handIn = (r: Renderer, event: Event): Promise<RendererOutput> =>
@@ -296,8 +293,15 @@ const configLoads = ({ diagnostics }: RendererDiagnostics): string[] =>
   );
 
 // A started renderer with the session's context in and its origin's config
-// handed in as `text`, then a request of it answered: the bar drawn.
-async function drawn(text: string) {
+// handed in as `text`, then a request of it answered: the bar drawn. `over`
+// sets what discovery and the daemon say beside the text.
+async function drawn(
+  text: string,
+  over: {
+    readonly snapshot?: Partial<ConfigSnapshot>;
+    readonly daemon?: Partial<DaemonFacts>;
+  } = {},
+) {
   const t = renderer();
   const context = contextOf("s1");
   const origin: RenderOrigin = context.requested;
@@ -306,11 +310,18 @@ async function drawn(text: string) {
     await handIn(t, {
       kind: "context",
       context,
-      worldState: worldStateOf(context.hookData.session_id),
+      worldState: {
+        ...worldStateOf(context.hookData.session_id),
+        daemon: { ...daemonFactsOf(), ...over.daemon },
+      },
     }),
   );
   const config = (text: string) =>
-    handIn(t, { kind: "config", origin, config: snapshotOf(text) });
+    handIn(t, {
+      kind: "config",
+      origin,
+      config: { ...snapshotOf(text), ...over.snapshot },
+    });
   const opened = answered(await config(text));
   const request = answered(
     await handIn(t, {
@@ -601,6 +612,29 @@ test("a snapshot whose layer will not parse draws the bundled bar, with its erro
   const { bar, frame } = await drawn(`{ root: { h: ["said"] `);
   expect(bar).not.toContain(SAID);
   expect(bar).toContain(DOOR_GLYPH);
+  expect(indicatorOf(frame)).toBe("⚠ 1");
+});
+
+test("a snapshot whose rediscovery threw draws its config, with the reason on the indicator", async () => {
+  const { bar, frame } = await drawn(CONFIG, {
+    snapshot: { discoveryFault: "config discovery threw: read failed" },
+  });
+  expect(bar).toContain(SAID);
+  expect(indicatorOf(frame)).toBe("⚠ 1");
+});
+
+test("a watch delivery that keeps throwing is on the indicator of a bar drawn from anything", async () => {
+  const { bar, frame } = await drawn(CONFIG, {
+    daemon: {
+      watchDelivery: [
+        {
+          about: "config discovery",
+          message: "config discovery: delivery threw late",
+        },
+      ],
+    },
+  });
+  expect(bar).toContain(SAID);
   expect(indicatorOf(frame)).toBe("⚠ 1");
 });
 

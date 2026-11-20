@@ -23,6 +23,9 @@ export interface ConfigSnapshot {
   readonly checkout: Checkout | null;
   readonly notices: readonly string[]; // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null; // what the config's watch cannot hear, or null
+  // Why this is the origin's last discovered snapshot rather than a current
+  // one: its rediscovery threw, so an edit may not have reached it.
+  readonly discoveryFault: string | null;
 }
 
 // A chain is user, project, local. The file `--config` names is the user
