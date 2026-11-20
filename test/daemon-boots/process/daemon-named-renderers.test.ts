@@ -554,9 +554,16 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     expect(JSON5.parse(winner)).toMatchObject({
       root: { h: ["source", "right"] },
     });
-    const refused = await clickAnswer(daemon.sockPath, secondSave);
+    let refused = "";
+    // [LAW:no-ambient-temporal-coupling] A click that the daemon dropped
+    // before it ran can be sent again. A taken click's outcome is final.
+    await until(async () => {
+      const answer = await clickAnswer(daemon.sockPath, secondSave);
+      refused = saidOf(answer);
+      return answer.kind !== "timed-out" || answer.outcome !== "abandoned";
+    }, () => `the second Save to take a turn (${refused})`);
     expect(bytes()).toBe(winner);
-    expect(saidOf(refused)).toMatch(
+    expect(refused).toMatch(
       /\broot\.h\b.*changed (while editing|since it was read)/,
     );
 
