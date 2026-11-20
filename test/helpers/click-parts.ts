@@ -88,7 +88,7 @@ export function clickParts(
       holdView: () => null,
       configDelivery: (origin) => {
         const snapshot = verbCtx.snapshotFor(origin);
-        return { kind: "received", snapshot, digest: digestOf(snapshot) };
+        return { kind: "received", attempt: { snapshot, digest: digestOf(snapshot) } };
       },
       prune: () => {},
     } satisfies Pick<

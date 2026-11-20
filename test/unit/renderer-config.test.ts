@@ -9,9 +9,10 @@ import { applyChanges } from "../../src/config/config-changes";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import { effectsOf, linksOf } from "../../src/click/read";
-import { admitClick, encodeSegments, VERB_SET_CONFIG } from "../../src/click/wire";
+import { admitClick, encodeSegments, VERB_SET_CONFIG, VERB_SET_STATE } from "../../src/click/wire";
 import { DOOR_GLYPH } from "../../src/config/disclosure";
 import { parseJson5Syntax } from "../../src/config/loader/diagnostics";
+import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../src/config/loader/edit-mode";
 import { parseClick } from "../../src/daemon/click-reading";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
@@ -614,6 +615,112 @@ test("a config turn whose text moved only by a comment keeps the state it serves
   expect(configLoads(answered(await config(`// a note\n${CONFIG}`)))).toEqual([
     expect.stringContaining("cause=config state=kept"),
   ]);
+});
+
+test("a rejected load keeps the selected revision through a duplicate and recovers without rebuilding", async () => {
+  const r = renderer();
+  const context = contextOf("attempt");
+  const { requested: origin, hookData } = context;
+  const configure = async (config: ConfigSnapshot) =>
+    answered(await handIn(r, { kind: "config", origin, config }));
+  answered(
+    await handIn(r, {
+      kind: "context",
+      context,
+      worldState: worldStateOf(hookData.session_id),
+    }),
+  );
+  const initial = await configure(snapshotOf(CONFIG));
+  expect(initial.subscriptions.configSelections).toHaveLength(1);
+
+  const bad = "{ invalid syntax";
+  const rejected = await configure(snapshotOf(bad));
+  expect(configLoads(rejected)).toEqual([
+    expect.stringContaining("state=failed"),
+  ]);
+  expect(rejected.subscriptions.configSelections).toEqual(
+    initial.subscriptions.configSelections,
+  );
+  const repeated = await configure(snapshotOf(bad));
+  expect(configLoads(repeated)).toEqual([]);
+  expect(repeated.subscriptions.configSelections).toEqual(
+    initial.subscriptions.configSelections,
+  );
+
+  const drawn = answered(
+    await handIn(r, { kind: "request", id: 1 as RequestId, context }),
+  );
+  const frame = presentOf(drawn.effects).frame;
+  expect(textOf(frame)).toContain(SAID);
+  expect(indicatorOf(frame)).toBe("⚠ 1");
+  const recovered = await configure(snapshotOf(CONFIG));
+  expect(configLoads(recovered)).toEqual([
+    expect.stringContaining("state=kept"),
+  ]);
+  const next = answered(
+    await handIn(r, { kind: "request", id: 2 as RequestId, context }),
+  );
+  expect(indicatorOf(presentOf(next.effects).frame)).toBeUndefined();
+});
+
+test("a repeated host notice does not reapply the session's edited draft", async () => {
+  const r = renderer();
+  const context = contextOf("edit-attempt");
+  const {
+    requested: origin,
+    hookData: { session_id: session },
+  } = context;
+  const configure = async (notices: readonly string[]) =>
+    answered(
+      await handIn(r, {
+        kind: "config",
+        origin,
+        config: { ...snapshotOf(CONFIG), notices },
+      }),
+    );
+  answered(
+    await handIn(r, {
+      kind: "context",
+      context,
+      worldState: worldStateOf(session),
+    }),
+  );
+  await configure([]);
+  const click = async (verb: string, args: readonly string[]) =>
+    answered(
+      await handIn(r, {
+        kind: "click",
+        click: admitClick(verb, encodeSegments([session, ...args]), TEST_SIGNER)
+          .click,
+        arrival: { via: "link", delivery: { kind: "cli" } },
+        context: { session, durable: { origin }, live: null },
+      }),
+    );
+  await click(VERB_SET_STATE, [EDIT_MODE_KEY, EDIT_MODE_ARRANGE]);
+  const palette = [...listResolvablePaletteNames()][0]!;
+  const changed = await click(VERB_SET_CONFIG, ["user", "palette", palette]);
+  expect(changed.effects).toEqual([]);
+  expect(configLoads(changed)).toEqual([
+    expect.stringContaining("cause=edit state=built"),
+  ]);
+
+  const warning = "The host is still watching an alias of the user's config";
+  const notified = await configure([warning]);
+  expect(configLoads(notified)).toEqual([
+    expect.stringContaining("cause=config state=kept"),
+    expect.stringContaining("cause=edit state=kept"),
+  ]);
+  expect(configLoads(notified)[1]).toContain(warning);
+  expect(
+    notified.diagnostics?.some(({ line }) =>
+      line.startsWith("render-cache compile built"),
+    ),
+  ).toBe(false);
+  const repeated = await configure([warning]);
+  expect(configLoads(repeated)).toEqual([]);
+  expect(repeated.subscriptions.configSelections).toEqual(
+    notified.subscriptions.configSelections,
+  );
 });
 
 test("a click on a session with no live context waits for the config of the origin the host's book holds, and runs in that config's turn", async () => {

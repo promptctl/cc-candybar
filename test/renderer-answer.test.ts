@@ -233,7 +233,7 @@ const configsNamed = async (
 ): Promise<RendererOutput> => {
   let last = output;
   for (const origin of output.subscriptions.configs) {
-    if (rig.cache.holdsConfig(origin)) continue;
+    if (rig.cache.configDelivery(origin).kind === "received") continue;
     rig.cache.configs.follow(origin);
     last = await r.answer({
       kind: "event",
@@ -1574,7 +1574,7 @@ describe("an event that waits for its origin's config", () => {
       await handIn(t.r, { kind: "retire", session: SESSION }),
     );
     expect(retired.subscriptions.configs).toEqual([context.requested]);
-    expect(t.rig.cache.holdsConfig(context.requested)).toBe(true);
+    expect(t.rig.cache.configDelivery(context.requested).kind).toBe("received");
   });
 });
 

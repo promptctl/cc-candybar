@@ -415,15 +415,27 @@ export function configDisposeLine(
 
 // A snapshot the host handed in, digested once as it arrived: what an entry
 // loaded from it is compared by.
-interface HeldSnapshot {
+interface ConfigAttempt {
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
+}
+
+// [LAW:single-enforcer] Repeated observations keep the same attempt before
+// or after a compiled entry exists. A moved observation can still reuse its
+// build through the separate effective load key.
+function configAttempt(
+  snapshot: ConfigSnapshot,
+  previous?: ConfigAttempt,
+): ConfigAttempt {
+  if (previous?.snapshot === snapshot) return previous;
+  const digest = digestOf(snapshot);
+  return previous?.digest === digest ? previous : { snapshot, digest };
 }
 
 // [LAW:types-are-the-program] A rejected delivery carries its classified
 // failure. A compiled entry keeps its last attempted input for diagnostics.
 type ArrivedConfig =
-  | ({ readonly kind: "received" } & HeldSnapshot)
+  | { readonly kind: "received"; readonly attempt: ConfigAttempt }
   | { readonly kind: "failed"; readonly failure: Failure };
 
 const CONFIG_PENDING = { kind: "pending" } as const;
@@ -458,12 +470,15 @@ export interface CacheEntry {
   // digest: a `config` turn whose snapshot digests alike reloads nothing.
   // The bar's repository question and what the config's watch cannot hear
   // are read off it.
-  snapshot: ConfigSnapshot;
-  digest: string;
-  selected: SelectedState;
-  lastError: string | null;
-  lastWarnings: readonly string[];
+  readonly snapshot: ConfigSnapshot;
+  readonly lastError: string | null;
+  readonly lastWarnings: readonly string[];
   readonly state: DslRenderState;
+  readonly applied: AppliedConfig;
+}
+
+interface MaterializedEntry extends CacheEntry {
+  applied: AppliedConfig;
 }
 
 // [LAW:types-are-the-program] An authored build carries its revision and
@@ -477,6 +492,17 @@ type SelectedState =
       readonly repo: RepoQuestion | null;
     }
   | { readonly kind: "bundled"; readonly state: DslRenderState };
+
+// [LAW:one-source-of-truth] A load publishes its attempt, diagnostics and
+// selected build together. A received delivery and its applied load share
+// the attempt itself, even when a failed load selects an older build.
+interface AppliedConfig {
+  readonly attempt: ConfigAttempt;
+  readonly selected: SelectedState;
+  readonly error: string | null;
+  readonly warnings: readonly string[];
+  readonly outcome: Settled;
+}
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
 // owns (brandon-unfiled-3248.6rc): the renders holding it across their
@@ -743,7 +769,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // default ("") matches the historical behavior when omitted.
   const registry = new SourceRegistry(
     store,
-    config.globals.default_empty_value ?? "",
+    config.globals.default_empty_value,
     deps.sessionState,
     null,
     deps.region,
@@ -893,7 +919,7 @@ export function loadOrigin(
   cwd: string,
   snapshot: ConfigSnapshot,
   deps: StateDeps,
-  served: DslRenderState | null = null,
+  served: DslRenderState | null,
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, snapshot, deps.locations.home);
   if (resolved.kind === "failed") return settle(snapshot, [], resolved);
@@ -1158,9 +1184,10 @@ export class RenderCache<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
 > {
-  private readonly entries = observable.map<string, CacheEntry>(undefined, {
-    deep: false,
-  });
+  private readonly entries = observable.map<string, MaterializedEntry>(
+    undefined,
+    { deep: false },
+  );
   // [LAW:one-source-of-truth] The latest delivery of each retained origin
   // gates admission and writes, including controls on an already live view.
   private readonly configDeliveries = observable.map<string, ArrivedConfig>(
@@ -1240,19 +1267,21 @@ export class RenderCache<
   configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = {
-      kind: "received",
-      snapshot,
-      digest: digestOf(snapshot),
-    } as const;
+    const delivery = this.configDeliveries.get(key);
+    const entry = this.entries.get(key);
+    const previous =
+      delivery?.kind === "received" ? delivery.attempt : entry?.applied.attempt;
+    const attempt = configAttempt(snapshot, previous);
     runInAction(() => {
-      const recovering = this.configDeliveries.get(key)?.kind === "failed";
-      this.configDeliveries.set(key, held);
-      const entry = this.entries.get(key);
+      if (delivery?.kind !== "received" || delivery.attempt !== attempt)
+        this.configDeliveries.set(key, { kind: "received", attempt });
       // [LAW:no-ambient-temporal-coupling] A rejected application may have
       // reached the entry before it threw. Reapply it when delivery resumes.
-      if (entry !== undefined && (recovering || entry.digest !== held.digest))
-        this.reloadInto(entry, held, { kind: "config" });
+      if (
+        entry !== undefined &&
+        (delivery?.kind === "failed" || entry.applied.attempt !== attempt)
+      )
+        this.reloadInto(entry, attempt, { kind: "config" });
     });
   }
 
@@ -1265,12 +1294,6 @@ export class RenderCache<
 
   configDelivery(origin: RenderOrigin): ConfigDelivery {
     return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
-  }
-
-  // Whether the host handed in `origin`'s config and the renderer still
-  // names it: what an event that needs it waits for.
-  holdsConfig(origin: RenderOrigin): boolean {
-    return this.configDelivery(origin).kind === "received";
   }
 
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
@@ -1324,44 +1347,51 @@ export class RenderCache<
         this.entries.delete(key);
         this.entries.set(key, existing);
       });
-      if (draft !== null && existing.snapshot !== draft)
-        this.reloadInto(
-          existing,
-          { snapshot: draft, digest: digestOf(draft) },
-          { kind: "edit" },
-        );
+      if (draft !== null) {
+        const previous = existing.applied.attempt;
+        const attempt = configAttempt(draft, previous);
+        if (attempt !== previous)
+          this.reloadInto(existing, attempt, { kind: "edit" });
+      }
       return existing;
     }
     if (existing !== undefined) this.drop(key, existing, "evict");
 
-    const held =
-      draft === null
-        ? this.held(origin)
-        : { snapshot: draft, digest: digestOf(draft) };
+    let attempt: ConfigAttempt;
+    if (draft === null) {
+      attempt = this.held(origin);
+    } else {
+      const delivery = this.configDelivery(origin);
+      attempt = configAttempt(
+        draft,
+        delivery.kind === "received" ? delivery.attempt : undefined,
+      );
+    }
     const { projectDir, cwd } = origin;
-    const { loaded, selected } = this.selectState(origin, held, null);
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    const entry: CacheEntry = {
+    const applied = this.applyConfig(origin, attempt, null);
+    this.logLoadedPlugins(applied);
+    const entry: MaterializedEntry = {
       origin,
+      applied,
       get configLayers() {
         return configPaths(this.snapshot);
       },
-      snapshot: held.snapshot,
-      digest: held.digest,
-      selected,
-      lastError: loaded.error,
-      lastWarnings: loaded.warnings,
+      get snapshot() {
+        return this.applied.attempt.snapshot;
+      },
+      get lastError() {
+        return this.applied.error;
+      },
+      get lastWarnings() {
+        return this.applied.warnings;
+      },
       get state() {
-        return this.selected.state;
+        return this.applied.selected.state;
       },
     };
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
-    makeObservable(entry, {
-      selected: observableRef,
-      lastError: observable,
-    });
+    makeObservable(entry, { applied: observableRef });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
@@ -1379,7 +1409,7 @@ export class RenderCache<
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     // An entry just created was drawn by no session.
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    this.observers.onReload?.(entry, [], { kind: "open" }, applied.outcome);
 
     return entry;
   }
@@ -1653,7 +1683,7 @@ export class RenderCache<
     const key = originKey(entry.origin);
     const error = entry.lastError ?? this.entries.get(key)?.lastError;
     if (error != null) return { kind: "unavailable", error };
-    for (const { role, path, content } of held.snapshot.chain)
+    for (const { role, path, content } of held.attempt.snapshot.chain)
       if (content.kind === "unreadable")
         return {
           kind: "unavailable",
@@ -1737,10 +1767,13 @@ export class RenderCache<
     return [...this.entries]
       .filter(([key, entry]) => key === originKey(entry.origin))
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([, { origin, selected }]) => ({
-        origin,
-        digest: selected.kind === "authored" ? selected.digest : null,
-      }));
+      .map(([, { origin, applied }]) => {
+        const { selected } = applied;
+        return {
+          origin,
+          digest: selected.kind === "authored" ? selected.digest : null,
+        };
+      });
   }
 
   subscriptions(): Pick<Subscriptions, "sources"> {
@@ -1776,12 +1809,13 @@ export class RenderCache<
   // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  private selectState(
+  private applyConfig(
     origin: RenderOrigin,
-    { snapshot, digest }: HeldSnapshot,
+    attempt: ConfigAttempt,
     previous: SelectedState | null,
-  ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
+  ): AppliedConfig {
     if (this.closed) throw new Error("render cache used after close");
+    const { snapshot, digest } = attempt;
     const retained =
       previous?.kind === "authored" &&
       retainsConfig(origin.target, previous.repo, snapshot.repo)
@@ -1796,23 +1830,29 @@ export class RenderCache<
       this.deps,
       (retained ?? bundled)?.state ?? null,
     );
-    if (loaded.state !== null)
-      return {
-        loaded,
-        selected: { kind: "authored", state: loaded.state, digest, repo },
-      };
-    if (retained !== null) return { loaded, selected: retained };
-    // [LAW:carrying-cost] The same load identity keeps the bundled state and
-    // views when an authored edit only changes the diagnostic.
-    const state = fallbackState(
-      cwd,
-      snapshot,
-      this.deps,
-      bundled?.state ?? null,
-    );
+    let selected: SelectedState;
+    if (loaded.state !== null) {
+      selected = { kind: "authored", state: loaded.state, digest, repo };
+    } else if (retained !== null) {
+      selected = retained;
+    } else {
+      // [LAW:carrying-cost] The same load identity keeps the bundled state
+      // and views when an authored edit only changes the diagnostic.
+      const state = fallbackState(
+        cwd,
+        snapshot,
+        this.deps,
+        bundled?.state ?? null,
+      );
+      selected =
+        bundled?.state === state ? bundled : { kind: "bundled", state };
+    }
     return {
-      loaded,
-      selected: bundled?.state === state ? bundled : { kind: "bundled", state },
+      attempt,
+      selected,
+      error: loaded.error,
+      warnings: loaded.warnings,
+      outcome: loaded.kind,
     };
   }
 
@@ -1824,7 +1864,7 @@ export class RenderCache<
     return this.held(origin).snapshot;
   }
 
-  private held(origin: RenderOrigin): HeldSnapshot {
+  private held(origin: RenderOrigin): ConfigAttempt {
     if (this.closed) throw new Error("render cache used after close");
     const held = this.configDelivery(origin);
     if (held.kind === "failed") throw new CrossedFailure(held.failure);
@@ -1832,7 +1872,7 @@ export class RenderCache<
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
       );
-    return held;
+    return held.attempt;
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
@@ -2014,8 +2054,8 @@ export class RenderCache<
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(
-    entry: CacheEntry,
-    held: HeldSnapshot,
+    entry: MaterializedEntry,
+    attempt: ConfigAttempt,
     cause: LoadCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
@@ -2029,31 +2069,36 @@ export class RenderCache<
     ];
     // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
-    const { loaded, selected } = this.selectState(
+    const applied = this.applyConfig(
       entry.origin,
-      held,
-      entry.selected,
+      attempt,
+      entry.applied.selected,
     );
-    entry.snapshot = held.snapshot;
-    entry.digest = held.digest;
-    entry.lastWarnings = loaded.warnings;
     runInAction(() => {
-      entry.lastError = loaded.error;
-      entry.selected = selected;
+      entry.applied = applied;
     });
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    this.logLoadedPlugins(applied);
+    const { selected, outcome } = applied;
     if (selected.state !== served) {
       this.serve(selected.state);
       this.retire(served, "reload", entry);
     }
-    if (selected.state !== served || loaded.state !== null)
+    if (selected.state !== served || outcome !== "failed")
       for (const [session, failure] of retry)
         this.reopen(entry, session, failure.requestOf);
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
+    this.observers.onReload?.(entry, sessions, cause, outcome);
+  }
+
+  private logLoadedPlugins(applied: AppliedConfig): void {
+    const { outcome, selected, attempt } = applied;
+    if (outcome !== "failed")
+      this.log(
+        "info",
+        pluginLoadLine(configPaths(attempt.snapshot), selected.state),
+      );
   }
 
   get size(): number {

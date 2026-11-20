@@ -134,7 +134,7 @@ export function loadDiscovered(
     { ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)), cwd },
     readShared({ locations: deps.locations, stateDir }),
   );
-  return { ...loadOrigin(cwd, snapshot, deps), snapshot };
+  return { ...loadOrigin(cwd, snapshot, deps, null), snapshot };
 }
 
 // [LAW:locality-or-seam] A render cache whose every origin is followed by a
@@ -173,7 +173,8 @@ export class DiscoveringCache<
 
   override getOrCreate(origin: RenderOrigin): CacheEntry {
     // A test driving the actual renderer turn has already chosen its input.
-    if (!this.shut && !this.holdsConfig(origin)) this.configs.follow(origin);
+    if (!this.shut && this.configDelivery(origin).kind !== "received")
+      this.configs.follow(origin);
     return super.getOrCreate(origin);
   }
 

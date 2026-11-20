@@ -526,9 +526,9 @@ test("a failed prune of an offered config is retried even when the declared orig
     kind: "threw",
     failure: { message: "config prune failed" },
   });
-  expect(fixture.cache.holdsConfig(origin)).toBe(true);
+  expect(fixture.cache.configDelivery(origin).kind).toBe("received");
   blocked = false;
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
-  expect(fixture.cache.holdsConfig(origin)).toBe(false);
+  expect(fixture.cache.configDelivery(origin).kind).toBe("pending");
   expect(fixture.subscriptions.map(({ configs }) => configs)).toEqual([[]]);
 });

@@ -83,6 +83,7 @@ class EditDraft {
   // The host's current layer identities and plugin discovery still decide
   // what it can load, including when the user revokes repository trust.
   updated(latest: ConfigSnapshot): void {
+    if (this.latest === latest) return;
     this.latest = latest;
     this.refreshSnapshot();
   }

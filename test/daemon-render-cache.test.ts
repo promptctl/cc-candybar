@@ -334,7 +334,7 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache();
     try {
       const origin = originOf("/x", "/x", "/tmp/alt.json5");
-      expect(cache.holdsConfig(origin)).toBe(false);
+      expect(cache.configDelivery(origin).kind).toBe("pending");
       expect(() => cache.getOrCreate(origin)).toThrow(
         "no config is held for origin projectDir=/x cwd=/x configFile=/tmp/alt.json5",
       );

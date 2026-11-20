@@ -406,7 +406,10 @@ export function mainRenderer(
           () =>
             runEach(
               parts.edits
-                .configured(event.origin, event.config)
+                .configured(
+                  event.origin,
+                  parts.renderCache.snapshotFor(event.origin),
+                )
                 .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
             ),
           ...sessions.map((session) => () => openSession(parts, session)),
