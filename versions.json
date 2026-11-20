@@ -4,15 +4,22 @@
     {
       "version": "pr-914",
       "ref": "refs/pull/914/merge",
-      "sha": "c0f8228576326f812161cd424078bd4d2c53f809",
-      "timestamp": "2026-11-20T12:23:34.445Z",
+      "sha": "7181652a64025a2fd06c4a0534e247ed9ecf03d4",
+      "timestamp": "2026-11-20T12:47:44.452Z",
       "commits": [
         {
-          "sha": "c0f8228576326f812161cd424078bd4d2c53f809",
+          "sha": "7181652a64025a2fd06c4a0534e247ed9ecf03d4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T05:22:24-07:00",
-          "message": "Merge a4a7007ddf138433b5861f0f6d82e4c5b3f6e4df into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T12:46:35Z",
+          "message": "Merge 776003e81405030bc5f3a2a0d46e0843e95eac32 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "776003e81405030bc5f3a2a0d46e0843e95eac32",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T05:46:22-07:00",
+          "message": "fix(discovery): read each origin before its hold moves and name origins one way\n\nThe watch batch filters the followed map by the keys it heard, so a heard\norigin released since has nothing to discover and no lookup can throw. Each\norigin's read (discovery, watch targets, landing paths) runs before its watch\nor entry moves: a failed rediscovery keeps both, and a first follow reads\nevery new origin before holding any. Every batch and follow writes its\nrecord, a zero one included.\n\nAn origin reads one way on log lines and in reasons, with its whole\nidentity. A failure said again while still owed is held once. The daemon's\nheld failure is `daemonFailed`, as it holds more than acts (wire 14).\n"
         },
         {
           "sha": "a4a7007ddf138433b5861f0f6d82e4c5b3f6e4df",
