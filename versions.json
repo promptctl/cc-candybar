@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
+      "timestamp": "2026-11-20T11:26:16.157Z",
+      "commits": [
+        {
+          "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T11:25:02Z",
+          "message": "chore(release): set `package.json` to 1.236.2\n\n## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)\n\n### Bug Fixes\n\n* **sources:** distinguish invalid inputs from typed empty values ([#897](https://github.com/promptctl/cc-candybar/issues/897)) ([c957046](https://github.com/promptctl/cc-candybar/commit/c957046c1280833322d322ac37f7edd30d094ff7))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-907",
       "ref": "refs/pull/907/merge",
       "sha": "aaae2613f93b88f02a847e86e995403df86da755",
@@ -104,21 +119,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
-      "timestamp": "2026-11-20T11:19:59.344Z",
-      "commits": [
-        {
-          "sha": "c957046c1280833322d322ac37f7edd30d094ff7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:18:46-07:00",
-          "message": "fix(sources): distinguish invalid inputs from typed empty values (#897)\n\n* fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n\n* fix(config): preserve unchanged variable declarations (ibyq.r86)\n\n* test(config): catch lost synthesized variable bindings"
         }
       ]
     },
