@@ -31,6 +31,7 @@ import {
   type RenderDeps,
   type StateDeps,
 } from "../../src/renderer/render-cache";
+import { rethrown } from "./work-threw";
 import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import type { ViewSource } from "../../src/dsl/view-source";
 import {
@@ -86,6 +87,7 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
+    threw: rethrown,
     reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
   });
@@ -131,7 +133,10 @@ export function loadDiscovered(
   { stateDir, ...deps }: StateDeps & { readonly stateDir: string },
 ): LoadOutcome & { readonly snapshot: ConfigSnapshot } {
   const { snapshot } = discover(
-    { ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)), cwd },
+    {
+      ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)),
+      cwd,
+    },
     readShared({ locations: deps.locations, stateDir }),
   );
   return { ...loadOrigin(cwd, snapshot, deps), snapshot };

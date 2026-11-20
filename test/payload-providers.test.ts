@@ -10,10 +10,12 @@ import { systemTimekeeper } from "../src/time";
 import { runTeardown } from "../src/utils/teardown";
 import { HOST } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { rethrown } from "./helpers/work-threw";
 
 function providers() {
   const log = () => {};
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     logger: log,
   });

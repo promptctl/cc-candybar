@@ -12,6 +12,7 @@ import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { TEST_SIGNER } from "./link-signer";
+import { rethrown } from "./work-threw";
 
 export function unexpectedTimingProblem(message: string): never {
   throw new Error(message);
@@ -84,6 +85,7 @@ export const NO_ACTS: HostWorld = {
   configs: NO_CONFIGS,
   closing: () => false,
   acknowledgeDisplayed: () => {},
+  threw: rethrown,
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },

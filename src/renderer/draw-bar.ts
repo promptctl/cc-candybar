@@ -513,7 +513,7 @@ export function drawRender(
   );
   const held = [
     daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
-    daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
+    daemonEventAt("daemon-failed", daemon.daemonFailed, at, drawing.by),
   ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
@@ -839,7 +839,7 @@ interface FactsWarning {
 // bar the next one draws says so, by the same event hold as a pipe event. So
 // does an act that failed where no session's bar could hold it.
 interface DaemonEventWarning {
-  readonly kind: "renderer-ended" | "act-failed";
+  readonly kind: "renderer-ended" | "daemon-failed";
   readonly message: string;
   readonly event: HeldEvent;
 }

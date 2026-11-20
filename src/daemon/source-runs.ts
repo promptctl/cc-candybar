@@ -44,6 +44,7 @@ import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Asked, type Outcome } from "../utils/outcome.js";
 import { digestOf, ownValue } from "../utils/plain.js";
+import { loggedThrew } from "./foundations/work-threw.js";
 import type {
   Environment,
   SessionEnvironment,
@@ -372,7 +373,8 @@ export class SourceRuns {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.watchers ??
+        new WatcherRegistry({ clock: deps.clock, threw: loggedThrew(logger) }),
       deps.fileEvents ?? NO_FILE_EVENTS,
     );
     // [LAW:nothing-unseen] One record per read kind (spec section 21's source

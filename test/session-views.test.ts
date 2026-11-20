@@ -37,6 +37,7 @@ import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { rethrown } from "./helpers/work-threw";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
 
@@ -84,6 +85,7 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

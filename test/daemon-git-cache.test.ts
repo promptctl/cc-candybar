@@ -20,6 +20,7 @@ import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
+import { rethrown } from "./helpers/work-threw";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -1272,6 +1273,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       counters,
       logger,
@@ -1520,7 +1522,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(
+            l,
+          ),
         ),
       ).toBe(true);
       expect(counters).toEqual({

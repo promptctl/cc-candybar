@@ -81,10 +81,14 @@ import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import { joinedEvent } from "../src/utils/event-hold";
-import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { STORAGE_FOLDER } from "../src/config/loader/plugins";
 import { writeStatePlan } from "./helpers/state-file";
+import { threwLine } from "../src/daemon/foundations/work-threw";
 import {
   hearingEvents,
   hostHeld,
@@ -382,7 +386,8 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     { ...NO_ACTS, configs: discovery },
   );
   cleanups.push(() => host.closeWake());
-  const submit = (event: Notification) => host.answer(() => ({ kind: "event", event }));
+  const submit = (event: Notification) =>
+    host.answer(() => ({ kind: "event", event }));
   const draw = async () => {
     const { effects } = await submit({ kind: "request", id: REQUEST, context });
     return textOf(parseFrame(presentOf(effects).frame));
@@ -400,13 +405,19 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
   };
   const replace = async () => {
     current = renderer();
-    expect(await host.start(
-      () => ({
-        kind: "event",
-        event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
-      }),
-      [],
-    )).toMatchObject({ kind: "answered" });
+    expect(
+      await host.start(
+        () => ({
+          kind: "event",
+          event: {
+            kind: "start",
+            viewers: {},
+            sessions: [{ context, worldState }],
+          },
+        }),
+        [],
+      ),
+    ).toMatchObject({ kind: "answered" });
   };
   return {
     discovery,
@@ -426,11 +437,17 @@ describe("a statusline request", () => {
     const file = path.join(dir, "config.json5");
     const plugin = path.join(dir, "p");
     fs.mkdirSync(plugin);
-    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      `{
       sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
       segments: { marker: { template: 'VALID-PLUGIN' } }
-    }`);
-    fs.writeFileSync(file, '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }');
+    }`,
+    );
+    fs.writeFileSync(
+      file,
+      '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }',
+    );
     const { discovery, published, draw, reload, replace, entry } =
       await restartableRendererHost(context);
     expect(await draw()).toContain("VALID-PLUGIN");
@@ -458,7 +475,9 @@ describe("a statusline request", () => {
     expect(entry().lastError).toBe(error);
     expect(discovery.retainedOf(origin)).toBe(good);
 
-    await edit("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
+    await edit(
+      "{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }",
+    );
     expect(published.at(-1)?.sources[SESSION]).toEqual([]);
     expect(await draw()).toContain("AFTER-REMOVAL");
     expect(entry().lastError).toBeNull();
@@ -472,17 +491,25 @@ describe("a statusline request", () => {
     const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
     const folder = path.join(plugin, STORAGE_FOLDER);
     fs.mkdirSync(plugin, { recursive: true });
-    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      `{
       sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
       segments: { marker: { template: 'APPROVED-PLUGIN' } }
-    }`);
+    }`,
+    );
     fs.writeFileSync(file, '{ root: { h: ["repo.p.marker"] } }');
     const state = stateDir({ env: {}, home: dir, tmp: dir });
     const book = repoConfigs(state);
-    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    expect(
+      writeStatePlan(book.plan(() => ({ [dir]: "approved" }))),
+    ).toMatchObject({ kind: "ok" });
     const { discovery, published, draw, reload, replace, entry, hold } =
       await restartableRendererHost(context);
-    expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "approved" });
+    expect(discovery.snapshotOf(origin)?.repo).toMatchObject({
+      dir,
+      standing: "approved",
+    });
     expect(await draw()).toContain("APPROVED-PLUGIN");
     expect(published.at(-1)?.managedFolders).toContain(folder);
     fs.writeFileSync(file, "{ invalid syntax");
@@ -493,9 +520,14 @@ describe("a statusline request", () => {
 
     {
       using drawing = hold();
-      expect(writeStatePlan(book.plan(() => ({})))).toMatchObject({ kind: "ok" });
+      expect(writeStatePlan(book.plan(() => ({})))).toMatchObject({
+        kind: "ok",
+      });
       await reload(repoConfigsPath(state));
-      expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "awaiting" });
+      expect(discovery.snapshotOf(origin)?.repo).toMatchObject({
+        dir,
+        standing: "awaiting",
+      });
       expect(published.at(-1)?.managedFolders).toContain(folder);
       expect(drawing.state.config.segments["repo.p.marker"]).toBeDefined();
     }
@@ -509,7 +541,10 @@ describe("a statusline request", () => {
     expect(live).not.toContain("APPROVED-PLUGIN");
     expect(liveFolders).not.toContain(folder);
 
-    fs.writeFileSync(file, "{ segments: { s: { template: 'RECOVERED' } }, root: { h: ['s'] } }");
+    fs.writeFileSync(
+      file,
+      "{ segments: { s: { template: 'RECOVERED' } }, root: { h: ['s'] } }",
+    );
     await reload(file);
     expect(await draw()).toContain("RECOVERED");
     expect(entry().lastError).toBeNull();
@@ -523,9 +558,12 @@ describe("a statusline request", () => {
     const definition = path.join(plugin, "plugin.json5");
     const folder = path.join(plugin, STORAGE_FOLDER);
     fs.mkdirSync(plugin, { recursive: true });
-    fs.writeFileSync(definition, `{
+    fs.writeFileSync(
+      definition,
+      `{
       sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } }
-    }`);
+    }`,
+    );
     const { discovery, published, draw, reload, replace, entry } =
       await restartableRendererHost(context);
     const folders = () => published.at(-1)?.managedFolders;
@@ -541,10 +579,15 @@ describe("a statusline request", () => {
 
     const state = stateDir({ env: {}, home: dir, tmp: dir });
     const book = repoConfigs(state);
-    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    expect(
+      writeStatePlan(book.plan(() => ({ [dir]: "approved" }))),
+    ).toMatchObject({ kind: "ok" });
     const recorded = book.read();
     await reload(repoConfigsPath(state));
-    expect(discovery.snapshotOf(context.requested)?.repo).toMatchObject({ dir, standing: "approved" });
+    expect(discovery.snapshotOf(context.requested)?.repo).toMatchObject({
+      dir,
+      standing: "approved",
+    });
     const liveFolders = folders();
     const latestError = entry().lastError;
     await draw();
@@ -573,24 +616,33 @@ describe("a statusline request", () => {
       if (config === null) throw new Error("the host did not hold the config");
       return { origin, config, retained: "current" as const };
     });
-    const first = answered(await handIn(t.r, {
-      kind: "start",
-      viewers: {
-        [SESSION]: {
-          lanes: { pane: { drawing: true, subscribers: 1 } },
-          shown: true,
-          joined: 1,
+    const first = answered(
+      await handIn(t.r, {
+        kind: "start",
+        viewers: {
+          [SESSION]: {
+            lanes: { pane: { drawing: true, subscribers: 1 } },
+            shown: true,
+            joined: 1,
+          },
         },
-      },
-      sessions: [{
-        context,
-        worldState: t.rig.served.collector.requested(context, TEST_ENVIRONMENT),
-      }],
-      configs: offerings,
-    }));
+        sessions: [
+          {
+            context,
+            worldState: t.rig.served.collector.requested(
+              context,
+              TEST_ENVIRONMENT,
+            ),
+          },
+        ],
+        configs: offerings,
+      }),
+    );
 
     expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
-    expect(first.subscriptions.configs).toEqual(expect.arrayContaining([context.requested, inactive]));
+    expect(first.subscriptions.configs).toEqual(
+      expect.arrayContaining([context.requested, inactive]),
+    );
     expect((await dueFrame(t.r)).bar.rows.length).toBeGreaterThan(0);
   });
 
@@ -749,12 +801,12 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      actFailed: event,
+      daemonFailed: event,
     }));
     const { effects, record } = answered(await request(t));
-    expect(new Map(record).get("warn")).toBe("act-failed");
+    expect(new Map(record).get("warn")).toBe("daemon-failed");
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "act-failed", event },
+      { kind: "daemon-failed", event },
     ]);
   });
 
@@ -866,7 +918,7 @@ describe("a feed's frame", () => {
       };
       const t = renderer(undefined, () => ({
         ...daemonFactsOf(),
-        actFailed: event,
+        daemonFailed: event,
       }));
       await configure(t, checked("%1"));
       answered(
@@ -883,7 +935,7 @@ describe("a feed's frame", () => {
       );
       const frame = await dueFrame(t.r);
       expect(frame.displayedEvents).toEqual(
-        shown ? undefined : [{ kind: "act-failed", event }],
+        shown ? undefined : [{ kind: "daemon-failed", event }],
       );
       const confirmed = answered(
         await done(t.r, { session: SESSION, id: frame.receipt }, true),
@@ -1225,6 +1277,8 @@ function productionAnswer(
     {
       ...NO_ACTS,
       unheard: (text) => void t.logged.push(text),
+      threw: (event, fields, thrown) =>
+        void t.logged.push(threwLine(event, fields, thrown)),
       configs: {
         ...NO_ACTS.configs,
         follow: discovery.follow.bind(discovery),
@@ -1292,11 +1346,16 @@ describe("the session's config, ahead of its request", () => {
     cleanups.push(() => host.closeWake());
     // Its origin's config was delivered, so the next context opens the view itself.
     const context = checked();
-    const worldState = t.rig.served.collector.requested(context, TEST_ENVIRONMENT);
-    expect(await host.answer(() => ({
-      kind: "event",
-      event: { kind: "context", context, worldState },
-    }))).toMatchObject({ kind: "answered" });
+    const worldState = t.rig.served.collector.requested(
+      context,
+      TEST_ENVIRONMENT,
+    );
+    expect(
+      await host.answer(() => ({
+        kind: "event",
+        event: { kind: "context", context, worldState },
+      })),
+    ).toMatchObject({ kind: "answered" });
     expect(kinds.splice(0)).toEqual(["context", "config"]);
     t.rig.cache.holdSession = () => {
       throw new Error("the opening broke");
@@ -1619,7 +1678,10 @@ describe("two requests of one session at different keys", () => {
         checked(pane, `${id}.json5`),
         TEST_ENVIRONMENT,
         id as RequestId,
-        { waitEndsAt: systemTimekeeper.monotonic() + 10_000, gone: () => false },
+        {
+          waitEndsAt: systemTimekeeper.monotonic() + 10_000,
+          gone: () => false,
+        },
         [],
       );
 

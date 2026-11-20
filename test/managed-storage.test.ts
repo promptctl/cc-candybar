@@ -27,6 +27,7 @@ import { until } from "./helpers/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import { SourceFiles } from "../src/daemon/source-files";
+import { rethrown } from "./helpers/work-threw";
 
 // [LAW:behavior-not-structure] The managed storage owner through what it
 // shows: what a session's lane reads, the refresh and sweep events it writes,
@@ -71,6 +72,7 @@ function rig(
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters,
     logger,

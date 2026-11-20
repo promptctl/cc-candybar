@@ -14,6 +14,7 @@ import {
   CrossedFailure,
   DaemonClosing,
 } from "./foundations/verb-error.js";
+import { threwLine, type WorkThrew } from "./foundations/work-threw.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -265,6 +266,30 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const stats = new RuntimeStats(clock);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
+  // [LAW:one-source-of-truth] How the last renderer process ended, and the
+  // work that failed with no session's bar to hold it, each held for the bar
+  // until an answer has carried it.
+  let rendererEnded: HeldEvent | null = null;
+  let daemonFailed: HeldEvent | null = null;
+  // The unacknowledged text is included in the next warning.
+  const held = (text: string, fromEnvironment: boolean): void => {
+    const prior = daemonFailed;
+    daemonFailed = environmentOutput(
+      joinedEvent(prior, text, instant()),
+      fromEnvironment ||
+        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    );
+    // [LAW:no-ambient-temporal-coupling] Work can throw before every fault
+    // owner exists. The initial restatement reads it once they do.
+    if (phase.kind !== "building") restateFaults();
+  };
+  // [LAW:single-enforcer] The daemon's one writer of a throw from work it
+  // called: one record, in daemon.log and on every bar.
+  const threw: WorkThrew = (event, fields, thrown) => {
+    const line = threwLine(event, fields, thrown);
+    log("error", line);
+    held(line, false);
+  };
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -273,6 +298,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     counters: stats,
     logger: log,
+    threw,
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -288,21 +314,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, daemonFailed: null },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
-        actFailed,
+        daemonFailed,
       }),
     );
   }
@@ -350,9 +371,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             changed = true;
           }
           break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
+        case "daemon-failed":
+          if (daemonFailed !== null && answeredBy(daemonFailed, event)) {
+            daemonFailed = { ...daemonFailed, answered: true };
             changed = true;
           }
           break;
@@ -410,7 +431,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:single-enforcer] The daemon's one record of every source's refreshes:
   // the providers', and each config's user sources (the render cache's).
   const refreshLedger = new RefreshLedger(log);
-  restateFaults();
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs: the collector holds each run a session's renderer subscribes to, so
   // one identity is one program however many sessions name it.
@@ -597,7 +617,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
-    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
+    threw,
+    // [LAW:no-silent-failure] Only a connected renderer follows an origin,
+    // and none is ever removed, so a holder with no runtime is a broken
+    // invariant, reported as the batch's throw.
+    moved: (name, origins) => {
+      const runtime = renderers.get(name);
+      if (runtime === undefined)
+        throw new Error(`config moved for renderer ${name}, never connected`);
+      runtime.renderer.moved(origins);
+    },
     reloaded: (folders) => managedStorage.recheck(folders),
   });
 
@@ -752,16 +781,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard: (text, fromEnvironment) =>
+          held(text, fromEnvironment === true),
+        threw,
       },
     );
     return { reported, entry, stores, link, renderer };
@@ -986,6 +1008,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     },
   };
   phase = { kind: "built" };
+  // [LAW:no-ambient-temporal-coupling] The initial restatement, once every
+  // fault owner exists: it carries whatever was reported while building.
+  restateFaults();
 
   function serve(): ServedDaemon {
     if (serving()) return served;

@@ -20,6 +20,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { rethrown } from "./helpers/work-threw";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,6 +61,7 @@ function setUp() {
     );
   writeConfig("{{ .status }}");
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

@@ -59,6 +59,7 @@ import { instantOf } from "../src/utils/instant";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { rethrown } from "./helpers/work-threw";
 const S1 = sessionIdOf("s1");
 const A_ID = sessionIdOf("a");
 const B_ID = sessionIdOf("b");
@@ -2251,6 +2252,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesClosed: 0,
       };
       const watchers = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -2444,6 +2446,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
         const watchers = new WatcherRegistry({
+          threw: rethrown,
           clock: systemTimekeeper,
           logger: () => {},
         });

@@ -118,6 +118,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
 import { onLanded } from "./helpers/click";
+import { rethrown } from "./helpers/work-threw";
 
 const S1 = sessionIdOf("s1");
 
@@ -994,6 +995,7 @@ function makeCache(reloads?: ReloadSignal): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
@@ -1211,6 +1213,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const loads: string[] = [];
     const lines: string[] = [];
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       logger: () => {},
     });

@@ -2,9 +2,10 @@ import { compareStructural } from "mobx";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
-import { valueOf } from "../../utils/logfmt";
+import { valueOf, type Field } from "../../utils/logfmt";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import type { Timekeeper } from "../../time";
+import type { WorkThrew } from "../foundations/work-threw";
 import {
   readPolledEntry,
   type FileObservations,
@@ -242,6 +243,7 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
+  private readonly threw: WorkThrew;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
@@ -256,6 +258,9 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // [LAW:no-silent-failure] Where a holder or a window that throws on a
+    // delivery is reported. Required: a consumer that drops it hears nothing.
+    threw: WorkThrew;
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
@@ -263,14 +268,22 @@ export class WatcherRegistry {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.threw = opts.threw;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
   // [LAW:single-enforcer] A consumer that reloads several slots together can
   // share their delivery window. Each slot still receives only its own paths.
   // Keys acquired in this window belong to it until their last release.
-  batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
-    const window: InvalidationWindow = { pending: null, completed };
+  // `name` is what a throw from `completed` is reported as.
+  batch(
+    name: string,
+    completed: () => void,
+  ): Pick<WatcherRegistry, "acquire" | "follow"> {
+    const window: InvalidationWindow = {
+      pending: null,
+      completed: () => this.notify(["window", name], completed),
+    };
     const acquire: WatcherRegistry["acquire"] = (
       key,
       targets,
@@ -699,10 +712,11 @@ export class WatcherRegistry {
               if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered);
               for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+                this.notify(["watch", changed.key], () =>
+                  holder.onInvalidate(heard),
+                );
             }
-            if (window.completed !== undefined)
-              this.notify(null, window.completed);
+            if (window.completed !== undefined) window.completed();
           },
           { unref: true },
         ),
@@ -720,13 +734,13 @@ export class WatcherRegistry {
     );
   }
 
-  private notify(key: string | null, take: () => void): void {
+  // [LAW:no-silent-failure] One delivery's throw is reported as what threw
+  // and cannot keep the rest of the window from being heard.
+  private notify(about: Field, take: () => void): void {
     try {
       take();
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      this.threw("watch delivery threw", [about], thrown);
     }
   }
 

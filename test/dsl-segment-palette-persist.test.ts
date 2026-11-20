@@ -72,6 +72,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { rethrown } from "./helpers/work-threw";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -452,6 +453,7 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

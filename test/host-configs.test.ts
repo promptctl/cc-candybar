@@ -41,6 +41,8 @@ import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
+import { rethrown } from "./helpers/work-threw";
+import { threwLine } from "../src/daemon/foundations/work-threw";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -81,7 +83,13 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    managedFolders: [],
+    configSelections: [],
+    configs,
+  },
   wake: null,
   record: [],
   frames: [],
@@ -149,6 +157,8 @@ function hostOver(
       configs: bound?.configs ?? configs,
       writeConfigFile: bound?.writeConfigFile,
       unheard: (text) => void logged.push(`unheard ${text}`),
+      threw: (event, fields, thrown) =>
+        void logged.push(`threw ${threwLine(event, fields, thrown)}`),
     },
   );
   return { host, heard, logged, follows, declarations };
@@ -339,13 +349,17 @@ test("a write through a config symlink reloads the remaining holder after the wr
   fs.symlinkSync(file, link);
   const origin = originOf(dir, dir, link);
   const secondary = rendererNameOf("secondary");
-  const watches = new WatcherRegistry({ clock: systemTimekeeper });
+  const watches = new WatcherRegistry({
+    threw: rethrown,
+    clock: systemTimekeeper,
+  });
   const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,
     log: () => {},
+    threw: rethrown,
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });
   try {
@@ -395,16 +409,19 @@ test("an unanswered start keeps the previous declaration until the next successf
     return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  const start = () => host.answer(() => ({
-    kind: "event",
-    event: { kind: "start", viewers: {}, sessions: [] },
-  }));
+  const start = () =>
+    host.answer(() => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }));
   const refused = {
     kind: "threw",
     failure: { message: "the renderer went down" },
   };
   expect(await start()).toMatchObject(refused);
-  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(
+    await host.answer(() => ({ kind: "event", event: due })),
+  ).toMatchObject(refused);
   expect(heard).toEqual(["due", "config", "start"]);
   expect(declarations).toEqual([opened.subscriptions]);
   fail = false;

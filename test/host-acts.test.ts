@@ -29,6 +29,7 @@ import { authorizeRun } from "../src/daemon/foundations/run-authorization";
 import { VERB_RUN, type RunEvidence } from "../src/click/wire";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { readTextIfPresent } from "../src/utils/regular-text";
+import { rethrown } from "./helpers/work-threw";
 
 const S = sessionIdOf("s");
 // No wake is declared, so no timer is set.
@@ -56,7 +57,13 @@ const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    managedFolders: [],
+    configSelections: [],
+    configs: [],
+  },
   wake: null,
   record: [],
   frames: [],
@@ -114,7 +121,8 @@ function hostOver(
   const unheard: string[] = [];
   const heard: EventInput[] = [];
   const world: HostWorld = {
-    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
+    authorizeRun: (request, captures) =>
+      authorizeRun(TEST_SIGNER, request, captures),
     perform: async (act: HostAct): Promise<EffectOutcome> => {
       did.push(
         `perform ${act.kind} ${act.id} (file says ${fs.readFileSync(file, "utf8").includes("dawn") ? "dawn" : "dusk"})`,
@@ -131,6 +139,7 @@ function hostOver(
     },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    threw: rethrown,
     unheard: (text) => void unheard.push(text),
     ...over,
   };

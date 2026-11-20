@@ -63,6 +63,7 @@ import {
   failureOf,
   type Failure,
 } from "./foundations/verb-error.js";
+import type { WorkThrew } from "./foundations/work-threw.js";
 import {
   performChanges,
   configEffectOutcome,
@@ -146,6 +147,9 @@ export interface HostWorld {
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
+  // [LAW:single-enforcer] Work this host took or left settling that threw is
+  // reported where every other daemon throw is.
+  readonly threw: WorkThrew;
 }
 
 export interface RendererHost {
@@ -641,11 +645,15 @@ export function rendererHost(
     }
   };
 
-  const notTaken = (what: string, failure: Failure): void => {
-    const text = `renderer ${name}'s ${what} could not be taken: ${failure.detail}`;
-    log("error", text);
-    world.unheard(text);
-  };
+  const notTaken = (what: string, thrown: unknown): void =>
+    world.threw(
+      "renderer work not taken",
+      [
+        ["renderer", name],
+        ["work", what],
+      ],
+      thrown,
+    );
 
   const recordTaken = <Value>(
     what: string,
@@ -654,7 +662,7 @@ export function rendererHost(
     try {
       return operation();
     } catch (thrown) {
-      notTaken(what, failureOf(thrown));
+      notTaken(what, thrown);
       return null;
     }
   };
@@ -783,7 +791,7 @@ export function rendererHost(
       for (const origin of named) markUnreceived(origin);
       const failure = failureOf(thrown);
       followFailure = failure;
-      notTaken("configs", failure);
+      notTaken("configs", thrown);
       return { kind: "failed", failure };
     }
   };
@@ -1075,11 +1083,16 @@ export function rendererHost(
   // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
   // is the daemon's, on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
-    void settling.catch((thrown: unknown) => {
-      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
-    });
+    void settling.catch((thrown: unknown) =>
+      world.threw(
+        "renderer turn unsettled",
+        [
+          ["renderer", name],
+          ["work", what],
+        ],
+        thrown,
+      ),
+    );
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(

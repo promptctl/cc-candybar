@@ -28,6 +28,9 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
+import { rethrown } from "./helpers/work-threw";
+import { threwLine } from "../src/daemon/foundations/work-threw";
+import { fieldsOf } from "../src/utils/logfmt";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -56,7 +59,7 @@ describe("WatcherRegistry", () => {
         fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-polled-")),
       );
       clock = heldClock(new Date(0));
-      reg = new WatcherRegistry({ clock, logger: () => {} });
+      reg = new WatcherRegistry({ threw: rethrown, clock, logger: () => {} });
     });
     afterEach(() => {
       reg.closeAll();
@@ -70,6 +73,49 @@ describe("WatcherRegistry", () => {
       );
       return seen;
     };
+
+    test("a holder or a window that throws is reported by name, and the rest of the window is still heard", () => {
+      const reported: string[] = [];
+      const reporting = new WatcherRegistry({
+        clock,
+        logger: () => {},
+        threw: (event, fields, thrown) =>
+          reported.push(threwLine(event, fields, thrown)),
+      });
+      try {
+        const file = path.join(dir, "config");
+        const targets = { dirs: [], polled: [file] };
+        const heard: string[] = [];
+        const window = reporting.batch("pair", () => {
+          heard.push("window");
+          throw new Error("window broke");
+        });
+        window.acquire("first", targets, () => {
+          throw new Error("holder broke");
+        });
+        window.acquire("second", targets, () => heard.push("second"));
+        fs.writeFileSync(file, "made");
+        swept();
+        expect(heard).toEqual(["second", "window"]);
+        expect(
+          reported.map((line) => [
+            line.split(" ").slice(0, 3).join(" "),
+            Object.fromEntries(fieldsOf(line)),
+          ]),
+        ).toEqual([
+          [
+            "watch delivery threw",
+            { watch: "first", failed: expect.stringContaining("holder broke") },
+          ],
+          [
+            "watch delivery threw",
+            { window: "pair", failed: expect.stringContaining("window broke") },
+          ],
+        ]);
+      } finally {
+        reporting.closeAll();
+      }
+    });
 
     test("each slot compares the one sweep with the revision its holder read", () => {
       const file = path.join(dir, "config");
@@ -298,7 +344,10 @@ describe("WatcherRegistry", () => {
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+    });
     const h1 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     const h2 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
@@ -320,7 +369,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+      counters,
+    });
     const first = reg.follow(
       null,
       { key: "a", targets: { dirs: [], polled: [] }, unbound: false },
@@ -379,7 +432,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+      counters,
+    });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
       reg.acquire(`k${i}`, { dirs: [], polled: [] }, () => fired.push(`k${i}`)),
@@ -404,7 +461,10 @@ describe("WatcherRegistry", () => {
 
   test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) =>
       seen.push(inv),
@@ -432,7 +492,10 @@ describe("WatcherRegistry", () => {
 
   test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(
       dir,
@@ -468,6 +531,7 @@ describe("WatcherRegistry", () => {
       dirWatchesClosed: 0,
     };
     const reg = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       counters,
       logger: () => {},
@@ -513,6 +577,7 @@ describe("WatcherRegistry", () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
       fs.chmodSync(dir, 0o000);
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -553,6 +618,7 @@ describe("WatcherRegistry", () => {
         fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-")),
       );
       reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
         nodeWalksTrees: true,
@@ -691,6 +757,7 @@ describe("WatcherRegistry", () => {
 
     test("where the recursive watch is native, a tree is one watch", () => {
       const native = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
         nodeWalksTrees: false,
@@ -716,6 +783,7 @@ describe("WatcherRegistry", () => {
       const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
       const dir = path.join(parent, "later");
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -748,6 +816,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -834,6 +903,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -866,6 +936,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -897,6 +968,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -940,6 +1012,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -973,6 +1046,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1023,6 +1097,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1091,6 +1166,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1125,6 +1201,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1153,7 +1230,10 @@ describe("WatcherRegistry", () => {
 
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+    });
     reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();

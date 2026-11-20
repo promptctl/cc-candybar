@@ -31,6 +31,7 @@ import { HOST } from "./host";
 import { stateDir } from "../../src/daemon/paths";
 import { digestOf } from "../../src/utils/plain";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
+import { rethrown } from "./work-threw";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -41,7 +42,8 @@ export function clickParts(
   // What the host's turns act in: by default, an act it is handed fails by
   // name, so a test whose click asks one hands in its own performer.
   world: HostWorld = {
-    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
+    authorizeRun: (request, captures) =>
+      authorizeRun(TEST_SIGNER, request, captures),
     perform: async (act) => ({
       kind: "failed",
       reason: `${act.kind}: no host part in this rig`,
@@ -50,6 +52,7 @@ export function clickParts(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    threw: rethrown,
     unheard: () => {},
   },
   clock: Timekeeper = systemTimekeeper,

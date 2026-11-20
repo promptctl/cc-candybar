@@ -60,9 +60,7 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  repoConfigsPath,
-} from "../src/daemon/config-discovery/repo-configs";
+import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
@@ -70,6 +68,7 @@ import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
+import { rethrown } from "./helpers/work-threw";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -114,6 +113,7 @@ function makeCache(
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters,
     logger: () => {},
@@ -1140,9 +1140,7 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(book, declined),
-      );
+      await reloads.after(entry, () => writeFileSync(book, declined));
       expect(entry.configLayers).toEqual([]);
       expect(entry.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");
@@ -1441,6 +1439,7 @@ describe("RenderCache close", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1496,6 +1495,7 @@ describe("RenderCache close", () => {
 describe("RenderCache frames and pins", () => {
   function pinCache(source = SOURCES_NOTHING) {
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1612,6 +1612,7 @@ describe("RenderCache frames and pins", () => {
     "a failed pinned %s successor keeps its owner and reopens on corrective config under pressure",
     (which) => {
       const watchers = new WatcherRegistry({
+        threw: rethrown,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1720,6 +1721,7 @@ describe("RenderCache frames and pins", () => {
   // forgets it.
   test("a retired session's open failure is forgotten", () => {
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       logger: () => {},
     });

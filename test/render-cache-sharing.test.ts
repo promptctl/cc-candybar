@@ -45,6 +45,7 @@ import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { rethrown } from "./helpers/work-threw";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -73,6 +74,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters,
     logger: () => {},
@@ -294,9 +296,14 @@ test("a load reports an action that claims a daemon-held key before its first cl
   const { cache, gates, originAt } = makeCache(Number.POSITIVE_INFINITY);
   const release = gates.state.register("daemon.example", []);
   try {
-    const config = file("held.json5", `{ actions: { page: { set: 'daemon.example', int: true } } }`);
+    const config = file(
+      "held.json5",
+      `{ actions: { page: { set: 'daemon.example', int: true } } }`,
+    );
     const entry = cache.getOrCreate(originAt(dir, dir, config));
-    expect(entry.lastError).toContain('key "daemon.example" is written by the daemon\'s own links');
+    expect(entry.lastError).toContain(
+      'key "daemon.example" is written by the daemon\'s own links',
+    );
   } finally {
     release();
   }

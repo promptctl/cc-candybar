@@ -69,6 +69,7 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { rethrown } from "./helpers/work-threw";
 
 const S1 = sessionIdOf("s1");
 const S2_NO_PICK = sessionIdOf("s2-no-pick");
@@ -816,6 +817,7 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    threw: rethrown,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

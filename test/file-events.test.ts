@@ -19,6 +19,7 @@ import {
 } from "../src/render/diagnostics";
 import { fakeWatches } from "./helpers/fake-watches";
 import { until } from "./helpers/until";
+import { rethrown } from "./helpers/work-threw";
 
 // [LAW:behavior-not-structure] The daemon's one owner of file-event delivery
 // through what it shows: what it reads, what it tells its subscribers, the
@@ -66,7 +67,11 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const events = new FileEventDelivery({
     clock: systemTimekeeper,
-    watchers: new WatcherRegistry({ clock: systemTimekeeper, logger }),
+    watchers: new WatcherRegistry({
+      threw: rethrown,
+      clock: systemTimekeeper,
+      logger,
+    }),
     logger,
     identityOf: opts.identityOf,
   });

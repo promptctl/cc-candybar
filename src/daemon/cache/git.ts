@@ -24,6 +24,7 @@ import {
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
+import { loggedThrew } from "../foundations/work-threw";
 import { Period, backedOffMs, type Every } from "../../utils/period";
 import {
   answerPending,
@@ -356,6 +357,7 @@ export class GitDataProvider {
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
+        threw: loggedThrew(this.logger),
       });
       this.ownsWatchers = true;
     }

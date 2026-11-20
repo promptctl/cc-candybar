@@ -44,6 +44,7 @@ import {
   originOf,
 } from "./helpers/config-host";
 import { ReloadSignal } from "./helpers/reload-signal";
+import { rethrown } from "./helpers/work-threw";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -115,17 +116,13 @@ describe("a listed plugin", () => {
   test("renders its segment from its data file", async () => {
     const p = config();
     write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("⇪ prod live");
     expect(warnings).toEqual([]);
   });
 
   test("a missing data file reads as no fields, so a `when` hides the segment", async () => {
-    const { rendered } = clean(
-      await renderConfig(world, config(), dir),
-    );
+    const { rendered } = clean(await renderConfig(world, config(), dir));
     expect(rendered).not.toContain("⇪");
   });
 
@@ -214,9 +211,7 @@ describe("a plugin segment's partials", () => {
   test("self rewrites inside a partial, and its bare helper call binds to the plugin's own namespace", async () => {
     const p = config(PARTIAL_DEFINITION);
     write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("⇪ prod live");
     expect(warnings).toEqual([]);
   });
@@ -359,9 +354,7 @@ test("a plugin named like the bar's own namespaces lives under plugins., beside 
     "config.json5",
     `{ plugins: ["./candybar/plugin.json5"], root: { h: ["plugins.candybar.s"] } }`,
   );
-  expect(
-    clean(await renderConfig(world, p, dir)).rendered,
-  ).toContain("mine");
+  expect(clean(await renderConfig(world, p, dir)).rendered).toContain("mine");
 });
 
 describe("a placed segment of a dropped plugin stands in as a cell, not a broken config", () => {
@@ -408,7 +401,9 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
     const message = fatal(await renderConfig(world, p, dir));
-    expect(message).toContain(`plugin ${path.join(dir, "deploy/plugin.json5")} was not loaded`);
+    expect(message).toContain(
+      `plugin ${path.join(dir, "deploy/plugin.json5")} was not loaded`,
+    );
   });
 
   test("a by-field retune and placement settings still load", async () => {
@@ -627,9 +622,7 @@ describe("a plugin's own variables", () => {
 
   test("a definition without data loads, and declares no data variable", async () => {
     const p = listing(`{ segments: { s: { template: "no data here" } } }`);
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
     const loaded = loadDiscovered(dir, dir, p, {
@@ -666,16 +659,12 @@ describe("a plugin's own variables", () => {
       "config.json5",
       `{ plugins: ["./hello/plugin.json5"], root: { h: ["model"] } }`,
     );
-    expect(
-      clean(await renderConfig(world, p, dir)).warnings,
-    ).toEqual([]);
+    expect(clean(await renderConfig(world, p, dir)).warnings).toEqual([]);
   });
 
   test("are named under the plugin, and its segment's vars of any kind load and draw", async () => {
     const p = listing(HELLO);
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
     const loaded = loadDiscovered(dir, dir, p, {
@@ -822,11 +811,7 @@ describe("an installed plugin", () => {
       `{ "env": "prod", "state": "live" }`,
     );
     const { rendered, warnings } = clean(
-      await renderConfig(
-        world,
-        placing("plugins.deploy.status"),
-        dir,
-      ),
+      await renderConfig(world, placing("plugins.deploy.status"), dir),
     );
     expect(rendered).toContain("⇪ prod live");
     expect(warnings).toEqual([]);
@@ -853,9 +838,7 @@ describe("an installed plugin", () => {
   test("a repo-shipped plugin is there only in sessions rooted in that repo", async () => {
     repoInstall("a", "deploy", DEFINITION);
     fs.mkdirSync(path.join(dir, "b"));
-    expect(segmentsIn(path.join(dir, "a"))).toEqual([
-      "repo.deploy.status",
-    ]);
+    expect(segmentsIn(path.join(dir, "a"))).toEqual(["repo.deploy.status"]);
     expect(segmentsIn(path.join(dir, "b"))).toEqual([]);
   });
 
@@ -870,17 +853,11 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "a/deep/sub"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     expect(
-      clean(
-        await renderConfig(
-          world,
-          p,
-          path.join(dir, "a/deep/sub"),
-        ),
-      ).rendered,
+      clean(await renderConfig(world, p, path.join(dir, "a/deep/sub")))
+        .rendered,
     ).toContain("#a-1");
     expect(
-      clean(await renderConfig(world, p, path.join(dir, "b")))
-        .rendered,
+      clean(await renderConfig(world, p, path.join(dir, "b"))).rendered,
     ).toContain("#b-2");
   });
 
@@ -943,6 +920,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
@@ -1040,8 +1018,7 @@ describe("an installed plugin", () => {
     write("loose/.lit/state.json", `{ "id": "l-3" }`);
     const p = placing("plugins.lit.ticket");
     expect(
-      clean(await renderConfig(world, p, path.join(dir, "loose")))
-        .rendered,
+      clean(await renderConfig(world, p, path.join(dir, "loose"))).rendered,
     ).toContain("#l-3");
   });
 
@@ -1085,13 +1062,8 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { status: { template: "user" } } }`,
     );
     expect(
-      clean(
-        await renderConfig(
-          world,
-          placing("plugins.deploy.status"),
-          dir,
-        ),
-      ).rendered,
+      clean(await renderConfig(world, placing("plugins.deploy.status"), dir))
+        .rendered,
     ).toContain("user");
     expect(segmentsIn(dir)).toEqual(["plugins.deploy.status"]);
   });
@@ -1113,22 +1085,12 @@ describe("an installed plugin", () => {
       "repo.deploy.status",
     ]);
     expect(
-      clean(
-        await renderConfig(
-          world,
-          placing("plugins.deploy.status"),
-          repo,
-        ),
-      ).rendered,
+      clean(await renderConfig(world, placing("plugins.deploy.status"), repo))
+        .rendered,
     ).toContain("user");
     expect(
-      clean(
-        await renderConfig(
-          world,
-          placing("repo.deploy.status"),
-          repo,
-        ),
-      ).rendered,
+      clean(await renderConfig(world, placing("repo.deploy.status"), repo))
+        .rendered,
     ).toContain("mine-repo");
   });
 
@@ -1150,8 +1112,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "elsewhere"));
     const p = home("repo.lit.ticket");
     expect(
-      clean(await renderConfig(world, p, path.join(dir, "repo")))
-        .rendered,
+      clean(await renderConfig(world, p, path.join(dir, "repo"))).rendered,
     ).toContain("TICKET");
     const outside = clean(
       await renderConfig(world, p, path.join(dir, "elsewhere")),
@@ -1179,11 +1140,7 @@ describe("an installed plugin", () => {
 
   test("a cell of a plugin that is not installed draws nothing, and is no error", async () => {
     const { rendered, warnings } = clean(
-      await renderConfig(
-        world,
-        home("plugins.deploy.ticket"),
-        dir,
-      ),
+      await renderConfig(world, home("plugins.deploy.ticket"), dir),
     );
     expect(rendered).toContain("MINE");
     expect(warnings).toEqual([]);
@@ -1194,9 +1151,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "repo.lit.ticket", after: "mine" }] }`,
     );
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("MINE");
     expect(warnings).toEqual([]);
   });
@@ -1209,11 +1164,7 @@ describe("an installed plugin", () => {
       `{ segments: { status: { template: "s", settings: { compact: { label: "c", domain: "bool", default: false }, wide: { label: "w", domain: "bool", default: true } } }, phase: { template: "p" } } }`,
     );
     const message = fatal(
-      await renderConfig(
-        world,
-        home("plugins.deploy.statsu"),
-        dir,
-      ),
+      await renderConfig(world, home("plugins.deploy.statsu"), dir),
     );
     expect(message).toContain(
       `root entry "plugins.deploy.statsu" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${won} declares: plugins.deploy.phase (no settings), plugins.deploy.status (settings: compact, wide)`,
@@ -1292,10 +1243,16 @@ describe("an installed plugin", () => {
     );
     const warnings: string[] = [];
     using prepared = await prepareConfig(
-      world, [user, project].map(homeLayer), dir, warnings, instantOf(new Date()),
+      world,
+      [user, project].map(homeLayer),
+      dir,
+      warnings,
+      instantOf(new Date()),
     );
     expect(prepared.droppedPlacements).toEqual([
-      expect.stringMatching(/user\.json5[\s\S]*"gti" does not match any declared segment/),
+      expect.stringMatching(
+        /user\.json5[\s\S]*"gti" does not match any declared segment/,
+      ),
     ]);
     expect(prepared.droppedPlugins).toEqual([]);
     expect(warnings.join("\n")).not.toContain("was not loaded");
@@ -1416,9 +1373,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }] }`,
     );
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("TWO");
     expect(rendered).not.toContain("⚠");
@@ -1430,9 +1385,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", { seg: "repo.lit.ticket", id: "ticket" }] }, insert: [{ seg: "two", after: "ticket" }] }`,
     );
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("TWO");
     expect(rendered).not.toContain("⚠");
@@ -1444,9 +1397,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" }, three: { template: "THREE" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }, { seg: "three", after: "two" }] }`,
     );
-    const { rendered, warnings } = clean(
-      await renderConfig(world, p, dir),
-    );
+    const { rendered, warnings } = clean(await renderConfig(world, p, dir));
     expect(rendered).toContain("MINE");
     expect(rendered).not.toContain("THREE");
     expect(rendered).not.toContain("⚠");
@@ -1499,9 +1450,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    expect(
-      clean(await renderConfig(world, p, dir)).warnings,
-    ).toEqual([]);
+    expect(clean(await renderConfig(world, p, dir)).warnings).toEqual([]);
   });
 
   test("a call to a dropped plugin's helper is ⚠ naming the drop", async () => {
@@ -1548,11 +1497,7 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { s: { template: "x" } } }`,
     );
     const message = fatal(
-      await renderConfig(
-        world,
-        placing("plugins.myplugin.s"),
-        dir,
-      ),
+      await renderConfig(world, placing("plugins.myplugin.s"), dir),
     );
     expect(message).toContain(`its folder "my-plugin" is not a plugin name`);
     expect(message).not.toContain("unknown segment");
@@ -1597,6 +1542,7 @@ describe("an installed plugin", () => {
   test("a failed first load still watches the repo's plugin root", async () => {
     const reloads = new ReloadSignal();
     const watchers = new WatcherRegistry({
+      threw: rethrown,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
@@ -1827,7 +1773,6 @@ describe("plugin roots", () => {
       "/home/u/.local/share/cc-candybar/plugins",
     ]);
   });
-
 });
 
 test("a listed definition that is not a folder's plugin.json5 is refused, naming the fix", async () => {
@@ -1918,9 +1863,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
     );
     write("repo/.cc-candybar.json5", `{}`);
     answerRepo(repo);
-    const message = fatal(
-      await renderConfig(world, undefined, repo),
-    );
+    const message = fatal(await renderConfig(world, undefined, repo));
     expect(message).toContain(
       `plugin ${path.join(repo, ".cc-candybar/plugins/lit/plugin.json5")} was not loaded`,
     );
@@ -2078,13 +2021,7 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.deploy.status"] } }`);
     answerRepo(path.join(dir, "repo"));
     expect(
-      cells(
-        await renderConfig(
-          world,
-          undefined,
-          path.join(dir, "repo"),
-        ),
-      ),
+      cells(await renderConfig(world, undefined, path.join(dir, "repo"))),
     ).toBe(installed);
   });
 
@@ -2107,11 +2044,7 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.ticket"] } }`);
     answerRepo(path.join(dir, "repo"));
     const message = fatal(
-      await renderConfig(
-        world,
-        undefined,
-        path.join(dir, "repo"),
-      ),
+      await renderConfig(world, undefined, path.join(dir, "repo")),
     );
     expect(message).toContain(
       `segments.repo.lit.ticket.template names .plugins.lit.data.id, this plugin under "plugins", but it loads as repo.lit: a plugin names itself without its scope — write .self.data.id`,
@@ -2162,11 +2095,7 @@ describe("a plugin names itself without its scope", () => {
     write("repo/.cc-candybar.json5", `{ root: { h: ["repo.lit.t"] } }`);
     answerRepo(path.join(dir, "repo"));
     const message = fatal(
-      await renderConfig(
-        world,
-        undefined,
-        path.join(dir, "repo"),
-      ),
+      await renderConfig(world, undefined, path.join(dir, "repo")),
     );
     expect(message).toContain(
       `segments.repo.lit.t.vars.v.cache.depends_on names plugins.lit.x`,
@@ -2207,13 +2136,7 @@ describe("a plugin names itself without its scope", () => {
     );
     answerRepo(path.join(dir, "repo"));
     expect(
-      drawn(
-        await renderConfig(
-          world,
-          undefined,
-          path.join(dir, "repo"),
-        ),
-      ),
+      drawn(await renderConfig(world, undefined, path.join(dir, "repo"))),
     ).not.toContain("TICKET");
     write(
       path.join(userRoot, "plugin.json5"),
@@ -2224,13 +2147,7 @@ describe("a plugin names itself without its scope", () => {
       `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine", "repo.deploy.phase"] } }`,
     );
     expect(
-      drawn(
-        await renderConfig(
-          world,
-          undefined,
-          path.join(dir, "repo"),
-        ),
-      ),
+      drawn(await renderConfig(world, undefined, path.join(dir, "repo"))),
     ).not.toContain("PHASE");
   });
 
@@ -2249,13 +2166,7 @@ describe("a plugin names itself without its scope", () => {
     );
     answerRepo(path.join(dir, "repo"));
     expect(
-      fatal(
-        await renderConfig(
-          world,
-          undefined,
-          path.join(dir, "repo"),
-        ),
-      ),
+      fatal(await renderConfig(world, undefined, path.join(dir, "repo"))),
     ).toContain(
       `"plugins.deploy.ticket" does not match any segment plugin "plugins.deploy" declares — the plugin loaded from ${path.join(dir, userRoot, "plugin.json5")} declares: plugins.deploy.phase (no settings) ("repo.deploy.ticket" is declared`,
     );
@@ -2274,11 +2185,7 @@ describe("a plugin names itself without its scope", () => {
     const placed = async (seg: string): Promise<string> => {
       write("repo/.cc-candybar.json5", `{ root: { h: ["${seg}"] } }`);
       return fatal(
-        await renderConfig(
-          world,
-          undefined,
-          path.join(dir, "repo"),
-        ),
+        await renderConfig(world, undefined, path.join(dir, "repo")),
       );
     };
     const repoMiss = await placed("repo.myplugin.s");
@@ -2319,11 +2226,7 @@ describe("a plugin names itself without its scope", () => {
   ])("a config file's own %s is refused", async (decl, message) => {
     expect(
       fatal(
-        await renderConfig(
-          world,
-          write("config.json5", `{ ${decl} }`),
-          dir,
-        ),
+        await renderConfig(world, write("config.json5", `{ ${decl} }`), dir),
       ),
     ).toContain(message);
   });
