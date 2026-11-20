@@ -38,7 +38,7 @@ import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
-import { failureOf } from "../foundations/verb-error.js";
+import type { Timekeeper } from "../../time.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -95,6 +95,9 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
+  // [LAW:effects-at-boundaries] Where each origin's rediscovery runs as a
+  // task, so what one throws is reported.
+  readonly clock: Pick<Timekeeper, "detach">;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
   readonly moved: (
@@ -380,9 +383,11 @@ export class ConfigDiscovery {
       const was = this.followed.get(key);
       if (was === undefined) continue;
       // [LAW:no-silent-failure] An origin that cannot be observed keeps the
-      // last snapshot for a retry. Its failure cannot suppress a sibling's
-      // already-observed change or reverse a successful write.
-      try {
+      // last snapshot for a retry, and the clock reports its throw. Its
+      // failure cannot suppress a sibling's already-observed change or
+      // reverse a successful write.
+      const task = `config discovery why=${why} origin=${JSON.stringify(key)}`;
+      this.deps.clock.detach(task, () => {
         const found = this.discovered(was.origin, shared, was.watch);
         const now = {
           ...found,
@@ -393,12 +398,7 @@ export class ConfigDiscovery {
         this.followed.set(key, now);
         observed.push(now);
         if (now.digest !== was.digest) moved.push(now);
-      } catch (thrown) {
-        this.deps.log(
-          "error",
-          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
-        );
-      }
+      });
     }
     this.deps.log(
       "info",

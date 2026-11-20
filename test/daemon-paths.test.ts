@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { rethrow } from "./helpers/task-throws";
 import { hostOf } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -71,7 +72,11 @@ describe("a daemon aimed by its paths value", () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
-    const second = adapters.profile(rendererNameOf("second"), () => {});
+    const second = adapters.profile(
+      rendererNameOf("second"),
+      () => {},
+      rethrow,
+    );
     second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
     await second.session.flush();
     second.history.save(new Map());
@@ -107,7 +112,7 @@ describe("a daemon aimed by its paths value", () => {
       const retiredContents = '{"already recorded":"drawn"}\n';
       fs.mkdirSync(aimed.state, { recursive: true });
       fs.writeFileSync(retiredFile, retiredContents);
-      const storage = adapters.profile(MAIN_RENDERER, () => {});
+      const storage = adapters.profile(MAIN_RENDERER, () => {}, rethrow);
       storage.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
       await storage.session.flush();
       storage.history.save(new Map());
@@ -117,6 +122,7 @@ describe("a daemon aimed by its paths value", () => {
         exit: () => {},
         launcher: unscriptedLauncher,
         log: () => {},
+        report: rethrow,
       });
       limits.writeMemoryReport(
         path.join(limits.snapshotDir, "report.txt"),

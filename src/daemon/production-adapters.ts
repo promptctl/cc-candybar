@@ -10,7 +10,7 @@ import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { systemLauncher } from "../proc/system-launcher";
-import type { Timekeeper } from "../time";
+import { reporting, type Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
 import { productionBarPaneEdge } from "./lane-edge.js";
@@ -25,7 +25,8 @@ import { writeConfigFile } from "./file-rewrites.js";
 // is given, so a daemon built over a temporary directory touches nothing else.
 // `machine` is the clock the machine's side runs on: real children, real files
 // and the log's blocking wait live in real time, whatever clock the daemon
-// itself is held on.
+// itself is held on. Each adapter runs its tasks on it through the daemon's
+// `report`, as the daemon's own pieces run theirs.
 export function productionAdapters(
   paths: DaemonPaths,
   daemonLog: DaemonLog,
@@ -36,19 +37,25 @@ export function productionAdapters(
     openRecording: openRecordingFile,
     accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,
-    launcher: (own) => systemLauncher(own, machine),
-    profile: (name, log) =>
-      fileStorage(profilePaths(paths, name), log, machine),
-    sessionBook: (log) =>
-      new SessionFile(SESSION_BOOK_FILE, paths.sessionBook, machine, 500, log),
+    launcher: (own, report) => systemLauncher(own, reporting(machine, report)),
+    profile: (name, log, report) =>
+      fileStorage(profilePaths(paths, name), log, reporting(machine, report)),
+    sessionBook: (log, report) =>
+      new SessionFile(
+        SESSION_BOOK_FILE,
+        paths.sessionBook,
+        reporting(machine, report),
+        500,
+        log,
+      ),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
     claudeInput: productionClaudeInputEdge,
     barPaneEdge: productionBarPaneEdge,
-    limits: ({ startedAtMs, exit, launcher, log }) =>
+    limits: ({ startedAtMs, exit, launcher, log, report }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,
         log,
-        clock: machine,
+        clock: reporting(machine, report),
         snapshotDir: paths.state,
         writeLogNow: () => daemonLog.writeNow(),
       }),

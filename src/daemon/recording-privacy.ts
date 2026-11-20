@@ -39,8 +39,12 @@ const UNKNOWN_PROFILE =
 function worldProblem({ env, runs, daemon }: WorldState): string | null {
   if (Object.values(env).some((fact) => fact.kind === "ok"))
     return SESSION_ENVIRONMENT;
+  // [LAW:single-enforcer] Every held kind is judged by its own mark, so a
+  // kind added to the record is judged with no line here to extend.
   return Object.values(runs).some(isEnvironmentOutput) ||
-    (daemon.actFailed !== null && isEnvironmentOutput(daemon.actFailed))
+    Object.values(daemon.held).some(
+      (event) => event !== null && isEnvironmentOutput(event),
+    )
     ? ENVIRONMENT_OUTPUT
     : null;
 }

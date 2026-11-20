@@ -91,14 +91,14 @@ export class FileEventDelivery {
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
-  private readonly clock: Pick<Timekeeper, "now" | "every">;
+  private readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
 
   constructor(opts: {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
     // [LAW:effects-at-boundaries] The daemon's clock: the probe period, and
     // the times probes and spans are stamped with.
-    readonly clock: Pick<Timekeeper, "now" | "every">;
+    readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
     readonly identityOf?: IdentityRead;
   }) {
     this.watchers = opts.watchers;
@@ -131,8 +131,9 @@ export class FileEventDelivery {
       throw new Error("file events: the owner was started twice");
     }
     const stopPeriod = this.clock.every(
+      "file event probe",
       PROBE_EVERY_MS,
-      () => void this.tick(),
+      () => this.tick(),
       {
         unref: true,
       },
@@ -177,7 +178,7 @@ export class FileEventDelivery {
       return;
     }
     this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
+    this.clock.detach("file event probe", () => this.tick());
   }
 
   stats(): FileEventsStats {
@@ -355,8 +356,11 @@ export class FileEventDelivery {
     this.notify({ kind: "moved" });
   }
 
+  // [LAW:single-enforcer] Each listener is a task of its own: what one
+  // throws is reported, and the others still hear the notice.
   private notify(notice: DeliveryNotice): void {
-    for (const listener of [...this.listeners]) listener(notice);
+    for (const listener of [...this.listeners])
+      this.clock.detach("file event notice", () => listener(notice));
   }
 }
 

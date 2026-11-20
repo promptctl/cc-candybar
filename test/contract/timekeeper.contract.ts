@@ -22,8 +22,8 @@ export function timekeeperContract(
     test("timers run in the order of their delays", async () => {
       const { clock, settle } = make();
       const ran: string[] = [];
-      clock.after(60, () => ran.push("late"));
-      clock.after(20, () => ran.push("early"));
+      clock.after("task", 60, () => ran.push("late"));
+      clock.after("task", 20, () => ran.push("early"));
       await settle(150);
       expect(ran).toEqual(["early", "late"]);
     });
@@ -31,7 +31,7 @@ export function timekeeperContract(
     test("a timer runs once, and not on the turn that set it", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      clock.after(0, () => runs++);
+      clock.after("task", 0, () => runs++);
       expect(runs).toBe(0);
       await settle(150);
       expect(runs).toBe(1);
@@ -40,7 +40,7 @@ export function timekeeperContract(
     test("a cleared timer never runs", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      const clear = clock.after(20, () => runs++);
+      const clear = clock.after("task", 20, () => runs++);
       clear();
       await settle(150);
       expect(runs).toBe(0);
@@ -49,8 +49,8 @@ export function timekeeperContract(
     test("a timer cleared by an earlier one does not run", async () => {
       const { clock, settle } = make();
       const ran: string[] = [];
-      const clearLater = clock.after(60, () => ran.push("later"));
-      clock.after(20, () => {
+      const clearLater = clock.after("task", 60, () => ran.push("later"));
+      clock.after("task", 20, () => {
         ran.push("earlier");
         clearLater();
       });
@@ -61,7 +61,7 @@ export function timekeeperContract(
     test("a repeating timer runs again and again until cleared", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      const clear = clock.every(20, () => runs++);
+      const clear = clock.every("task", 20, () => runs++);
       await settle(110);
       expect(runs).toBeGreaterThanOrEqual(2);
       clear();
@@ -73,7 +73,7 @@ export function timekeeperContract(
     test("a repeating timer can clear itself from inside its run", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      const clear = clock.every(20, () => {
+      const clear = clock.every("task", 20, () => {
         runs++;
         clear();
       });
@@ -84,7 +84,7 @@ export function timekeeperContract(
     test("a deferred run waits for the work now running, and runs once", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      clock.defer(() => runs++);
+      clock.defer("task", () => runs++);
       expect(runs).toBe(0);
       await settle(0);
       await settle(20);
@@ -94,7 +94,7 @@ export function timekeeperContract(
     test("a cleared deferral never runs", async () => {
       const { clock, settle } = make();
       let runs = 0;
-      const clear = clock.defer(() => runs++);
+      const clear = clock.defer("task", () => runs++);
       clear();
       await settle(20);
       expect(runs).toBe(0);

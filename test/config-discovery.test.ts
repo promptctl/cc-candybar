@@ -39,7 +39,7 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
-import { systemTimekeeper } from "../src/time";
+import { reporting, systemTimekeeper } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
@@ -85,8 +85,13 @@ function named(
 }
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
-// moved, by key, in order, and `logged` every line.
-function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = stateDir(HOST)) {
+// moved, by key, in order, `logged` every line, and `threw` what each task the
+// clock ran threw, as `task: message`.
+function discoveryRig(files = diskFiles, held = systemTimekeeper, state = stateDir(HOST)) {
+  const threw: string[] = [];
+  const clock = reporting(held, (task, thrown) =>
+    threw.push(`${task}: ${(thrown as Error).message}`),
+  );
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -104,6 +109,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   const logged: string[] = [];
   const delivered: Array<readonly [RendererName, string]> = [];
   const service = new ConfigDiscovery({
+    clock,
     locations: locations(HOST),
     stateDir: state,
     watchers,
@@ -120,7 +126,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
   const discovery = service.forRenderer(MAIN_RENDERER);
-  return { service, discovery, watchers, counters, moved, logged, delivered };
+  return { service, discovery, watchers, counters, moved, logged, threw, delivered };
 }
 
 const textOfLayer = (
@@ -607,7 +613,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
     service,
     discovery: writer,
     delivered,
-    logged,
+    threw,
   } = discoveryRig({
     ...diskFiles,
     text(read) {
@@ -627,11 +633,9 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
+  expect(threw).toEqual([
+    expect.stringMatching(/^config discovery why=landed origin=.*failed-once.*: rediscovery failed$/),
+  ]);
 
   refuse = false;
   service.again("events-resumed");
@@ -842,6 +846,7 @@ function physicalDiscovery(
     logger: () => {},
   });
   const service = new ConfigDiscovery({
+    clock: systemTimekeeper,
     locations: { ...locations(HOST), dataHome, dataDirs },
     stateDir: state,
     watchers,
@@ -1355,6 +1360,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
   const moved: RenderOrigin[] = [];
   const observe = countingText(reads);
   const service = new ConfigDiscovery({
+    clock: systemTimekeeper,
     locations: {
       ...locations(HOST),
       dataHome: project("empty-data"),

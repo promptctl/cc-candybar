@@ -29,7 +29,7 @@ test("held work runs in the first due turn whose tick has reached it, earliest f
   const ran: string[] = [];
   time.during(at(100, 0), () => {
     time.after(2000, () => ran.push("two"));
-    time.clock.after(1000, () => ran.push("one"));
+    time.clock.after("task", 1000, () => ran.push("one"));
   });
   expect(time.next()).toBe(1);
   // The wall stepped back an hour: the ticks still say one second on.

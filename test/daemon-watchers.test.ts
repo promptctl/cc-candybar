@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../src/time";
+import { reporting, systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
 import os from "node:os";
@@ -884,6 +884,34 @@ describe("WatcherRegistry", () => {
         "both holders' windows",
       );
       expect(second).toEqual(first);
+      reg.closeAll();
+    } finally {
+      fake.restore();
+    }
+  });
+
+  test("a holder whose invalidation throws is reported, and the next holder still hears the window", async () => {
+    const fake = standIn();
+    try {
+      const threw: string[] = [];
+      const reg = new WatcherRegistry({
+        clock: reporting(systemTimekeeper, (task, thrown) =>
+          threw.push(`${task}: ${(thrown as Error).message}`),
+        ),
+        logger: () => {},
+      });
+      const heard: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, () => {
+        throw new Error("holder broke");
+      });
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
+        heard.push(inv),
+      );
+      fake.opensOf("/w")[0]!.listener("rename", "a");
+      await until(() => heard.length === 1, "the second holder's window");
+      expect(threw).toEqual([
+        expect.stringMatching(/^watch delivery .*k.*: holder broke$/),
+      ]);
       reg.closeAll();
     } finally {
       fake.restore();

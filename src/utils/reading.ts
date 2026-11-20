@@ -132,7 +132,7 @@ export function waitWithin(
 ): Promise<WaitEnd> {
   const wait = new AbortController();
   const end = (why: "deadline" | "closed") => () => wait.abort(why);
-  const clear = after(Math.max(0, ms), end("deadline"));
+  const clear = after("statusline wait", Math.max(0, ms), end("deadline"));
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () =>
       resolve(wait.signal.reason as WaitEnd),

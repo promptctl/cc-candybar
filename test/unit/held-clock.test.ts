@@ -32,8 +32,8 @@ describe("the held clock", () => {
   test("each timer runs at its own moment, so a run can read how far time had gone", () => {
     const clock = heldClock(new Date(1_000_000));
     const at: number[] = [];
-    clock.after(30, () => at.push(clock.monotonic()));
-    clock.every(40, () => at.push(clock.monotonic()));
+    clock.after("task", 30, () => at.push(clock.monotonic()));
+    clock.every("task", 40, () => at.push(clock.monotonic()));
     clock.advance(100);
     expect(at).toEqual([30, 40, 80]);
     expect(clock.monotonic()).toBe(100);
@@ -42,7 +42,7 @@ describe("the held clock", () => {
   test("a burn moves time and fires nothing; what fell due runs at the burned moment on the next advance", () => {
     const clock = heldClock(new Date(1_000_000));
     const at: number[] = [];
-    clock.after(30, () => at.push(clock.monotonic()));
+    clock.after("task", 30, () => at.push(clock.monotonic()));
     clock.burn(60);
     expect(clock.monotonic()).toBe(60);
     expect(clock.now()).toBe(1_000_060);
@@ -64,9 +64,9 @@ describe("the held clock", () => {
     const run = (): void => {
       at.push(clock.monotonic());
       clock.burn(60);
-      clock.after(0, run);
+      clock.after("task", 0, run);
     };
-    clock.after(0, run);
+    clock.after("task", 0, run);
     clock.advance(130);
     // Runs at 0, 60 and 120; the one after the burn at 180 is past the end.
     expect(at).toEqual([0, 60, 120]);
@@ -76,7 +76,7 @@ describe("the held clock", () => {
   test("a repeating timer a burn passed runs once, late, then a period on", () => {
     const clock = heldClock(new Date(1_000_000));
     const at: number[] = [];
-    clock.every(20, () => at.push(clock.monotonic()));
+    clock.every("task", 20, () => at.push(clock.monotonic()));
     clock.burn(70);
     clock.advance(30);
     expect(at).toEqual([70, 90]);
@@ -95,9 +95,9 @@ describe("the held clock", () => {
   test("counts the timers armed, not those fired or cancelled", () => {
     const clock = heldClock(new Date(1_000_000));
     expect(clock.pending()).toBe(0);
-    const cancel = clock.after(10, () => {});
-    clock.after(20, () => {});
-    clock.every(5, () => {});
+    const cancel = clock.after("task", 10, () => {});
+    clock.after("task", 20, () => {});
+    clock.every("task", 5, () => {});
     expect(clock.pending()).toBe(3);
     cancel();
     expect(clock.pending()).toBe(2);

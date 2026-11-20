@@ -242,7 +242,7 @@ export class ManagedStorage {
   private readonly fileEvents: FileEvents;
   private readonly clock: Pick<
     Timekeeper,
-    "now" | "monotonic" | "after" | "every"
+    "now" | "monotonic" | "after" | "every" | "detach"
   >;
   private readonly unsubscribe: Release;
 
@@ -253,7 +253,10 @@ export class ManagedStorage {
     readonly files?: SourceFiles;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep period, the
     // age a file is judged against, and the source's timings.
-    readonly clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
+    readonly clock: Pick<
+      Timekeeper,
+      "now" | "monotonic" | "after" | "every" | "detach"
+    >;
     readonly identityOf?: IdentityRead;
     readonly ledger?: RefreshLedger;
   }) {
@@ -437,13 +440,14 @@ export class ManagedStorage {
         (invalidation) => this.invalidated(watching, invalidation),
       ),
       stopSweep: this.clock.every(
+        "storage sweep",
         STORAGE_SWEEP_EVERY_MS,
-        () => void this.sweep(key),
+        () => this.sweep(key),
         { unref: true },
       ),
       unread: null,
     };
-    void this.sweep(key);
+    this.clock.detach("storage sweep", () => this.sweep(key));
     return watching;
   }
 

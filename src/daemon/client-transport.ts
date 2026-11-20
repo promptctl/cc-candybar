@@ -312,7 +312,7 @@ function connectWithTimeout(
 ): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
     const sock = net.createConnection({ path });
-    const clearTimer = clock.after(timeoutMs, () => {
+    const clearTimer = clock.after("connect timeout", timeoutMs, () => {
       sock.destroy();
       reject(new ClientTimeoutError(phase));
     });

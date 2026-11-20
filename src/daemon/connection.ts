@@ -330,11 +330,14 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // duplicating. A timeout therefore adds zero new fs work — there is never
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
-  const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () =>
-    on({
-      kind: "deadline",
-      answer: replyOf(timeoutResponse(accepted.id)),
-    }),
+  const clearBackstop = daemon.clock.after(
+    "request backstop",
+    REQUEST_TIMEOUT_MS,
+    () =>
+      on({
+        kind: "deadline",
+        answer: replyOf(timeoutResponse(accepted.id)),
+      }),
   );
 
   // [LAW:single-enforcer] The one move of the state. In flight, the backstop
@@ -477,12 +480,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       answer: replyOf(r.verdict),
       awaited: r.awaitsVerdict,
     });
-    void r
-      .land()
-      .catch((err: unknown) =>
-        daemon.log("error", `url click threw: ${inspect(err)}`),
-      )
-      .finally(() => on({ kind: "landed" }));
+    daemon.clock.detach("url click", () =>
+      r.land().finally(() => on({ kind: "landed" })),
+    );
   }
 
   // The connection becomes the session's subscription: no reply, no request

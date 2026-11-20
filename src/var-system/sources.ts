@@ -782,7 +782,11 @@ export class SourceRegistry {
         this.store.setDocument(name, next);
       };
       if (torn) {
-        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show);
+        clearSettling = this.store.clock.after(
+          "torn write settle",
+          TORN_WRITE_SETTLE_MS,
+          show,
+        );
       } else {
         show();
       }

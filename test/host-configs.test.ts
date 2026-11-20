@@ -49,6 +49,7 @@ const CLOCK = {
   after: (): (() => void) => {
     throw new Error("this rig sets no timer");
   },
+  detach: systemTimekeeper.detach,
 };
 const ORIGIN: RenderOrigin = {
   projectDir: "/p",
@@ -342,6 +343,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
   const watches = new WatcherRegistry({ clock: systemTimekeeper });
   const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
+    clock: systemTimekeeper,
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,

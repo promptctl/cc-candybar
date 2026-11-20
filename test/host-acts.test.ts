@@ -22,7 +22,7 @@ import type {
   EventInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
-import type { Monotonic } from "../src/time";
+import { systemTimekeeper, type Monotonic } from "../src/time";
 import { eventRenderer, hostHeld } from "./helpers/renderers";
 import { NO_CONFIGS } from "./helpers/renderers";
 import { authorizeRun } from "../src/daemon/foundations/run-authorization";
@@ -38,6 +38,7 @@ const CLOCK = {
   after: (): (() => void) => {
     throw new Error("this rig sets no timer");
   },
+  detach: systemTimekeeper.detach,
 };
 const FILE = `{ globals: { theme: "dusk" } }\n`;
 const RUN_INPUT = JSON.stringify({ run: ["/bin/true"], env: {} });

@@ -76,7 +76,10 @@ export class TranscriptLanes {
       readonly watchers: Pick<WatcherRegistry, "acquire">;
       // [LAW:effects-at-boundaries] Arms each entry's period, times each read
       // and stamps the speed sample.
-      readonly clock: Pick<Timekeeper, "monotonic" | "after" | "now">;
+      readonly clock: Pick<
+        Timekeeper,
+        "monotonic" | "after" | "now" | "detach"
+      >;
       readonly logger: DaemonLogger;
       readonly ledger: RefreshLedger;
       readonly every?: Every;

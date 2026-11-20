@@ -58,6 +58,8 @@ export class RuntimeStats {
   requestsTotal = 0;
   environmentMisses = 0;
   requestsErrored = 0;
+  // Throws the daemon's tasks reported, each also held for the bar.
+  tasksThrew = 0;
   requestsTimedOut = 0;
   inFlight = 0;
   private readonly unknownHookFields = new Set<string>();
@@ -348,6 +350,7 @@ export class RuntimeStats {
         inFlight: this.inFlight,
         took: durationsOf(this.took),
       },
+      tasksThrew: this.tasksThrew,
       unknownHookFields: [...this.unknownHookFields],
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,

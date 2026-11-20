@@ -8,7 +8,7 @@ import {
   shownPanes,
 } from "../../src/daemon/pane-visibility";
 import type { TmuxRun } from "../../src/proc/tmux";
-import { systemTimekeeper } from "../../src/time";
+import { reporting, systemTimekeeper } from "../../src/time";
 
 const hint = (socket: string, pane: string) => ({
   socket,
@@ -67,10 +67,13 @@ describe("PaneVisibility", () => {
   function harness(answers: Record<string, TmuxRun>, answerMs = 0) {
     const changes: string[][] = [];
     const log: string[] = [];
+    const threw: string[] = [];
     const sockets = new Set(Object.keys(answers));
     const counts = { asks: 0, inFlight: 0, overlap: false, readFails: false };
     const visibility = new PaneVisibility({
-      clock: systemTimekeeper,
+      clock: reporting(systemTimekeeper, (task, thrown) =>
+        threw.push(`${task}: ${(thrown as Error).message}`),
+      ),
       listPanes: async (socket) => {
         counts.asks++;
         counts.inFlight++;
@@ -94,6 +97,7 @@ describe("PaneVisibility", () => {
       visibility,
       changes,
       log,
+      threw,
       serverLog,
       answers,
       sockets,
@@ -155,14 +159,12 @@ describe("PaneVisibility", () => {
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
   });
 
-  test("a throw reading which servers to ask is logged, and the loop goes on", async () => {
+  test("a throw reading which servers to ask is the refresh's, and the loop goes on", async () => {
     const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
     h.counts.readFails = true;
     const stop = h.visibility.follow();
     await pass(0);
-    expect(h.log.filter((l) => l.includes("refresh threw"))).toEqual([
-      expect.stringContaining("the read broke"),
-    ]);
+    expect(h.threw).toEqual(["pane visibility refresh: the read broke"]);
     h.counts.readFails = false;
     await pass(INTERVAL_MS);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);

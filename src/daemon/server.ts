@@ -489,7 +489,7 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  daemonProcess().world.clock.after(500, () =>
+  daemonProcess().world.clock.after("exit backstop", 500, () =>
     process.kill(process.pid, "SIGKILL"),
   );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
@@ -505,7 +505,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  void closeThenExit(code);
+  daemonProcess().world.clock.detach("daemon close", () => closeThenExit(code));
 }
 
 // [LAW:no-ambient-temporal-coupling] The daemon's close awaits the renderer's

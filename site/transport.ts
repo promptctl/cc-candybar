@@ -86,8 +86,8 @@ const pageDaemon = createDaemon({
   },
   rendererName: MAIN_RENDERER,
   // Its picks and history live only as long as the page.
-  profile: (name, log) => ({
-    ...adapters.profile(name, log),
+  profile: (name, log, report) => ({
+    ...adapters.profile(name, log, report),
     session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE,
   }),

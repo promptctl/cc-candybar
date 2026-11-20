@@ -269,7 +269,7 @@ async function foldFile(
   state: FileFold,
   entries: readonly ParsedEntry[],
   cacheRoot: string,
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
   // string comparison against yesterday's key.
@@ -479,14 +479,14 @@ export class SessionUsageStore {
   private closed = false;
   private readonly clock: Pick<
     Timekeeper,
-    "now" | "monotonic" | "after" | "every"
+    "now" | "monotonic" | "after" | "every" | "detach"
   >;
 
   constructor(opts: {
     host: Host;
     // [LAW:effects-at-boundaries] The daemon's clock: the sweep and the scans'
     // periods, and the instants the store stamps, ages and cuts off by.
-    clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every">;
+    clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "every" | "detach">;
     staleAgeMs?: number;
     sweepIntervalMs?: number;
     rescan?: Every;
@@ -523,9 +523,14 @@ export class SessionUsageStore {
     });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
-      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
-        unref: true,
-      });
+      this.stopSweep = this.clock.every(
+        "usage sweep",
+        interval,
+        () => this.sweepStale(),
+        {
+          unref: true,
+        },
+      );
     }
   }
 

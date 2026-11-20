@@ -95,6 +95,8 @@ export class TurnTime {
   // epoch milliseconds, and its held work.
   readonly clock: TurnClock = {
     now: () => this.at * 1000,
-    after: (ms, run) => this.after(ms, run),
+    // The renderer's held work throws into its turn (`runDue`), not to a
+    // reporting clock, so the task's name is not kept.
+    after: (_task, ms, run) => this.after(ms, () => void run()),
   };
 }

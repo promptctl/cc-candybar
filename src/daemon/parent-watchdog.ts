@@ -70,6 +70,7 @@ export function armParentWatchdog(deps: ParentWatchdogDeps): {
 
   const { pid } = deps.anchor;
   const disarm = deps.clock.every(
+    "parent watchdog",
     deps.intervalMs ?? DEFAULT_POLL_INTERVAL_MS,
     () => {
       if (!deps.probe.alive(pid)) deps.onOrphaned(`spawner pid ${pid} gone`);

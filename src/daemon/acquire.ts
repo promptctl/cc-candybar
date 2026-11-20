@@ -673,7 +673,12 @@ function canConnect(
     };
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
-    clearTimer = clock.after(timeoutMs, () => done(false), { unref: true });
+    clearTimer = clock.after(
+      "socket probe timeout",
+      timeoutMs,
+      () => done(false),
+      { unref: true },
+    );
   });
 }
 

@@ -1,4 +1,5 @@
 import { compareStructural, reaction } from "mobx";
+import { systemTimekeeper } from "../../src/time";
 import { configQuery } from "../../src/config/loader/chain-places.js";
 // The host's half of a config, for a test that drives a render cache with no
 // renderer around it: a real config discovery over the test's own watcher
@@ -82,6 +83,7 @@ export function configHost(
     cache.configure(origin, snapshot);
   };
   const discovery: ConfigDiscovery = new ConfigDiscovery({
+    clock: systemTimekeeper,
     locations: world.locations,
     stateDir: world.stateDir,
     watchers: world.watchers,

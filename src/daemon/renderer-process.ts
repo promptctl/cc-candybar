@@ -351,17 +351,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
     heardBy = (text) => heard(link, text);
-    void restore(link);
-    void channel.ended.then((result) => {
-      stdout.end();
-      stderr.end();
-      ended(
-        link,
-        link.hung
-          ? `stopped answering for ${HUNG_AFTER_MS / 1000} s`
-          : (link.failure ?? (result.ok ? "exited" : whyFailed(result))),
-      );
-    });
+    clock.detach("renderer restore", () => restore(link));
+    clock.detach("renderer end", () =>
+      channel.ended.then((result) => {
+        stdout.end();
+        stderr.end();
+        ended(
+          link,
+          link.hung
+            ? `stopped answering for ${HUNG_AFTER_MS / 1000} s`
+            : (link.failure ?? (result.ok ? "exited" : whyFailed(result))),
+        );
+      }),
+    );
   };
 
   const heard = (link: Link, text: string): void => {
@@ -555,7 +557,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     phase = {
       kind: "down",
       why: how,
-      cancelRetry: clock.after(delay, () => {
+      cancelRetry: clock.after("renderer respawn", delay, () => {
         if (phase.kind === "down") spawn();
       }),
     };
@@ -614,7 +616,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // and one that has not ended after the grace is signalled.
   const ending = async (link: Link): Promise<void> => {
     link.channel.end();
-    const grace = clock.after(CLOSE_GRACE_MS, () =>
+    const grace = clock.after("renderer close grace", CLOSE_GRACE_MS, () =>
       link.kill.abort(new Error("the daemon closed")),
     );
     await link.channel.ended;
@@ -766,7 +768,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     arm: () => {
       if (phase.kind !== "idle") return;
       spawn();
-      stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
+      stopPings = clock.every("renderer ping", PING_PERIOD_MS, pinged, {
+        unref: true,
+      });
     },
     beginClose: () => beginClose().kind,
     close: async () => {

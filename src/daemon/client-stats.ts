@@ -148,6 +148,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
+  // Older daemons do not count their tasks' throws.
+  if (s.tasksThrew !== undefined) lines.push(`  tasks threw   ${s.tasksThrew}`);
   lines.push(
     `  took          ${s.requests.took.count === 0 ? "-" : durationsText(s.requests.took)}`,
   );

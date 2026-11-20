@@ -105,8 +105,8 @@ test("its owner closing ends the wait there, with its timer cleared and its work
     },
     60_000,
     unexpected,
-    (ms, fire) => {
-      const clear = systemTimekeeper.after(ms, fire);
+    (task, ms, fire) => {
+      const clear = systemTimekeeper.after(task, ms, fire);
       return () => {
         cleared.push("timer");
         clear();

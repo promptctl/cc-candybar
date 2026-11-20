@@ -456,7 +456,9 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
-  void track(state, new Promise((closed) => line.once("close", closed)));
+  clock.detach("lifeline close", () =>
+    track(state, new Promise((closed) => line.once("close", closed))),
+  );
   line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}\n`);
@@ -834,7 +836,9 @@ async function launchPiped(
         spawner.signalGroup(pid, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
-        void exited.then(() => state.unreaped.delete(child));
+        clock.detach("launch reap", () =>
+          exited.then(() => state.unreaped.delete(child)),
+        );
         settle({
           ok: false,
           reason: "signal-refused",
@@ -856,15 +860,19 @@ async function launchPiped(
       const awaitGroupEnd = (delayMs: number) => {
         if (settled) return;
         if (spawner.groupGone(group)) {
-          clock.defer(concludeWithGroup);
+          clock.defer("launch conclusion", concludeWithGroup);
           return;
         }
-        groupEndTimer = clock.after(delayMs, () =>
+        groupEndTimer = clock.after("group end poll", delayMs, () =>
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      void exited.then(() =>
-        clock.defer(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+      clock.detach("group end poll", () =>
+        exited.then(() =>
+          clock.defer("group end poll", () =>
+            awaitGroupEnd(GROUP_END_POLL_MIN_MS),
+          ),
+        ),
       );
     }
 
@@ -888,7 +896,7 @@ async function launchPiped(
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== undefined && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
-        clock.defer(concludeWithGroup);
+        clock.defer("launch conclusion", concludeWithGroup);
         return;
       }
       terminated = cause;
@@ -899,9 +907,11 @@ async function launchPiped(
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
-        killTimer = clock.after(TIMEOUT_KILL_GRACE_MS, () => {
+        killTimer = clock.after("kill grace", TIMEOUT_KILL_GRACE_MS, () => {
           signal(pid, "SIGKILL");
-          void exited.then(() => clock.defer(concludeWithGroup));
+          return exited.then(() =>
+            clock.defer("launch conclusion", concludeWithGroup),
+          );
         });
         signal(pid, "SIGTERM");
       }
@@ -960,7 +970,9 @@ async function launchPiped(
     child.on("close", conclude);
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = clock.after(opts.timeoutMs, () => terminate("timeout"));
+      timer = clock.after("launch timeout", opts.timeoutMs, () =>
+        terminate("timeout"),
+      );
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
@@ -1229,6 +1241,7 @@ function endJob(
     const signalled = spawner.signalJob(pid, "SIGTERM");
     if (signalled) {
       clock.after(
+        "kill grace",
         TIMEOUT_KILL_GRACE_MS,
         () => spawner.signalJob(pid, "SIGKILL"),
         {

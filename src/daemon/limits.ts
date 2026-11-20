@@ -162,7 +162,7 @@ function breachArtifactOf(base: string): BreachArtifact | null {
 export interface LimitsDeps {
   // The machine's clock: when a post-mortem is stamped, and the pace of the
   // readings.
-  clock: Pick<Timekeeper, "now" | "after">;
+  clock: Pick<Timekeeper, "now" | "after" | "detach">;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
   // unit tests of check compute filenames against the real state directory and
@@ -381,11 +381,11 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
         deps.log("warn", `memory check failed: ${(e as Error).message}`);
       }
       if (disarmed) return;
-      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+      clearTimer = deps.clock.after("memory check", intervalMs, tick, {
         unref: true,
       });
     };
-    void tick();
+    deps.clock.detach("memory check", tick);
   }
 
   function disarm(): void {
@@ -513,7 +513,7 @@ export function realLimitsDeps(
   owner: {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
-    readonly clock: Pick<Timekeeper, "now" | "after">;
+    readonly clock: Pick<Timekeeper, "now" | "after" | "detach">;
     // The daemon's state directory, which its post-mortems are written to.
     readonly snapshotDir: string;
     // What the log holds, written before the loop blocks (log.ts).

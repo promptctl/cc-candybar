@@ -242,14 +242,14 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
-  private readonly clock: Pick<Timekeeper, "after" | "every">;
+  private readonly clock: Pick<Timekeeper, "after" | "every" | "detach">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
     // sweep run on.
-    clock: Pick<Timekeeper, "after" | "every">;
+    clock: Pick<Timekeeper, "after" | "every" | "detach">;
     counters?: WatcherCounters;
     // [LAW:single-enforcer] One injection point per consumer. The daemon
     // passes its log so watcher-failure events land in daemon.log; non-
@@ -692,6 +692,7 @@ export class WatcherRegistry {
       window.pending = {
         changes,
         cancel: this.clock.after(
+          "watch delivery",
           DEBOUNCE_MS,
           () => {
             window.pending = null;
@@ -720,14 +721,13 @@ export class WatcherRegistry {
     );
   }
 
+  // [LAW:single-enforcer] Each holder's take is a task of its own: what one
+  // throws is reported, and the delivery goes on to the next holder.
   private notify(key: string | null, take: () => void): void {
-    try {
-      take();
-    } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
-    }
+    this.clock.detach(
+      key === null ? "watch delivery" : `watch delivery ${valueOf(key)}`,
+      take,
+    );
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -813,9 +813,14 @@ export class WatcherRegistry {
   // thread to render anyway.
   private armSweep(): void {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
-    this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
-      unref: true,
-    });
+    this.sweep = this.clock.every(
+      "polled watch read",
+      POLL_MS,
+      () => this.readPolled(),
+      {
+        unref: true,
+      },
+    );
   }
 
   private disarmSweep(): void {

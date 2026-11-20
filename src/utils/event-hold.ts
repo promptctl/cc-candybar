@@ -29,10 +29,27 @@ export interface HeldEvent {
   readonly answered: boolean;
 }
 
+// [LAW:one-type-per-behavior] The daemon's own events no request waited on,
+// each held, joined and answered by the one rule below: how the last renderer
+// process ended, an act that failed with no session's bar to hold it, and a
+// task the daemon ran on its own that threw. A kind is a key, not a field.
+export const HELD_KINDS = [
+  "renderer-ended",
+  "act-failed",
+  "task-threw",
+] as const;
+export type HeldKind = (typeof HELD_KINDS)[number];
+export type HeldEvents = { readonly [K in HeldKind]: HeldEvent | null };
+export const NO_HELD_EVENTS: HeldEvents = {
+  "renderer-ended": null,
+  "act-failed": null,
+  "task-threw": null,
+};
+
 // [LAW:types-are-the-program] A frame names the daemon's occurrence and its
 // owner. Session click errors never leave the renderer's delivery record.
 export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+  readonly kind: "launch-pipes" | HeldKind;
   readonly event: HeldEvent;
 }
 

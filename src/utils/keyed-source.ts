@@ -82,7 +82,7 @@ export interface KeyedSourceSpec<I, T> {
   readonly lines: readonly RefreshTrigger[];
   // [LAW:effects-at-boundaries] Times each refresh and arms each entry's
   // period.
-  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
+  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "detach">;
 }
 
 interface Entry<I, T> extends Readable<T> {
@@ -258,10 +258,15 @@ export class KeyedSource<I, T> {
       flight: null,
       changed: false,
       superseding: 0,
-      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
-        period: () => this.refresh(entry, "period"),
-        holdReturned: () => this.refresh(entry, "change"),
-      }),
+      revisit: revisitOf(
+        `${this.spec.name} refresh`,
+        this.spec.every(input),
+        this.spec.clock,
+        {
+          period: () => this.refresh(entry, "period"),
+          holdReturned: () => this.refresh(entry, "change"),
+        },
+      ),
       unwatch: () => {},
     };
     this.entries.set(key, entry);
@@ -293,33 +298,37 @@ export class KeyedSource<I, T> {
     const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal, by))
-      .then((outcome) => {
-        const fields = this.spec.fields(entry.input, entry.holders);
-        const ms = elapsedMs(this.spec.clock, startedAt);
-        // [LAW:no-silent-failure] A read the owner abandoned (a supersede, a
-        // drop) was told to stop, so what it answers is the owner's doing,
-        // never a failure the source met: it is an event and a count of its
-        // own, not a refresh.
-        if (flight.signal.aborted) {
-          this.refreshes.abandoned(fields, by, ms);
-          return;
-        }
-        // The flight that answered is the entry's: every path that replaces
-        // one (a supersede, a drop) aborts it first, so a read not aborted
-        // is the one whose answer is stored.
-        try {
-          this.refreshes.recorded(fields, by, outcome, ms);
-        } finally {
-          this.store(entry, outcome);
-        }
-      })
-      .catch((e: unknown) => {
-        this.spec.logger(
-          "error",
-          `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`,
-        );
-      });
+    // [LAW:no-silent-failure] A throw past the read's own (`attempt`) is the
+    // clock's to report.
+    this.spec.clock.detach(`${this.spec.name} refresh`, () =>
+      attempt(() => this.spec.read(entry.input, flight.signal, by)).then(
+        (outcome) => {
+          const recorded = () => ({
+            fields: this.spec.fields(entry.input, entry.holders),
+            ms: elapsedMs(this.spec.clock, startedAt),
+          });
+          // [LAW:no-silent-failure] A read the owner abandoned (a supersede,
+          // a drop) was told to stop, so what it answers is the owner's
+          // doing, never a failure the source met: it is an event and a
+          // count of its own, not a refresh.
+          if (flight.signal.aborted) {
+            const { fields, ms } = recorded();
+            this.refreshes.abandoned(fields, by, ms);
+            return;
+          }
+          // The flight that answered is the entry's: every path that
+          // replaces one (a supersede, a drop) aborts it first, so a read not
+          // aborted is the one whose answer is stored, whatever its record
+          // throws.
+          try {
+            const { fields, ms } = recorded();
+            this.refreshes.recorded(fields, by, outcome, ms);
+          } finally {
+            this.store(entry, outcome);
+          }
+        },
+      ),
+    );
   }
 
   private store(entry: Entry<I, T>, outcome: Outcome<T>): void {
@@ -387,12 +396,13 @@ interface Revisit {
 }
 
 function revisitOf(
+  task: string,
   every: Every | null,
   clock: Pick<Timekeeper, "monotonic" | "after">,
   read: { readonly period: () => void; readonly holdReturned: () => void },
 ): Revisit {
   if (every === null) return new HoldReturn(read.holdReturned);
-  const period = new Period(read.period, clock);
+  const period = new Period(task, read.period, clock);
   return {
     landed: (outcome) => period.landed(periodOf(every, outcome)),
     hold: (held) => period.hold(held),

@@ -61,6 +61,19 @@ async function hostOf() {
       client: { kind: "node", bundle: BUNDLE, source: null },
       env: { CC_CANDYBAR_NAME: name, ...env },
     });
+  // [LAW:no-ambient-temporal-coupling] A source's first run can outlast one
+  // render's wait on a loaded runner, so a case that needs its answer draws
+  // until the bar shows it.
+  const drawnWith = (
+    name: string,
+    file: string,
+    env: Record<string, string>,
+    text: string,
+  ) =>
+    until(
+      async () => textOf(await draw(name, file, env)).includes(text),
+      `the bar showing ${JSON.stringify(text)}`,
+    );
   const open = async (name: string, label = name): Promise<string> => {
     const file = path.join(dir, `${label}.jsonl`);
     await command("record", "start", file, "--renderer", name);
@@ -85,6 +98,7 @@ async function hostOf() {
     socket: isolated.sockPath,
     command,
     draw,
+    drawnWith,
     open,
     stop,
     refused,
@@ -135,9 +149,7 @@ test("the running host refuses shell stdout and stderr derived from an environme
       source("printf 'exposed no environment'"),
     );
     const saved = await host.open("absent");
-    expect(textOf(await host.draw("absent", safe, {}))).toContain(
-      "exposed no environment",
-    );
+    await host.drawnWith("absent", safe, {}, "exposed no environment");
     await host.stop("absent");
     expect((await host.command("replay", saved)).stdout).toContain("Verified");
 
@@ -146,9 +158,12 @@ test("the running host refuses shell stdout and stderr derived from an environme
       source(`printf '%s' "${CLIPPED_VALUE}"`),
     );
     const stdoutCapture = await host.open("stdout");
-    expect(
-      textOf(await host.draw("stdout", successful, { [VARIABLE]: ENV_VALUE })),
-    ).toContain(`source=${DERIVED}`);
+    await host.drawnWith(
+      "stdout",
+      successful,
+      { [VARIABLE]: ENV_VALUE },
+      `source=${DERIVED}`,
+    );
     await host.refused("stdout", stdoutCapture);
     // The live host still holds the last successful run when a replacement starts.
     const restarted = await host.open("stdout", "restarted-stdout");

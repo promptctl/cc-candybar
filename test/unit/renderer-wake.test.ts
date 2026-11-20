@@ -9,7 +9,7 @@ import {
   RendererWake,
   type DueEnded,
 } from "../../src/daemon/renderer-wake";
-import type { Monotonic } from "../../src/time";
+import type { Monotonic, Task } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
 import type { Failure } from "../../src/daemon/foundations/verb-error";
 
@@ -24,21 +24,23 @@ const failure = (kind: Failure["kind"]): DueEnded => ({
 
 // A wake over a held clock: each timer set is recorded with the monotonic
 // moment it was set to fire at, and each `due` answers as `ends` says, after
-// `waits` ms in the mailbox.
+// `waits` ms in the mailbox. What a fired timer throws is heard in `threw`,
+// as a reporting clock hears it.
 function rig(
   ends: () => DueEnded = () => answered,
   waits = 0,
   onLog: (text: string) => void = () => {},
 ) {
   const clock = { ms: 0 };
-  const timers: Array<{ at: number; run: () => void; cancelled: boolean }> = [];
+  const timers: Array<{ at: number; run: Task; cancelled: boolean }> = [];
+  const threw: string[] = [];
   const dues: number[] = [];
   const said: string[] = [];
   const logged: string[] = [];
   const wake = new RendererWake({
     clock: {
       monotonic: () => clock.ms as Monotonic,
-      after: (ms, run) => {
+      after: (_task, ms, run) => {
         const timer = { at: clock.ms + ms, run, cancelled: false };
         timers.push(timer);
         return () => void (timer.cancelled = true);
@@ -61,11 +63,11 @@ function rig(
     const timer = live().at(-1)!;
     clock.ms = ms ?? timer.at;
     timer.cancelled = true;
-    timer.run();
-    await Promise.resolve();
-    await Promise.resolve();
+    await Promise.resolve(timer.run()).catch((thrown: unknown) => {
+      threw.push((thrown as Error).message);
+    });
   };
-  return { wake, clock, timers, live, dues, said, logged, fire };
+  return { wake, clock, timers, live, dues, said, logged, threw, fire };
 }
 
 const tick = (s: number) => s as Tick;
@@ -98,7 +100,7 @@ test("what is declared while a `due` is out is armed once it has answered", asyn
   const wake = new RendererWake({
     clock: {
       monotonic: () => r.clock.ms as Monotonic,
-      after: (ms, run) => {
+      after: (_task, ms, run) => {
         const timer = { at: r.clock.ms + ms, run, cancelled: false };
         r.timers.push(timer);
         return () => void (timer.cancelled = true);
@@ -222,5 +224,5 @@ test("a failing wake summary leaves the next due armed", async () => {
   r.wake.declare(tick(60));
   await r.fire();
   expect(r.live().map((timer) => timer.at)).toEqual([61_000]);
-  expect(r.logged).toContainEqual(expect.stringContaining("summary failed"));
+  expect(r.threw).toEqual(["summary failed"]);
 });

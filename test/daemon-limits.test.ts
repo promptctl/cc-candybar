@@ -53,7 +53,11 @@ function makeDeps(
   overrides: Partial<LimitsDeps & RendererMemory> = {},
 ): LimitsDeps & RendererMemory {
   return {
-    clock: { now: () => rec.fakeNow, after: systemTimekeeper.after },
+    clock: {
+      now: () => rec.fakeNow,
+      after: systemTimekeeper.after,
+      detach: systemTimekeeper.detach,
+    },
     pid: rec.pid,
     snapshotDir: rec.snapshotDir,
     log: (level, msg) => rec.logs.push({ level, msg }),

@@ -81,7 +81,7 @@ export interface CollectorDeps {
   // The daemon diagnostics every session's document carries. An observable
   // change restamps every session.
   readonly daemon: () => DaemonFacts;
-  readonly clock: Pick<Timekeeper, "now" | "every">;
+  readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
   readonly watched: (session: SessionId) => boolean;
@@ -516,10 +516,12 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           // one action, so a request's wait (`settled`) sees only a stamp
           // whose world state is already in the mailbox, ahead of its turn.
           if (this.stamp({ session, stamped }, moved))
-            void this.deps.deliver({
-              kind: "world-state",
-              worldState: stamped.document,
-            });
+            this.deps.clock.detach("world state delivery", () =>
+              this.deps.deliver({
+                kind: "world-state",
+                worldState: stamped.document,
+              }),
+            );
         }),
       {
         // The expression cannot throw; the effect's catch is `stamp`.
@@ -658,21 +660,24 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
       "info",
       `session retired sid=${JSON.stringify(record.session)}`,
     );
-    void this.deps
-      .deliver({ kind: "retire", session: record.session })
-      .then(() => {
-        if (
-          record.phase === retiring &&
-          this.records.get(record.session) === record
-        )
-          runInAction(() => this.records.delete(record.session));
-        if (this.records.size === 0) this.disarmSweep();
-      });
+    this.deps.clock.detach("session retire", () =>
+      this.deps
+        .deliver({ kind: "retire", session: record.session })
+        .then(() => {
+          if (
+            record.phase === retiring &&
+            this.records.get(record.session) === record
+          )
+            runInAction(() => this.records.delete(record.session));
+          if (this.records.size === 0) this.disarmSweep();
+        }),
+    );
   }
 
   private armSweep(): void {
     if (this.stopSweep !== null) return;
     this.stopSweep = this.deps.clock.every(
+      "session sweep",
       SESSION_SWEEP_MS,
       () => this.sweep(),
       { unref: true },

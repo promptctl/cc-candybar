@@ -9,7 +9,7 @@ import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LauncherFact } from "../proc/launcher";
-import type { HeldEvent } from "../utils/event-hold";
+import type { HeldEvents } from "../utils/event-hold";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -69,15 +69,15 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // daemon itself: whether file events are heard,
 // and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
-// and for whom it draws, src/utils/event-hold.ts), how the last renderer
-// process ended, and the acts that failed with no session's bar to hold them
-// (one no session asked for, or one whose renderer had ended), each held the
+// and for whom it draws, src/utils/event-hold.ts), and the daemon's held
+// events: how the last renderer process ended, the acts that failed with no
+// session's bar to hold them (one no session asked for, or one whose renderer
+// had ended) and the throws of the tasks it runs on its own, each held the
 // same way: null while none has.
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
-  readonly rendererEnded: HeldEvent | null;
-  readonly actFailed: HeldEvent | null;
+  readonly held: HeldEvents;
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

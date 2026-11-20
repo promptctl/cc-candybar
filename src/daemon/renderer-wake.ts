@@ -126,7 +126,7 @@ export class RendererWake {
       LONGEST_TIMER_MS,
       Math.max(0, (tick - tickAt(clock)) * 1000),
     );
-    return clock.after(ms, () => {
+    return clock.after("renderer wake", ms, () => {
       if (this.state.kind !== "armed" || this.state.tick !== tick) return;
       // Fired early: the rest is waited out.
       if (tickAt(clock) < tick) {
@@ -136,11 +136,8 @@ export class RendererWake {
       this.state = { kind: "queued" };
       // [LAW:no-silent-failure] A `due` that rejected failed: the wake
       // hears it as one that threw, so it is said and the wake arms again.
-      void this.deliverDue(tick).catch((thrown: unknown) =>
-        this.deps.log(
-          `wake could not record its due: ${failureOf(thrown).detail}`,
-        ),
-      );
+      // A throw in the wake's own record of it is the clock's to report.
+      return this.deliverDue(tick);
     });
   }
 

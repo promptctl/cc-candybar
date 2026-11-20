@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../src/time";
+import { reporting, systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -163,9 +163,13 @@ function makeCache(
 ) {
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
+  // What a task the provider scheduled threw, as `task: message`.
+  const threw: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
-    clock: systemTimekeeper,
+    clock: reporting(systemTimekeeper, (task, thrown) =>
+      threw.push(`${task}: ${(thrown as Error).message}`),
+    ),
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
     maxPrLookups: opts.maxPrLookups,
@@ -179,7 +183,7 @@ function makeCache(
     },
   });
   built.push(svc);
-  return { svc, inner, logs, holds: new Holds() };
+  return { svc, inner, logs, threw, holds: new Holds() };
 }
 
 // The git passes' refresh events, without the PR lookups' between them.
@@ -1168,9 +1172,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws is the clock's to report, and the repo keeps its period", async () => {
     jest.useFakeTimers();
-    const { svc, inner, logs, holds } = makeCache({
+    const { svc, inner, logs, threw, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
     });
@@ -1181,8 +1185,8 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
       "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
     ]);
+    expect(threw).toEqual(["git refresh /repo: logger bug"]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
@@ -1271,20 +1275,25 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
+    // What a task the provider or its watches scheduled threw.
+    const threw: string[] = [];
+    const clock = reporting(systemTimekeeper, (task, thrown) =>
+      threw.push(`${task}: ${(thrown as Error).message}`),
+    );
     const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
+      clock,
       counters,
       logger,
     });
     const svc = new GitDataProvider({
-      clock: systemTimekeeper,
+      clock,
       ...opts,
       inner,
       watchers,
       logger,
     });
     built.push(svc);
-    return { svc, inner, counters, logs, watchers };
+    return { svc, inner, counters, logs, threw, watchers };
   }
 
   test("refreshes and changes never close or reopen the watch", async () => {
@@ -1508,14 +1517,14 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-eloop-"));
     const loop = path.join(repo, ".git");
     fs.symlinkSync(loop, loop);
-    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    const { svc, inner, counters, logs, threw } = counted({ periodMs: 100 });
     inner.repoRootByDir[repo] = repo;
     inner.gitDirByDir[repo] = loop;
     try {
       const outcome = await gitOf(svc, new Holds(), repo);
       expect(outcome.kind).toBe("ok");
       await until(() => passes(logs).length >= 2, "a period pass landed");
-      expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
+      expect(threw).toEqual([]);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
       // The refs tree under it is refused, on every platform.
       expect(

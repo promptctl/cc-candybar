@@ -669,6 +669,28 @@ export default [
       ],
     },
   },
+  // [LAW:single-enforcer] Work the daemon starts and does not await goes
+  // through its clock's `detach`, which reports what it throws; a promise
+  // dropped any other way, `void` included, throws past the daemon unseen.
+  {
+    files: [
+      "src/daemon/**/*.{ts,mts}",
+      "src/utils/**/*.{ts,mts}",
+      "src/proc/**/*.{ts,mts}",
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        { ignoreVoid: false },
+      ],
+    },
+  },
   {
     ignores: [
       "node_modules/",

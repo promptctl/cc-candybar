@@ -5,8 +5,10 @@ import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
+  HELD_KINDS,
   type DisplayedEvent,
   type HeldEvent,
+  type HeldKind,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
@@ -462,6 +464,16 @@ export function drawRender(
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.snapshot.repo, sessionId);
+  // [LAW:no-ambient-temporal-coupling] The daemon's held events at this
+  // draw's instant and for whom it draws, by the same event hold as the click
+  // error; each is placed by its kind.
+  const { daemon } = document;
+  const held = HELD_KINDS.flatMap((kind) => {
+    const shown = daemonEventAt(kind, daemon.held[kind], at, drawing.by);
+    return shown === undefined ? [] : [shown];
+  });
+  const placed = (placement: Placement) =>
+    held.filter(({ kind }) => HELD_PLACEMENT[kind] === placement);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -493,6 +505,9 @@ export function drawRender(
       }),
     ),
     said("click", clickShown?.text),
+    // A held event is about its kind: its text grows as throws join it,
+    // under an open viewer, without becoming another message.
+    ...placed("error").map(({ kind, message }) => sourced(kind, kind, message)),
   ].flatMap(({ about, text, copy, ...named }) =>
     text != null && copy != null ? [{ ...named, about, text, copy }] : [],
   );
@@ -506,15 +521,10 @@ export function drawRender(
   const configWatch = entry.snapshot.watch;
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
-  const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const launchEvents = launched.flatMap((warning) =>
     "event" in warning ? [warning] : [],
   );
-  const held = [
-    daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
-    daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
-  ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
   const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
@@ -523,7 +533,7 @@ export function drawRender(
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
-    ...held,
+    ...placed("warning"),
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -790,7 +800,13 @@ export function drawRender(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and the file a dropped write names.
 interface DrawError extends SourcedText {
-  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "dropped"
+    | "click"
+    | HeldKind;
   readonly subject?: string;
 }
 
@@ -837,9 +853,18 @@ interface FactsWarning {
 // [LAW:no-silent-failure] A renderer process that ended took its session
 // state that lives only in memory with it (open menus, armed confirms): the
 // bar the next one draws says so, by the same event hold as a pipe event. So
-// does an act that failed where no session's bar could hold it.
+// does an act that failed where no session's bar could hold it: both warn. A
+// task the daemon ran on its own that threw is a bug in the daemon, so it is
+// an error.
+type Placement = "error" | "warning";
+const HELD_PLACEMENT: Readonly<Record<HeldKind, Placement>> = {
+  "renderer-ended": "warning",
+  "act-failed": "warning",
+  "task-threw": "error",
+};
+
 interface DaemonEventWarning {
-  readonly kind: "renderer-ended" | "act-failed";
+  readonly kind: HeldKind;
   readonly message: string;
   readonly event: HeldEvent;
 }

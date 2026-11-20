@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { Monotonic, Timekeeper } from "../../src/time";
+import type { Monotonic, Task, Timekeeper } from "../../src/time";
 
 // A clock a test moves by hand. Both of its readings and every timer it hands
 // out stand still until `advance`, so it belongs on a daemon its case owns,
@@ -38,12 +38,12 @@ export function heldClock(start: Date): HeldClock {
   // A repeating timer keeps its record and re-arms a period from where it fired,
   // as an interval does after a blocked loop: one late run, not one per missed
   // period. A one-shot leaves the set.
-  const timers = new Set<{ at: number; fire: () => void; period?: number }>();
+  const timers = new Set<{ at: number; fire: Task; period?: number }>();
   const nextDue = (end: number) =>
     [...timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at)[0];
   // Each timer fires at its own moment, and one cleared by an earlier firing
   // does not fire at all.
-  const fire = (due: { at: number; fire: () => void; period?: number }) => {
+  const fire = (due: { at: number; fire: Task; period?: number }) => {
     // Time never runs back: a burn may have passed the moment this was set for.
     elapsed = Math.max(elapsed, due.at);
     if (due.period === undefined) {
@@ -51,7 +51,7 @@ export function heldClock(start: Date): HeldClock {
     } else {
       due.at = elapsed + due.period;
     }
-    due.fire();
+    void due.fire();
   };
   const fireThrough = (end: number): void => {
     for (let due = nextDue(end); due; due = nextDue(end)) fire(due);
@@ -79,7 +79,7 @@ export function heldClock(start: Date): HeldClock {
     }
     return ms;
   };
-  const arm = (ms: number, fire: () => void, period?: number) => {
+  const arm = (ms: number, fire: Task, period?: number) => {
     const timer = { at: elapsed + ms, fire, period };
     timers.add(timer);
     return () => timers.delete(timer);
@@ -88,9 +88,14 @@ export function heldClock(start: Date): HeldClock {
     // Whole milliseconds, as `Date.now()` reads them.
     now: () => Math.trunc(start.getTime() + elapsed),
     monotonic: () => elapsed as Monotonic,
-    after: (ms, fire) => arm(ms, fire),
-    every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
-    defer: (fire) => arm(0, fire),
+    // Tasks run bare, as the system clock runs them: a case that wants a
+    // task's throw reported wraps this clock in `reporting`.
+    after: (_task, ms, fire) => arm(ms, fire),
+    every: (_task, ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
+    defer: (_task, fire) => arm(0, fire),
+    detach: (_task, fire) => {
+      void fire();
+    },
     advance: (ms) => fireThrough(elapsed + span(ms)),
     settle: (ms) => settleThrough(elapsed + span(ms)),
     burn: (ms) => {

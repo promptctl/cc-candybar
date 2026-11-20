@@ -9,10 +9,10 @@ timekeeperContract("the system timekeeper", () => ({
 describe("the system timekeeper", () => {
   test("a timer set to leave the process alone does not hold the loop", () => {
     const set = jest.spyOn(globalThis, "setTimeout");
-    const clear = systemTimekeeper.after(60_000, () => undefined, {
+    const clear = systemTimekeeper.after("task", 60_000, () => undefined, {
       unref: true,
     });
-    const held = systemTimekeeper.after(60_000, () => undefined);
+    const held = systemTimekeeper.after("task", 60_000, () => undefined);
     const [unref, ref] = set.mock.results.map(
       (r) => r.value as NodeJS.Timeout,
     );

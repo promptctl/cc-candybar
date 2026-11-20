@@ -206,6 +206,10 @@ export class DaemonLog {
       this.dropped += cut;
     }
     if (this.exiting) this.writeWaitingSync(true, EXIT_WAIT_MS);
+    // [LAW:single-enforcer] exception: the log's own flush is not a task
+    // the daemon reports, since its report is a log line. Its failures are
+    // the log's `unwritable` record.
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     else if (!this.flushing) void this.flush();
   };
 

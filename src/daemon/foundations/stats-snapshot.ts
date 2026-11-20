@@ -122,6 +122,9 @@ export interface StatsSnapshot {
   heapTotalBytes: number;
   externalBytes: number;
   arrayBuffersBytes: number;
+  // [LAW:nothing-unseen] How many throws the daemon's own tasks reported:
+  // three and three thousand read apart.
+  tasksThrew: number;
   requests: {
     total: number;
     /** Valid compact requests that asked the client for its environment before drawing. */

@@ -137,6 +137,40 @@ describe("a connection to a daemon built in this worker", () => {
     );
   });
 
+  test("a throw in a task the daemon scheduled is held for every bar, once per distinct line", async () => {
+    let observed: HeldEvent | null = null;
+    const running = startDaemon(process.env, {
+      renderer: inProcessRenderer((real) =>
+        hearingEvents(real, ({ event }) => {
+          if (
+            event.kind === "context" &&
+            event.worldState.session === "observe"
+          )
+            observed = event.worldState.daemon.held["task-threw"];
+        }),
+      ),
+    });
+    started = running;
+    const { daemon } = running;
+    const broke = () => {
+      throw new Error("it broke");
+    };
+    daemon.clock.detach("probe task", broke);
+    daemon.clock.detach("probe task", broke);
+    const check = await daemon.reply(
+      renderRequest("observe", undefined),
+      () => false,
+      daemon.stats.accept(),
+      () => false,
+    );
+    check.settled(false);
+    expect(observed).toMatchObject({
+      text: "probe task threw: it broke",
+      answered: false,
+    });
+    expect(daemon.stats.tasksThrew).toBe(2);
+  });
+
   test("a subscribe receives the frames the daemon draws", async () => {
     const running = start();
     await rendered(running, "connection-feed");
@@ -159,7 +193,7 @@ describe("a connection to a daemon built in this worker", () => {
     const inProcess = inProcessRenderer((real) =>
       hearingEvents(real, ({ event }) => {
         if (event.kind === "context" && event.worldState.session === "observe")
-          observed = event.worldState.daemon.rendererEnded;
+          observed = event.worldState.daemon.held["renderer-ended"];
       }),
     );
     const running = startDaemon(process.env, {
@@ -266,16 +300,17 @@ describe("a connection to a daemon built in this worker", () => {
     const first = await reply();
     const concurrent = await reply();
     expect(drawn(first.resp)).toMatch(/⚠\s+1/);
+    // A held event is answered in its own record: the launcher's standing
+    // warnings are not read again for it.
     const before = standingReads();
     first.settled(true);
-    expect(standingReads()).toBe(before + 1);
     concurrent.settled(true);
-    expect(standingReads()).toBe(before + 1);
+    expect(standingReads()).toBe(before);
 
     const insideHold = await reply();
     expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
     insideHold.settled(true);
-    expect(standingReads()).toBe(before + 1);
+    expect(standingReads()).toBe(before);
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

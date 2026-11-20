@@ -131,10 +131,10 @@ export function followFrames(
   // fault, which may be a daemon that restarted without it; never after a
   // lane switched off, which the daemon answered with the data in hand.
   const reopenAfter = (ms: number, refresh: boolean): void => {
-    cancelReopen = world.clock.after(ms, () => {
+    cancelReopen = world.clock.after("frame reopen", ms, () => {
       cancelReopen = null;
       const before = refresh ? follow.beforeReconnect?.() : undefined;
-      void (before ?? Promise.resolve()).then(() => {
+      return (before ?? Promise.resolve()).then(() => {
         if (!closed) open();
       });
     });

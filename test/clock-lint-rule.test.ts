@@ -13,7 +13,13 @@ const ROOT = path.resolve(__dirname, "..");
 const SCRIPT = `
 import { ESLint } from "eslint";
 const [root, casesJson] = process.argv.slice(1);
-const eslint = new ESLint({ cwd: root });
+// Source text has no program for the typed rules to read, so the cases lint
+// it untyped: the rules here read syntax alone.
+const UNTYPED = {
+  languageOptions: { parserOptions: { projectService: false } },
+  rules: { "@typescript-eslint/no-floating-promises": "off" },
+};
+const eslint = new ESLint({ cwd: root, overrideConfig: UNTYPED });
 const out = {};
 for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
   const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });

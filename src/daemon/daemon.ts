@@ -13,6 +13,7 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
 } from "./foundations/verb-error.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
@@ -86,10 +87,14 @@ import {
 import {
   answeredBy,
   joinedEvent,
+  NO_HELD_EVENTS,
   type DisplayedEvent,
   type HeldEvent,
+  type HeldEvents,
+  type HeldKind,
 } from "../utils/event-hold.js";
-import { compareStructural, observable, runInAction } from "mobx";
+import { reporting, type ReportThrow } from "../time.js";
+import { compareStructural, computed, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
@@ -115,7 +120,9 @@ export interface RunningBundle {
 // input: it names no real one itself, so a daemon is as isolated as the
 // adapters it is handed. src/daemon/production-adapters.ts builds the real
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
-// its stats and its closing signal, is a factory over those.
+// its stats and its closing signal, is a factory over those. One that runs
+// tasks on its own clock is handed `report`, where the daemon tells every bar
+// what a task threw.
 export interface DaemonAdapters {
   // Available in the installed host. Each test or embedded host chooses its file edge.
   readonly openRecording?: (file: string) => Promise<RecordingFile>;
@@ -123,17 +130,25 @@ export interface DaemonAdapters {
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
-  readonly launcher: (own: LaunchOwner) => TestableLauncher;
+  readonly launcher: (
+    own: LaunchOwner,
+    report: ReportThrow,
+  ) => TestableLauncher;
   // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
   // are kept, which the daemon reads once it serves and is then their sole
   // writer. Built over the daemon's log: a write in flight at the close
   // finishes after it, and what it logs says so like any other line of the
   // daemon's work.
-  readonly profile: (name: RendererName, log: DaemonLogger) => ProfileStorage;
+  readonly profile: (
+    name: RendererName,
+    log: DaemonLogger,
+    report: ReportThrow,
+  ) => ProfileStorage;
   // Where the host keeps its book of each session's durable context: the
   // host's own, whichever renderer it runs.
   readonly sessionBook: (
     log: DaemonLogger,
+    report: ReportThrow,
   ) => SessionFileStorage<DurableContext>;
   readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
@@ -146,6 +161,7 @@ export interface DaemonAdapters {
     readonly exit: (code: number) => void;
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
+    readonly report: ReportThrow;
   }) => LimitsDeps;
   // A worktree bundle's executable entry at the host's filesystem boundary.
   readonly rendererEntryOf?: (reported: string) => string;
@@ -241,10 +257,11 @@ type DaemonPhase =
     };
 
 export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
-  const { bundle, memoryLimitBytes, clock, exit, paths, host } = inputs;
+  const { bundle, memoryLimitBytes, exit, paths, host } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
-  const instant = (): Instant => instantAt(clock);
+  // Readings only: the clock's tasks are run by the reporting clock below.
+  const instant = (): Instant => instantAt(inputs.clock);
   let phase: DaemonPhase = { kind: "building" };
   const currentPhase = (): DaemonPhase => phase;
   const serving = (): boolean =>
@@ -261,8 +278,43 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       phase.kind === "closed" ? `after close: ${msg}` : msg,
     );
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
-  // instances would defeat the share-across-sessions invariant.
-  const stats = new RuntimeStats(clock);
+  // instances would defeat the share-across-sessions invariant. It reads the
+  // clock and runs no task on it.
+  const stats = new RuntimeStats(inputs.clock);
+  // [LAW:one-source-of-truth] The daemon's held events, each held for the bar
+  // until an answer has carried it.
+  // [LAW:no-ambient-temporal-coupling] Declared before the clock whose
+  // reports join them, so no report reaches state that does not exist yet.
+  const held = observable.box<HeldEvents>(NO_HELD_EVENTS, { deep: false });
+  const hold = (kind: HeldKind, event: HeldEvent): void =>
+    runInAction(() => held.set({ ...held.get(), [kind]: event }));
+  // [LAW:single-enforcer] Where every task the daemon runs on its own lands
+  // when it throws: its detail in daemon.log, its message on every bar.
+  const reportThrow: ReportThrow = (task, thrown) => {
+    const failure = failureOf(thrown);
+    log("error", `${task} threw: ${failure.detail}`);
+    stats.tasksThrew++;
+    const line = `${task} threw: ${failure.message}`;
+    const prior = held.get()["task-threw"];
+    // A throw the unanswered event already says moves nothing: a new revision
+    // would never match a frame that showed the last, so a task that throws
+    // every period would never be answered.
+    if (
+      prior !== null &&
+      !prior.answered &&
+      prior.text.split("\n").includes(line)
+    )
+      return;
+    // [LAW:no-silent-failure] A thrown message can carry a launched command's
+    // output, so it is held as environment output.
+    hold(
+      "task-threw",
+      environmentOutput(joinedEvent(prior, line, instant()), true),
+    );
+  };
+  // [LAW:single-enforcer] The one clock every piece below is handed, so none
+  // of their tasks can throw past the daemon unseen.
+  const clock = reporting(inputs.clock, reportThrow);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
@@ -283,80 +335,71 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
   // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
+  // launcher stands behind. Restated whenever either may have moved.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
-    { deep: false, equals: compareStructural },
+  const standingFaults = observable.box<Omit<DaemonFacts, "held">>(
+    { fileEvents: [], launcher: [] },
+    { deep: false },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
-      daemonFaults.set({
+      standingFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
-        actFailed,
       }),
     );
   }
+  // Compared whole, so a restatement that moved nothing moves no document.
+  const daemonFaults = computed<DaemonFacts>(
+    () => ({ ...standingFaults.get(), held: held.get() }),
+    { equals: compareStructural },
+  );
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
-  const launcher = inputs.launcher({
-    inherited: host.env,
-    stats: stats.launchStats,
-    signal: cancelWork.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it, and each pipe event, is said in daemon.log, and every
-    // session's world state carries it, so its warning comes on frames too.
-    observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null
-            ? "launch lifeline running again"
-            : `launch lifeline ${change.fault}; the next launch starts another`,
-        );
-      // [LAW:no-ambient-temporal-coupling] A factory may report a warning
-      // before its launcher can be read. The initial restatement reads it
-      // once the launcher exists.
-      if (phase.kind !== "building") restateFaults();
+  const launcher = inputs.launcher(
+    {
+      inherited: host.env,
+      stats: stats.launchStats,
+      signal: cancelWork.signal,
+      // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+      // hold them against.
+      now: instant,
+      // [LAW:no-silent-failure] Each change in whether what the daemon launches
+      // dies with it, and each pipe event, is said in daemon.log, and every
+      // session's world state carries it, so its warning comes on frames too.
+      observeWarnings: (change) => {
+        if (change.kind === "launch-pipes") log("warn", change.text);
+        else
+          log(
+            change.fault === null ? "info" : "warn",
+            change.fault === null
+              ? "launch lifeline running again"
+              : `launch lifeline ${change.fault}; the next launch starts another`,
+          );
+        // [LAW:no-ambient-temporal-coupling] A factory may report a warning
+        // before its launcher can be read. The initial restatement reads it
+        // once the launcher exists.
+        if (phase.kind !== "building") restateFaults();
+      },
     },
-  });
+    reportThrow,
+  );
   // [LAW:single-enforcer] Both client writers acknowledge events at the
   // owner of the daemon's latest occurrences, independent of their renderer.
   const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
     let changed = false;
     for (const { kind, event } of shown) {
-      switch (kind) {
-        case "launch-pipes":
-          if (launcher.answeredPipeEvent(event)) changed = true;
-          break;
-        case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
-          break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
-            changed = true;
-          }
-          break;
+      if (kind === "launch-pipes") {
+        if (launcher.answeredPipeEvent(event)) changed = true;
+        continue;
       }
+      // [LAW:one-type-per-behavior] Every held kind is answered by one rule.
+      const last = held.get()[kind];
+      if (last !== null && answeredBy(last, event))
+        hold(kind, { ...last, answered: true });
     }
     // [LAW:dataflow-not-control-flow] Writers can confirm independently;
     // publish new facts only when the first confirmation changes an owner.
@@ -364,7 +407,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   };
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
-  const sessionBook = new SessionBook(inputs.sessionBook(log));
+  const sessionBook = new SessionBook(inputs.sessionBook(log, reportThrow));
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
@@ -395,6 +438,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       exit,
       launcher,
       log,
+      report: reportThrow,
     }),
     limitBytes: memoryLimitBytes,
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
@@ -597,6 +641,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    clock,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });
@@ -646,7 +691,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log));
+    const stores = new HeldStores(inputs.profile(name, log, reportThrow));
     // [LAW:one-source-of-truth] Each start reads the latest held profile.
     const boot = (): RendererBoot => ({
       stored: stores.current(),
@@ -705,11 +750,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ended: (event) => {
         // [LAW:types-are-the-program] A later exit can have the same text and
         // instant as an earlier one, even as an old reply is still writing.
-        rendererEnded = {
+        hold("renderer-ended", {
           ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1,
-        };
-        restateFaults();
+          revision: (held.get()["renderer-ended"]?.revision ?? 0) + 1,
+        });
       },
     });
     const renderer = rendererHost(
@@ -754,13 +798,17 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         acknowledgeDisplayed,
         unheard: (text, fromEnvironment) => {
           // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+          const prior = held.get()["act-failed"];
+          hold(
+            "act-failed",
+            environmentOutput(
+              joinedEvent(prior, text, instant()),
+              fromEnvironment === true ||
+                (prior !== null &&
+                  !prior.answered &&
+                  isEnvironmentOutput(prior)),
+            ),
           );
-          restateFaults();
         },
       },
     );
@@ -848,20 +896,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
-          void former.renderer
-            .deliver(
+          clock.detach(`renderer ${former.renderer.name} retire`, () =>
+            former.renderer.deliver(
               () => ({
                 kind: "event",
                 event: { kind: "retire", session },
               }),
               [["why", "renderer-moved"]],
-            )
-            .catch((error: unknown) => {
-              log(
-                "error",
-                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
-              );
-            });
+            ),
+          );
         frameFeeds.handedIn(null);
         frameFeeds.announce();
       }

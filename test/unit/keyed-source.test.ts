@@ -10,7 +10,7 @@ import {
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
-import { systemTimekeeper } from "../../src/time";
+import { reporting, systemTimekeeper } from "../../src/time";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
@@ -511,6 +511,34 @@ describe("KeyedSource", () => {
     await jest.advanceTimersByTimeAsync(EVERY.failedMs);
     expect(calls).toBe(2);
     expect(lines[0]).toMatchObject({ level: "warn" });
+  });
+
+  test("a throw recording a read is the clock's to report, and the answer still lands and is visited again", async () => {
+    // The refresh's record throws once, as a broken ledger would.
+    class BrokenOnce extends Array<Line> {
+      broke = false;
+      override push(...lines: Line[]): number {
+        if (this.broke) return super.push(...lines);
+        this.broke = true;
+        throw new Error("ledger broke");
+      }
+    }
+    const threw: string[] = [];
+    const held = heldClock(new Date(1_000_000));
+    const f = fakeRead();
+    source = sourceOf(f.read, {
+      lines: new BrokenOnce(),
+      clock: reporting(held, (task, thrown) =>
+        threw.push(`${task}: ${(thrown as Error).message}`),
+      ),
+    });
+    const holds = new Holds();
+    const first = laneOutcome(source.declare(holds, "a"));
+    f.calls[0]!.resolve(ok("A"));
+    expect(await first).toEqual(ok("A"));
+    expect(threw).toEqual(["fake refresh: ledger broke"]);
+    held.advance(EVERY.okMs);
+    expect(f.calls).toHaveLength(2);
   });
 
   test("a declaration into a closed home throws, for the session's declaration to report", () => {

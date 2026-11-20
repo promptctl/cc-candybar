@@ -225,7 +225,7 @@ export function rendererHost(
   name: RendererName,
   // The clock every input's readings are made on, a hop is timed on, and the
   // renderer's wake is armed on.
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">,
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
@@ -1073,13 +1073,9 @@ export function rendererHost(
     };
   const deliver = recorded("last");
   // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
-  // is the daemon's, on every bar.
+  // is the daemon's: the clock reports it on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
-    void settling.catch((thrown: unknown) => {
-      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
-    });
+    clock.detach(`renderer ${name}'s ${what}`, () => settling);
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(

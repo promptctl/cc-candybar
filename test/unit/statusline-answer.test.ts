@@ -41,7 +41,7 @@ import {
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
-import type { Monotonic } from "../../src/time";
+import { systemTimekeeper, type Monotonic } from "../../src/time";
 import { ABSENT } from "../../src/utils/outcome";
 
 const SESSION = sessionIdOf("a-session");
@@ -87,10 +87,11 @@ const deadlines = new Set<() => void>();
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
-  after: (_ms: number, fire: () => void) => {
+  after: (_task: string, _ms: number, fire: () => unknown) => {
     deadlines.add(fire);
     return () => void deadlines.delete(fire);
   },
+  detach: systemTimekeeper.detach,
 };
 const NOT_CLOSING = new AbortController().signal;
 

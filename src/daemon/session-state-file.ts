@@ -166,10 +166,11 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   private schedule(): void {
     if (this.clearTimer !== null) return;
     this.clearTimer = this.clock.after(
+      "session state write",
       this.debounceMs,
       () => {
         this.clearTimer = null;
-        void this.write();
+        return this.write();
       },
       { unref: true },
     );

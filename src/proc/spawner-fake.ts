@@ -184,7 +184,7 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
       // [LAW:no-silent-failure] Nothing registered it: it fails as a missing
       // binary does, never as a program that quietly succeeded.
       spawned.push(record);
-      clock.after(0, () => {
+      clock.after("fake spawn", 0, () => {
         events.emit("error", errno("ENOENT", "spawn", bin));
         out?.end();
         err?.end();
@@ -224,7 +224,8 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
       if (open === 0) closed();
       else for (const s of [out, err]) if (s !== null) whenClosed(s, closed);
     };
-    const ending = (code: number) => clock.after(0, () => finish(code, null));
+    const ending = (code: number) =>
+      clock.after("fake spawn", 0, () => finish(code, null));
 
     groups.set(pid, {
       refuses: false,
@@ -232,12 +233,12 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
       deliver: (sig) => {
         record.signals.push(sig);
         if (done || behaviour.ignores?.includes(sig)) return;
-        clock.after(0, () => finish(null, sig));
+        clock.after("fake spawn", 0, () => finish(null, sig));
       },
     });
 
     timers.push(
-      clock.after(0, () => {
+      clock.after("fake spawn", 0, () => {
         if (behaviour.stdout) out?.write(behaviour.stdout);
         if (behaviour.stderr) err?.write(behaviour.stderr);
         for (let left = behaviour.floods ?? 0; left > 0; left -= CHUNK) {
@@ -245,7 +246,7 @@ export function fakeSpawner(clock: Timekeeper): FakeSpawner {
         }
         if (Number.isFinite(behaviour.runsFor)) {
           timers.push(
-            clock.after(behaviour.runsFor, () =>
+            clock.after("fake spawn", behaviour.runsFor, () =>
               finish(behaviour.exitCode, null),
             ),
           );

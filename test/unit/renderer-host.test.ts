@@ -22,7 +22,7 @@ import {
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
-import type { Monotonic } from "../../src/time";
+import { systemTimekeeper, type Monotonic } from "../../src/time";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS } from "../helpers/renderers";
@@ -45,6 +45,7 @@ const clockAt = (read: { wall: number; mono: number }) => ({
   after: (): (() => void) => {
     throw new Error("this rig sets no timer");
   },
+  detach: systemTimekeeper.detach,
 });
 
 type Ended =
@@ -878,7 +879,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
     MAIN_RENDERER,
     {
       ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
+      after: (_task: string, _ms: number, run: () => unknown) => {
         fire.push(run);
         return () => {};
       },
@@ -933,7 +934,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
     MAIN_RENDERER,
     {
       ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
+      after: (_task: string, _ms: number, run: () => unknown) => {
         fire.push(run);
         return () => {};
       },
@@ -991,7 +992,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
     MAIN_RENDERER,
     {
       ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
+      after: (_task: string, _ms: number, run: () => unknown) => {
         fire.push(run);
         return () => {};
       },
@@ -1054,7 +1055,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
     MAIN_RENDERER,
     {
       ...clockAt(read),
-      after: (_ms, run) => {
+      after: (_task, _ms, run) => {
         fire.push(run);
         return () => {};
       },

@@ -747,14 +747,27 @@ describe("a statusline request", () => {
 
   test("reports which daemon act failure the statusline drew alongside the frame", async () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
-    const t = renderer(undefined, () => ({
-      ...daemonFactsOf(),
-      actFailed: event,
-    }));
+    const t = renderer(undefined, () =>
+      daemonFactsOf([], { "act-failed": event }),
+    );
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
     expect(presentOf(effects).displayedEvents).toEqual([
       { kind: "act-failed", event },
+    ]);
+  });
+
+  test("draws a daemon task's throw as an error, and reports it drew it", async () => {
+    const event = joinedEvent(null, "git refresh /r threw: boom", READ.at);
+    const t = renderer(undefined, () =>
+      daemonFactsOf([], { "task-threw": event }),
+    );
+    const { effects, record } = answered(await request(t));
+    const fields = new Map(record);
+    expect(fields.get("err")).toBe("Y");
+    expect(fields.get("warn")).not.toContain("task-threw");
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "task-threw", event },
     ]);
   });
 
@@ -864,10 +877,9 @@ describe("a feed's frame", () => {
         ...joinedEvent(null, "a daemon act failed", READ.at),
         answered: shown,
       };
-      const t = renderer(undefined, () => ({
-        ...daemonFactsOf(),
-        actFailed: event,
-      }));
+      const t = renderer(undefined, () =>
+        daemonFactsOf([], { "act-failed": event }),
+      );
       await configure(t, checked("%1"));
       answered(
         await handIn(t.r, {
