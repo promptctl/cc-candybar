@@ -258,6 +258,7 @@ export function snapshotOf(
     checkout: session.checkout,
     notices: session.notices,
     watch: null,
+    discovery: null,
   };
 }
 

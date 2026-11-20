@@ -514,6 +514,7 @@ test("a failed prune of an offered config is retried even when the declared orig
     checkout: { root: origin.projectDir, git: false },
     notices: [],
     watch: null,
+    discovery: null,
   };
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   blocked = true;

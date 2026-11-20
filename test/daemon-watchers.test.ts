@@ -28,6 +28,7 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
+import { valueOf } from "../src/utils/logfmt";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -99,6 +100,81 @@ describe("WatcherRegistry", () => {
       swept();
       expect(stale).toHaveLength(1);
       expect(fresh).toEqual([]);
+    });
+
+    test("a holder whose delivery throws stands until a delivery returns, and leaves with its release while another holder of the watch stays", () => {
+      const file = path.join(dir, "watched");
+      fs.writeFileSync(file, "1");
+      const targets = { dirs: [], polled: [file] };
+      const logged: string[] = [];
+      reg = new WatcherRegistry({
+        clock,
+        logger: (level, line) => logged.push(`${level} ${line}`),
+      });
+      let moved = 0;
+      reg.subscribe(() => moved++);
+      let broken = true;
+      const throwing = reg.acquire("k", targets, () => {
+        if (broken) throw new Error("holder bug");
+      });
+      const steady: Invalidation[] = [];
+      reg.acquire("k", targets, (inv) => steady.push(inv));
+      const written = (text: string): void => {
+        fs.writeFileSync(file, text);
+        swept();
+      };
+      const fault = {
+        about: `watch on ${file}`,
+        message: `watch on ${file}: delivery threw holder bug`,
+      };
+
+      written("22");
+      expect(steady).toHaveLength(1);
+      expect(reg.standing()).toEqual([fault]);
+      written("333");
+      expect(reg.standing()).toEqual([fault]);
+      expect(moved).toBe(1);
+      expect(logged.filter((l) => l.startsWith("error "))).toHaveLength(1);
+
+      broken = false;
+      written("4444");
+      expect(reg.standing()).toEqual([]);
+      expect(moved).toBe(2);
+      expect(logged).toContain(
+        `info watch delivery recovered about=${valueOf(fault.about)}`,
+      );
+
+      broken = true;
+      written("55555");
+      expect(reg.standing()).toEqual([fault]);
+      throwing.release();
+      expect(reg.standing()).toEqual([]);
+      expect(moved).toBe(4);
+      written("666666");
+      expect(steady).toHaveLength(5);
+    });
+
+    test("a window whose completion throws stands while a slot rides it", () => {
+      const file = path.join(dir, "batched");
+      fs.writeFileSync(file, "1");
+      const window = reg.batch("config discovery", () => {
+        throw new Error("window bug");
+      });
+      const handle = window.acquire(
+        "batched",
+        { dirs: [], polled: [file] },
+        () => {},
+      );
+      fs.writeFileSync(file, "22");
+      swept();
+      expect(reg.standing()).toEqual([
+        {
+          about: "config discovery",
+          message: "config discovery: delivery threw window bug",
+        },
+      ]);
+      handle.release();
+      expect(reg.standing()).toEqual([]);
     });
 
     // The daemon makes the file between two sweeps and a holder reads it and

@@ -8,6 +8,7 @@ import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
+import type { WatchDeliveryFault } from "../daemon/foundations/watch-targets";
 import type { LauncherFact } from "../proc/launcher";
 import type { HeldEvent } from "../utils/event-hold";
 
@@ -75,6 +76,7 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // same way: null while none has.
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
+  readonly watchDelivery: readonly WatchDeliveryFault[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;

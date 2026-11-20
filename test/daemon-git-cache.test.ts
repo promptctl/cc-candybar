@@ -91,8 +91,12 @@ class StubGitService extends GitService {
     return root === null ? ABSENT : ok(root);
   }
 
+  // Stands in for a bug inside a pass: the pass's own step throws.
+  public gitDirThrows = false;
+
   override resolveGitDir(workingDir: string): string {
     this.gitDirCalls.push(workingDir);
+    if (this.gitDirThrows) throw new Error("gitdir bug");
     if (workingDir in this.gitDirByDir) return this.gitDirByDir[workingDir]!;
     return `${workingDir}/.git`;
   }
@@ -1186,6 +1190,30 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
+  });
+
+  test("a pass that throws is the repo's failed read until a pass runs clean", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await gitOf(svc, holds, "/repo");
+
+    inner.gitDirThrows = true;
+    svc.changed("/repo");
+    await tick();
+    expect(svc.declare(holds, "/repo").current()).toEqual(
+      failed("git refresh threw: gitdir bug", "read"),
+    );
+    expect(failuresIn(logs)).toEqual(["git refresh threw: gitdir bug"]);
+    expect(
+      logs.filter((l) => l.startsWith("git refresh threw root=/repo detail=")),
+    ).toHaveLength(1);
+
+    inner.gitDirThrows = false;
+    svc.changed("/repo");
+    await tick();
+    expect(await gitOf(svc, holds, "/repo")).toEqual(
+      ok({ ...inner.stubInfo, pullRequest: inner.stubPr }),
+    );
   });
 });
 

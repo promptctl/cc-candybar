@@ -758,6 +758,29 @@ describe("a statusline request", () => {
     ]);
   });
 
+  test("draws a watch delivery that keeps throwing as an error, not a warning", async () => {
+    const drawn = async (
+      watchDelivery: DaemonFacts["watchDelivery"],
+    ): Promise<Map<string, string>> =>
+      new Map(
+        answered(
+          await request(
+            renderer(undefined, () => ({ ...daemonFactsOf(), watchDelivery })),
+          ),
+        ).record,
+      );
+    const clean = await drawn([]);
+    const faulted = await drawn([
+      {
+        about: "config discovery",
+        message: "config discovery: delivery threw window bug",
+      },
+    ]);
+    expect(faulted.get("err")).toBe("Y");
+    expect(faulted.get("warn")).toBe(clean.get("warn"));
+    expect(Number(faulted.get("diag"))).toBe(Number(clean.get("diag")) + 1);
+  });
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = answered(await request({ r, rig }));

@@ -615,6 +615,7 @@ test("a config named by a command reaches the renderer before the next queued ev
           checkout: { root: origin.cwd, git: false },
           notices: [],
           watch: null,
+          discovery: null,
         }),
       },
     },
@@ -644,6 +645,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
     checkout: { root: origin.cwd, git: false },
     notices: [],
     watch: null,
+    discovery: null,
   };
   const context = heardRequest("added", "/added");
   const added = context.requested;

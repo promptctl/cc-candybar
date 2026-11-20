@@ -77,6 +77,7 @@ export function soleLayer(file: string, home: string): WriteLayer {
       checkout: { root: path.dirname(file), git: false },
       notices: [],
       watch: null,
+      discovery: null,
     },
     home,
   };

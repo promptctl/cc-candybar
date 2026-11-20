@@ -282,13 +282,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
   });
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
+  // world state carries them: whether file events are heard, which watch
+  // deliveries keep throwing, and what the launcher stands behind, each read
+  // from its owner. Restated whenever one may have moved, and
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      watchDelivery: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+    },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] How the last renderer process ended, and the
@@ -300,6 +307,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        watchDelivery: watcherRegistry.standing(),
         launcher: launcher.standing(),
         rendererEnded,
         actFailed,
@@ -920,6 +928,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // the disk on the one period the daemon keeps time by: a folder replaced
   // beneath a renamed ancestor reports nothing to the handle bound to the old
   // one, and a directory the OS refused is heard again only by a retry.
+  watcherRegistry.subscribe(restateFaults);
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
       case "period":

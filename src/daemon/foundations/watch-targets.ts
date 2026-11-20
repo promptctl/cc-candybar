@@ -216,3 +216,10 @@ export function followWatch(
   held?.handle.release();
   return { watch, move: "rebound" };
 }
+
+// A watch delivery that keeps throwing, as every bar shows it: `about` names
+// the watch, so a viewer stays on it while its reason changes.
+export interface WatchDeliveryFault {
+  readonly about: string;
+  readonly message: string;
+}

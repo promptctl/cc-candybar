@@ -483,6 +483,19 @@ export function drawRender(
       "load",
       configAccess.kind === "unavailable" ? configAccess.error : null,
     ),
+    // [LAW:no-silent-failure] The config drawn is the last one discovery
+    // found, because its discovery threw since: an edit may not reach it.
+    sourced("discovery", "discovery", entry.snapshot.discovery),
+    // A watch delivery that keeps throwing may leave any bar unrefreshed.
+    ...document.daemon.watchDelivery.map(
+      ({ about, message }): MaybeError => ({
+        kind: "watch-delivery",
+        subject: about,
+        about: `watch-delivery\0${about}`,
+        text: message,
+        copy: message,
+      }),
+    ),
     ...state.dropped.map(
       (e): MaybeError => ({
         kind: "dropped",
@@ -790,7 +803,14 @@ export function drawRender(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and the file a dropped write names.
 interface DrawError extends SourcedText {
-  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "discovery"
+    | "watch-delivery"
+    | "dropped"
+    | "click";
   readonly subject?: string;
 }
 

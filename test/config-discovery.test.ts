@@ -25,6 +25,7 @@ import {
 } from "../src/daemon/config-discovery/discovery-files";
 import {
   ConfigDiscovery,
+  type ConfigDiscoveryDeps,
   type RendererConfigs,
 } from "../src/daemon/config-discovery/config-discovery";
 import {
@@ -598,7 +599,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("a failed rediscovery hands its holders the last config with why, while a sibling's change lands, until it rediscovers", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -623,24 +624,67 @@ test("one failed rediscovery leaves the writer and another holder the successful
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
   refuse = true;
-  expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
-  expect(delivered).toEqual([[name, originKey(a.origin)]]);
+  expect(writer.landed([a.file, b.file])).toEqual([a.origin, b.origin]);
+  expect(delivered).toEqual([
+    [name, originKey(a.origin)],
+    [name, originKey(b.origin)],
+  ]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
+  expect(second.snapshotOf(a.origin)?.discovery).toBeNull();
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  expect(second.snapshotOf(b.origin)?.discovery).toBe(
+    "config discovery threw: rediscovery failed",
+  );
   expect(logged).toEqual(
     expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
+      expect.stringMatching(
+        /^config discovery threw why=landed origin=.*failed-once.*rediscovery failed/,
+      ),
     ]),
   );
+
+  // The same throw again is the fault already handed: nothing moves.
+  service.again("events-resumed");
+  expect(delivered).toHaveLength(2);
 
   refuse = false;
   service.again("events-resumed");
   expect(delivered).toEqual([
     [name, originKey(a.origin)],
+    [name, originKey(b.origin)],
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+  expect(second.snapshotOf(b.origin)?.discovery).toBeNull();
+});
+
+test("a managed-storage recheck that throws still hands the change to the other holders", () => {
+  const a = named("recheck", '{ plugins: ["widget/plugin.json5"] }');
+  const plugin = project("recheck/widget");
+  fs.writeFileSync(path.join(plugin, "plugin.json5"), "{ name: 'widget' }");
+  let broken = false;
+  const delivered: string[] = [];
+  const service = physicalDiscovery(project("empty-data"), [], {
+    reloaded: () => {
+      if (broken) throw new Error("recheck bug");
+    },
+    moved: (renderer, origins) => {
+      for (const origin of origins)
+        delivered.push(`${renderer} ${originKey(origin)}`);
+    },
+  });
+  const other = rendererNameOf("other");
+  const writer = service.forRenderer(MAIN_RENDERER);
+  writer.follow([a.origin]);
+  service.forRenderer(other).follow([a.origin]);
+  const next = '{ plugins: ["widget/plugin.json5"], globals: { padding: 1 } }';
+  fs.writeFileSync(a.file, next);
+
+  broken = true;
+  expect(() => writer.landed([a.file])).toThrow("recheck bug");
+  expect(delivered).toEqual([`${other} ${originKey(a.origin)}`]);
+  expect(textOfLayer(service.forRenderer(other), a.origin, a.file)).toBe(next);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -829,12 +873,14 @@ function physicalDiscovery(
     state = path.join(root, "state"),
     clock = heldClock(new Date()),
     reloaded,
+    moved = () => {},
   }: {
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
     clock?: ReturnType<typeof heldClock>;
     reloaded?: (folders: ReadonlySet<string>) => void;
+    moved?: ConfigDiscoveryDeps["moved"];
   } = {},
 ) {
   const watchers = new WatcherRegistry({
@@ -847,7 +893,7 @@ function physicalDiscovery(
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
-    moved: () => {},
+    moved,
     reloaded,
   });
   cleanups.push(

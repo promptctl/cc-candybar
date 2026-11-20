@@ -22,6 +22,7 @@ import {
   type WatchSpec,
 } from "../foundations/watch-targets";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
+import { failureOf } from "../foundations/verb-error";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
 import { Period, backedOffMs, type Every } from "../../utils/period";
@@ -145,6 +146,14 @@ function prPeriodOf({ failures }: PrAnswer): number {
 // moved while nothing held the repo, keyed once something does; `unkeyed` a
 // pass that read no branch to key it by.
 type PrMove = "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
+
+// What a landed pass met, for its refresh event: a pass that threw moved its
+// watch by no step it can name.
+interface PassLanded {
+  readonly failures: ReadonlySet<string>;
+  readonly pr: PrMove;
+  readonly watch: WatchMove | "threw";
+}
 
 // What asked for a pass, beside the period: a watch fire, the repo's first
 // ask, a reader of a value a change went by, or a hold's return to a PR whose
@@ -560,8 +569,9 @@ export class GitDataProvider {
     state.refresh.run(PASS, () => this.refreshPass(state));
   }
 
-  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
+  // The loop's work. Nobody awaits it — a watch fire or a tick starts it. A
+  // pass stores its own throw as the repo's read; [LAW:no-silent-failure] one
+  // that escapes even that is logged here as the bug it is, never an
   // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
   // when the pass ENDS, after its every await, so a tick that shares a running
   // pass is always followed by the landing that schedules the next one.
@@ -632,23 +642,61 @@ export class GitDataProvider {
     return state;
   }
 
-  // One pass: read the repo and the remote beside the branch it read; store
-  // the outcome, log each failure once, and move the PR's key — all in one
-  // turn once the reads land, so no read sees a branch's value beside another
-  // branch's PR. Each pass that lands writes one refresh event.
+  // One pass, and the one refresh event it writes once it lands.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = this.clock.monotonic();
     const asked = [...state.asked];
     state.asked.clear();
+    const landed = await this.read(state).catch((thrown: unknown) =>
+      this.threw(state, thrown),
+    );
+    // Dropped or closed while the read was out: nothing of it is stored.
+    if (landed === null) return;
+    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
+    // reason it met on the one event; a read of the stored value never logs
+    // it again.
+    this.gitRefreshes.recorded(
+      `${state.root} asked=${asked.join(",") || "-"} pr=${landed.pr} watch=${landed.watch}`,
+      triggerOf(asked),
+      landed.failures.size === 0
+        ? ok(null)
+        : failed([...landed.failures].join("; "), "read"),
+      elapsedMs(this.clock, startedAt),
+    );
+  }
+
+  // [LAW:one-source-of-truth] A pass that throws is a defect of this owner,
+  // and its failure is the repo's read until a pass runs clean: the value
+  // every bar reading the repo draws, beside a PR key owed so a key the throw
+  // left half moved is set again by the next clean pass. Nothing else holds
+  // it, so nothing has to let it go.
+  private threw(state: RepoState, thrown: unknown): PassLanded {
+    const failure = failureOf(thrown);
+    this.logger(
+      "error",
+      `git refresh threw root=${logfmtValue(state.root)} detail=${logfmtValue(failure.detail)}`,
+    );
+    const reason = `git refresh threw: ${failure.message}`;
+    state.value.missed = false;
+    settle(state.value, failed(reason, "read"));
+    owe(state.pr);
+    this.held(state);
+    return { failures: new Set([reason]), pr: "owed", watch: "threw" };
+  }
+
+  // Read the repo and the remote beside the branch it read; store the
+  // outcome and move the PR's key — all in one turn once the reads land, so
+  // no read sees a branch's value beside another branch's PR. `null`: the
+  // state was dropped or closed while the read was out.
+  private async read(state: RepoState): Promise<PassLanded | null> {
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
     const [outcome, remote] = await Promise.all([
       this.inner.getGitInfo(state.root).catch(threw("git fetch")),
       this.remoteOf(state),
     ]);
-    // Dropped or closed while the read was out: nothing of it is stored.
-    if (this.repos.get(state.root) !== state) return;
+    if (this.repos.get(state.root) !== state) return null;
     const failures = new Set<string>();
     state.value.missed = false;
     settle(state.value, outcome);
@@ -665,15 +713,7 @@ export class GitDataProvider {
         ? unkeyedPr(state.pr, failures)
         : this.movePr(state, branch, remote);
     this.held(state);
-    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
-    // reason it met on the one event; a read of the stored value never logs
-    // it again.
-    this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
-      triggerOf(asked),
-      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
-      elapsedMs(this.clock, startedAt),
-    );
+    return { failures, pr: prMove, watch: followed.move };
   }
 
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
