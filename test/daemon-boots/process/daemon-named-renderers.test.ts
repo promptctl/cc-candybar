@@ -6,24 +6,43 @@ import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { decodeAnsi } from "@promptctl/rich-js";
-import { textOf } from "../../../src/render/frame";
+import JSON5 from "json5";
+import { textOf, type Frame } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
 import {
   click,
+  clickAnswer,
   findUrl,
   frameRequest,
   hookData,
   observePane,
   renderBody,
   renderRequest,
+  saidOf,
+  urlWriting,
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
-import { VERB_REPO_CONFIG, VERB_RUN, VERB_SET_STATE } from "../../../src/click/wire";
+import {
+  VERB_APPLY_LAYOUT_OP,
+  VERB_REDO,
+  VERB_REPO_CONFIG,
+  VERB_REWIND,
+  VERB_RUN,
+  VERB_SAVE,
+  VERB_SET_STATE,
+  VERB_UNDO,
+} from "../../../src/click/wire";
 import { linksOf } from "../../../src/click/read";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
+import { encodeLayoutOp } from "../../../src/config/layout-ops";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../../../src/config/loader/edit-mode";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
 import { readProbe, readsOf, type Read } from "../../helpers/daemon-read-probe";
@@ -452,6 +471,123 @@ test("two named renderer processes draw separately and share config, transcript 
     await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// [LAW:behavior-not-structure] The two private drafts and their shared durable
+// result are observable through the signed controls and bytes of the file.
+test("a conflicting save keeps the named renderer's draft undo and redo until cancel", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-named-edit", builtDaemon);
+  try {
+    const dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(daemon.stateDir, "edit-project-")),
+    );
+    const config = path.join(dir, "config.json5");
+    const alternate = path.join(dir, "worktree.mjs");
+    fs.copyFileSync(worktreeBuilt, alternate);
+    const original = JSON.stringify(
+      {
+        segments: {
+          source: { template: "{{ .model.display_name }}" },
+          left: { template: "Left live cell" },
+          right: { template: "Right live cell" },
+        },
+        root: { h: ["source", "left", "right"] },
+      },
+      null,
+      2,
+    );
+    fs.writeFileSync(config, original);
+    const bytes = () => fs.readFileSync(config, "utf8");
+    const draw = (session: string, named = false) =>
+      frameRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, ["cc-candybar", "--config", config]),
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: alternate, source: null },
+        }),
+      });
+    const main = () => draw("main-editor");
+    const worktree = () => draw("worktree-editor", true);
+    const link = (frame: Frame, verb: string, op?: string) =>
+      findUrl(linksOf(frame).map(({ url }) => url), (effects) =>
+        effects.some((e) => e.verb === verb && (op === undefined || e.args[3] === op)),
+      );
+    const control = (frame: Frame, verb: string, op?: string): string => {
+      const url = link(frame, verb, op);
+      if (url === undefined)
+        throw new Error(`no ${verb} ${op ?? ""} control in ${textOf(frame)}`);
+      return url;
+    };
+    const remove = (target: string) => encodeLayoutOp({ op: "remove", target });
+    const expectPreview = (frame: Frame, present: string, removed: string) => {
+      expect(link(frame, VERB_APPLY_LAYOUT_OP, remove(present))).toBeDefined();
+      expect(link(frame, VERB_APPLY_LAYOUT_OP, remove(removed))).toBeUndefined();
+    };
+    const hit = (url: string) => click(daemon.sockPath, url);
+    const enter = async (bar: () => Promise<Frame>) => {
+      await hit(urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+      await hit(urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    };
+
+    expect(textOf(await main())).toContain("Opus 4.7");
+    expect(textOf(await worktree())).toContain(WORKTREE_MODEL);
+    await enter(main);
+    await enter(worktree);
+    await hit(control(await main(), VERB_APPLY_LAYOUT_OP, remove("left")));
+    await hit(control(await worktree(), VERB_APPLY_LAYOUT_OP, remove("right")));
+
+    const firstDraft = await main();
+    const secondDraft = await worktree();
+    expectPreview(firstDraft, "right", "left");
+    expectPreview(secondDraft, "left", "right");
+    expect(bytes()).toBe(original);
+    const secondSave = control(secondDraft, VERB_SAVE);
+
+    await hit(control(firstDraft, VERB_SAVE));
+    const winner = bytes();
+    expect(JSON5.parse(winner)).toMatchObject({
+      root: { h: ["source", "right"] },
+    });
+    let refused = "";
+    // [LAW:no-ambient-temporal-coupling] A click that the daemon dropped
+    // before it ran can be sent again. A taken click's outcome is final.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const answer = await clickAnswer(daemon.sockPath, secondSave);
+      refused = saidOf(answer);
+      if (answer.kind !== "timed-out" || answer.outcome !== "abandoned") break;
+    }
+    expect(bytes()).toBe(winner);
+    expect(refused).toMatch(
+      /\broot\.h\b.*changed (while editing|since it was read)/,
+    );
+
+    const losingPreview = await worktree();
+    expectPreview(losingPreview, "left", "right");
+    expect(textOf(losingPreview)).toContain("✓ save");
+    await hit(control(losingPreview, VERB_UNDO));
+    const undone = await worktree();
+    expect(link(undone, VERB_APPLY_LAYOUT_OP, remove("left"))).toBeDefined();
+    expect(link(undone, VERB_APPLY_LAYOUT_OP, remove("right"))).toBeDefined();
+    expect(textOf(undone)).toContain("✓ done");
+    expect(bytes()).toBe(winner);
+    await hit(control(undone, VERB_REDO));
+    const redone = await worktree();
+    expectPreview(redone, "left", "right");
+    expect(bytes()).toBe(winner);
+
+    await hit(control(redone, VERB_REWIND));
+    const savedMain = textOf(await main());
+    const savedWorktree = textOf(await worktree());
+    expect(savedMain).toContain("Opus 4.7");
+    expect(savedWorktree).toContain(WORKTREE_MODEL);
+    for (const saved of [savedMain, savedWorktree]) {
+      expect(saved).toContain("Right live cell");
+      expect(saved).not.toContain("Left live cell");
+    }
+    expect(bytes()).toBe(winner);
+  } finally {
+    await daemon.cleanup();
   }
 });
 
