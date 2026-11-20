@@ -47427,13 +47427,6 @@ init_globals();
 // src/config/loader/validate-core.ts
 init_globals();
 
-// src/config/identifier.ts
-init_globals();
-var IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-function isIdentifier(value) {
-  return typeof value === "string" && IDENTIFIER.test(value);
-}
-
 // src/config/loader/diagnostics.ts
 init_globals();
 var import_json52 = __toESM(require_dist(), 1);
@@ -48357,17 +48350,18 @@ function optionalStringSpec() {
     parse: (ctx, path31, field, raw) => optionalStringField(ctx, path31, raw, field)
   };
 }
+var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function optionalEnvNamesSpec() {
   return {
     required: false,
     json: {
       type: "array",
-      items: { type: "string", pattern: IDENTIFIER.source }
+      items: { type: "string", pattern: ENV_NAME.source }
     },
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (!Array.isArray(v) || !v.every(isIdentifier)) {
+      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
@@ -49131,6 +49125,7 @@ init_globals();
 
 // src/config/root.ts
 init_globals();
+var ROW_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function positionalRowName(index) {
   return `#${index + 1}`;
 }
@@ -50335,22 +50330,8 @@ function renamedHint(name) {
 
 // src/config/loader/settings.ts
 init_globals();
-
-// src/config/loader/wire-shape.ts
-init_globals();
-function wireShape(forbidden, rule) {
-  const pattern2 = new RegExp(`^[^${forbidden}]+$`);
-  return { pattern: pattern2, json: { type: "string", pattern: pattern2.source }, rule };
-}
-var WIRE_VALUE = wireShape("/", "non-empty and slash-free");
-var LAYOUT_NAME = wireShape("/:", 'non-empty and free of "/" and ":"');
-var DISPLAYED_WIRE_VALUE = wireShape(
-  "/\n\r",
-  "non-empty, slash-free, and newline-free"
-);
-
-// src/config/loader/settings.ts
-var SETTING_NAME_JSON = { pattern: IDENTIFIER.source };
+var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
 var SETTING_VALUE_JSON = {
   anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
 };
@@ -50365,7 +50346,7 @@ var SETTING_DECL_JSON = {
         { const: "bool" },
         {
           type: "array",
-          items: DISPLAYED_WIRE_VALUE.json,
+          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
           minItems: 1,
           uniqueItems: true
         },
@@ -50414,13 +50395,13 @@ function parseDomain(ctx, path31, raw) {
       );
     }
     const unwritable2 = words2.filter(
-      (w) => !DISPLAYED_WIRE_VALUE.pattern.test(w)
+      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
     );
     if (unwritable2.length > 0) {
       return issue(
         ctx,
         path31,
-        `a list domain's words must be ${DISPLAYED_WIRE_VALUE.rule} \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
+        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
       );
     }
     return words2;
@@ -50520,7 +50501,7 @@ function settingsDeclSpec() {
       }
       const out = /* @__PURE__ */ Object.create(null);
       for (const [name, decl] of Object.entries(v)) {
-        if (!IDENTIFIER.test(name)) {
+        if (!SETTING_NAME.test(name)) {
           issue(
             ctx,
             `${at}.${name}`,
@@ -51139,7 +51120,7 @@ function rowsSpec() {
     required: true,
     json: {
       type: "object",
-      propertyNames: { pattern: IDENTIFIER.source },
+      propertyNames: { pattern: ROW_NAME_RE.source },
       additionalProperties: { $ref: LAYOUT_NODE_REF }
     },
     parse: (ctx, path31, field, raw) => {
@@ -51154,7 +51135,7 @@ function rowsSpec() {
       }
       const rows = {};
       for (const [name, node] of Object.entries(v)) {
-        if (!IDENTIFIER.test(name)) {
+        if (!ROW_NAME_RE.test(name)) {
           ctx.issues.push({
             path: `${path31}.${field}.${name}`,
             message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
@@ -51247,10 +51228,10 @@ function validateInsert(ctx, raw, file) {
 function groupNameSpec() {
   return {
     required: true,
-    json: { type: "string", pattern: IDENTIFIER.source },
+    json: { type: "string", pattern: ROW_NAME_RE.source },
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
-      if (typeof v !== "string" || !IDENTIFIER.test(v) || v === DISCLOSURE_CLOSED) {
+      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
@@ -51265,14 +51246,14 @@ function groupNameSpec() {
 function groupKeySpec() {
   return {
     required: false,
-    json: WIRE_VALUE.json,
+    json: { type: "string", minLength: 1 },
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (typeof v !== "string" || !WIRE_VALUE.pattern.test(v)) {
+      if (typeof v !== "string" || v === "" || v.includes("/")) {
         ctx.issues.push({
           path: `${path31}.${field}`,
-          message: `a group "key" must be a ${WIRE_VALUE.rule} SessionState key, got ${describeValue(v)}`,
+          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return void 0;
@@ -52949,10 +52930,10 @@ function goPrint(args, toString3) {
   let prevIsString = false;
   for (let i2 = 0; i2 < args.length; i2++) {
     const arg = args[i2];
-    const isString2 = typeof arg === "string";
-    if (i2 > 0 && !prevIsString && !isString2) out += " ";
+    const isString = typeof arg === "string";
+    if (i2 > 0 && !prevIsString && !isString) out += " ";
     out += stringifyForPrint(arg, toString3);
-    prevIsString = isString2;
+    prevIsString = isString;
   }
   return out;
 }
@@ -57558,12 +57539,11 @@ function settingsArtifacts(doorGlyph) {
       [BACK_STEP]: { back: true },
       [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
       [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save", layer: DEFAULT_WRITE_LAYER },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save", layer: DEFAULT_WRITE_LAYER },
+      [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
       [PRESET_DELETE]: {
         preset: "delete",
-        name: `{{ .${SETTINGS.preset.effectiveVar} }}`,
-        layer: DEFAULT_WRITE_LAYER
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
       }
     },
     segments: {
@@ -57666,10 +57646,7 @@ function declareSettingControls(artifacts) {
   for (const c of CONTROLS) {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
-    artifacts.actions[reset] = {
-      reset: c.configKey,
-      layer: DEFAULT_WRITE_LAYER
-    };
+    artifacts.actions[reset] = { reset: c.configKey };
     artifacts.variables[controlResettable(c.name)] = {
       kind: "input",
       path: `resettable.${c.name}`,
@@ -57799,8 +57776,7 @@ function removeTerm(ctx, id2) {
   const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
-    removeSegment: id2,
-    layer: DEFAULT_WRITE_LAYER
+    removeSegment: id2
   };
   const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
   return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
@@ -57990,8 +57966,7 @@ function insertTerm(ctx, anchor, relation) {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
     anchor,
-    relation,
-    layer: DEFAULT_WRITE_LAYER
+    relation
   };
   const member = menuMember(applyName);
   const pageKey2 = menuPageKey(stateKey);
@@ -58057,10 +58032,7 @@ function spliceContainer(node, ctx) {
 function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  artifacts.actions[actionName] = {
-    reset: rootKey,
-    layer: DEFAULT_WRITE_LAYER
-  };
+  artifacts.actions[actionName] = { reset: rootKey };
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
     when: CUSTOMIZED_BANNER_GATE
@@ -58156,10 +58128,7 @@ function synthesizeEditChrome(config) {
     type: "number",
     default: 0
   };
-  artifacts.actions[EDIT_DONE_SEG] = {
-    save: true,
-    layer: DEFAULT_WRITE_LAYER
-  };
+  artifacts.actions[EDIT_DONE_SEG] = { save: true };
   artifacts.segments[EDIT_DONE_SEG] = {
     template: `{{ if ${TO_KEEP} }}{{ if ${USER_LAYER_WRITABLE} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ end }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
     when: EDIT_MODE_GATE
@@ -58194,9 +58163,6 @@ function synthesizeEditChrome(config) {
   };
 }
 
-// src/config/loader/actions.ts
-init_globals();
-
 // src/config/action.ts
 init_globals();
 var ACTION_KEYS = [
@@ -58216,6 +58182,20 @@ var ACTION_KEYS = [
   "run",
   "do"
 ];
+var LAYER_CHOICES = {
+  persist: LAYER_ROLES,
+  reset: LAYER_ROLES,
+  preset: LAYER_ROLES,
+  themeDefault: LAYER_ROLES,
+  save: [...LAYER_ROLES, "ask"]
+};
+var defaultLayer = (choice) => choice ?? DEFAULT_WRITE_LAYER;
+function resolveActionLayer(action2) {
+  if ("save" in action2) return { ...action2, layer: defaultLayer(action2.layer) };
+  if ("persist" in action2 || "reset" in action2 || "preset" in action2 || "themeDefault" in action2)
+    return { ...action2, layer: defaultLayer(action2.layer) };
+  return action2;
+}
 function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
@@ -58252,6 +58232,7 @@ function actionBindsTemplateValue(a) {
 }
 
 // src/config/loader/actions.ts
+init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
@@ -58294,75 +58275,91 @@ function validateActionDecl(ctx, path31, raw, home) {
     );
     return null;
   }
-  const key = actionKeyOf(ctx, path31, raw);
-  return key === null ? null : ACTION_ARMS[key].parse(ctx, path31, raw, home);
-}
-function actionKeyOf(ctx, path31, raw) {
-  const [key, ...others] = ACTION_KEYS.filter((k) => k in raw);
-  if (key !== void 0 && others.length === 0) return key;
-  issue2(
-    ctx,
-    path31,
-    `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${others.length > 0 ? ` (found: ${[key, ...others].join(", ")})` : ""}`
-  );
-  return null;
+  const present = ACTION_KEYS.filter((k) => k in raw);
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path31,
+      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
+    );
+    return null;
+  }
+  const key = present[0];
+  const { layer, ...rest2 } = raw;
+  const layers = LAYER_CHOICES[key];
+  if (layer === void 0) return actionArms(home)[key](ctx, path31, rest2);
+  if (layers === void 0) {
+    issue2(
+      ctx,
+      `${path31}.layer`,
+      `a ${key} action writes no config, so it names no layer`
+    );
+    return null;
+  }
+  if (!layers.includes(layer)) {
+    issue2(
+      ctx,
+      `${path31}.layer`,
+      `layer must be one of ${layers.join(", ")}, got ${describeValue(layer)}`
+    );
+    return null;
+  }
+  const parsed2 = actionArms(home)[key](ctx, path31, rest2);
+  return parsed2 === null ? null : { ...parsed2, layer };
 }
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
   return import_node_path4.default.isAbsolute(filePath2) ? { dir: import_node_path4.default.dirname(filePath2) } : { text: filePath2 };
 }
-function closedArm(key, fieldMap, checks = []) {
-  return refine(
-    (ctx, path31, raw) => record(ctx, { noun: `${key} action key`, fields: fieldMap }, path31, raw),
-    ...checks
-  );
-}
-function recordSyntax(key, fieldMap) {
-  return { parse: closedArm(key, fieldMap), variants: [objectJson(fieldMap)] };
-}
-function layerSpec(choices) {
-  return {
-    required: false,
-    json: { enum: [...choices] },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return DEFAULT_WRITE_LAYER;
-      const chosen = choices.find((choice) => choice === v);
-      if (chosen === void 0)
+var actionArms = (home) => ({
+  set: (ctx, path31, raw) => valueSourceAction(ctx, path31, raw, "set", SET_ARMS),
+  persist: (ctx, path31, raw) => valueSourceAction(ctx, path31, raw, "persist", PERSIST_ARMS),
+  copy: templateArm("copy"),
+  open: templateArm("open"),
+  reset: resetArm,
+  undo: markerArm("undo"),
+  redo: markerArm("redo"),
+  back: markerArm("back"),
+  rewind: markerArm("rewind"),
+  save: markerArm("save"),
+  preset: presetArm,
+  themeDefault: themeDefaultArm,
+  slash: slashArm,
+  run: runArm(home),
+  do: doArm
+});
+function templateArm(key) {
+  return (ctx, path31, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
         issue2(
           ctx,
-          `${path31}.${field}`,
-          `layer must be one of ${choices.join(", ")}, got ${describeValue(v)}`
+          `${path31}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
         );
-      return chosen;
     }
+    const tmpl = requireString(ctx, path31, raw, key);
+    return tmpl === null ? null : { [key]: tmpl };
   };
 }
-var WRITES_LAYER = layerSpec(LAYER_ROLES);
-var SAVE_LAYER = layerSpec([...LAYER_ROLES, "ask"]);
-function wireSpec(shape, message) {
-  return {
-    required: true,
-    json: shape.json,
-    parse: (ctx, path31, field, raw) => {
-      const v = requireString(ctx, path31, raw, field);
-      if (v === null) return void 0;
-      if (shape.pattern.test(v)) return v;
-      issue2(ctx, `${path31}.${field}`, message(v));
-      return void 0;
-    }
-  };
-}
-function literalSpec2(value, message) {
-  return {
-    required: true,
-    json: { const: value },
-    parse: (ctx, path31, field, raw) => {
-      if (raw[field] === value) return value;
-      issue2(ctx, `${path31}.${field}`, message(raw[field]));
-      return void 0;
-    }
-  };
+function resetArm(ctx, path31, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "reset")
+      issue2(
+        ctx,
+        `${path31}.${k}`,
+        `Unknown key "${k}" on a reset action. Expected only: reset`
+      );
+  }
+  const key = slashFreeString(
+    ctx,
+    path31,
+    "reset",
+    raw,
+    `reset key must be non-empty (the config globals field to clear)`,
+    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return key === null ? null : { reset: key };
 }
 var MARKER_SUBJECT = {
   undo: "it steps the session's settings history",
@@ -58371,301 +58368,242 @@ var MARKER_SUBJECT = {
   rewind: "it steps the session's settings history back to where edit mode opened",
   save: "it saves the session's unsaved settings"
 };
-function markerSpec(key) {
-  return literalSpec2(
-    true,
-    (got) => `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(got)}`
-  );
+function markerArm(key) {
+  return (ctx, path31, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue2(
+          ctx,
+          `${path31}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
+        );
+    }
+    if (raw[key] !== true) {
+      issue2(
+        ctx,
+        `${path31}.${key}`,
+        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
+      );
+      return null;
+    }
+    return { [key]: true };
+  };
 }
-var RESET_FIELDS = {
-  reset: wireSpec(
-    WIRE_VALUE,
-    (v) => `reset key ${JSON.stringify(v)} must be ${WIRE_VALUE.rule} (the config globals field to clear)`
-  ),
-  layer: WRITES_LAYER
-};
-var presetVerb = (verb) => literalSpec2(
-  verb,
-  (got) => `preset must be "save" or "delete", got ${describeValue(got)}`
-);
-var PRESET_SAVE2 = {
-  preset: presetVerb("save"),
-  layer: WRITES_LAYER
-};
-var PRESET_DELETE2 = {
-  preset: presetVerb("delete"),
-  name: requireStringSpec(),
-  layer: WRITES_LAYER
-};
-var parsePresetSave = closedArm("preset", PRESET_SAVE2);
-var parsePresetDelete = closedArm("preset", PRESET_DELETE2);
-var THEME_DEFAULT_FIELDS2 = {
-  themeDefault: literalSpec2(
-    "save",
-    (got) => `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(got)}`
-  ),
-  layer: WRITES_LAYER
-};
-var SLASH_FIELDS = {
-  slash: {
-    required: true,
-    json: { type: "string", pattern: SLASH_LINE_PATTERN },
-    parse: (ctx, path31, field, raw) => {
-      const parsed2 = parseSlashLine(raw[field]);
-      if (parsed2.kind === "line") return parsed2.line;
-      issue2(ctx, `${path31}.${field}`, parsed2.reason);
-      return void 0;
-    }
+function presetArm(ctx, path31, raw) {
+  const verb = raw.preset;
+  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue2(
+        ctx,
+        `${path31}.${k}`,
+        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
+      );
   }
-};
-var RUN_FIELDS = {
-  run: {
-    required: true,
-    // The program comes first and is never empty; its arguments may be.
-    json: {
-      type: "array",
-      items: [{ type: "string", minLength: 1 }],
-      additionalItems: { type: "string" },
-      minItems: 1
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (Array.isArray(v) && v.every(isString)) {
-        const [program, ...args] = v;
-        if (program !== void 0 && program !== "") return [program, ...args];
-      }
-      issue2(
-        ctx,
-        `${path31}.${field}`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(v)}`
-      );
-      return void 0;
-    }
-  },
-  env: {
-    required: false,
-    json: {
-      type: "object",
-      propertyNames: { pattern: IDENTIFIER.source },
-      additionalProperties: { type: "string" }
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return {};
-      const table = {};
-      const entries = isPlainObject2(v) ? Object.entries(v) : null;
-      for (const [name, value] of entries ?? [])
-        if (IDENTIFIER.test(name) && typeof value === "string")
-          table[name] = value;
-      if (entries !== null && Object.keys(table).length === entries.length)
-        return table;
-      issue2(
-        ctx,
-        `${path31}.${field}`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(v)}`
-      );
-      return void 0;
-    }
-  },
-  refreshes: {
-    required: false,
-    json: { type: "array", items: { type: "string", minLength: 1 } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return [];
-      if (Array.isArray(v) && v.every(isString) && !v.includes("")) return v;
-      issue2(
-        ctx,
-        `${path31}.${field}`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue(v)}`
-      );
-      return void 0;
-    }
-  }
-};
-var parseRun = closedArm("run", RUN_FIELDS);
-function runParse(ctx, path31, raw, home) {
-  const parsed2 = parseRun(ctx, path31, raw);
-  if ("text" in home) {
+  if (verb !== "save" && verb !== "delete") {
     issue2(
       ctx,
-      `${path31}.run`,
-      `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
+      `${path31}.preset`,
+      `preset must be "save" or "delete", got ${describeValue(verb)}`
     );
     return null;
   }
-  return parsed2 === null ? null : { ...parsed2, cwd: home.dir };
+  if (verb === "save") return { preset: "save" };
+  const name = requireString(ctx, path31, raw, "name");
+  return name === null ? null : { preset: "delete", name };
 }
-var DO_FIELDS = {
-  do: {
-    required: true,
-    json: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      minItems: 2
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (Array.isArray(v) && v.every(isString) && !v.includes("")) {
-        const [head, second, ...rest2] = v;
-        if (head !== void 0 && second !== void 0)
-          return [head, second, ...rest2];
-      }
+function themeDefaultArm(ctx, path31, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "themeDefault")
       issue2(
         ctx,
-        `${path31}.${field}`,
-        `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(v)}`
+        `${path31}.${k}`,
+        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
       );
-      return void 0;
-    }
   }
-};
-function isString(v) {
-  return typeof v === "string";
-}
-var DESTINATION = {
-  set: { noun: "the SessionState key to write", wire: "set-state" },
-  persist: { noun: "the config globals field to write", wire: "set-config" }
-};
-function destinationKeySpec(discriminator) {
-  return wireSpec(
-    WIRE_VALUE,
-    (v) => `${discriminator} key ${JSON.stringify(v)} must be ${WIRE_VALUE.rule} (${DESTINATION[discriminator].noun})`
-  );
-}
-var SET_DESTINATION = {
-  set: destinationKeySpec("set")
-};
-var PERSIST_DESTINATION = { persist: destinationKeySpec("persist"), layer: WRITES_LAYER };
-function toValueSpec(discriminator) {
-  return wireSpec(
-    WIRE_VALUE,
-    (v) => `${discriminator} value ${JSON.stringify(v)} must be ${WIRE_VALUE.rule} \u2014 the ${DESTINATION[discriminator].wire} wire refuses an empty value and splits on "/"`
-  );
-}
-function fromSpec(discriminator, member) {
-  return {
-    required: true,
-    json: {
-      anyOf: [
-        { type: "string", minLength: 1 },
-        { type: "array", items: member.json, minItems: 1, uniqueItems: true }
-      ]
-    },
-    parse: (ctx, path31, field, raw) => {
-      const from = raw[field];
-      const at = `${path31}.${field}`;
-      if (typeof from === "string" && from !== "") return from;
-      if (Array.isArray(from) && from.length > 0 && from.every(isString)) {
-        const unwritable2 = from.filter((m) => !member.pattern.test(m));
-        if (unwritable2.length > 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be ${member.rule} \u2014 the ${DESTINATION[discriminator].wire} wire carries each \u2014 got ${JSON.stringify(unwritable2)}`
-          );
-          return void 0;
-        }
-        if (new Set(from).size === from.length) return from;
-        issue2(
-          ctx,
-          at,
-          `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
-        );
-        return void 0;
-      }
-      issue2(
-        ctx,
-        at,
-        `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of strings), got ${describeValue(from)}`
-      );
-      return void 0;
-    }
-  };
-}
-function cycleSpec(discriminator) {
-  return {
-    required: true,
-    json: {
-      type: "array",
-      items: WIRE_VALUE.json,
-      minItems: 2,
-      uniqueItems: true
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      const at = `${path31}.${field}`;
-      if (!Array.isArray(v) || !v.every(isString)) {
-        issue2(
-          ctx,
-          at,
-          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
-        );
-        return void 0;
-      }
-      if (v.length < 2) {
-        issue2(
-          ctx,
-          at,
-          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
-        );
-        return void 0;
-      }
-      const unwritable2 = v.filter((m) => !WIRE_VALUE.pattern.test(m));
-      if (unwritable2.length > 0) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be ${WIRE_VALUE.rule} \u2014 the ${DESTINATION[discriminator].wire} wire carries each \u2014 got ${JSON.stringify(unwritable2)}`
-        );
-        return void 0;
-      }
-      if (new Set(v).size !== v.length) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-var INT_MARKER = literalSpec2(
-  true,
-  (got) => `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(got)}`
-);
-function requireIntSpec() {
-  return {
-    required: true,
-    json: { type: "integer" },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "number" && Number.isInteger(v)) return v;
-      issue2(
-        ctx,
-        `${path31}.${field}`,
-        `${field} must be an integer, got ${describeValue(v)}`
-      );
-      return void 0;
-    }
-  };
-}
-var STILL4 = 0;
-var STEP = {
-  required: true,
-  json: { type: "integer", not: { const: STILL4 } },
-  parse: (ctx, path31, field, raw) => {
-    const v = requireIntSpec().parse(ctx, path31, field, raw);
-    if (v !== STILL4) return v;
+  if (raw.themeDefault !== "save") {
     issue2(
       ctx,
-      `${path31}.${field}`,
-      `${field} must be a non-zero integer (the per-click increment; negative steps down)`
+      `${path31}.themeDefault`,
+      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
     );
-    return void 0;
+    return null;
   }
+  return { themeDefault: "save" };
+}
+function slashArm(ctx, path31, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "slash")
+      issue2(
+        ctx,
+        `${path31}.${k}`,
+        `Unknown key "${k}" on a slash action. Expected only: slash`
+      );
+  }
+  const parsed2 = parseSlashLine(raw.slash);
+  if (parsed2.kind === "refused") {
+    issue2(ctx, `${path31}.slash`, parsed2.reason);
+    return null;
+  }
+  return { slash: parsed2.line };
+}
+var RUN_KEYS = ["run", "env", "refreshes"];
+function runArm(home) {
+  return (ctx, path31, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (!RUN_KEYS.includes(k))
+        issue2(
+          ctx,
+          `${path31}.${k}`,
+          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
+        );
+    }
+    const before = ctx.issues.length;
+    const run2 = raw.run;
+    if (!Array.isArray(run2) || run2.length === 0 || run2.some((item) => typeof item !== "string") || run2[0] === "") {
+      issue2(
+        ctx,
+        `${path31}.run`,
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run2)}`
+      );
+    }
+    const env2 = raw.env ?? {};
+    if (!isPlainObject2(env2) || Object.entries(env2).some(
+      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
+    )) {
+      issue2(
+        ctx,
+        `${path31}.env`,
+        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
+      );
+    }
+    const refreshes = raw.refreshes ?? [];
+    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
+      issue2(
+        ctx,
+        `${path31}.refreshes`,
+        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
+      );
+    }
+    if (!("dir" in home)) {
+      issue2(
+        ctx,
+        `${path31}.run`,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
+      );
+    }
+    if (ctx.issues.length > before || !("dir" in home)) return null;
+    return {
+      run: run2,
+      env: env2,
+      refreshes,
+      cwd: home.dir
+    };
+  };
+}
+var RUN_ARM_JSON = {
+  type: "object",
+  properties: {
+    run: { type: "array", items: { type: "string" }, minItems: 1 },
+    env: {
+      type: "object",
+      propertyNames: { pattern: ENV_NAME.source },
+      additionalProperties: { type: "string" }
+    },
+    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
+  },
+  required: ["run"],
+  additionalProperties: false
+};
+function doArm(ctx, path31, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "do")
+      issue2(
+        ctx,
+        `${path31}.${k}`,
+        `Unknown key "${k}" on a do action. Expected only: do`
+      );
+  }
+  const members = raw.do;
+  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
+    issue2(
+      ctx,
+      `${path31}.do`,
+      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
+    );
+    return null;
+  }
+  return { do: members };
+}
+function slashFreeString(ctx, path31, field, raw, emptyMessage, slashMessage) {
+  const v = requireString(ctx, path31, raw, field);
+  if (v === null) return null;
+  const at = `${path31}.${field}`;
+  if (v === "") {
+    issue2(ctx, at, emptyMessage);
+    return null;
+  }
+  if (v.includes("/")) {
+    issue2(ctx, at, slashMessage(v));
+    return null;
+  }
+  return v;
+}
+var DISCRIMINATOR_NOUN = {
+  set: "the SessionState key to write",
+  persist: "the config globals field to write"
+};
+function validateDiscriminatorKey(ctx, path31, raw, discriminator) {
+  const noun = DISCRIMINATOR_NOUN[discriminator];
+  const value = slashFreeString(
+    ctx,
+    path31,
+    discriminator,
+    raw,
+    `${discriminator} key must be non-empty (${noun})`,
+    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return value === null ? null : { [discriminator]: value };
+}
+function wireName(discriminator) {
+  return discriminator === "set" ? "set-state" : "set-config";
+}
+var TO_FIELDS_SET = {
+  to: setLiteralSpec("set")
+};
+var TO_FIELDS_PERSIST = {
+  to: setLiteralSpec("persist")
+};
+var FROM_FIELDS_SET = {
+  from: fromSpec("set")
+};
+var FROM_FIELDS_PERSIST = {
+  from: fromSpec("persist")
+};
+var BOUNDED_FIELDS = {
+  min: requireIntSpec(),
+  max: requireIntSpec(),
+  by: requireIntSpec()
+};
+var INT_FIELDS = { int: intMarkerSpec() };
+var CYCLE_FIELDS_SET = {
+  cycle: cycleSpec("set")
+};
+var CYCLE_FIELDS_PERSIST = {
+  cycle: cycleSpec("persist")
+};
+var REMOVE_SEGMENT_FIELDS = {
+  removeSegment: layoutNameSpec("removeSegment")
+};
+var INSERT_SEGMENT_FIELDS = {
+  insertSegment: layoutNameSpec("insertSegment"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
+};
+var INSERT_SEGMENT_FROM_FIELDS = {
+  insertSegmentFrom: fromSpec("persist"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
 };
 var minLessThanMax = {
   ok: (v) => v.min < v.max,
@@ -58674,203 +58612,331 @@ var minLessThanMax = {
     message: `min (${v.min}) must be less than max (${v.max})`
   })
 };
-function layoutNameSpec() {
-  return wireSpec(
-    LAYOUT_NAME,
-    (v) => `segment name ${JSON.stringify(v)} in a layout op must be ${LAYOUT_NAME.rule} (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
-  );
-}
-var RELATION = {
-  required: true,
-  json: { enum: ["before", "after"] },
-  parse: (ctx, path31, field, raw) => {
-    const v = raw[field];
-    if (v === "before" || v === "after") return v;
-    issue2(
-      ctx,
-      `${path31}.${field}`,
-      `relation must be "before" or "after", got ${describeValue(v)}`
-    );
-    return void 0;
-  }
+var byNonZero = {
+  ok: (v) => v.by !== 0,
+  issue: () => ({
+    field: "by",
+    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
+  })
 };
-function valueSourceArm(discriminator, destination, fieldMap, about, options = {}) {
-  const source = Object.keys(fieldMap).filter((k) => !(k in destination));
+function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
+  const fullKeys = Object.keys(fieldMap);
+  const detect = detectKeys ?? fullKeys;
+  const keys2 = [discriminator];
+  const inner = (ctx, path31, raw) => fields(ctx, fieldMap, path31, raw);
+  const source = objectJson(fieldMap);
   return {
-    detect: options.detect ?? source,
-    label: source.join("/"),
-    about,
-    json: objectJson(fieldMap),
-    parse: closedArm(discriminator, fieldMap, options.checks)
+    detect,
+    allowed: [...keys2, ...fullKeys],
+    label: fullKeys.join("/"),
+    json: {
+      type: "object",
+      properties: {
+        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
+        ...source.properties
+      },
+      required: [...keys2, ...source.required ?? []],
+      additionalProperties: false
+    },
+    parse: checks.length ? refine(inner, ...checks) : inner
   };
 }
-var ABOUT = {
-  to: "a literal value",
-  from: 'an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values',
-  bounded: "a bounded step",
-  int: "an unbounded integer cursor",
-  cycle: "an enumerated domain stepped in order"
-};
 var SET_ARMS = [
-  valueSourceArm(
-    "set",
-    SET_DESTINATION,
-    { ...SET_DESTINATION, to: toValueSpec("set") },
-    ABOUT.to
-  ),
-  valueSourceArm(
-    "set",
-    SET_DESTINATION,
-    { ...SET_DESTINATION, from: fromSpec("set", WIRE_VALUE) },
-    ABOUT.from
-  ),
-  valueSourceArm(
-    "set",
-    SET_DESTINATION,
-    {
-      ...SET_DESTINATION,
-      min: requireIntSpec(),
-      max: requireIntSpec(),
-      by: STEP
-    },
-    ABOUT.bounded,
-    { checks: [minLessThanMax] }
-  ),
-  valueSourceArm(
-    "set",
-    SET_DESTINATION,
-    { ...SET_DESTINATION, int: INT_MARKER },
-    ABOUT.int
-  ),
-  valueSourceArm(
-    "set",
-    SET_DESTINATION,
-    { ...SET_DESTINATION, cycle: cycleSpec("set") },
-    ABOUT.cycle
-  )
+  valueSourceArm("set", TO_FIELDS_SET),
+  valueSourceArm("set", FROM_FIELDS_SET),
+  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("set", INT_FIELDS),
+  valueSourceArm("set", CYCLE_FIELDS_SET)
 ];
 var PERSIST_ARMS = [
+  valueSourceArm("persist", TO_FIELDS_PERSIST),
+  valueSourceArm("persist", FROM_FIELDS_PERSIST),
+  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
+  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
+  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
+  // their own discriminating field — see valueSourceArm's own comment. They
+  // share "anchor"/"relation" (same position shape, different segment-name
+  // source), so dispatching on the full field set would make EITHER arm
+  // spuriously match an action declaring the other.
+  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
   valueSourceArm(
     "persist",
-    PERSIST_DESTINATION,
-    { ...PERSIST_DESTINATION, to: toValueSpec("persist") },
-    ABOUT.to
-  ),
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    { ...PERSIST_DESTINATION, from: fromSpec("persist", WIRE_VALUE) },
-    ABOUT.from
-  ),
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    {
-      ...PERSIST_DESTINATION,
-      min: requireIntSpec(),
-      max: requireIntSpec(),
-      by: STEP
-    },
-    ABOUT.bounded,
-    { checks: [minLessThanMax] }
-  ),
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    { ...PERSIST_DESTINATION, cycle: cycleSpec("persist") },
-    ABOUT.cycle
-  ),
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    { ...PERSIST_DESTINATION, removeSegment: layoutNameSpec() },
-    "remove a named segment from the layout"
-  ),
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    {
-      ...PERSIST_DESTINATION,
-      insertSegment: layoutNameSpec(),
-      anchor: layoutNameSpec(),
-      relation: RELATION
-    },
-    "insert a named segment before/after an existing one",
-    { detect: ["insertSegment"] }
-  ),
-  // `insertSegmentFrom` is insertSegment with the segment picked from an
-  // option domain, so an inline domain's members are segment names.
-  valueSourceArm(
-    "persist",
-    PERSIST_DESTINATION,
-    {
-      ...PERSIST_DESTINATION,
-      insertSegmentFrom: fromSpec("persist", LAYOUT_NAME),
-      anchor: layoutNameSpec(),
-      relation: RELATION
-    },
-    "insert a segment PICKED from an option domain before/after an existing one",
-    { detect: ["insertSegmentFrom"] }
+    INSERT_SEGMENT_FROM_FIELDS,
+    [],
+    ["insertSegmentFrom"]
   )
 ];
-function valueSyntax(discriminator, destination, arms) {
-  return {
-    variants: arms.map((arm2) => arm2.json),
-    parse: (ctx, path31, raw) => {
-      const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
-      const [arm2, ...others] = present;
-      if (arm2 !== void 0 && others.length === 0)
-        return arm2.parse(ctx, path31, raw);
-      fields(ctx, destination, path31, raw);
+function valueSourceClauses(discriminator) {
+  const clauses = [
+    `"to" (a literal value)`,
+    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
+    `"min"/"max"/"by" (a bounded step)`
+  ];
+  if (discriminator === "set")
+    clauses.push(`"int" (an unbounded integer cursor)`);
+  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
+  if (discriminator === "persist") {
+    clauses.push(
+      `"removeSegment" (remove a named segment from the layout)`,
+      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
+      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
+    );
+  }
+  return clauses;
+}
+function VALUE_SOURCE_MESSAGE(discriminator) {
+  const clauses = valueSourceClauses(discriminator);
+  const last2 = clauses[clauses.length - 1];
+  const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
+  return `a ${discriminator} action declares exactly one value source: ${list2}`;
+}
+function valueSourceAction(ctx, path31, raw, discriminator, arms) {
+  const keys2 = validateDiscriminatorKey(ctx, path31, raw, discriminator);
+  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path31,
+      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
+    );
+    return null;
+  }
+  const arm2 = present[0];
+  for (const k of Object.keys(raw)) {
+    if (!arm2.allowed.includes(k))
       issue2(
         ctx,
-        path31,
-        `a ${discriminator} action declares exactly one value source: ${sourceList(arms)}${others.length > 0 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
+        `${path31}.${k}`,
+        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
       );
-      return null;
+  }
+  const payload = arm2.parse(ctx, path31, raw);
+  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
+}
+function setLiteralSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => slashFreeString(
+      ctx,
+      path31,
+      field,
+      raw,
+      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
+      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
+    ) ?? void 0
+  };
+}
+function fromSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      anyOf: [
+        { type: "string", minLength: 1 },
+        {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+          minItems: 1,
+          uniqueItems: true
+        }
+      ]
+    },
+    parse: (ctx, path31, field, raw) => {
+      const from = raw[field];
+      const at = `${path31}.${field}`;
+      if (typeof from === "string") {
+        if (from === "") {
+          issue2(ctx, at, `${field} must be a non-empty domain name`);
+          return void 0;
+        }
+        return from;
+      }
+      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
+        const members = from;
+        if (members.length === 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
+          );
+          return void 0;
+        }
+        if (members.some((m) => m === "")) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+          );
+          return void 0;
+        }
+        const slashed = members.filter((m) => m.includes("/"));
+        if (slashed.length > 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+          );
+          return void 0;
+        }
+        if (new Set(members).size !== members.length) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
+          );
+          return void 0;
+        }
+        return members;
+      }
+      issue2(
+        ctx,
+        at,
+        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
+      );
+      return void 0;
     }
   };
 }
-function sourceList(arms) {
-  const names = arms.map(
-    (arm2) => `"${arm2.label.split("/").join('"/"')}" (${arm2.about})`
-  );
-  const last2 = names[names.length - 1];
-  return names.length < 2 ? last2 ?? "" : `${names.slice(0, -1).join(", ")}, or ${last2}`;
+function cycleSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      minItems: 2,
+      uniqueItems: true
+    },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      const at = `${path31}.${field}`;
+      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
+        issue2(
+          ctx,
+          at,
+          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
+        );
+        return void 0;
+      }
+      const members = v;
+      if (members.length < 2) {
+        issue2(
+          ctx,
+          at,
+          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
+        );
+        return void 0;
+      }
+      const empty2 = members.some((m) => m === "");
+      const slashed = members.filter((m) => m.includes("/"));
+      if (empty2) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+        );
+        return void 0;
+      }
+      if (slashed.length > 0) {
+        issue2(
+          ctx,
+          at,
+          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+        );
+        return void 0;
+      }
+      if (new Set(members).size !== members.length) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
+        );
+        return void 0;
+      }
+      return members;
+    }
+  };
 }
-var ACTION_ARMS = {
-  set: valueSyntax("set", SET_DESTINATION, SET_ARMS),
-  persist: valueSyntax("persist", PERSIST_DESTINATION, PERSIST_ARMS),
-  // copy and open each take one required template string.
-  copy: recordSyntax("copy", { copy: requireStringSpec() }),
-  open: recordSyntax("open", { open: requireStringSpec() }),
-  reset: recordSyntax("reset", RESET_FIELDS),
-  undo: recordSyntax("undo", { undo: markerSpec("undo") }),
-  redo: recordSyntax("redo", { redo: markerSpec("redo") }),
-  back: recordSyntax("back", { back: markerSpec("back") }),
-  rewind: recordSyntax("rewind", {
-    rewind: markerSpec("rewind")
-  }),
-  save: recordSyntax("save", {
-    save: markerSpec("save"),
-    layer: SAVE_LAYER
-  }),
-  preset: {
-    parse: (ctx, path31, raw) => (raw.preset === "delete" ? parsePresetDelete : parsePresetSave)(
-      ctx,
-      path31,
-      raw
-    ),
-    variants: [objectJson(PRESET_SAVE2), objectJson(PRESET_DELETE2)]
-  },
-  themeDefault: recordSyntax("themeDefault", THEME_DEFAULT_FIELDS2),
-  slash: recordSyntax("slash", SLASH_FIELDS),
-  run: {
-    parse: runParse,
-    variants: [objectJson(RUN_FIELDS)]
-  },
-  do: recordSyntax("do", DO_FIELDS)
-};
+function intMarkerSpec() {
+  return {
+    required: true,
+    json: { const: true },
+    parse: (ctx, path31, field, raw) => {
+      if (raw[field] !== true) {
+        issue2(
+          ctx,
+          `${path31}.${field}`,
+          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
+        );
+        return void 0;
+      }
+      return true;
+    }
+  };
+}
+function layoutNameSpec(field) {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, f, raw) => {
+      const v = requireString(ctx, path31, raw, f);
+      if (v === null) return void 0;
+      const at = `${path31}.${f}`;
+      if (v === "") {
+        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
+        return void 0;
+      }
+      if (v.includes("/") || v.includes(":")) {
+        issue2(
+          ctx,
+          at,
+          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function relationSpec() {
+  return {
+    required: true,
+    json: { enum: ["before", "after"] },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v !== "before" && v !== "after") {
+        issue2(
+          ctx,
+          `${path31}.${field}`,
+          `relation must be "before" or "after", got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function requireIntSpec() {
+  return {
+    required: true,
+    json: { type: "integer" },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "number" || !Number.isInteger(v)) {
+        issue2(
+          ctx,
+          `${path31}.${field}`,
+          `${field} must be an integer, got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
 
 // src/config/loader/styles.ts
 init_globals();
@@ -58897,10 +58963,10 @@ function validateStyles(ctx, raw) {
   }
   const out = {};
   for (const [name, value] of Object.entries(raw)) {
-    if (!WIRE_VALUE.pattern.test(name)) {
+    if (name === "" || name.includes("/")) {
       ctx.issues.push({
         path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be ${WIRE_VALUE.rule} \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
         line: findKeyLine(ctx.source, ["styles", name])
       });
       continue;
@@ -58946,10 +59012,10 @@ function validatePresets(ctx, raw) {
   }
   const out = {};
   for (const [name, value] of Object.entries(raw)) {
-    if (!DISPLAYED_WIRE_VALUE.pattern.test(name)) {
+    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
       ctx.issues.push({
         path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be ${DISPLAYED_WIRE_VALUE.rule} \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
         line: findKeyLine(ctx.source, ["presets", name])
       });
       continue;
@@ -62500,10 +62566,17 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     authored: (name) => authored.has(name)
   });
   refuseIfIssues();
+  const actions = Object.fromEntries(
+    Object.entries(withChrome.actions).map(([name, action2]) => [
+      name,
+      resolveActionLayer(action2)
+    ])
+  );
   return {
     config: {
       ...withChrome,
-      ...resolveVariableTypes(withChrome)
+      ...resolveVariableTypes(withChrome),
+      actions
     },
     dropped,
     placed: merged,
@@ -74084,7 +74157,7 @@ function inheritedDoc(value) {
   return parseDocument(json5Text(value));
 }
 function inheritedRowLayers(under2) {
-  if (!Object.keys(under2.root.rows).every((name) => IDENTIFIER.test(name))) {
+  if (!Object.keys(under2.root.rows).every((name) => ROW_NAME_RE.test(name))) {
     const authored = authoredLayout(rootNode(under2.root));
     return [
       {
@@ -91577,9 +91650,14 @@ var ConfigDiscovery = class {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
     this.watches = deps.watchers.batch(() => {
-      const held = [...this.followed].filter(([key]) => this.invalidated.has(key)).map(([, followed]) => followed);
+      const heard = [...this.invalidated].map((key) => {
+        const followed = this.followed.get(key);
+        if (followed === void 0)
+          throw new Error(`a watch heard an origin no longer followed: ${key}`);
+        return followed;
+      });
       this.invalidated.clear();
-      this.heard(held, "config-watch", "observed");
+      this.heard(heard, "config-watch", "observed");
     });
   }
   deps;
@@ -91658,7 +91736,12 @@ var ConfigDiscovery = class {
       const shared = this.batch();
       const observed2 = [];
       for (const [key, origin] of fresh) {
-        const found2 = this.discovered(origin, shared, null);
+        const found2 = this.observedAt(
+          origin,
+          discoveredAt(origin, shared),
+          shared,
+          null
+        );
         this.followed.set(key, {
           ...found2,
           renderers: /* @__PURE__ */ new Set([renderer]),
@@ -91677,14 +91760,18 @@ var ConfigDiscovery = class {
       selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
-      this.invalidated.delete(key);
       watch2.handle.release();
       released++;
     }
     if (fresh.length + released === 0) return;
     this.deps.log(
       "info",
-      `config discovery why=follow followed=${this.followed.size} added=${fresh.length} released=${released}`
+      eventLine("config discovery", [
+        ["why", "follow"],
+        ["followed", String(this.followed.size)],
+        ["discovered", String(fresh.length)],
+        ["released", String(released)]
+      ])
     );
   }
   // [LAW:single-enforcer] The renderer can keep its earlier selection or
@@ -91755,11 +91842,11 @@ var ConfigDiscovery = class {
     this.followed.clear();
     this.texts.clear();
   }
-  // A watch heard these held origins may have changed: those whose snapshot
-  // moved go to the renderer.
-  heard(held, why, recover) {
+  // A watch heard that `heard` may have changed: those whose snapshot moved
+  // go to the renderer.
+  heard(heard, why, recover) {
     if (this.closed) return;
-    this.publish(this.rediscovered(held, why, recover), null);
+    this.publish(this.rediscovered(heard, why, recover), null);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -91778,52 +91865,42 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(held, why, recover) {
+  rediscovered(heard, why, recover) {
+    if (heard.length === 0) return [];
     const shared = this.batch();
-    const outcomes = held.map((was) => ({
-      was,
-      ...this.observedAgain(was, shared)
-    }));
-    for (const { was, now: now2, failure: failure2 } of outcomes) {
+    const moved2 = [];
+    const observed2 = [];
+    let failed3 = 0;
+    for (const was of heard) {
+      const read2 = this.found(was.origin, shared);
+      if (read2.kind === "threw") {
+        failed3++;
+        this.failed(was.origin, why, read2.failure);
+        continue;
+      }
+      const found2 = this.observedAt(was.origin, read2.found, shared, was.watch);
+      const now2 = {
+        ...found2,
+        snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+        renderers: was.renderers,
+        selected: was.selected
+      };
       this.followed.set(originKey(was.origin), now2);
-      if (failure2 !== null)
-        this.deps.log(
-          "error",
-          `config discovery why=${why} origin=${JSON.stringify(originKey(was.origin))} failed: ${failure2.detail}`
-        );
+      observed2.push(now2);
+      if (now2.digest !== was.digest) moved2.push(now2);
     }
-    const moved2 = outcomes.filter(({ was, now: now2 }) => now2.digest !== was.digest).map(({ now: now2 }) => now2);
-    const observed2 = outcomes.filter(({ failure: failure2 }) => failure2 === null).map(({ now: now2 }) => now2);
-    const failed3 = outcomes.filter(({ failure: failure2 }) => failure2 !== null).map(({ was }) => originKey(was.origin));
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} observed=${observed2.length} moved=${moved2.length} failed=${JSON.stringify(failed3)}`
+      eventLine("config discovery", [
+        ["why", why],
+        ["followed", String(this.followed.size)],
+        ["observed", String(observed2.length)],
+        ["moved", String(moved2.length)],
+        ["failed", String(failed3)]
+      ])
     );
     this.reloaded(recover === "observed" ? observed2 : moved2);
     return moved2;
-  }
-  // [LAW:no-silent-failure] An origin that cannot be observed keeps its last
-  // snapshot for a retry, published with the failure as what its watch cannot
-  // hear, so every renderer holding it shows the fault until a later batch
-  // observes it. Its failure cannot suppress a sibling's observed change or
-  // reverse a successful write.
-  observedAgain(was, shared) {
-    const held = { renderers: was.renderers, selected: was.selected };
-    try {
-      const found2 = this.discovered(was.origin, shared, was.watch);
-      const snapshot = found2.digest === was.digest ? was.snapshot : found2.snapshot;
-      return { now: { ...found2, snapshot, ...held }, failure: null };
-    } catch (thrown2) {
-      const failure2 = failureOf(thrown2);
-      const snapshot = {
-        ...was.snapshot,
-        watch: `config discovery failed: ${failure2.message}`
-      };
-      return {
-        now: { ...was, snapshot, digest: digestOf(snapshot), ...held },
-        failure: failure2
-      };
-    }
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -91858,17 +91935,37 @@ var ConfigDiscovery = class {
       landingPath: directoryEntries(facts.files.realpath)
     };
   }
-  // What discovery finds at `origin` now, with its watch following the
-  // targets that finding names, and what that watch cannot hear in the
-  // snapshot.
-  discovered(origin, shared, held) {
-    const found2 = discover(
-      {
-        ...configQuery(origin.projectDir, origin.target),
-        cwd: origin.cwd
-      },
-      shared.facts
+  // [LAW:no-silent-failure] Discovery says what it cannot read in the
+  // snapshot, so a throw from it broke that contract. Only the read is
+  // caught: the origin keeps its last snapshot and the watch nothing has
+  // rebound yet, and its failure cannot suppress a sibling's change or
+  // reverse a successful write.
+  found(origin, shared) {
+    try {
+      return { kind: "found", found: discoveredAt(origin, shared) };
+    } catch (thrown2) {
+      return { kind: "threw", failure: failureOf(thrown2) };
+    }
+  }
+  failed(origin, why, failure2) {
+    const { projectDir, cwd: cwd2, target } = origin;
+    this.deps.log(
+      "error",
+      eventLine("config discovery failed", [
+        ["why", why],
+        ["projectDir", projectDir],
+        ["cwd", cwd2],
+        ["config", target.path ?? ""],
+        ["error", failure2.detail]
+      ])
     );
+    this.deps.unheard(
+      `config discovery failed for ${projectDir} (cwd ${cwd2}); the last config read stays in use: ${failure2.message}`
+    );
+  }
+  // The origin's watch following the targets `found` names, and what that
+  // watch cannot hear in the snapshot.
+  observedAt(origin, found2, shared, held) {
     const key = originKey(origin);
     const paths2 = watchTargetsFor(found2);
     const spec = {
@@ -91927,6 +92024,12 @@ var ConfigDiscovery = class {
       );
   }
 };
+function discoveredAt(origin, shared) {
+  return discover(
+    { ...configQuery(origin.projectDir, origin.target), cwd: origin.cwd },
+    shared.facts
+  );
+}
 function watchTargetsFor(found2) {
   const { snapshot, targets } = found2;
   const { roots } = targets;
@@ -92275,12 +92378,21 @@ function createDaemon(inputs) {
     log
   });
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
+  const unheard = (text4, fromEnvironment) => {
+    const prior = actFailed;
+    actFailed = environmentOutput(
+      joinedEvent(prior, text4, instant()),
+      fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
+    );
+    restateFaults();
+  };
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    unheard,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders)
   });
@@ -92404,14 +92516,7 @@ function createDaemon(inputs) {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text4, fromEnvironment) => {
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text4, instant()),
-            fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
-          );
-          restateFaults();
-        }
+        unheard
       }
     );
     return { reported, entry, stores, link, renderer };

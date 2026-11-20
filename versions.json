@@ -2,115 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-907",
-      "ref": "refs/pull/907/merge",
-      "sha": "1b442db162e7e1d79fde88b3571fe53bb13eaea4",
-      "timestamp": "2026-11-20T11:54:43.440Z",
+      "version": "pr-914",
+      "ref": "refs/pull/914/merge",
+      "sha": "c0f8228576326f812161cd424078bd4d2c53f809",
+      "timestamp": "2026-11-20T12:23:34.445Z",
       "commits": [
         {
-          "sha": "1b442db162e7e1d79fde88b3571fe53bb13eaea4",
+          "sha": "c0f8228576326f812161cd424078bd4d2c53f809",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T11:53:33Z",
-          "message": "Merge 03ccbdf02ceec9c313d5fa62a0ead72c029a47e0 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T05:22:24-07:00",
+          "message": "Merge a4a7007ddf138433b5861f0f6d82e4c5b3f6e4df into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "03ccbdf02ceec9c313d5fa62a0ead72c029a47e0",
+          "sha": "a4a7007ddf138433b5861f0f6d82e4c5b3f6e4df",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:53:21-07:00",
-          "message": "fix(config): declare each action's keys once and show a failed rediscovery on the bar\n\nAction arms are closed records typed by their ActionDecl member, so a writing\naction carries its layer from the border and the loader, schema and messages\nshare one key list. Wire-value shapes declare their pattern, schema and rule\nonce. A rediscovery that throws keeps the last config and publishes the\nfailure as its watch fault; the batch log names failed origins.\n"
-        },
-        {
-          "sha": "04e8295af35bcf1109d6e15acaa0726a9c9e6b83",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:18:57-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into grv-integration\n"
-        },
-        {
-          "sha": "8fdfd0ecfedff17a3d5c7ade65660a5b5e13ac48",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:15:21-07:00",
-          "message": "fix(config): publish the action shapes the loader enforces\n\nEach string a click delivers is one pattern that the parser tests and the\nschema publishes: a wire value is non-empty and slash-free, a layout name is\nalso free of \":\". A run's program is a non-empty first item, a bounded\nstep's `by` is a non-zero integer field, and omitting a run's env or\nrefreshes is the one way to declare none, so null is refused.\n"
-        },
-        {
-          "sha": "e28793feef89b1715ac5e4ce9bca8de9927eb0d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:11:16-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into grv-integration\n\n# Conflicts:\n#\tsrc/daemon/config-discovery/config-discovery.ts\n#\ttest/config-discovery.test.ts\n#\ttest/daemon-boots/worker/config-write-rollback.test.ts\n"
-        },
-        {
-          "sha": "b1333125c500cc56b2bce86e3ef425ac2dfed252",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:46:37-07:00",
-          "message": "wip(config): checkpoint action schema parity cases for handoff\n"
-        },
-        {
-          "sha": "e397e448023aaf6a5d6b7c010f2c9a441f6a93b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:40:50-07:00",
-          "message": "Merge shared rollback host into config discovery accounting\n"
-        },
-        {
-          "sha": "4488f95257aca36a622a6e5665acf1b455ef6d46",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:30:41-07:00",
-          "message": "Merge replay-enabled main into config rollback reconciliation\n"
-        },
-        {
-          "sha": "39532f7e50aed7462f6e699b54e37783e6a3a6b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:24:37-07:00",
-          "message": "fix(daemon): preserve file permissions on removal rollback\n"
-        },
-        {
-          "sha": "78fd44b4158962b6c789b3b74bc0d1868dc85ea1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:25:07-07:00",
-          "message": "fix(daemon): reconcile config writes by directory entry\n"
-        },
-        {
-          "sha": "fe5f39ee9b10b8a0539648bc8714eb2fd5226810",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:12:07-07:00",
-          "message": "Merge current main into config rollback reconciliation\n"
-        },
-        {
-          "sha": "adcf2a15ab32c3ca8cbdafa0306400a81f7f749d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:20:09-07:00",
-          "message": "fix(config): report actual rediscovery outcomes\n"
-        },
-        {
-          "sha": "1543d0e645df8e23cec9b72430d3cf58d2782116",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:24:45-07:00",
-          "message": "refactor(config): derive action layers from one grammar\n"
-        },
-        {
-          "sha": "7d0cd43eccda508e15b5b9f9ca05fb956c5b0708",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:49:26-07:00",
-          "message": "test(config): assert the reported outcome of a refused save\n"
-        },
-        {
-          "sha": "f9c1c445b2e6d75190a13ca6035a569286ff25b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:46-07:00",
-          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+          "timestamp": "2026-11-20T05:18:01-07:00",
+          "message": "fix(discovery): show a failed config rediscovery on every bar\n\nDiscovery reports unreadable files inside the snapshot, so a throw from a\nrediscovery is a broken contract. Only the read is caught: the origin keeps\nits snapshot and watch, the daemon's held warning names it on every bar,\nand siblings still refresh. Batch records are written with the logfmt\nwriter and count observed, moved and failed origins.\n"
         }
       ]
     },
