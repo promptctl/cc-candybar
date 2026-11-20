@@ -40,7 +40,7 @@ function worldProblem({ env, runs, daemon }: WorldState): string | null {
   if (Object.values(env).some((fact) => fact.kind === "ok"))
     return SESSION_ENVIRONMENT;
   return Object.values(runs).some(isEnvironmentOutput) ||
-    (daemon.actFailed !== null && isEnvironmentOutput(daemon.actFailed))
+    daemon.notices.some(isEnvironmentOutput)
     ? ENVIRONMENT_OUTPUT
     : null;
 }

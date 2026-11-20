@@ -24,7 +24,7 @@ import { inProcessRenderer } from "../../../src/in-process-renderer";
 import type { LinkOwner } from "../../../src/daemon/renderer-process";
 import { textOf } from "../../../src/render/frame";
 import { instantAt } from "../../../src/utils/instant";
-import type { HeldEvent } from "../../../src/utils/event-hold";
+import type { Notice } from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
@@ -154,12 +154,14 @@ describe("a connection to a daemon built in this worker", () => {
 
   function daemonWithWarning() {
     let owner: LinkOwner | undefined;
-    let observed: HeldEvent | null = null;
+    let observed: Notice | undefined;
     let standingReads = 0;
     const inProcess = inProcessRenderer((real) =>
       hearingEvents(real, ({ event }) => {
         if (event.kind === "context" && event.worldState.session === "observe")
-          observed = event.worldState.daemon.rendererEnded;
+          observed = event.worldState.daemon.notices.find(
+            (notice) => notice.about === "renderer ended",
+          );
       }),
     );
     const running = startDaemon(process.env, {
@@ -184,11 +186,7 @@ describe("a connection to a daemon built in this worker", () => {
     const link = owner;
     if (link === undefined)
       throw new Error("the daemon did not attach a renderer");
-    const warning = {
-      text: "the renderer stopped",
-      at: instantAt(running.daemon.clock),
-      answered: false,
-    };
+    let reports = 0;
     const reply = async (session = "warning-draw") => {
       const result = await running.daemon.reply(
         renderRequest(session, undefined),
@@ -208,11 +206,27 @@ describe("a connection to a daemon built in this worker", () => {
       running,
       reply,
       held,
-      report: () => link.ended(warning),
+      report: () =>
+        link.notify({
+          level: "warning",
+          about: "renderer ended",
+          text: `the renderer stopped ${++reports}`,
+          fromEnvironment: false,
+        }),
       replace: () => link.start(),
+      log: link.log,
       standingReads: () => standingReads,
     };
   }
+
+  test("an error the daemon logs is on every bar, and a warning it logs is the operator's", async () => {
+    const { reply, log } = daemonWithWarning();
+    log("warn", "a cache read was slow");
+    expect(drawn((await reply("first-bar")).resp)).not.toMatch(/⚠/);
+    log("error", "a background read threw");
+    for (const session of ["first-bar", "second-bar"])
+      expect(drawn((await reply(session)).resp)).toMatch(/⚠\s+1/);
+  });
 
   test("a confirmed ordinary reply answers its daemon event across replacement and only for that occurrence", async () => {
     const { running, reply, held, report, replace } = daemonWithWarning();

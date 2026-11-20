@@ -34,7 +34,7 @@ import type {
   Timed,
 } from "../../src/renderer-interface/interface";
 import type { WireFrame } from "../../src/render/frame";
-import type { HeldEvent } from "../../src/utils/event-hold";
+import type { Notification } from "../../src/daemon/notices";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
@@ -95,7 +95,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   const children: Child[] = [];
   const logs: string[] = [];
   const levels: string[] = [];
-  const ends: HeldEvent[] = [];
+  const ends: Notification[] = [];
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -132,7 +132,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
     clock,
     start,
-    ended: (event) => ends.push(event),
+    notify: (notice) => ends.push(notice),
     launcher,
     node: [
       "/bin/node",
@@ -479,7 +479,7 @@ test("the in-process link logs construction diagnostics once before its first an
     log: (level, line) => void logs.push({ level, line }),
     clock: heldClock(new Date(0)),
     start: async () => {},
-    ended: () => {},
+    notify: () => {},
   });
   link.serve();
   link.serve();

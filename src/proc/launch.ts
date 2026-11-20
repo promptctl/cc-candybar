@@ -45,8 +45,6 @@ import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
-import { answeredBy, type HeldEvent } from "../utils/event-hold";
-import { instantOf, type Instant } from "../utils/instant";
 import { withoutRepositoryScopedEnv } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
@@ -57,7 +55,6 @@ import type {
   AsyncLaunchOpts,
   LaunchResult,
   Refusal,
-  PipeEvent,
   LauncherFact,
   WarningChange,
   JobEnd,
@@ -193,10 +190,6 @@ export interface LaunchScope {
   // kill grace run on, and where they wait for a loop turn. A child lives in
   // real time, so a held daemon is handed the real one here.
   readonly clock: Timekeeper;
-  // The owner's own instant: when a pipe event happened, on the clock every
-  // render compares the event hold against. A held daemon's renders run on its
-  // clock, not the machine's, so the event is stamped on the same one.
-  readonly now: () => Instant;
 }
 
 // [LAW:one-source-of-truth] Everything one owner's launches read and leave
@@ -228,10 +221,6 @@ interface LaunchState {
   // lifeline runs, or before one is needed. Its observer hears each change, and
   // the daemon shows it as a standing warning.
   fault: string | null;
-  // [LAW:one-source-of-truth] The latest pipe event after a settle — a drain
-  // cut at the bound, or a held pipe that failed — and what it says, read by
-  // every render through the event hold. Null before the first.
-  pipeEvent: PipeEvent | null;
   // What has not ended: each launch in flight and each lifeline.
   readonly ending: Set<Promise<unknown>>;
   // [LAW:no-silent-failure] Launches the OS would not let this launcher end,
@@ -357,66 +346,23 @@ const pipeEventWords = (kind: PipeEventKind): string =>
 
 const PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
 
+// The observer hears each pipe event once; the daemon holds it for the bar.
 function pipeEvent(
   state: LaunchState,
   kind: PipeEventKind,
   category: LaunchCategory,
 ): void {
-  const last = state.pipeEvent;
-  const counts = new Map(last === null || last.answered ? [] : last.counts);
-  const key = `${kind}\0${category}`;
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-  const said = [...counts].map(([at, n]) => {
-    const [k, c] = at.split("\0") as [PipeEventKind, LaunchCategory];
-    return `${n}× ${c} ${pipeEventWords(k)}`;
-  });
-  state.pipeEvent = {
-    text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
-    at: state.scope.now(),
-    // [LAW:types-are-the-program] An old write must not answer a later event
-    // with the same count, category and instant.
-    revision: (last?.revision ?? 0) + 1,
-    answered: false,
-    counts,
-  };
-  // The observer hears this event alone, so the log says each once.
   state.scope.observeWarnings({
     kind: "launch-pipes",
     text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`,
   });
 }
 
-// [LAW:single-enforcer] The one write after a pipe event: an answer carrying
-// `event` reached its client. A newer event since is left unmarked.
-function answeredPipeEvent(state: LaunchState, event: HeldEvent): boolean {
-  const last = state.pipeEvent;
-  if (last === null || !answeredBy(last, event)) return false;
-  state.pipeEvent = { ...last, answered: true };
-  return true;
-}
-
-// What the launcher stands behind now: the lifeline's fault while it stands,
-// and the latest pipe event, without the counts its text was made from.
+// What the launcher stands behind now: the lifeline's fault while it stands.
 function standing(state: LaunchState): LauncherFact[] {
-  const event = state.pipeEvent;
-  return [
-    ...(state.fault === null
-      ? []
-      : [{ kind: "lifeline" as const, message: lifelineMessage(state.fault) }]),
-    ...(event === null
-      ? []
-      : [
-          {
-            kind: "launch-pipes" as const,
-            event: {
-              text: event.text,
-              at: event.at,
-              revision: event.revision,
-              answered: event.answered,
-            },
-          },
-        ]),
-  ];
+  return state.fault === null
+    ? []
+    : [{ kind: "lifeline", message: lifelineMessage(state.fault) }];
 }
 
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
@@ -1344,7 +1290,6 @@ function launcherWithState(
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),
     endJob: (pid, status, end) => endJob(spawner, clock, pid, status, end),
     standing: () => standing(state),
-    answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
       return { unreaped: [...state.unreaped.values()] };
@@ -1375,7 +1320,6 @@ function launcherWithState(
         if (message !== null) process.emitWarning(message);
       },
       signal: new AbortController().signal,
-      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock,
     },
@@ -1384,7 +1328,6 @@ function launcherWithState(
     liveGroups: new Set(),
     lifeline: null,
     fault: null,
-    pipeEvent: null,
     ending: new Set(),
     unreaped: new Map(),
     drains: new Set(),

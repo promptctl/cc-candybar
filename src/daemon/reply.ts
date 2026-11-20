@@ -166,7 +166,7 @@ function closingResponse(
       failure,
       elapsedMs(parts.clock, accepted.at),
     );
-    parts.log(event.level, event.line);
+    parts.requests(event.level, event.line);
   }
   return failedWith(failure.message);
 }
@@ -474,7 +474,7 @@ export async function replyTo(
       const took = elapsedMs(clock, t0);
       stats.recordTook(took);
       const { level, line } = requestEvent("render", facts, outcome, took);
-      parts.log(level, line);
+      parts.requests(level, line);
       return reply;
     };
     const failedDraw = (error: unknown) => {
@@ -699,7 +699,7 @@ async function clickEvent(
     outcome,
     elapsedMs(clock, t0),
   );
-  parts.log(level, line);
+  parts.requests(level, line);
   return clickReply(outcome);
 }
 

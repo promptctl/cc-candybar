@@ -283,10 +283,6 @@ function composed({ value, pr }: RepoState): Current<GitInfo> {
 
 const CLOSED = failed("git cache closed", "read");
 
-function threw(label: string): (e: unknown) => Outcome<never> {
-  return (e) => failed(`${label} threw: ${String(e)}`, "read");
-}
-
 export class GitDataProvider {
   private readonly repos = new Map<string, RepoState>();
   // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
@@ -561,8 +557,9 @@ export class GitDataProvider {
   }
 
   // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
+  // [LAW:no-silent-failure] a throw is logged here as the error it is, which
+  // every bar shows, never an unhandled rejection; the repo keeps the value
+  // and PR it had. [LAW:no-ambient-temporal-coupling] The period lands
   // when the pass ENDS, after its every await, so a tick that shares a running
   // pass is always followed by the landing that schedules the next one.
   private async refreshPass(state: RepoState): Promise<void> {
@@ -644,7 +641,7 @@ export class GitDataProvider {
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
     const [outcome, remote] = await Promise.all([
-      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
+      this.inner.getGitInfo(state.root),
       this.remoteOf(state),
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
@@ -679,7 +676,7 @@ export class GitDataProvider {
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
   // PR's failure; only `absent` (no remote configured) means "no forge PR".
   private remoteOf(state: RepoState): Promise<Outcome<string>> {
-    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
+    return this.inner.getRepoRemoteUrl(state.root);
   }
 
   // [LAW:one-source-of-truth] The PR's key is every input its value depends on
@@ -739,7 +736,15 @@ export class GitDataProvider {
               startedAt = this.clock.monotonic();
               return this.inner.resolvePullRequest(state.root, remote.value);
             })
-            .catch(threw("PR lookup"))
+            // [LAW:no-silent-failure] Every failure a lookup expects is an
+            // outcome, so a rejection is a defect: logged as the error it is,
+            // which every bar shows, and answered as failed so its readers
+            // and its period move on as for any failed lookup.
+            .catch((thrown: unknown) => {
+              const why = `PR lookup threw: ${String(thrown)}`;
+              this.logger("error", `${why} (${state.root})`);
+              return failed(why, "read");
+            })
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;

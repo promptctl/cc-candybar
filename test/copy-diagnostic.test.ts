@@ -37,8 +37,14 @@ const drawn = () => {
   const list = collectDiagnostics(
     SID,
     "request",
-    [{ about: "dropped\0/x.json5", text: "first line\nsecond", copy: PROMPT }],
-    [],
+    [
+      {
+        level: "error",
+        about: "dropped\0/x.json5",
+        text: "first line\nsecond",
+        copy: PROMPT,
+      },
+    ],
     [],
   );
   const copies = diagnosticCopies(list);

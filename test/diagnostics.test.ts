@@ -62,7 +62,16 @@ const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly string[],
-) => collectSourced(SID, "request", errors.map(sourced), notices, warnings.map(sourced));
+) =>
+  collectSourced(
+    SID,
+    "request",
+    [
+      ...errors.map((e) => ({ level: "error" as const, ...sourced(e) })),
+      ...warnings.map((w) => ({ level: "warning" as const, ...sourced(w) })),
+    ],
+    notices,
+  );
 const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
@@ -198,9 +207,15 @@ describe("the viewer", () => {
         collectSourced(
           SID,
           "request",
-          errors.map((e) => ({ ...e, copy: e.text })),
+          [
+            ...errors.map((e) => ({ level: "error" as const, ...e, copy: e.text })),
+            ...warnings.map((w) => ({
+              level: "warning" as const,
+              ...w,
+              copy: w.text,
+            })),
+          ],
           [],
-          warnings.map((w) => ({ ...w, copy: w.text })),
         ),
         0,
         0,
@@ -360,12 +375,12 @@ describe("the viewer", () => {
       "request",
       [
         {
+          level: "error",
           about: "dropped",
           text: 'root entry "x" is broken\nmore',
           copy: prompt,
         },
       ],
-      [],
       [],
     );
     expect(list[0]!.copy).toBe(prompt);

@@ -16,7 +16,9 @@ import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error"
 import { systemTimekeeper } from "../../../src/time";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
-import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";
+import { DAEMON_EVENT_HOLD_S, type Notice } from "../../../src/utils/event-hold";
+import { inProcessRenderer } from "../../../src/in-process-renderer";
+import { hearingEvents } from "../../helpers/renderers";
 import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
@@ -180,8 +182,19 @@ describe("a daemon in this worker", () => {
     // are simulated. The launcher owns the late read failure and its receipt.
     const pipe = Object.assign(new PassThrough(), { unref() {} });
     let now = Date.now();
+    // The pipe notice as the last world state a renderer was handed holds it.
+    let pipeNotice: Notice | undefined;
+    const hearing = inProcessRenderer((real) =>
+      hearingEvents(real, ({ event }) => {
+        if (event.kind === "context" || event.kind === "world-state")
+          pipeNotice = event.worldState.daemon.notices.find(
+            (notice) => notice.about === "launch pipes",
+          );
+      }),
+    );
     const running = startDaemon(env, {
       clock: { ...systemTimekeeper, now: () => now },
+      renderer: hearing,
       launcher: (owner) =>
         createLauncher(owner, systemTimekeeper, {
           ...spawner,
@@ -194,10 +207,7 @@ describe("a daemon in this worker", () => {
         }),
     });
     daemon = running;
-    const pipeEvent = () =>
-      running.daemon.launcher
-        .standing()
-        .find((fact) => fact.kind === "launch-pipes")?.event;
+    const pipeEvent = () => pipeNotice;
     const pending = async () => {
       const { resp, settled } = await running.daemon.reply(
         {
@@ -224,10 +234,12 @@ describe("a daemon in this worker", () => {
         "copy failure",
       );
       pipe.destroy(new Error("fixture cannot read the inherited pipe"));
-      await until(
-        () => pipeEvent() !== undefined,
-        "the actual launcher's pipe warning",
-      );
+      // A renderer hears the daemon's notices with a render's world; this
+      // one confirms nothing.
+      await until(async () => {
+        (await pending()).settled(false);
+        return pipeEvent() !== undefined;
+      }, "the actual launcher's pipe warning");
       expect(pipeEvent()).toMatchObject({
         answered: false,
         text: expect.stringContaining("output failed to read"),

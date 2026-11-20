@@ -46,9 +46,11 @@ const list = (
   collectDiagnostics(
     SID,
     "request",
-    errors.map(sourced),
+    [
+      ...errors.map((e) => ({ level: "error" as const, ...sourced(e) })),
+      ...warnings.map((w) => ({ level: "warning" as const, ...sourced(w) })),
+    ],
     notices,
-    warnings.map(sourced),
   );
 
 // The message the indicator's click opens.

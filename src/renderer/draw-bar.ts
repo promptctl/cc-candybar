@@ -1,12 +1,11 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
-import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
+import type { LauncherFact } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
-  type DisplayedEvent,
-  type HeldEvent,
+  type Notice,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
@@ -81,7 +80,7 @@ import {
   type DiagnosticGeometry,
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
-import { type Instant, type Readings } from "../utils/instant.js";
+import { type Readings } from "../utils/instant.js";
 import {
   drawEvent,
   noteFacts,
@@ -404,7 +403,7 @@ export function drawRender(
   clickShown: ClickErrorRecord | null;
   // The held events this draw showed (the launcher's pipe event, the last
   // renderer's end), which an answer carrying them marks answered.
-  eventsShown: readonly DisplayedEvent[] | undefined;
+  eventsShown: readonly Notice[] | undefined;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
   candidate: FrameCandidate;
@@ -504,26 +503,21 @@ export function drawRender(
   // says so, as discovery found it. A stall is no reason of this watch's: it
   // has the bar's own row.
   const configWatch = entry.snapshot.watch;
-  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
+  // [LAW:no-ambient-temporal-coupling] The daemon's notices at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const { daemon } = document;
-  const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
-  const launchEvents = launched.flatMap((warning) =>
-    "event" in warning ? [warning] : [],
-  );
-  const held = [
-    daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
-    daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
-  ].flatMap((w) => (w === undefined ? [] : [w]));
-  // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
-  // warning's display hold still runs after the host has confirmed it.
-  const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
-    event.answered ? [] : [{ kind, event }],
+  const notices = daemon.notices.flatMap((notice) => {
+    const hold = eventHoldAt(notice, DAEMON_EVENT_HOLD_S, at, drawing.by);
+    return hold === "over" ? [] : [{ notice, hold }];
+  });
+  // [LAW:one-source-of-truth] Acknowledgement comes from world state. A
+  // notice's display hold still runs after the host has confirmed it.
+  const eventsShown = notices.flatMap(({ notice }) =>
+    notice.answered ? [] : [notice],
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
-    ...launched,
-    ...held,
+    ...daemon.launcher,
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -552,13 +546,27 @@ export function drawRender(
   const diagnostics = collectDiagnostics(
     sessionId,
     drawing.by,
-    errors,
-    questions,
     [
-      // A standing warning is one per kind whose words change as it does (a
-      // pipe event's counts), so its kind alone is what it is about: a viewer
-      // open on it stays open. A render warning is about its words.
+      ...errors.map(({ about, text, copy }) => ({
+        level: "error" as const,
+        about,
+        text,
+        copy,
+      })),
+      // A notice is about what its producer named, so a later one joined to
+      // it changes its words under an open viewer without becoming another
+      // message.
+      ...notices.map(({ notice }) => ({
+        level: notice.level,
+        about: `notice\0${notice.about}`,
+        text: notice.text,
+        copy: notice.text,
+      })),
+      // A standing warning is one per kind whose words change as it does, so
+      // its kind alone is what it is about: a viewer open on it stays open.
+      // A render warning is about its words.
       ...standing.map((w) => ({
+        level: "warning" as const,
         about: w.kind,
         text: w.message,
         copy: w.message,
@@ -566,11 +574,13 @@ export function drawRender(
       ...presentations
         .warnings(sessionId, drawing.by, config)
         .map(({ key, warning }) => ({
+          level: "warning" as const,
           about: key,
           text: warning.message,
           copy: warning.message,
         })),
     ],
+    questions,
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -704,6 +714,9 @@ export function drawRender(
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
+    ...notices.map(({ notice }) =>
+      faultOf(notice.level, "notice", notice.text, notice.about),
+    ),
     ...standing.map((w) => faultOf("warning", w.kind, w.message)),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
@@ -740,8 +753,11 @@ export function drawRender(
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: launchEvents[0]?.hold ?? "-",
+    // Each notice this frame showed, by what it is about and why (held, or
+    // owed past its hold); `-` for none.
+    notices:
+      notices.map(({ notice, hold }) => `${notice.about}:${hold}`).join(",") ||
+      "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -805,6 +821,7 @@ type MaybeError = Omit<DrawError, "text" | "copy"> & {
 // with no list here to extend.
 type FaultKind =
   | DrawError["kind"]
+  | "notice"
   | StandingWarning["kind"]
   | RenderWarning["kind"];
 
@@ -834,33 +851,10 @@ interface FactsWarning {
   readonly message: string;
 }
 
-// [LAW:no-silent-failure] A renderer process that ended took its session
-// state that lives only in memory with it (open menus, armed confirms): the
-// bar the next one draws says so, by the same event hold as a pipe event. So
-// does an act that failed where no session's bar could hold it.
-interface DaemonEventWarning {
-  readonly kind: "renderer-ended" | "act-failed";
-  readonly message: string;
-  readonly event: HeldEvent;
-}
-
-function daemonEventAt(
-  kind: DaemonEventWarning["kind"],
-  event: HeldEvent | null,
-  at: Instant,
-  render: Drawing["by"],
-): DaemonEventWarning | undefined {
-  return event === null ||
-    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
-    ? undefined
-    : { kind, message: event.text, event };
-}
-
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
-  | LauncherWarning
-  | DaemonEventWarning
+  | LauncherFact
   | ConfigWatchWarning
   | LoadWarning
   | FactsWarning;
@@ -880,7 +874,7 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
-  readonly displayedEvents?: readonly DisplayedEvent[];
+  readonly displayedEvents?: readonly Notice[];
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }

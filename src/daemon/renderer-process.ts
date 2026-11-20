@@ -17,8 +17,7 @@ import { whyFailed } from "../proc/launcher.js";
 import { writeLogLines, type DaemonLogger } from "../utils/logger.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { eventLine, type Field } from "../utils/logfmt.js";
-import { instantAt } from "../utils/instant.js";
-import type { HeldEvent } from "../utils/event-hold.js";
+import type { Notification } from "./notices.js";
 import {
   isCommand,
   sessionOfEvent,
@@ -106,8 +105,8 @@ export function processPort(
 
 // What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
 // watches each session through the host's one path to the renderer,
-// resolving once its turn has answered; and who holds each end as an event,
-// which every session's world state carries for the bar's ⚠.
+// resolving once its turn has answered; and the daemon's notices, which tell
+// every bar each end.
 // [LAW:no-ambient-temporal-coupling] The start is the host's state as one
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
@@ -115,7 +114,8 @@ export interface LinkOwner {
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
-  readonly ended: (event: HeldEvent) => void;
+  // Where the link tells every bar that its renderer ended.
+  readonly notify: (notification: Notification) => void;
 }
 
 // What a process link is built from besides: the launcher whose lifetime is
@@ -561,18 +561,18 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     };
     // What waited for a start that never came fails as no renderer's.
     for (const send of queued) send(unavailable(phase));
-    const event: HeldEvent = {
-      text: `${why}; it restarts, and unsaved state (open menus, armed confirms) is lost`,
-      at: instantAt(clock),
-      answered: false,
-    };
     // [LAW:single-enforcer] The one line for an end, however many inputs
     // then find no renderer.
     log(
       "warn",
       `${why} after ${Math.round(lived / 1000)} s; next start in ${Math.round(delay / 1000)} s`,
     );
-    own.ended(event);
+    own.notify({
+      level: "warning",
+      about: "renderer ended",
+      text: `${why}; it restarts, and unsaved state (open menus, armed confirms) is lost`,
+      fromEnvironment: false,
+    });
   };
 
   // [LAW:single-enforcer] The one liveness check: a ping the renderer's loop

@@ -392,7 +392,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
 });
 
 test("a taker that throws fails no turn that answered: it is said on every bar, and the frames are still taken", async () => {
-  const unheard: string[] = [];
+  const errors: string[] = [];
   const frames: PushedFrame[] = [];
   const pushed: PushedFrame = {
     session: sessionIdOf("s"),
@@ -420,7 +420,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
         }),
       },
     ),
-    () => {},
+    (level, line) => void (level === "error" && errors.push(line)),
     {
       subscribed: () => {
         throw new Error("the collector broke");
@@ -430,7 +430,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
+    NO_ACTS,
   );
   const turn = await host.answer(() => ({
     kind: "event",
@@ -438,7 +438,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   }));
   expect(turn.kind).toBe("answered");
   expect(frames).toEqual([pushed]);
-  expect(unheard).toEqual([
+  expect(errors).toEqual([
     expect.stringMatching(
       /^renderer main's subscriptions could not be taken: .*the collector broke/,
     ),
@@ -496,6 +496,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   const heard: number[] = [];
   const performed: string[] = [];
   const unheard: string[] = [];
+  const errors: string[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
@@ -526,7 +527,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
         },
       },
     ),
-    () => {},
+    (level, line) => void (level === "error" && errors.push(line)),
     {
       subscribed: () => {},
       frames: () => {},
@@ -558,7 +559,8 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   ]);
   expect(performed).toEqual(["first", "second"]);
   expect(heard).toEqual([1, 2]);
-  expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
+  expect(unheard).toEqual([expect.stringContaining("copy failed")]);
+  expect(errors).toContainEqual(expect.stringContaining("record sink failed"));
 });
 
 test("a config named by a command reaches the renderer before the next queued event", async () => {

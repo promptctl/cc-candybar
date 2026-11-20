@@ -385,7 +385,7 @@ test("the supervisor names the unanswered input when its built worker is killed"
     node: [process.execPath],
     boot: () => COMPATIBLE_BOOT.boot,
     log: (_level, line) => void logged.push(line),
-    ended: (event) => ready.reject(new Error(event.text)),
+    notify: (notice) => ready.reject(new Error(notice.text)),
     start: async () => {
       const answer = await link.renderer.answer({
         kind: "event",

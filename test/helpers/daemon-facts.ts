@@ -14,8 +14,7 @@ export const daemonFactsOf = (
 ): DaemonFacts => ({
   fileEvents,
   launcher: [],
-  rendererEnded: null,
-  actFailed: null,
+  notices: [],
 });
 
 // The host's feeds of a daemon where nothing follows any session.

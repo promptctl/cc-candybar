@@ -429,7 +429,7 @@ test("a new session context retries its failed config with the same declaration,
   const origin = CONTEXT.requested;
   const declaration = { ...NO_SUBSCRIPTIONS, configs: [origin] };
   const delivered: Event["kind"][] = [];
-  const unheard: string[] = [];
+  const errors: string[] = [];
   const follow = jest.fn(() => {
     if (follow.mock.calls.length === 1)
       throw new Error("discovery unavailable");
@@ -444,7 +444,7 @@ test("a new session context retries its failed config with the same declaration,
       }),
       CLOCK.monotonic,
     ),
-    () => {},
+    (level, line) => void (level === "error" && errors.push(line)),
     {
       subscribed: () => {},
       frames: () => {},
@@ -454,7 +454,6 @@ test("a new session context retries its failed config with the same declaration,
     },
     {
       ...NO_ACTS,
-      unheard: (why) => void unheard.push(why),
       configs: {
         ...NO_ACTS.configs,
         follow,
@@ -483,7 +482,7 @@ test("a new session context retries its failed config with the same declaration,
   expect(await context()).not.toHaveProperty("configFailure");
   expect(follow.mock.calls).toEqual([[[origin]], [[origin]]]);
   expect(delivered).toEqual(["context", "due", "context", "config"]);
-  expect(unheard).toEqual([expect.stringContaining("discovery unavailable")]);
+  expect(errors).toEqual([expect.stringContaining("discovery unavailable")]);
 });
 
 test("a failed effect-done turn is said on a turn line naming the renderer and the session", async () => {

@@ -31,7 +31,7 @@ import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
 import type { LogLevel } from "../utils/logger";
-import { sameOccurrence, type DisplayedEvent } from "../utils/event-hold.js";
+import { sameNotice, type Notice } from "../utils/event-hold.js";
 import type {
   FeedFrame,
   LaneViewers,
@@ -53,7 +53,7 @@ export interface Subscriber {
 
 export interface FeedDeps<Req> {
   readonly publishFrame: PublishFrame;
-  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
+  readonly acknowledgeDisplayed: (events: readonly Notice[]) => void;
   // Which accepted request changed independently of a renderer's declaration.
   readonly requestChanged: (
     session: SessionId,
@@ -108,7 +108,7 @@ interface Watched {
 
 interface EncodedAnswer {
   readonly json: string;
-  readonly displayedEvents?: readonly DisplayedEvent[];
+  readonly displayedEvents?: readonly Notice[];
 }
 
 interface EncodedFeed {
@@ -129,10 +129,9 @@ function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
   return (
     offered.displayedEvents === undefined ||
     offered.displayedEvents.every(
-      ({ kind, event }) =>
-        prior.displayedEvents?.some(
-          (seen) => seen.kind === kind && sameOccurrence(seen.event, event),
-        ) ?? false,
+      (notice) =>
+        prior.displayedEvents?.some((seen) => sameNotice(seen, notice)) ??
+        false,
     )
   );
 }

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
+import { failureOf } from "../foundations/verb-error";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import type { Timekeeper } from "../../time";
 import {
@@ -720,13 +721,18 @@ export class WatcherRegistry {
     );
   }
 
+  // [LAW:no-silent-failure] Each recipient is its own boundary, so the others
+  // still hear the delivery. A throw is a defect of the daemon, so it is
+  // logged as an error, which every bar shows.
   private notify(key: string | null, take: () => void): void {
     try {
       take();
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
       const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      this.logger(
+        "error",
+        `watcher invalidate threw ${about}: ${failureOf(thrown).message}`,
+      );
     }
   }
 

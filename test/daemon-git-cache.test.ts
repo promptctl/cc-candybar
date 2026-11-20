@@ -75,12 +75,15 @@ class StubGitService extends GitService {
   // Holds every forge lookup open until resolved; a lookup answers with the PR
   // the forge held as it BEGAN.
   public prGate: { promise: Promise<void>; resolve: () => void } | null = null;
+  // A lookup that rejects, standing in for a bug in the forge dispatch.
+  public prRejects = false;
 
   override async resolvePullRequest(
     workingDir: string,
     remoteUrl: string,
   ): Promise<Outcome<PullRequest>> {
     this.prCalls.push({ workingDir, remoteUrl });
+    if (this.prRejects) throw new Error("forge bug");
     const pr = this.stubPr;
     if (this.prGate) await this.prGate.promise;
     return pr;
@@ -522,7 +525,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.infoGate = null;
     gate.resolve();
 
-    expect(await read).toMatchObject({ kind: "ok", value: { branch: "main" } });
+    // The reader is answered by a pass, whichever has landed by then.
+    expect((await read).kind).toBe("ok");
     await tick();
 
     // The stored value ends on a value read after the change, never on the one
@@ -1006,6 +1010,25 @@ describe("GitDataProvider PR source", () => {
     expect(inner.prCalls).toHaveLength(2);
     await jest.advanceTimersByTimeAsync(1);
     expect(inner.prCalls).toHaveLength(3);
+  });
+
+  test("a lookup that rejects is logged as the bug it is, and its period still lands", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.prRejects = true;
+
+    await gitOf(svc, holds, "/repo");
+    expect(inner.prCalls).toHaveLength(1);
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^PR lookup threw: .*forge bug \(\/repo\)/),
+    );
+    inner.prRejects = false;
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.failedMs);
+    expect(inner.prCalls).toHaveLength(2);
+    expect(await gitOf(svc, holds, "/repo")).toMatchObject({
+      value: { pullRequest: OPEN_PR },
+    });
   });
 
   // A forge that stays down is asked less often the longer it does, and the

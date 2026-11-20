@@ -61,10 +61,7 @@ import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
-import {
-  environmentOutput,
-  isEnvironmentOutput,
-} from "./environment-output.js";
+import { BAR_LEVELS, Notices, type Notification } from "./notices.js";
 import { RendererRecordings } from "./renderer-recording.js";
 import type { RecordingFile } from "./recording-file.js";
 import {
@@ -83,12 +80,7 @@ import {
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
-import {
-  answeredBy,
-  joinedEvent,
-  type DisplayedEvent,
-  type HeldEvent,
-} from "../utils/event-hold.js";
+import type { Notice } from "../utils/event-hold.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -255,11 +247,25 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // already in flight can finish through the journal barrier.
   const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
-  const log: DaemonLogger = (level, msg) =>
+  const notices = new Notices(instant);
+  // [LAW:single-enforcer] The log every part of the daemon is handed is also
+  // how its errors reach every bar: an error the daemon logs is one no bar
+  // would otherwise show, wherever it was caught.
+  const record: DaemonLogger = (level, msg) =>
     inputs.daemonLog.log(
       level,
       phase.kind === "closed" ? `after close: ${msg}` : msg,
     );
+  const log: DaemonLogger = (level, msg) => {
+    record(level, msg);
+    for (const noticeLevel of BAR_LEVELS[level])
+      notify({
+        level: noticeLevel,
+        about: "daemon",
+        text: msg,
+        fromEnvironment: false,
+      });
+  };
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
@@ -282,29 +288,32 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
   });
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
+  // world state carries them: whether file events are heard, what the
+  // launcher stands behind, and the notices held for every bar. Restated
+  // whenever any may have moved, and compared whole, so a restatement that
+  // moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], notices: [] },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
-        actFailed,
+        notices: notices.list(),
       }),
     );
+  }
+  // [LAW:single-enforcer] Every part of the daemon tells every bar through
+  // this one submission.
+  // [LAW:no-ambient-temporal-coupling] A part may notify before the launcher
+  // can be read. The initial restatement reads the notice once it exists.
+  function notify(notification: Notification): void {
+    if (notices.notify(notification) && phase.kind !== "building")
+      restateFaults();
   }
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
@@ -314,53 +323,35 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     inherited: host.env,
     stats: stats.launchStats,
     signal: cancelWork.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null
-            ? "launch lifeline running again"
-            : `launch lifeline ${change.fault}; the next launch starts another`,
-        );
-      // [LAW:no-ambient-temporal-coupling] A factory may report a warning
-      // before its launcher can be read. The initial restatement reads it
-      // once the launcher exists.
+      if (change.kind === "launch-pipes") {
+        log("warn", change.text);
+        notify({
+          level: "warning",
+          about: "launch pipes",
+          text: change.text,
+          fromEnvironment: false,
+        });
+        return;
+      }
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null
+          ? "launch lifeline running again"
+          : `launch lifeline ${change.fault}; the next launch starts another`,
+      );
       if (phase.kind !== "building") restateFaults();
     },
   });
-  // [LAW:single-enforcer] Both client writers acknowledge events at the
-  // owner of the daemon's latest occurrences, independent of their renderer.
-  const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
-    let changed = false;
-    for (const { kind, event } of shown) {
-      switch (kind) {
-        case "launch-pipes":
-          if (launcher.answeredPipeEvent(event)) changed = true;
-          break;
-        case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
-          break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
-            changed = true;
-          }
-          break;
-      }
-    }
+  // [LAW:single-enforcer] Both client writers acknowledge the notices they
+  // showed at the daemon's one channel, independent of their renderer.
+  const acknowledgeDisplayed = (shown: readonly Notice[]): void => {
     // [LAW:dataflow-not-control-flow] Writers can confirm independently;
-    // publish new facts only when the first confirmation changes an owner.
-    if (changed) restateFaults();
+    // publish new facts only when the first confirmation moves a notice.
+    if (notices.answered(shown)) restateFaults();
   };
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
@@ -702,15 +693,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         // renderer stays owed until it has received the aggregate announcement.
         if (renderers.size > 1) frameFeeds.announce();
       },
-      ended: (event) => {
-        // [LAW:types-are-the-program] A later exit can have the same text and
-        // instant as an earlier one, even as an old reply is still writing.
-        rendererEnded = {
-          ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1,
-        };
-        restateFaults();
-      },
+      notify,
     });
     const renderer = rendererHost(
       name,
@@ -752,16 +735,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard: (text, fromEnvironment) =>
+          notify({
+            level: "warning",
+            about: "act failed",
+            text,
+            fromEnvironment: fromEnvironment === true,
+          }),
       },
     );
     return { reported, entry, stores, link, renderer };
@@ -887,6 +867,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     home: host.home,
     launcher,
     log,
+    requests: record,
     clock,
     checkoutLocation: checkouts.location,
     bundle: bundle.path,

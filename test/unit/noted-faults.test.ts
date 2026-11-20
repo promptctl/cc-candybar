@@ -48,7 +48,7 @@ test.each([
   ["not JSON", "kep"],
   ["not an array", `{"level":"error"}`],
   ["an entry that is not an object", `["x"]`],
-  ["a level of neither", `[{"level":"info","kind":"k","message":"m"}]`],
+  ["no diagnostic level", `[{"level":"fatal","kind":"k","message":"m"}]`],
   ["no kind", `[{"level":"error","message":"m"}]`],
   ["no message", `[{"level":"error","kind":"k"}]`],
   [

@@ -350,7 +350,7 @@ test("rotating an in-process renderer disposes its previous view before serving 
     clock: heldClock(new Date(AT * 1000)),
     log: (level, line) => logged.push({ level, line }),
     start: async () => {},
-    ended: () => {},
+    notify: () => {},
   });
   const open = async (session: string) => {
     const context = contextOf(session);

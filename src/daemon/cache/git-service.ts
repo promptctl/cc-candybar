@@ -131,11 +131,11 @@ export class GitService {
   // cache + watcher on the *effective* git directory — the same directory the
   // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
   // alone is wrong when `projectDir` is set and is itself a git repo: the
-  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
+  // shell-runner picks `projectDir` (see `getGitInfo`'s gitDir resolution
   // below), but a workingDir-keyed cache would store that data under a
   // different key and wire invalidation to the wrong watcher. The contract:
   // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
-  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
+  // directory `getGitInfo` will use as `gitDir`. Both surfaces must agree.
   resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
@@ -199,25 +199,10 @@ export class GitService {
   // a per-process cache on top of an already-cached call would double the
   // invalidation surface — exactly the trap that kz8.3 collapses.
   //
-  // [LAW:no-silent-failure] Never rejects: helpers return outcomes by
-  // construction, and an unexpected throw (a bug) is surfaced as a `failed`
-  // outcome whose reason reaches the consuming boundary's log — not a blank
-  // bar, not a swallowed branch.
+  // [LAW:no-silent-failure] Every failure a read expects is an outcome, so a
+  // rejection is a defect, and it reaches the boundary of the work that
+  // started the read, which logs it as the error it is.
   async getGitInfo(
-    workingDir: string,
-    projectDir?: string,
-  ): Promise<Outcome<GitRead>> {
-    try {
-      return await this.computeGitInfo(workingDir, projectDir);
-    } catch (e) {
-      return failed(
-        `git: ${e instanceof Error ? e.message : String(e)}`,
-        "read",
-      );
-    }
-  }
-
-  private async computeGitInfo(
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<GitRead>> {
@@ -463,7 +448,7 @@ export class GitService {
   }
 
   // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
-  // `repoName` and `repoUrl` share a single call from `computeGitInfo`, so those
+  // `repoName` and `repoUrl` share a single call from `getGitInfo`, so those
   // two can never disagree about which remote is origin — that pair used to be
   // one `config --get remote.origin.url` each.
   //

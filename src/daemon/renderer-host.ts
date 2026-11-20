@@ -49,7 +49,7 @@ import {
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
-import type { DisplayedEvent } from "../utils/event-hold.js";
+import type { Notice } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
@@ -144,7 +144,7 @@ export interface HostWorld {
   readonly configs: RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
-  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
+  readonly acknowledgeDisplayed: (events: readonly Notice[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
 }
 
@@ -641,11 +641,12 @@ export function rendererHost(
     }
   };
 
-  const notTaken = (what: string, failure: Failure): void => {
-    const text = `renderer ${name}'s ${what} could not be taken: ${failure.detail}`;
-    log("error", text);
-    world.unheard(text);
-  };
+  // [LAW:no-silent-failure] Logged as the error it is, which every bar shows.
+  const notTaken = (what: string, failure: Failure): void =>
+    log(
+      "error",
+      `renderer ${name}'s ${what} could not be taken: ${failure.detail}`,
+    );
 
   const recordTaken = <Value>(
     what: string,
@@ -1075,11 +1076,12 @@ export function rendererHost(
   // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
   // is the daemon's, on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
-    void settling.catch((thrown: unknown) => {
-      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
-    });
+    void settling.catch((thrown: unknown) =>
+      log(
+        "error",
+        `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`,
+      ),
+    );
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(

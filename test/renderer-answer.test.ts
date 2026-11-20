@@ -80,7 +80,8 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import { joinedEvent } from "../src/utils/event-hold";
+import { joinedEvent, type Notice } from "../src/utils/event-hold";
+import { readFaults } from "../src/renderer-interface/noted-faults";
 import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { STORAGE_FOLDER } from "../src/config/loader/plugins";
@@ -720,43 +721,35 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("reports which launcher event the statusline drew alongside the frame", async () => {
-    const event = {
-      text: "a launched program's pipe outlived its launch",
-      ...READ,
-      answered: false,
-    };
-    const t = renderer(undefined, () => ({
-      ...daemonFactsOf(),
-      launcher: [
-        {
-          kind: "lifeline",
-          message: "programs launched now would outlive their launcher",
-        },
-        { kind: "launch-pipes", event },
-      ],
-    }));
-    const { effects, record } = answered(await request(t));
-    const facts = new Map(record);
-    expect(facts.get("warn")).toBe("lifeline,launch-pipes");
-    expect(facts.get("pipeEvent")).toBe("held");
-    expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "launch-pipes", event },
-    ]);
-  });
-
-  test("reports which daemon act failure the statusline drew alongside the frame", async () => {
-    const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
-    const t = renderer(undefined, () => ({
-      ...daemonFactsOf(),
-      actFailed: event,
-    }));
-    const { effects, record } = answered(await request(t));
-    expect(new Map(record).get("warn")).toBe("act-failed");
-    expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "act-failed", event },
-    ]);
-  });
+  test.each(["error", "warning"] as const)(
+    "draws a held %s notice at its level and reports it beside the frame",
+    async (level) => {
+      const notice: Notice = {
+        ...joinedEvent(null, "the daemon met something", READ.at),
+        level,
+        about: "daemon",
+      };
+      const t = renderer(undefined, () => ({
+        ...daemonFactsOf(),
+        notices: [notice],
+      }));
+      const { effects, record } = answered(await request(t));
+      expect(new Map(record).get("notices")).toBe("daemon:held");
+      const present = presentOf(effects);
+      expect(present.displayedEvents).toEqual([notice]);
+      await done(t.r, present, true);
+      const { faults } = t.rig.cache.presentations.diagnostics(
+        SESSION,
+        "request",
+      )!;
+      expect(readFaults(faults)).toContainEqual({
+        level,
+        kind: "notice",
+        subject: "daemon",
+        message: notice.text,
+      });
+    },
+  );
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
@@ -860,13 +853,15 @@ describe("a feed's frame", () => {
   test.each([false, true])(
     "a pane frame displays the daemon warning while its answered state is %s",
     async (shown) => {
-      const event = {
+      const event: Notice = {
         ...joinedEvent(null, "a daemon act failed", READ.at),
         answered: shown,
+        level: "warning",
+        about: "act failed",
       };
       const t = renderer(undefined, () => ({
         ...daemonFactsOf(),
-        actFailed: event,
+        notices: [event],
       }));
       await configure(t, checked("%1"));
       answered(
@@ -883,7 +878,7 @@ describe("a feed's frame", () => {
       );
       const frame = await dueFrame(t.r);
       expect(frame.displayedEvents).toEqual(
-        shown ? undefined : [{ kind: "act-failed", event }],
+        shown ? undefined : [event],
       );
       const confirmed = answered(
         await done(t.r, { session: SESSION, id: frame.receipt }, true),

@@ -69,15 +69,13 @@ export interface DiagnosticSeverity {
   readonly level: DiagnosticLevel;
   readonly glyph: string;
 }
-// A plain error or warning leads with its level's own glyph.
-export const ERROR_SEVERITY: DiagnosticSeverity = {
-  level: "error",
-  glyph: DIAGNOSTIC_LEVELS.error.glyph,
-};
-export const WARNING_SEVERITY: DiagnosticSeverity = {
-  level: "warning",
-  glyph: DIAGNOSTIC_LEVELS.warning.glyph,
-};
+// A plain message leads with its level's own glyph.
+const plainSeverity = (level: DiagnosticLevel): DiagnosticSeverity => ({
+  level,
+  glyph: DIAGNOSTIC_LEVELS[level].glyph,
+});
+export const ERROR_SEVERITY = plainSeverity("error");
+export const WARNING_SEVERITY = plainSeverity("warning");
 // A repository's config waiting on the user's answer before anything in it
 // runs: the state it reports is the safe one, so it is a question, not a
 // warning, and its glyph is a lock.
@@ -150,39 +148,33 @@ export interface SourcedText {
   readonly copy: string;
 }
 
+// [LAW:dataflow-not-control-flow] A plain message names its level as a value,
+// so no producer picks a colour by which list it hands its text to.
+export interface PlainText extends SourcedText {
+  readonly level: DiagnosticLevel;
+}
+
 // [LAW:parse-dont-validate] The one place a draw's diagnostics become a list,
-// worst level first, each level in the order its producers gave it. The
-// errors and warnings are plain texts, the notices and questions already
-// shaped (their lines carry per-word clicks): that split says who builds the
-// lines, not what level they are. A text with nothing visible in it — empty,
+// worst level first, each level in the order its producers gave it. Plain
+// texts are given with their level, the questions and handoffs already shaped
+// (their lines carry per-word clicks): that split says who builds the lines,
+// not what level they are. A text with nothing visible in it — empty,
 // whitespace, control characters — is no message, decided here.
 export function collectDiagnostics(
   sessionId: string,
   // The renderer drawing the list: a copy click names it, so the daemon
   // reads the list that surface shows.
   by: Drawing["by"],
-  errors: readonly SourcedText[],
-  notices: readonly DiagnosticMessage[],
-  warnings: readonly SourcedText[],
+  texts: readonly PlainText[],
+  shaped: readonly DiagnosticMessage[],
 ): DiagnosticList {
-  const plain = new Set<DiagnosticMessage>();
-  const plainOf = (
-    text: SourcedText,
-    severity: DiagnosticSeverity,
-  ): DiagnosticMessage[] => {
-    const made = plainMessage(text, severity);
-    for (const m of made) plain.add(m);
-    return made;
-  };
-  // [LAW:one-source-of-truth] Order derives from level, never from which
-  // argument a message came in through, so the indicator's click (the first
-  // message) opens a message of the level the indicator wears. The sort is
-  // stable, keeping producer order within a level.
-  const list = [
-    ...errors.flatMap((e) => plainOf(e, ERROR_SEVERITY)),
-    ...notices,
-    ...warnings.flatMap((w) => plainOf(w, WARNING_SEVERITY)),
-  ].sort((a, b) => rankOf(a) - rankOf(b));
+  const made = texts.flatMap(plainMessage);
+  const plain = new Set<DiagnosticMessage>(made);
+  // [LAW:one-source-of-truth] Order derives from level alone, so the
+  // indicator's click (the first message) opens a message of the level the
+  // indicator wears. The sort is stable, keeping producer order within a
+  // level.
+  const list = [...made, ...shaped].sort((a, b) => rankOf(a) - rankOf(b));
   // A message's key depends on the whole list (which occurrence it is), so
   // its first line's click is minted once the list stands.
   const seen = new Map<number, number>();
@@ -215,10 +207,13 @@ export function collectDiagnostics(
 // A plain message: every visible line one span with no click (its first
 // gains the copy click once the list stands). Blank lines are dropped; a
 // message with no visible line is none.
-function plainMessage(
-  { about, text: message, copy }: SourcedText,
-  severity: DiagnosticSeverity,
-): DiagnosticMessage[] {
+function plainMessage({
+  level,
+  about,
+  text: message,
+  copy,
+}: PlainText): DiagnosticMessage[] {
+  const severity = plainSeverity(level);
   const [first, ...rest] = message
     .split(/\r\n|\r|\n/)
     .map((line) => diagnosticSpan(line, null))

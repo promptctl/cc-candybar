@@ -3,13 +3,6 @@
 // (src/proc/launch.ts); the renderer's verbs launch through this port.
 
 import type { Timekeeper } from "../time";
-import type { Drawing } from "../config/lanes";
-import {
-  DAEMON_EVENT_HOLD_S,
-  eventHoldAt,
-  type HeldEvent,
-} from "../utils/event-hold";
-import type { Instant } from "../utils/instant";
 import type { Linked } from "../utils/atomic-write";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
@@ -230,48 +223,10 @@ export interface LifelineWarning {
   readonly message: string;
 }
 
-export interface PipeEvent extends HeldEvent {
-  // What its text counts: each kind and category since an answer last carried
-  // one, so a second event before anyone saw the first adds to it.
-  readonly counts: ReadonlyMap<string, number>;
-}
-
-// The latest pipe event as every render judges it: what it says, when, and
-// whether an answer carried it. Its counts are the launcher's own.
-export interface LaunchPipesFact {
-  readonly kind: "launch-pipes";
-  readonly event: HeldEvent;
-}
-
 // What the launcher stands behind now, whoever draws it: the lifeline's fault
-// while it stands, and the latest pipe event.
-export type LauncherFact = LifelineWarning | LaunchPipesFact;
-
-export interface LaunchPipesWarning {
-  readonly kind: "launch-pipes";
-  readonly message: string;
-  // The record the warning shows, which an answer carrying it marks answered.
-  readonly event: HeldEvent;
-  // Why this render shows it: inside the hold, or owed past it.
-  readonly hold: "held" | "owed";
-}
-
-export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
-
-// [LAW:single-enforcer] What the launcher's facts warn a render at `at` for
-// `render`: the lifeline's fault while it stands, and the latest pipe event
-// while the event hold shows it.
-export function launcherWarningsAt(
-  facts: readonly LauncherFact[],
-  at: Instant,
-  render: Drawing["by"],
-): LauncherWarning[] {
-  return facts.flatMap((fact): LauncherWarning[] => {
-    if (fact.kind === "lifeline") return [fact];
-    const hold = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render);
-    return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
-  });
-}
+// while it stands. A pipe event is an occurrence, not a standing fact: its
+// observer hears it once, and the daemon's notices hold it for the bar.
+export type LauncherFact = LifelineWarning;
 
 export type WarningChange =
   | { readonly kind: "lifeline"; readonly fault: string | null }
@@ -359,9 +314,6 @@ export interface Launcher {
   // gone. A signal is sent in every case, a refused verdict included: the
   // caller proved the group the job's (see `endJob`).
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
-  // What the launcher stands behind now (`launcherWarningsAt` judges it).
+  // What the launcher stands behind now.
   standing(): LauncherFact[];
-  // An answer carrying `event` reached its client. True when it answered
-  // the still-outstanding occurrence.
-  answeredPipeEvent(event: HeldEvent): boolean;
 }

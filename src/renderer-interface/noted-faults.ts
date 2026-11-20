@@ -4,15 +4,16 @@
 // [LAW:one-source-of-truth] The renderer writes the note and the host reads
 // it, so both spellings live here, in the zone both processes load.
 
-// One fault: its level, as the bar's ⚠ list shows it (an error red, a warning
-// amber); its kind, the identity its producer gives it; what it is about,
+import { DIAGNOSTIC_LEVELS, type DiagnosticLevel } from "../render/diagnostics";
+
+// One fault: its level, as the bar's list shows it; its kind, the identity its producer gives it; what it is about,
 // where it carries one (a slot, a variable, a placement, a file); and its
 // whole message.
 // [LAW:types-are-the-program] The kinds are the renderer's, which this zone
 // cannot import: the renderer narrows `Kind` to the union it derives from its
 // own warnings and errors, and a reader parses any kind it is handed.
 export interface Fault<Kind extends string = string> {
-  readonly level: "error" | "warning";
+  readonly level: DiagnosticLevel;
   readonly kind: Kind;
   readonly subject?: string;
   readonly message: string;
@@ -36,7 +37,7 @@ export const faultsNote = (
   last: string | undefined,
 ): string => (last === spelled ? KEPT_FAULTS : spelled);
 
-const LEVELS: ReadonlySet<unknown> = new Set(["error", "warning"]);
+const LEVELS: ReadonlySet<unknown> = new Set(Object.keys(DIAGNOSTIC_LEVELS));
 const FIELDS: ReadonlySet<string> = new Set([
   "level",
   "kind",
@@ -63,7 +64,7 @@ export function readFaults(
     const stray = Object.keys(fields).find((key) => !FIELDS.has(key));
     if (stray !== undefined) throw fault(`has a field no fault has, ${stray}`);
     const { level, kind, subject, message } = fields;
-    if (!LEVELS.has(level)) throw fault("has no level of error or warning");
+    if (!LEVELS.has(level)) throw fault("has no diagnostic level");
     if (typeof kind !== "string") throw fault("has no kind");
     if (typeof message !== "string") throw fault("has no message");
     if (subject !== undefined && typeof subject !== "string")

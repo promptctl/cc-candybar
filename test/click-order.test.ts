@@ -79,6 +79,7 @@ function setup(
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
+    requests: (_level: string, line: string) => events.push(line),
     ...host,
   } as unknown as DaemonParts;
   const stats = new RuntimeStats(clock);

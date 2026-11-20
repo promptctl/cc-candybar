@@ -37,6 +37,9 @@ export interface DaemonParts {
   readonly checkoutLocation: Locate;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;
+  // The record of each request, which its answer already carries to its
+  // requester, so it goes to the daemon's log alone and to no bar.
+  readonly requests: DaemonLogger;
   readonly bundle: string;
   readonly sourceDigest: string | null;
   readonly sessionBook: SessionBook;

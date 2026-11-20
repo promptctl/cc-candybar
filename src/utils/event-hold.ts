@@ -10,6 +10,7 @@
 
 import type { Instant } from "./instant.js";
 import type { Drawing } from "../config/lanes.js";
+import type { DiagnosticLevel } from "../render/diagnostics.js";
 
 // Seconds every render shows an event of the daemon's own (a pipe event, a
 // renderer's end): long enough to read on a bar that redraws only on events.
@@ -29,11 +30,14 @@ export interface HeldEvent {
   readonly answered: boolean;
 }
 
-// [LAW:types-are-the-program] A frame names the daemon's occurrence and its
-// owner. Session click errors never leave the renderer's delivery record.
-export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
-  readonly event: HeldEvent;
+// [LAW:one-type-per-behavior] Whatever the daemon tells every bar is one
+// notice: a held event at a level, about one thing. What it is about is its
+// identity, so a later notice about the same thing joins it, and a frame that
+// showed it names it by that. Session click errors never leave the renderer's
+// delivery record.
+export interface Notice extends HeldEvent {
+  readonly level: DiagnosticLevel;
+  readonly about: string;
 }
 
 // `held` inside the hold, `owed` past it to a request no answer has served,
@@ -102,4 +106,9 @@ export function answeredBy(last: HeldEvent, shown: HeldEvent): boolean {
 
 export function sameOccurrence(a: HeldEvent, b: HeldEvent): boolean {
   return a.at === b.at && a.text === b.text && a.revision === b.revision;
+}
+
+// [LAW:single-enforcer] One notice is the same occurrence about the same thing.
+export function sameNotice(a: Notice, b: Notice): boolean {
+  return a.about === b.about && sameOccurrence(a, b);
 }

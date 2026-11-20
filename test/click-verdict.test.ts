@@ -54,6 +54,7 @@ function host(
     frameFeeds: { latest: () => null },
     rendererForClick: () => undefined,
     log: (_level: string, line: string) => events.push(line),
+    requests: (_level: string, line: string) => events.push(line),
     ...clickParts(verbCtx, undefined, world),
   } as unknown as DaemonParts;
   const frame = async (url: string, urlV = URL_FRAME_VERSION) => {
