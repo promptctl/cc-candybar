@@ -477,14 +477,14 @@ test("two named renderer processes draw separately and share config, transcript 
 // [LAW:behavior-not-structure] The two private drafts and their shared durable
 // result are observable through the signed controls and bytes of the file.
 test("a conflicting save keeps the named renderer's draft undo and redo until cancel", async () => {
-  const daemon = await spawnIsolatedDaemon("ccb-named-edit");
+  const daemon = await spawnIsolatedDaemon("ccb-named-edit", builtDaemon);
   try {
     const dir = fs.realpathSync(
       fs.mkdtempSync(path.join(daemon.stateDir, "edit-project-")),
     );
     const config = path.join(dir, "config.json5");
     const alternate = path.join(dir, "worktree.mjs");
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     const original = JSON.stringify(
       {
         segments: {
