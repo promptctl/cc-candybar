@@ -44,6 +44,7 @@ import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
 import { performChanges } from "../src/daemon/effect-interpreter";
+import { writeConfigFile } from "../src/daemon/file-rewrites";
 import { diffChanges } from "../src/config/config-changes";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { ConfigChange, EffectId } from "../src/renderer-interface/interface";
@@ -1056,6 +1057,97 @@ const paddingEdit = (origin: RenderOrigin, text: string): ConfigChange => ({
   session: sessionIdOf("config-edit"),
   target: { kind: "layer", origin, role: "user" },
   changes: diffChanges(text, changePadding(text)),
+});
+
+test("an unrestored write reaches a directory alias but leaves a different hardlink entry alone", () => {
+  const initial = "{ globals: { padding: 1 } }";
+  const direct = named("direct-entry", initial);
+  const alias = path.join(root, "directory-alias");
+  fs.symlinkSync(path.dirname(direct.file), alias);
+  const file = path.join(alias, "config.json5");
+  const writerOrigin = originOf(alias, alias, file);
+  const hardlink = path.join(path.dirname(direct.file), "hardlink.json5");
+  fs.linkSync(direct.file, hardlink);
+  const hardlinkOrigin = originOf(alias, alias, hardlink);
+  const later = named("later-publication", initial);
+  const { service, discovery: writer, delivered, logged } = discoveryRig(
+    diskFiles,
+    heldClock(new Date()),
+  );
+  const name = rendererNameOf("worktree");
+  const observer = service.forRenderer(name);
+  writer.follow([writerOrigin, later.origin]);
+  observer.follow([direct.origin, hardlinkOrigin]);
+
+  const outcome = performChanges(
+    [paddingEdit(writerOrigin, initial), paddingEdit(later.origin, initial)],
+    null,
+    writer,
+    (at, text) => {
+      if (at === later.file) throw new Error("later publication refused");
+      if (text === initial) throw new Error("restore refused");
+      writeConfigFile(at, text);
+    },
+  );
+  if (outcome.kind !== "incomplete") throw new Error(JSON.stringify(outcome));
+  expect(writer.landed(outcome.files)).toEqual([writerOrigin]);
+  expect(delivered).toEqual([[name, originKey(direct.origin)]]);
+  expect(textOfLayer(writer, writerOrigin, file)).toBe(changePadding(initial));
+  expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
+  expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
+  expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
+  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+});
+
+test("a batch composes disjoint edits addressed through two names of one directory entry", () => {
+  const initial = '{ globals: { padding: 1, separator: " " } }';
+  const direct = named("one-entry", initial);
+  const alias = path.join(root, "alias-entry");
+  fs.symlinkSync(path.dirname(direct.file), alias);
+  const file = path.join(alias, "config.json5");
+  const throughAlias = originOf(alias, alias, file);
+  const clock = heldClock(new Date());
+  const { discovery } = discoveryRig(diskFiles, clock);
+  discovery.follow([throughAlias, direct.origin]);
+  const separator = initial.replace('" "', '" | "');
+  const published: string[] = [];
+  const result = performChanges(
+    [
+      paddingEdit(throughAlias, initial),
+      {
+        ...paddingEdit(direct.origin, initial),
+        changes: diffChanges(initial, separator),
+      },
+    ],
+    null,
+    discovery,
+    (target, text) => {
+      published.push(target);
+      writeConfigFile(target, text);
+    },
+  );
+  expect(fs.readFileSync(direct.file, "utf8")).toBe(changePadding(separator));
+  expect(result).toEqual({ kind: "ok", files: [file] });
+  expect(published).toEqual([file]);
+});
+
+test("a created config reaches an alias whose parent was missing when followed", () => {
+  const physical = project("physical-root");
+  const alias = path.join(root, "alias-root");
+  fs.symlinkSync(physical, alias);
+  const observed = path.join(alias, "future", "config.json5");
+  const created = path.join(physical, "future", "config.json5");
+  const origin = originOf(alias, alias, observed);
+  const { service, discovery, delivered } = discoveryRig(
+    diskFiles,
+    heldClock(new Date()),
+  );
+  discovery.follow([origin]);
+  const writer = service.forRenderer(rendererNameOf("writer"));
+  writeConfigFile(created, "{}");
+  expect(writer.landed([created])).toEqual([]);
+  expect(delivered).toEqual([[MAIN_RENDERER, originKey(origin)]]);
+  expect(textOfLayer(discovery, origin, observed)).toBe("{}");
 });
 
 test.each([
