@@ -1,5 +1,6 @@
-// [LAW:no-silent-failure] Where work the daemon calls reports that it threw:
-// the event, the fields that name what threw, and the thrown value.
+// [LAW:no-silent-failure] Where work the daemon calls, with no caller to
+// answer for it, reports that it threw: the event, the fields that name what
+// threw, and the thrown value.
 import { eventLine, type Field } from "../../utils/logfmt.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import { failureOf } from "./verb-error.js";

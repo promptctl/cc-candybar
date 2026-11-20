@@ -31,6 +31,7 @@ function providers() {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
+    threw: rethrown,
     sourceRuns: unscriptedRuns(),
   });
   return { built, watchers };

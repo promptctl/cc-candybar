@@ -20,7 +20,7 @@ import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
-import { rethrown } from "./helpers/work-threw";
+import { recordedInto, rethrown } from "./helpers/work-threw";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -164,6 +164,7 @@ function makeCache(
 ) {
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
+  const threw: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
     clock: systemTimekeeper,
@@ -178,9 +179,10 @@ function makeCache(
       }
       logs.push(message);
     },
+    threw: recordedInto(threw),
   });
   built.push(svc);
-  return { svc, inner, logs, holds: new Holds() };
+  return { svc, inner, logs, threw, holds: new Holds() };
 }
 
 // The git passes' refresh events, without the PR lookups' between them.
@@ -1169,9 +1171,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws is reported, and the repo keeps its period", async () => {
     jest.useFakeTimers();
-    const { svc, inner, logs, holds } = makeCache({
+    const { svc, inner, logs, threw, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
     });
@@ -1182,7 +1184,11 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
       "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+    ]);
+    expect(threw).toEqual([
+      expect.stringMatching(
+        /^git refresh threw repo=\/repo failed=.*logger bug/,
+      ),
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);

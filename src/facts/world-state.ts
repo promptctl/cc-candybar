@@ -80,6 +80,15 @@ export interface DaemonFacts {
   readonly daemonFailed: HeldEvent | null;
 }
 
+// [LAW:one-source-of-truth] A daemon with nothing to say of itself: what it
+// starts from.
+export const NO_DAEMON_FACTS: DaemonFacts = {
+  fileEvents: [],
+  launcher: [],
+  rendererEnded: null,
+  daemonFailed: null,
+};
+
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the
 // transcript's folds alone: the hook's instantaneous fields (cost, the
 // context window, durations, lines) are the renderer's, laid over them when

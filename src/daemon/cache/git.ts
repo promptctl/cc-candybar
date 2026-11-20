@@ -24,7 +24,7 @@ import {
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
-import { loggedThrew } from "../foundations/work-threw";
+import { loggedThrew, type WorkThrew } from "../foundations/work-threw";
 import { Period, backedOffMs, type Every } from "../../utils/period";
 import {
   answerPending,
@@ -311,6 +311,7 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
+  private readonly threw: WorkThrew;
   private readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
 
   constructor(opts: {
@@ -328,6 +329,9 @@ export class GitDataProvider {
     // unless CC_CANDYBAR_DEBUG is set).
     logger?: GitProviderLogger;
     ledger?: RefreshLedger;
+    // [LAW:no-silent-failure] Where a refresh pass that threw goes; outside
+    // the daemon, the logger.
+    threw?: WorkThrew;
   }) {
     this.inner = opts.inner;
     this.clock = opts.clock;
@@ -335,6 +339,7 @@ export class GitDataProvider {
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
+    this.threw = opts.threw ?? loggedThrew(this.logger);
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
       name: "git",
@@ -570,8 +575,8 @@ export class GitDataProvider {
   private async refreshPass(state: RepoState): Promise<void> {
     try {
       await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+    } catch (thrown) {
+      this.threw("git refresh threw", [["repo", state.root]], thrown);
     } finally {
       state.period.landed(this.periodMs);
     }

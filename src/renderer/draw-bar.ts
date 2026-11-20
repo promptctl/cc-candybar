@@ -837,7 +837,8 @@ interface FactsWarning {
 // [LAW:no-silent-failure] A renderer process that ended took its session
 // state that lives only in memory with it (open menus, armed confirms): the
 // bar the next one draws says so, by the same event hold as a pipe event. So
-// does an act that failed where no session's bar could hold it.
+// does work the daemon called that failed where no session's bar could hold
+// it: an act, a watch delivery, a config rediscovery.
 interface DaemonEventWarning {
   readonly kind: "renderer-ended" | "daemon-failed";
   readonly message: string;

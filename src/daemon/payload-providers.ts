@@ -32,6 +32,7 @@ import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 import type { SourceRuns } from "./source-runs.js";
 import type { TeardownStep } from "../utils/teardown.js";
+import type { WorkThrew } from "./foundations/work-threw.js";
 import { TranscriptLanes, type LaneOwners } from "./cache/transcript-lanes.js";
 
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
@@ -50,6 +51,8 @@ export function createPayloadProviders(opts: {
   readonly clock: Timekeeper;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
+  // [LAW:no-silent-failure] Where a refresh nothing awaits that threw goes.
+  readonly threw: WorkThrew;
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
   readonly sourceRuns: SourceRuns;
@@ -79,6 +82,7 @@ export function createPayloadProviders(opts: {
       clock,
       logger,
       ledger,
+      threw: opts.threw,
     }),
     tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
     transcriptLanes: new TranscriptLanes({

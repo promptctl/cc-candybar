@@ -225,6 +225,7 @@ function rig(): Rig {
       fileEvents,
       logger: log,
       ledger: new RefreshLedger(log),
+      threw: rethrown,
       sourceRuns: new SourceRuns({
         launcher: world.launcher,
         clock: systemTimekeeper,
@@ -842,7 +843,7 @@ function statusline(r: Rig, configFile: string) {
     ),
     () => {},
     unfollowedCollector(r.collector),
-    { ...NO_ACTS, configs: r.configs.discovery },
+    { ...NO_ACTS, configs: () => r.configs.discovery },
   );
   r.route(host);
   cleanups.push(host.closeWake);

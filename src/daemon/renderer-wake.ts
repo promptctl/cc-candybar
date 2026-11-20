@@ -17,6 +17,7 @@ import {
   recordMs,
 } from "./foundations/durations.js";
 import { failureOf, type Failure } from "./foundations/verb-error.js";
+import type { WorkThrew } from "./foundations/work-threw.js";
 
 // How long a `due` that failed holds every later wake off when its turn asks
 // for a tick no later than its own: a renderer whose due turn throws before
@@ -60,6 +61,8 @@ export interface WakeDeps {
   // [LAW:nothing-unseen] Where the wake's summary goes: a `due` turn that
   // learned nothing writes no line of its own.
   readonly log: (text: string) => void;
+  // [LAW:no-silent-failure] Where a `due` the wake could not record goes.
+  readonly threw: WorkThrew;
 }
 
 export class RendererWake {
@@ -137,9 +140,7 @@ export class RendererWake {
       // [LAW:no-silent-failure] A `due` that rejected failed: the wake
       // hears it as one that threw, so it is said and the wake arms again.
       void this.deliverDue(tick).catch((thrown: unknown) =>
-        this.deps.log(
-          `wake could not record its due: ${failureOf(thrown).detail}`,
-        ),
+        this.deps.threw("wake due unrecorded", [], thrown),
       );
     });
   }

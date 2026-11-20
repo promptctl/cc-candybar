@@ -12,6 +12,7 @@ import {
 import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
 import type { Failure } from "../../src/daemon/foundations/verb-error";
+import { recordedInto, rethrown } from "../helpers/work-threw";
 
 const answered: DueEnded = { kind: "answered", queuedMs: 0, turnMs: 2 };
 
@@ -35,6 +36,7 @@ function rig(
   const dues: number[] = [];
   const said: string[] = [];
   const logged: string[] = [];
+  const threw: string[] = [];
   const wake = new RendererWake({
     clock: {
       monotonic: () => clock.ms as Monotonic,
@@ -54,6 +56,7 @@ function rig(
       logged.push(text);
       onLog(text);
     },
+    threw: recordedInto(threw),
   });
   const live = () => timers.filter((t) => !t.cancelled);
   // Fires the live timer at the moment it was set for, or at `ms`.
@@ -65,7 +68,7 @@ function rig(
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { wake, clock, timers, live, dues, said, logged, fire };
+  return { wake, clock, timers, live, dues, said, logged, threw, fire };
 }
 
 const tick = (s: number) => s as Tick;
@@ -107,6 +110,7 @@ test("what is declared while a `due` is out is armed once it has answered", asyn
     due: () => new Promise<DueEnded>((resolve) => (answer = resolve)),
     said: () => {},
     log: () => {},
+    threw: rethrown,
   });
   wake.declare(tick(1));
   r.clock.ms = 1000;
@@ -222,5 +226,7 @@ test("a failing wake summary leaves the next due armed", async () => {
   r.wake.declare(tick(60));
   await r.fire();
   expect(r.live().map((timer) => timer.at)).toEqual([61_000]);
-  expect(r.logged).toContainEqual(expect.stringContaining("summary failed"));
+  expect(r.threw).toEqual([
+    expect.stringMatching(/^wake due unrecorded failed=.*summary failed/),
+  ]);
 });

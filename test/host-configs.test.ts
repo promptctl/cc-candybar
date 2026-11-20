@@ -21,7 +21,10 @@ import {
   type HostWorld,
   type RendererHost,
 } from "../src/daemon/renderer-host";
-import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import {
+  ConfigDiscovery,
+  type RendererConfigs,
+} from "../src/daemon/config-discovery/config-discovery";
 import {
   writeConfigFile,
   type WriteConfigFile,
@@ -38,11 +41,15 @@ import type {
 } from "../src/renderer-interface/interface";
 import { systemTimekeeper, type Monotonic } from "../src/time";
 import { readTextIfPresent } from "../src/utils/regular-text";
-import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
+import {
+  eventRenderer,
+  hostHeld,
+  NO_ACTS,
+  NO_CONFIGS,
+} from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
-import { rethrown } from "./helpers/work-threw";
-import { threwLine } from "../src/daemon/foundations/work-threw";
+import { recordedInto, rethrown } from "./helpers/work-threw";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -101,7 +108,7 @@ const output = (
 // event the renderer heard, in order, and `logged` every line.
 function hostOver(
   turn: (event: Event) => RendererOutput,
-  landed: HostWorld["configs"]["landed"] = () => [],
+  landed: RendererConfigs["landed"] = () => [],
   bound?: {
     readonly name: RendererName;
     readonly configs: HostWorld["configs"];
@@ -113,8 +120,12 @@ function hostOver(
   const follows: Array<readonly RenderOrigin[]> = [];
   const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
-  const configs: HostWorld["configs"] = {
-    ...NO_ACTS.configs,
+  // Where the host's moved origins go: taken when the host takes its configs.
+  let moved: (origins: readonly RenderOrigin[]) => void = () => {
+    throw new Error("the host has not taken its configs");
+  };
+  const configs: RendererConfigs = {
+    ...NO_CONFIGS,
     follow: (origins) => {
       follows.push(origins);
       followed = origins;
@@ -154,14 +165,25 @@ function hostOver(
     {
       ...NO_ACTS,
       stateDir: path.join(dir, "state"),
-      configs: bound?.configs ?? configs,
+      configs:
+        bound?.configs ??
+        ((to) => {
+          moved = to;
+          return configs;
+        }),
       writeConfigFile: bound?.writeConfigFile,
       unheard: (text) => void logged.push(`unheard ${text}`),
-      threw: (event, fields, thrown) =>
-        void logged.push(`threw ${threwLine(event, fields, thrown)}`),
+      threw: recordedInto(logged),
     },
   );
-  return { host, heard, logged, follows, declarations };
+  return {
+    host,
+    heard,
+    logged,
+    follows,
+    declarations,
+    moved: (origins: readonly RenderOrigin[]) => moved(origins),
+  };
 }
 
 const due = { kind: "due" } as const;
@@ -260,8 +282,8 @@ test.each(["unreadable", "restored", "unrestored"] as const)(
       undefined,
       {
         name: MAIN_RENDERER,
-        configs: {
-          ...NO_ACTS.configs,
+        configs: () => ({
+          ...NO_CONFIGS,
           follow: () => {},
           snapshotOf: () => SNAPSHOT,
           path: (_origin, role) => destinations[role],
@@ -274,7 +296,7 @@ test.each(["unreadable", "restored", "unrestored"] as const)(
             observed.push(paths);
             return [ORIGIN];
           },
-        },
+        }),
         writeConfigFile: (at, text) => {
           attempts.push(at);
           if (at === destinations.local)
@@ -353,14 +375,12 @@ test("a write through a config symlink reloads the remaining holder after the wr
     threw: rethrown,
     clock: systemTimekeeper,
   });
-  const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,
     log: () => {},
     threw: rethrown,
-    moved: (name, origins) => hosts.get(name)?.moved(origins),
   });
   try {
     const change = themeChange(origin);
@@ -371,14 +391,15 @@ test("a write through a config symlink reloads the remaining holder after the wr
           ? output(event.kind === "due" ? [change] : [], [])
           : output([], [origin]),
       undefined,
-      { name: MAIN_RENDERER, configs: discovery.forRenderer(MAIN_RENDERER) },
+      {
+        name: MAIN_RENDERER,
+        configs: (moved) => discovery.forRenderer(MAIN_RENDERER, moved),
+      },
     );
     const other = hostOver(() => output([], [origin]), undefined, {
       name: secondary,
-      configs: discovery.forRenderer(secondary),
+      configs: (moved) => discovery.forRenderer(secondary, moved),
     });
-    hosts.set(main.host.name, main.host);
-    hosts.set(other.host.name, other.host);
     const tick = () => ({ kind: "event", event: due }) as const;
     await main.host.answer(tick);
     await other.host.answer(tick);
@@ -432,8 +453,8 @@ test("an unanswered start keeps the previous declaration until the next successf
 });
 
 test("an origin a watch moved that the renderer let go by its slot is abandoned, and no config is handed in", async () => {
-  const { host, heard, logged } = hostOver(() => output([], []));
-  host.moved([ORIGIN]);
+  const { host, heard, logged, moved } = hostOver(() => output([], []));
+  moved([ORIGIN]);
   await host.answer(() => ({ kind: "event", event: due }));
   expect(heard).toEqual(["due"]);
   expect(logged.some((l) => l.includes("is no longer followed"))).toBe(true);

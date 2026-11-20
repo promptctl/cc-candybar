@@ -114,8 +114,12 @@ interface Holder {
   readonly observed: Map<string, string>;
 }
 
+// [LAW:types-are-the-program] A delivery window: a batch's, shared by its
+// keys and completed once their holders have heard it, or one slot's own,
+// whose completion is nothing.
 interface InvalidationWindow {
-  readonly completed?: () => void;
+  readonly kind: "batch" | "direct";
+  readonly completed: () => void;
   pending: {
     readonly changes: Map<WatcherSlot, Gathering>;
     readonly cancel: () => void;
@@ -281,6 +285,7 @@ export class WatcherRegistry {
     completed: () => void,
   ): Pick<WatcherRegistry, "acquire" | "follow"> {
     const window: InvalidationWindow = {
+      kind: "batch",
       pending: null,
       completed: () => this.notify(["window", name], completed),
     };
@@ -342,7 +347,7 @@ export class WatcherRegistry {
     if (
       shared !== undefined &&
       (window === undefined
-        ? shared.window.completed !== undefined
+        ? shared.window.kind === "batch"
         : shared.window !== window)
     )
       throw new Error(
@@ -365,7 +370,12 @@ export class WatcherRegistry {
     );
     const slot =
       shared ??
-      this.opened(key, targets, window ?? { pending: null }, observed);
+      this.opened(
+        key,
+        targets,
+        window ?? { kind: "direct", completed: () => {}, pending: null },
+        observed,
+      );
     const holder: Holder = { onInvalidate, observed: new Map() };
     slot.holders.add(holder);
     const handle = this.makeHandle(slot, holder);
@@ -716,7 +726,7 @@ export class WatcherRegistry {
                   holder.onInvalidate(heard),
                 );
             }
-            if (window.completed !== undefined) window.completed();
+            window.completed();
           },
           { unref: true },
         ),

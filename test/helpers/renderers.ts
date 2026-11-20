@@ -8,6 +8,7 @@ import type {
 } from "../../src/renderer-interface/interface";
 import { timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
+import type { RendererConfigs } from "../../src/daemon/config-discovery/config-discovery";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
@@ -53,7 +54,7 @@ export const NOTHING_STORED = {
 
 // The config discovery of a rig whose renderer names no origin: one it
 // names would be the rig's bug, said.
-export const NO_CONFIGS: HostWorld["configs"] = {
+export const NO_CONFIGS: RendererConfigs = {
   follow: (origins) => {
     if (origins.length > 0)
       throw new Error(
@@ -82,7 +83,7 @@ export const NO_ACTS: HostWorld = {
     reason: `${act.kind}: this rig performs no act`,
   }),
   stateDir: "/nonexistent/this-rig-has-no-state-dir",
-  configs: NO_CONFIGS,
+  configs: () => NO_CONFIGS,
   closing: () => false,
   acknowledgeDisplayed: () => {},
   threw: rethrown,

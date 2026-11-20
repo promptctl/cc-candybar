@@ -28,8 +28,7 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
-import { rethrown } from "./helpers/work-threw";
-import { threwLine } from "../src/daemon/foundations/work-threw";
+import { recordedInto, rethrown } from "./helpers/work-threw";
 import { fieldsOf } from "../src/utils/logfmt";
 
 function makeRepo(): string {
@@ -79,8 +78,7 @@ describe("WatcherRegistry", () => {
       const reporting = new WatcherRegistry({
         clock,
         logger: () => {},
-        threw: (event, fields, thrown) =>
-          reported.push(threwLine(event, fields, thrown)),
+        threw: recordedInto(reported),
       });
       try {
         const file = path.join(dir, "config");

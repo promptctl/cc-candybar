@@ -1,4 +1,4 @@
-import type { DaemonFacts } from "../../src/facts/world-state";
+import { NO_DAEMON_FACTS, type DaemonFacts } from "../../src/facts/world-state";
 import {
   UNFOLLOWED_FEEDS,
   type Lane,
@@ -11,12 +11,7 @@ export const FILE_EVENTS_STALLED = [
 
 export const daemonFactsOf = (
   fileEvents: DaemonFacts["fileEvents"] = [],
-): DaemonFacts => ({
-  fileEvents,
-  launcher: [],
-  rendererEnded: null,
-  daemonFailed: null,
-});
+): DaemonFacts => ({ ...NO_DAEMON_FACTS, fileEvents });
 
 // The host's feeds of a daemon where nothing follows any session.
 export const UNFOLLOWED = {

@@ -89,9 +89,10 @@ export function configHost(
     log: world.log ?? (() => {}),
     threw: rethrown,
     reloaded: world.reloaded,
-    moved: (_renderer, moved) => moved.forEach(handIn),
   });
-  const configs = discovery.forRenderer(MAIN_RENDERER);
+  const configs = discovery.forRenderer(MAIN_RENDERER, (moved) =>
+    moved.forEach(handIn),
+  );
   const follow = (origin: RenderOrigin): RenderOrigin => {
     const key = originKey(origin);
     if (!origins.has(key)) {

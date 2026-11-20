@@ -17,6 +17,7 @@ import {
   hearingEvents,
   hostHeld,
   NO_ACTS,
+  NO_CONFIGS,
 } from "../helpers/renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
@@ -43,7 +44,7 @@ import {
 import type { WorldState } from "../../src/facts/world-state";
 import type { Monotonic } from "../../src/time";
 import { ABSENT } from "../../src/utils/outcome";
-import { threwLine } from "../../src/daemon/foundations/work-threw";
+import { recordedInto } from "../helpers/work-threw";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -456,10 +457,9 @@ test("a new session context retries its failed config with the same declaration,
     {
       ...NO_ACTS,
       unheard: (why) => void unheard.push(why),
-      threw: (event, fields, thrown) =>
-        void unheard.push(threwLine(event, fields, thrown)),
-      configs: {
-        ...NO_ACTS.configs,
+      threw: recordedInto(unheard),
+      configs: () => ({
+        ...NO_CONFIGS,
         follow,
         snapshotOf: () => ({
           chain: [],
@@ -470,7 +470,7 @@ test("a new session context retries its failed config with the same declaration,
           watch: null,
           checkout: { root: "/project", git: false },
         }),
-      },
+      }),
     },
   );
   const context = () =>

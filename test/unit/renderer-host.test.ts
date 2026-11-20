@@ -25,13 +25,13 @@ import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
-import { hostHeld, NO_ACTS } from "../helpers/renderers";
+import { hostHeld, NO_ACTS, NO_CONFIGS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { threwLine } from "../../src/daemon/foundations/work-threw";
+import { recordedInto } from "../helpers/work-threw";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
@@ -294,7 +294,7 @@ const answered = (): RendererOutput => ({
 
 test("a start heads the mailbox, behind only the slot in progress", async () => {
   const heard: string[] = [];
-  const followed = jest.fn(NO_ACTS.configs.follow);
+  const followed = jest.fn(NO_CONFIGS.follow);
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
@@ -316,7 +316,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
+    { ...NO_ACTS, configs: () => ({ ...NO_CONFIGS, follow: followed }) },
   );
   const asked = host.command({ kind: "close-journal" });
   const waiting = host.deliver(
@@ -461,8 +461,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     {
       ...NO_ACTS,
       unheard: (text) => void unheard.push(text),
-      threw: (event, fields, thrown) =>
-        void unheard.push(threwLine(event, fields, thrown)),
+      threw: recordedInto(unheard),
     },
   );
   const turn = await host.answer(() => ({
@@ -590,8 +589,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
     {
       ...NO_ACTS,
       unheard: (text) => void unheard.push(text),
-      threw: (event, fields, thrown) =>
-        void unheard.push(threwLine(event, fields, thrown)),
+      threw: recordedInto(unheard),
       perform: async (act) => {
         if (act.kind !== "copy") throw new Error("unexpected act");
         performed.push(act.text);
@@ -655,8 +653,8 @@ test("a config named by a command reaches the renderer before the next queued ev
     },
     {
       ...NO_ACTS,
-      configs: {
-        ...NO_ACTS.configs,
+      configs: () => ({
+        ...NO_CONFIGS,
         follow: () => {},
         snapshotOf: () => ({
           chain: [],
@@ -667,7 +665,7 @@ test("a config named by a command reaches the renderer before the next queued ev
           notices: [],
           watch: null,
         }),
-      },
+      }),
     },
   );
   const due = () =>
@@ -810,8 +808,8 @@ test("failed replacement starts leave the accepted declaration until a complete 
         performed.push(act.text);
         return { kind: "ok" };
       },
-      configs: {
-        ...NO_ACTS.configs,
+      configs: () => ({
+        ...NO_CONFIGS,
         follow: (wanted) => {
           const paths = wanted.map(({ cwd }) => cwd);
           followed.push(paths);
@@ -837,7 +835,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
             return attempted === "prepare" ? null : addedConfig;
           return config;
         },
-      },
+      }),
     },
   );
   const due = () => ({ kind: "event", event: { kind: "due" } }) as const;

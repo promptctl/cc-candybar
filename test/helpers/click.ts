@@ -412,7 +412,7 @@ export function actingWorld(
       authorizeRun(TEST_SIGNER, request, captures),
     perform: (act) => acts.perform(act),
     stateDir: stateDir(HOST),
-    configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
+    configs: () => ({ ...NO_CONFIGS, ...discoveryNow(HOST) }),
     closing: () => false,
     acknowledgeDisplayed: () => {},
     threw: rethrown,

@@ -11,6 +11,7 @@
 // parts its side still reaches; no daemon is built.
 
 import { checkoutLocation } from "../src/utils/git-root";
+import type { RendererConfigs } from "../src/daemon/config-discovery/config-discovery";
 import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
@@ -88,11 +89,12 @@ import {
 import { stateDir } from "../src/daemon/paths";
 import { STORAGE_FOLDER } from "../src/config/loader/plugins";
 import { writeStatePlan } from "./helpers/state-file";
-import { threwLine } from "../src/daemon/foundations/work-threw";
+import { recordedInto } from "./helpers/work-threw";
 import {
   hearingEvents,
   hostHeld,
   NO_ACTS,
+  NO_CONFIGS,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -383,7 +385,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
       recorded: () => {},
       holding: () => () => {},
     },
-    { ...NO_ACTS, configs: discovery },
+    { ...NO_ACTS, configs: () => discovery },
   );
   cleanups.push(() => host.closeWake());
   const submit = (event: Notification) =>
@@ -1260,7 +1262,7 @@ describe("the world state the host hands in", () => {
 function productionAnswer(
   t: ReturnType<typeof renderer>,
   seen: Event[],
-  override: Partial<Pick<HostWorld["configs"], "follow" | "snapshotOf">> = {},
+  override: Partial<Pick<RendererConfigs, "follow" | "snapshotOf">> = {},
   closing = new AbortController().signal,
 ) {
   const { discovery } = t.rig.cache.configs;
@@ -1277,14 +1279,13 @@ function productionAnswer(
     {
       ...NO_ACTS,
       unheard: (text) => void t.logged.push(text),
-      threw: (event, fields, thrown) =>
-        void t.logged.push(threwLine(event, fields, thrown)),
-      configs: {
-        ...NO_ACTS.configs,
+      threw: recordedInto(t.logged),
+      configs: () => ({
+        ...NO_CONFIGS,
         follow: discovery.follow.bind(discovery),
         snapshotOf: discovery.snapshotOf.bind(discovery),
         ...override,
-      },
+      }),
     },
   );
   return Object.assign(
@@ -1341,7 +1342,7 @@ describe("the session's config, ahead of its request", () => {
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...NO_ACTS, configs: () => t.rig.cache.configs.discovery },
     );
     cleanups.push(() => host.closeWake());
     // Its origin's config was delivered, so the next context opens the view itself.
@@ -1663,7 +1664,7 @@ describe("two requests of one session at different keys", () => {
       ),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+      { ...NO_ACTS, configs: () => t.rig.cache.configs.discovery },
     );
     t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
@@ -1765,7 +1766,7 @@ test("overlapping requests draw the latest pane with each client's width, then a
     ),
     () => {},
     unfollowedCollector(collector),
-    { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
+    { ...NO_ACTS, configs: () => t.rig.cache.configs.discovery },
   );
   t.rig.served.route(host);
   let resumeOlder = (): void => {};

@@ -58,8 +58,7 @@ import type {
   ConfigChange,
   EffectId,
 } from "../src/renderer-interface/interface";
-import { rethrown } from "./helpers/work-threw";
-import { threwLine } from "../src/daemon/foundations/work-threw";
+import { recordedInto, rethrown } from "./helpers/work-threw";
 import { fieldsOf } from "../src/utils/logfmt";
 
 let root: string;
@@ -76,6 +75,9 @@ afterEach(() => {
 });
 
 // A project directory under the test's root.
+// Where a holder's moved origins go when its test does not read them.
+const IGNORED = (_origins: readonly RenderOrigin[]): void => {};
+
 function project(name: string): string {
   const dir = path.join(root, name);
   fs.mkdirSync(dir, { recursive: true });
@@ -99,12 +101,11 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, `logged` every line, and `threw` every reported
-// throw. A line `refused` names throws from the log instead.
+// throw.
 function discoveryRig(
   files = diskFiles,
   clock = systemTimekeeper,
   state = stateDir(HOST),
-  refused: (line: string) => boolean = () => false,
 ) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
@@ -129,25 +130,23 @@ function discoveryRig(
     stateDir: state,
     watchers,
     files: () => files,
-    log: (_level, line) => {
-      if (refused(line)) throw new Error("the log refused the line");
-      logged.push(line);
-    },
-    threw: (event, fields, thrown) =>
-      threw.push(threwLine(event, fields, thrown)),
-    moved: (renderer, origins) => {
+    log: (_level, line) => void logged.push(line),
+    threw: recordedInto(threw),
+  });
+  const holder = (renderer: RendererName) =>
+    service.forRenderer(renderer, (origins) => {
       for (const origin of origins) {
         const key = originKey(origin);
         moved.push(key);
         delivered.push([renderer, key]);
       }
-    },
-  });
+    });
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
-  const discovery = service.forRenderer(MAIN_RENDERER);
+  const discovery = holder(MAIN_RENDERER);
   return {
     service,
+    holder,
     discovery,
     watchers,
     counters,
@@ -284,13 +283,13 @@ test.each(["landed", "polled"] as const)(
       target: requestedConfigTarget(file, undefined, "config-only"),
     };
     const clock = heldClock(new Date());
-    const { service, discovery, delivered } = discoveryRig(
+    const { service, holder, discovery, delivered } = discoveryRig(
       diskFiles,
       clock,
       state,
     );
     const name = rendererNameOf("worktree");
-    const worker = service.forRenderer(name);
+    const worker = holder(name);
     const listed = (holder: RendererConfigs, origin: RenderOrigin) =>
       holder.snapshotOf(origin)?.strays.map(({ path }) => path);
     writeStatePlan(book.plan(() => ({ [dir]: "approved" })));
@@ -371,7 +370,7 @@ test.each([
     const before = store.read();
     const clock = heldClock(new Date());
     const reads: string[] = [];
-    const { discovery, service } = discoveryRig(
+    const { discovery, service, holder } = discoveryRig(
       {
         ...diskFiles,
         text(file) {
@@ -383,7 +382,7 @@ test.each([
       state,
     );
     discovery.follow([origin, only]);
-    const worktree = service.forRenderer(rendererNameOf("next"));
+    const worktree = holder(rendererNameOf("next"));
     worktree.follow([origin]);
     const snapshot = () => discovery.snapshotOf(origin)!;
     const errors = () =>
@@ -468,7 +467,7 @@ test("only an isolated config skips the project's plugin discovery and watch", (
 });
 
 test("once closed, it follows nothing and lets every watch go", () => {
-  const { service, discovery, counters } = discoveryRig();
+  const { service, holder, discovery, counters } = discoveryRig();
   const { origin } = named("a");
   discovery.follow([origin]);
   service.close();
@@ -484,6 +483,7 @@ test("two named renderers share one read and watch until the last releases", asy
   let reads = 0;
   const {
     service,
+    holder,
     discovery: first,
     counters,
     delivered,
@@ -494,7 +494,7 @@ test("two named renderers share one read and watch until the last releases", asy
       return diskFiles.text(read);
     },
   });
-  const second = service.forRenderer(name);
+  const second = holder(name);
   first.follow([origin]);
   const opened = counters.watchersOpened;
   const closed = counters.watchersClosed;
@@ -536,9 +536,9 @@ test("two named renderers share one read and watch until the last releases", asy
 
 test("a landed write synchronously returns only the writer's reloads and routes all others", () => {
   const { origin, file } = named("written-origin");
-  const { service, discovery: first, delivered } = discoveryRig();
+  const { service, holder, discovery: first, delivered } = discoveryRig();
   const name = rendererNameOf("next");
-  const second = service.forRenderer(name);
+  const second = holder(name);
   first.follow([origin]);
   second.follow([origin]);
   fs.writeFileSync(file, "{ globals: {} }");
@@ -550,8 +550,8 @@ test("a landed write synchronously returns only the writer's reloads and routes 
 
 test("renderers hold only their own selected shared config observations", () => {
   const { origin, file } = named("selected-config");
-  const { service, discovery: first } = discoveryRig();
-  const second = service.forRenderer(rendererNameOf("second"));
+  const { service, holder, discovery: first } = discoveryRig();
+  const second = holder(rendererNameOf("second"));
   first.follow([origin]);
   second.follow([origin]);
   const original = first.snapshotOf(origin);
@@ -628,7 +628,7 @@ test("a shared file's watch window reads it once for different held origins and 
   const name = rendererNameOf("next");
   const clock = heldClock(new Date(0));
   let reads = 0;
-  const { service, discovery, delivered } = discoveryRig(
+  const { service, holder, discovery, delivered } = discoveryRig(
     {
       ...diskFiles,
       text(read) {
@@ -638,7 +638,7 @@ test("a shared file's watch window reads it once for different held origins and 
     },
     clock,
   );
-  const second = service.forRenderer(name);
+  const second = holder(name);
   discovery.follow([origin]);
   second.follow([other]);
   reads = 0;
@@ -670,6 +670,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
   let refuse = false;
   const {
     service,
+    holder,
     discovery: writer,
     delivered,
     logged,
@@ -681,7 +682,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
       return diskFiles.text(read);
     },
   });
-  const second = service.forRenderer(name);
+  const second = holder(name);
   const origins = [a.origin, b.origin];
   writer.follow(origins);
   second.follow(origins);
@@ -927,7 +928,6 @@ function physicalDiscovery(
     threw: rethrown,
     openText: countingText(reads, opens),
     log: () => {},
-    moved: () => {},
     reloaded,
   });
   cleanups.push(
@@ -956,9 +956,9 @@ test("managed folders are admitted by each renderer's own discoveries and remain
     reloaded: (observed) => reloaded.push(observed),
   });
   const sibling = rendererNameOf("sibling");
-  const main = service.forRenderer(MAIN_RENDERER);
+  const main = service.forRenderer(MAIN_RENDERER, IGNORED);
   main.follow([a.origin]);
-  service.forRenderer(sibling).follow([b.origin]);
+  service.forRenderer(sibling, IGNORED).follow([b.origin]);
 
   const readCount = reads.length;
   const mainFolders = service.admitManagedFolders(
@@ -1034,8 +1034,8 @@ test("two renderers read the winning plugin and promote its shadowed copy when t
     clock,
     opens,
   });
-  const main = service.forRenderer(MAIN_RENDERER);
-  const other = service.forRenderer(rendererNameOf("worktree"));
+  const main = service.forRenderer(MAIN_RENDERER, IGNORED);
+  const other = service.forRenderer(rendererNameOf("worktree"), IGNORED);
   const { origin } = named("main-session");
   const second = { ...origin, cwd: project("second-session") };
   main.follow([origin]);
@@ -1093,8 +1093,8 @@ test("the two renderers and an answer written through the host read each book re
   const reads: string[] = [];
   const opens: string[] = [];
   const service = physicalDiscovery(project("data"), reads, { opens, state });
-  const main = service.forRenderer(MAIN_RENDERER);
-  const worker = service.forRenderer(rendererNameOf("worktree"));
+  const main = service.forRenderer(MAIN_RENDERER, IGNORED);
+  const worker = service.forRenderer(rendererNameOf("worktree"), IGNORED);
   main.follow([only]);
   expect(opens).not.toContain(book);
   main.follow([only, a]);
@@ -1152,12 +1152,13 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   const later = named("later-publication", initial);
   const {
     service,
+    holder,
     discovery: writer,
     delivered,
     logged,
   } = discoveryRig(diskFiles, heldClock(new Date()));
   const name = rendererNameOf("worktree");
-  const observer = service.forRenderer(name);
+  const observer = holder(name);
   writer.follow([writerOrigin, later.origin]);
   observer.follow([direct.origin, hardlinkOrigin]);
 
@@ -1224,22 +1225,23 @@ test("a created config reaches an alias whose parent was missing when followed",
   const observed = path.join(alias, "future", "config.json5");
   const created = path.join(physical, "future", "config.json5");
   const origin = originOf(alias, alias, observed);
-  const { service, discovery, delivered } = discoveryRig(
+  const { service, holder, discovery, delivered } = discoveryRig(
     diskFiles,
     heldClock(new Date()),
   );
   discovery.follow([origin]);
-  const writer = service.forRenderer(rendererNameOf("writer"));
+  const writer = holder(rendererNameOf("writer"));
   writeConfigFile(created, "{}");
   expect(writer.landed([created])).toEqual([]);
   expect(delivered).toEqual([[MAIN_RENDERER, originKey(origin)]]);
   expect(textOfLayer(discovery, origin, observed)).toBe("{}");
 });
 
-// [LAW:one-source-of-truth] The registry releases the old watch as it moves
-// to the new targets, so the entry must hold the new one before anything
-// can throw. A leak or a double release shows in the counters at close.
-test("a throw once rediscovery has moved an origin's watch leaves the entry holding it, and close releases it", () => {
+// [LAW:no-ambient-temporal-coupling] The registry releases the old watch as
+// it moves to the new targets. A rediscovery that throws keeps the old watch
+// with the old snapshot, and the origin stays owed until a catch-up
+// discovers it. A leak or a double release shows in the counters at close.
+test("a rediscovery that throws keeps the held watch and snapshot, and a catch-up delivers the change to every holder", () => {
   const dir = project("rebound");
   const first = path.join(dir, "first.json5");
   const second = path.join(dir, "second.json5");
@@ -1249,29 +1251,56 @@ test("a throw once rediscovery has moved an origin's watch leaves the entry hold
   fs.symlinkSync(first, link);
   const origin = originOf(dir, dir, link);
   let refuse = false;
-  const { service, discovery, delivered, threw, counters } = discoveryRig(
-    diskFiles,
-    heldClock(new Date()),
-    stateDir(HOST),
-    (line) => refuse && line.startsWith("config watch bound"),
-  );
+  const { service, holder, discovery, delivered, threw, logged, counters } =
+    discoveryRig(
+      {
+        ...diskFiles,
+        text(read) {
+          if (refuse && read === second) throw new Error("second refused");
+          return diskFiles.text(read);
+        },
+      },
+      heldClock(new Date()),
+    );
+  const other = rendererNameOf("other");
   discovery.follow([origin]);
-  // Re-pointing the link moves the polled target, so the watch rebinds.
+  holder(other).follow([origin]);
+  // Re-pointing the link moves the polled target, so the watch would rebind.
   refuse = true;
   fs.rmSync(link);
   fs.symlinkSync(second, link);
-  expect(discovery.landed([link])).toEqual([origin]);
-  expect(delivered).toEqual([]);
-  expect(textOfLayer(discovery, origin, link)).toBe(
-    "{ globals: { padding: 2 } }",
-  );
+  expect(discovery.landed([link])).toEqual([]);
+  expect(textOfLayer(discovery, origin, link)).toBe("{}");
   expect(threw.map((line) => Object.fromEntries(fieldsOf(line)))).toEqual([
     {
       why: "landed",
       origin: originKey(origin),
-      failed: expect.stringContaining("the log refused the line"),
+      failed: expect.stringContaining("second refused"),
     },
   ]);
+  const batches = () =>
+    logged
+      .filter((line) => line.startsWith("config discovery "))
+      .map((line) => Object.fromEntries(fieldsOf(line)));
+  expect(batches().at(-1)).toMatchObject({ why: "landed", owed: "1" });
+
+  refuse = false;
+  service.again("events-resumed");
+  expect(batches().at(-1)).toMatchObject({
+    why: "events-resumed",
+    moved: "1",
+    owed: "0",
+  });
+  expect(delivered).toEqual([
+    [MAIN_RENDERER, originKey(origin)],
+    [other, originKey(origin)],
+  ]);
+  expect(textOfLayer(discovery, origin, link)).toBe(
+    "{ globals: { padding: 2 } }",
+  );
+  expect(logged).toContainEqual(
+    expect.stringMatching(/^config watch bound projectDir=/),
+  );
   service.close();
   expect(counters.watchersOpened + counters.watchRefusals).toBe(
     counters.watchersClosed,
@@ -1289,8 +1318,8 @@ test.each([
     const reads: string[] = [];
     const opens: string[] = [];
     const service = physicalDiscovery(project("empty-data"), reads, { opens });
-    const first = service.forRenderer(MAIN_RENDERER);
-    const second = service.forRenderer(rendererNameOf("worktree"));
+    const first = service.forRenderer(MAIN_RENDERER, IGNORED);
+    const second = service.forRenderer(rendererNameOf("worktree"), IGNORED);
     first.follow([origin]);
     second.follow([origin]);
     expect(opens).toEqual([file]);
@@ -1328,7 +1357,7 @@ test("a dangling plugin definition stays quiet until its target appears", () => 
   const clock = heldClock(new Date());
   const opens: string[] = [];
   const service = physicalDiscovery(data, [], { clock, opens });
-  const renderer = service.forRenderer(MAIN_RENDERER);
+  const renderer = service.forRenderer(MAIN_RENDERER, IGNORED);
   renderer.follow([origin]);
   const definition = () =>
     renderer.snapshotOf(origin)?.plugins.find((p) => p.path === plugin)
@@ -1346,7 +1375,7 @@ test("a held layer replaced by a directory cannot be overwritten by an edit", ()
   const { origin, file } = named("directory-after-discovery", initial);
   const reads: string[] = [];
   const service = physicalDiscovery(project("empty-data"), reads);
-  const renderer = service.forRenderer(MAIN_RENDERER);
+  const renderer = service.forRenderer(MAIN_RENDERER, IGNORED);
   renderer.follow([origin]);
   fs.unlinkSync(file);
   fs.mkdirSync(file);
@@ -1384,8 +1413,8 @@ test("physical config and plugin text are shared across separate renderer discov
 
   const reads: string[] = [];
   const service = physicalDiscovery(path.join(root, "data"), reads);
-  const first = service.forRenderer(MAIN_RENDERER);
-  const next = service.forRenderer(rendererNameOf("other"));
+  const first = service.forRenderer(MAIN_RENDERER, IGNORED);
+  const next = service.forRenderer(rendererNameOf("other"), IGNORED);
   const a = originOf(left, left, config);
   const b = originOf(right, right, alias);
   const c = originOf(right, right, hardlink);
@@ -1450,8 +1479,8 @@ test("a project cannot inherit another origin's approval through the same physic
   );
   const reads: string[] = [];
   const service = physicalDiscovery(project("empty-data"), reads);
-  const first = service.forRenderer(MAIN_RENDERER);
-  const second = service.forRenderer(rendererNameOf("other"));
+  const first = service.forRenderer(MAIN_RENDERER, IGNORED);
+  const second = service.forRenderer(rendererNameOf("other"), IGNORED);
   const a = originOf(approved, approved);
   const b = originOf(other, other);
   first.follow([a]);
@@ -1513,13 +1542,14 @@ test("a deleted layer heard through its descriptor revision retires on the first
       return result;
     },
     log: () => {},
-    moved: (_renderer, origins) => moved.push(...origins),
   });
   cleanups.push(
     () => watchers.closeAll(),
     () => service.close(),
   );
-  const renderer = service.forRenderer(MAIN_RENDERER);
+  const renderer = service.forRenderer(MAIN_RENDERER, (origins) =>
+    moved.push(...origins),
+  );
   const content = () => renderer.snapshotOf(origin)?.chain[0]?.content.kind;
   renderer.follow([origin]);
   expect(content()).toBe("text");

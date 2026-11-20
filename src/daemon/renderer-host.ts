@@ -47,7 +47,7 @@ import {
   type Subscriptions,
   type TurnRecord,
 } from "../renderer-interface/interface.js";
-import { eventLine } from "../utils/logfmt.js";
+import { eventLine, type Field } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
@@ -142,13 +142,18 @@ export interface HostWorld {
   ) => Asked<RunAct>;
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
-  readonly configs: RendererConfigs;
+  // [LAW:single-enforcer] This renderer's hold on config discovery, given
+  // where the origins a batch moves go: its own `config` turns.
+  readonly configs: (
+    moved: (origins: readonly RenderOrigin[]) => void,
+  ) => RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
-  // [LAW:single-enforcer] Work this host took or left settling that threw is
-  // reported where every other daemon throw is.
+  // [LAW:single-enforcer] Work this host took or left settling that threw,
+  // with no caller to answer for it, goes to the daemon's one writer of such
+  // throws.
   readonly threw: WorkThrew;
 }
 
@@ -176,9 +181,6 @@ export interface RendererHost {
   ): Promise<TurnOutcome>;
   // An inspection or teardown event, answered by its own reply.
   command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
-  // What discovery found at each of `origins` moved: each gets its `config`
-  // turn, made from what discovery holds as its slot comes up.
-  moved(origins: readonly RenderOrigin[]): void;
   // [LAW:no-ambient-temporal-coupling] The wake's end, first in the
   // daemon's teardown: no `due` is made after it.
   closeWake(): void;
@@ -256,6 +258,7 @@ export function rendererHost(
   world: HostWorld,
 ): RendererHost {
   const mailbox = new KeyedSerialQueue<RendererName>();
+  const discovery = world.configs(moved);
   let generation = 0;
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
@@ -301,7 +304,7 @@ export function rendererHost(
   };
 
   const follow = (wanted: Subscriptions["configs"]): void => {
-    world.configs.follow(wanted);
+    discovery.follow(wanted);
     followedOrigins = wanted;
   };
 
@@ -319,10 +322,10 @@ export function rendererHost(
     if (wanted.size > followedOrigins.length || followFailure !== null)
       borrow([...wanted.values()]);
     const configs = [...wanted].map(([key, origin]) => {
-      const config = world.configs.snapshotOf(origin);
+      const config = discovery.snapshotOf(origin);
       if (config === null)
         throw new Error(`no config snapshot for renderer start origin ${key}`);
-      const retained = world.configs.retainedOf(origin);
+      const retained = discovery.retainedOf(origin);
       return {
         origin,
         config,
@@ -546,7 +549,7 @@ export function rendererHost(
     const moved =
       "files" in landed && landed.files.length > 0
         ? (recordTaken("landed config discovery", () =>
-            world.configs.landed(landed.files),
+            discovery.landed(landed.files),
           ) ?? [])
         : [];
     const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];
@@ -637,7 +640,7 @@ export function rendererHost(
           said: (line) =>
             void recordTaken("trust book record", () => log("info", line)),
         },
-        world.configs,
+        discovery,
         world.writeConfigFile,
       );
     } catch (thrown) {
@@ -645,15 +648,14 @@ export function rendererHost(
     }
   };
 
+  // [LAW:one-source-of-truth] What names this host's work in a record of
+  // its throw.
+  const work = (what: string): readonly Field[] => [
+    ["renderer", name],
+    ["work", what],
+  ];
   const notTaken = (what: string, thrown: unknown): void =>
-    world.threw(
-      "renderer work not taken",
-      [
-        ["renderer", name],
-        ["work", what],
-      ],
-      thrown,
-    );
+    world.threw("renderer work not taken", work(what), thrown);
 
   const recordTaken = <Value>(
     what: string,
@@ -769,7 +771,7 @@ export function rendererHost(
         return { kind: "failed", failure: followFailure };
       const entries = subscriptions.configSelections;
       if (selected !== entries) {
-        world.configs.selected(entries, (origin) => {
+        discovery.selected(entries, (origin) => {
           const delivered = configs.get(originKey(origin));
           return delivered?.kind === "received" ? delivered.config : undefined;
         });
@@ -807,7 +809,7 @@ export function rendererHost(
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
   const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
-    const config = world.configs.snapshotOf(origin);
+    const config = discovery.snapshotOf(origin);
     return config === null
       ? {
           kind: "abandoned",
@@ -1084,14 +1086,7 @@ export function rendererHost(
   // is the daemon's, on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
     void settling.catch((thrown: unknown) =>
-      world.threw(
-        "renderer turn unsettled",
-        [
-          ["renderer", name],
-          ["work", what],
-        ],
-        thrown,
-      ),
+      world.threw("renderer turn unsettled", work(what), thrown),
     );
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
@@ -1114,13 +1109,15 @@ export function rendererHost(
     // reply before landing. The shared turn type cannot carry that correlation.
     return turn.reply as ReplyTo<C["kind"]>;
   };
-  const moved = (origins: readonly RenderOrigin[]): void => {
+  // What discovery found at each of `origins` moved: each gets its `config`
+  // turn, made from what discovery holds as its slot comes up.
+  function moved(origins: readonly RenderOrigin[]): void {
     for (const origin of origins)
       unawaited(
         "config",
         deliver(configMade(origin), [["why", "config-moved"]]),
       );
-  };
+  }
   const stats = (): MailboxStats => ({
     holder: holder?.input ?? null,
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
@@ -1163,6 +1160,7 @@ export function rendererHost(
     // every bar.
     said: (text) => world.unheard(text),
     log: (text) => log("info", text),
+    threw: world.threw,
   });
   return {
     name,
@@ -1176,7 +1174,6 @@ export function rendererHost(
     deliver,
     start: recorded("first"),
     command,
-    moved,
     stats,
     closeWake: () => wake.close(),
   };

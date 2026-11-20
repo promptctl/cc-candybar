@@ -49,7 +49,7 @@ export function clickParts(
       reason: `${act.kind}: no host part in this rig`,
     }),
     stateDir: stateDir(HOST),
-    configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
+    configs: () => ({ ...NO_CONFIGS, ...discoveryNow(HOST) }),
     closing: () => false,
     acknowledgeDisplayed: () => {},
     threw: rethrown,

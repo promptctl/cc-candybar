@@ -69,6 +69,7 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 import { rethrown } from "./helpers/work-threw";
+import { fieldsOf } from "../src/utils/logfmt";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -677,12 +678,17 @@ describe("RenderCache", () => {
         symlinkSync(link, `${link}.other`);
         cache.getOrCreate(originAt(dir, dir, undefined));
         expect(
-          lines.filter((l) =>
-            l.startsWith(
-              `warn config watch unresolved projectDir=${dir} path=${link} reason=`,
-            ),
-          ),
-        ).toHaveLength(1);
+          lines
+            .filter((l) => l.startsWith("warn config watch unresolved "))
+            .map((l) => Object.fromEntries(fieldsOf(l))),
+        ).toEqual([
+          {
+            projectDir: dir,
+            cwd: dir,
+            path: link,
+            reason: expect.any(String),
+          },
+        ]);
       } finally {
         for (const fn of cleanups) fn();
         cleanup();

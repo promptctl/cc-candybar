@@ -231,6 +231,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
+    threw: rethrown,
     sourceRuns: new SourceRuns({
       launcher: processLauncher,
       clock: systemTimekeeper,

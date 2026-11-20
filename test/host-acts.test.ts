@@ -131,12 +131,12 @@ function hostOver(
     },
     stateDir: path.join(dir, "state"),
     // The origin's one layer is the test's file.
-    configs: {
+    configs: () => ({
       ...NO_CONFIGS,
       path: () => file,
       repoDir: () => null,
       readText: readTextIfPresent,
-    },
+    }),
     closing: () => false,
     acknowledgeDisplayed: () => {},
     threw: rethrown,

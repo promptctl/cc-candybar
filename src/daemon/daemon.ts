@@ -90,7 +90,7 @@ import {
   type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { compareStructural, observable, runInAction } from "mobx";
+import { compareStructural, computed, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
@@ -266,25 +266,30 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const stats = new RuntimeStats(clock);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // work that failed with no session's bar to hold it, each held for the bar
-  // until an answer has carried it.
+  // [LAW:one-source-of-truth] How the last renderer process ended, held for
+  // the bar until an answer has carried it.
   let rendererEnded: HeldEvent | null = null;
-  let daemonFailed: HeldEvent | null = null;
+  // [LAW:no-ambient-temporal-coupling] The work that failed with no
+  // session's bar to hold it, held the same way. Its own box, declared before
+  // anything that can throw, so a throw while the daemon is building reaches
+  // the bar with nothing else needing to exist yet.
+  const daemonFailed = observable.box<HeldEvent | null>(null, { deep: false });
   // The unacknowledged text is included in the next warning.
   const held = (text: string, fromEnvironment: boolean): void => {
-    const prior = daemonFailed;
-    daemonFailed = environmentOutput(
-      joinedEvent(prior, text, instant()),
-      fromEnvironment ||
-        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    const prior = daemonFailed.get();
+    runInAction(() =>
+      daemonFailed.set(
+        environmentOutput(
+          joinedEvent(prior, text, instant()),
+          fromEnvironment ||
+            (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+        ),
+      ),
     );
-    // [LAW:no-ambient-temporal-coupling] Work can throw before every fault
-    // owner exists. The initial restatement reads it once they do.
-    if (phase.kind !== "building") restateFaults();
   };
   // [LAW:single-enforcer] The daemon's one writer of a throw from work it
-  // called: one record, in daemon.log and on every bar.
+  // called that no caller answers for: one record, in daemon.log and on
+  // every bar.
   const threw: WorkThrew = (event, fields, thrown) => {
     const line = threwLine(event, fields, thrown);
     log("error", line);
@@ -313,20 +318,25 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, daemonFailed: null },
+  const restated = observable.box<Omit<DaemonFacts, "daemonFailed">>(
+    { fileEvents: [], launcher: [], rendererEnded: null },
     { deep: false, equals: compareStructural },
   );
   function restateFaults(): void {
     runInAction(() =>
-      daemonFaults.set({
+      restated.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
-        daemonFailed,
       }),
     );
   }
+  const daemonFaults = computed(
+    (): DaemonFacts => ({
+      ...restated.get(),
+      daemonFailed: daemonFailed.get(),
+    }),
+  );
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // Its work holds this one, so a closed daemon's launches are refused here,
@@ -371,12 +381,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             changed = true;
           }
           break;
-        case "daemon-failed":
-          if (daemonFailed !== null && answeredBy(daemonFailed, event)) {
-            daemonFailed = { ...daemonFailed, answered: true };
-            changed = true;
-          }
+        case "daemon-failed": {
+          const failed = daemonFailed.get();
+          if (failed !== null && answeredBy(failed, event))
+            runInAction(() => daemonFailed.set({ ...failed, answered: true }));
           break;
+        }
       }
     }
     // [LAW:dataflow-not-control-flow] Writers can confirm independently;
@@ -431,6 +441,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:single-enforcer] The daemon's one record of every source's refreshes:
   // the providers', and each config's user sources (the render cache's).
   const refreshLedger = new RefreshLedger(log);
+  restateFaults();
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs: the collector holds each run a session's renderer subscribes to, so
   // one identity is one program however many sessions name it.
@@ -450,6 +461,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     logger: log,
     ledger: refreshLedger,
+    threw,
     sourceRuns,
   });
   const { managedStorage } = payloadProviders;
@@ -618,15 +630,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     files: checkouts.discovery,
     log,
     threw,
-    // [LAW:no-silent-failure] Only a connected renderer follows an origin,
-    // and none is ever removed, so a holder with no runtime is a broken
-    // invariant, reported as the batch's throw.
-    moved: (name, origins) => {
-      const runtime = renderers.get(name);
-      if (runtime === undefined)
-        throw new Error(`config moved for renderer ${name}, never connected`);
-      runtime.renderer.moved(origins);
-    },
     reloaded: (folders) => managedStorage.recheck(folders),
   });
 
@@ -777,7 +780,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           authorizeRun(linkSigner, request, captures),
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
-        configs: configDiscovery.forRenderer(name),
+        configs: (moved) => configDiscovery.forRenderer(name, moved),
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
@@ -1008,9 +1011,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     },
   };
   phase = { kind: "built" };
-  // [LAW:no-ambient-temporal-coupling] The initial restatement, once every
-  // fault owner exists: it carries whatever was reported while building.
-  restateFaults();
 
   function serve(): ServedDaemon {
     if (serving()) return served;
