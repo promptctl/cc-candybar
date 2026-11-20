@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
@@ -84,6 +85,7 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

@@ -829,11 +829,11 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   feeds.subscribe(S, pane.sub);
   const event = { text: "an act failed", at: 7 as Instant, answered: false };
   const first: DisplayedEvent = {
-    kind: "act-failed",
+    kind: "daemon-failed",
     event: { ...event, revision: 1 },
   };
   const second: DisplayedEvent = {
-    kind: "act-failed",
+    kind: "daemon-failed",
     event: { ...event, revision: 2 },
   };
   const older = frame(S, "warning", null, 1, [first]);
@@ -946,7 +946,7 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
     refused: (resp) => out.end(JSON.stringify(resp)),
   });
   const shown: DisplayedEvent = {
-    kind: "act-failed",
+    kind: "daemon-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
   const offered = frame(S, "warning", null, 1, [shown]);

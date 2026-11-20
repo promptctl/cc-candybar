@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 // [LAW:behavior-not-structure] The providers' one close, as steps of a
 // teardown: what a teardown that meets a throwing owner still ends, and what
 // it says.
@@ -14,6 +15,7 @@ import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 function providers() {
   const log = () => {};
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     logger: log,
   });

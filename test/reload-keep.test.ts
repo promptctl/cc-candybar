@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import fs from "node:fs";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -61,6 +62,7 @@ function rig(
   const reloaded: string[] = [];
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     logger: () => {},
   });

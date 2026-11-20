@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
@@ -73,6 +74,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters,
     logger: () => {},
@@ -294,9 +296,14 @@ test("a load reports an action that claims a daemon-held key before its first cl
   const { cache, gates, originAt } = makeCache(Number.POSITIVE_INFINITY);
   const release = gates.state.register("daemon.example", []);
   try {
-    const config = file("held.json5", `{ actions: { page: { set: 'daemon.example', int: true } } }`);
+    const config = file(
+      "held.json5",
+      `{ actions: { page: { set: 'daemon.example', int: true } } }`,
+    );
     const entry = cache.getOrCreate(originAt(dir, dir, config));
-    expect(entry.lastError).toContain('key "daemon.example" is written by the daemon\'s own links');
+    expect(entry.lastError).toContain(
+      'key "daemon.example" is written by the daemon\'s own links',
+    );
   } finally {
     release();
   }

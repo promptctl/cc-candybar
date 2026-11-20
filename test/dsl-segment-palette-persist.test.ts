@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
 // per-segment palette override as a menu-able domain — mirroring
 // dsl-persist-actions.test.ts's model for the Globals-scoped `persist`
@@ -452,6 +453,7 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

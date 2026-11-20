@@ -27,6 +27,7 @@ import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launcher";
 import type { SourceRead, ReadMode } from "../facts/source-identity.js";
 import { WatcherRegistry } from "./cache/watchers.js";
+import { threwLine } from "./foundations/verb-error.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -372,7 +373,11 @@ export class SourceRuns {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.watchers ??
+        new WatcherRegistry({
+          clock: deps.clock,
+          failed: (...threw) => logger("error", threwLine(...threw)),
+        }),
       deps.fileEvents ?? NO_FILE_EVENTS,
     );
     // [LAW:nothing-unseen] One record per read kind (spec section 21's source

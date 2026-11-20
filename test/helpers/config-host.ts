@@ -1,3 +1,4 @@
+import { failTest } from "./threw.js";
 import { compareStructural, reaction } from "mobx";
 import { configQuery } from "../../src/config/loader/chain-places.js";
 // The host's half of a config, for a test that drives a render cache with no
@@ -82,6 +83,7 @@ export function configHost(
     cache.configure(origin, snapshot);
   };
   const discovery: ConfigDiscovery = new ConfigDiscovery({
+    failed: failTest,
     locations: world.locations,
     stateDir: world.stateDir,
     watchers: world.watchers,
@@ -131,7 +133,10 @@ export function loadDiscovered(
   { stateDir, ...deps }: StateDeps & { readonly stateDir: string },
 ): LoadOutcome & { readonly snapshot: ConfigSnapshot } {
   const { snapshot } = discover(
-    { ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)), cwd },
+    {
+      ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)),
+      cwd,
+    },
     readShared({ locations: deps.locations, stateDir }),
   );
   return { ...loadOrigin(cwd, snapshot, deps), snapshot };

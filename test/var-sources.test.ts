@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { processLauncher } from "./helpers/host";
 import { reaction } from "mobx";
@@ -2251,6 +2252,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         dirWatchesClosed: 0,
       };
       const watchers = new WatcherRegistry({
+        failed: failTest,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -2444,6 +2446,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
         const watchers = new WatcherRegistry({
+          failed: failTest,
           clock: systemTimekeeper,
           logger: () => {},
         });

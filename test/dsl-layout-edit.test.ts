@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -994,6 +995,7 @@ function makeCache(reloads?: ReloadSignal): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
@@ -1211,6 +1213,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const loads: string[] = [];
     const lines: string[] = [];
     const watchers = new WatcherRegistry({
+      failed: failTest,
       clock: systemTimekeeper,
       logger: () => {},
     });

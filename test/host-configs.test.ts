@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 // [LAW:verifiable-goals] An origin's config as the host routes it
 // (src/daemon/renderer-host.ts): an origin a turn newly names gets its
 // `config` turn in that turn's slot, before anything queued behind it; each
@@ -81,7 +82,13 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    managedFolders: [],
+    configSelections: [],
+    configs,
+  },
   wake: null,
   record: [],
   frames: [],
@@ -339,9 +346,13 @@ test("a write through a config symlink reloads the remaining holder after the wr
   fs.symlinkSync(file, link);
   const origin = originOf(dir, dir, link);
   const secondary = rendererNameOf("secondary");
-  const watches = new WatcherRegistry({ clock: systemTimekeeper });
+  const watches = new WatcherRegistry({
+    failed: failTest,
+    clock: systemTimekeeper,
+  });
   const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
+    failed: failTest,
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,
@@ -395,16 +406,19 @@ test("an unanswered start keeps the previous declaration until the next successf
     return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  const start = () => host.answer(() => ({
-    kind: "event",
-    event: { kind: "start", viewers: {}, sessions: [] },
-  }));
+  const start = () =>
+    host.answer(() => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }));
   const refused = {
     kind: "threw",
     failure: { message: "the renderer went down" },
   };
   expect(await start()).toMatchObject(refused);
-  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(
+    await host.answer(() => ({ kind: "event", event: due })),
+  ).toMatchObject(refused);
   expect(heard).toEqual(["due", "config", "start"]);
   expect(declarations).toEqual([opened.subscriptions]);
   fail = false;

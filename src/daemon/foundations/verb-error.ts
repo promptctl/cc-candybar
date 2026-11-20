@@ -1,4 +1,5 @@
 import { inspect } from "node:util";
+import { eventLine, type Field } from "../../utils/logfmt.js";
 
 // [LAW:types-are-the-program] Argument-shape failures are structurally
 // distinct from operational failures. `failureOf` classifies a thrown value
@@ -95,6 +96,23 @@ function classified(
 export function failureOf(thrown: unknown): Failure {
   return classified(thrown, inspect);
 }
+
+// [LAW:single-enforcer] Where a daemon part reports that work it called
+// threw: the event that failed, what it was about, and the thrown value. The
+// daemon's sink logs it and holds it for every bar.
+export type ThrewSink = (
+  event: string,
+  about: readonly Field[],
+  thrown: unknown,
+) => void;
+
+// [LAW:one-source-of-truth] A thrown value's record in a log: the sink's
+// event and fields, then the failure's full detail.
+export const threwLine: (...args: Parameters<ThrewSink>) => string = (
+  event,
+  about,
+  thrown,
+) => eventLine(event, [...about, ["error", failureOf(thrown).detail]]);
 
 // [LAW:effects-at-boundaries] A renderer answer records what failed, which
 // does not depend on where the runtime put the executing code. Report the

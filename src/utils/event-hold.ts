@@ -32,7 +32,7 @@ export interface HeldEvent {
 // [LAW:types-are-the-program] A frame names the daemon's occurrence and its
 // owner. Session click errors never leave the renderer's delivery record.
 export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+  readonly kind: "launch-pipes" | "renderer-ended" | "daemon-failed";
   readonly event: HeldEvent;
 }
 
@@ -92,6 +92,16 @@ export function joinedEvent(
     revision: (last?.revision ?? 0) + 1,
     answered: false,
   };
+}
+
+// Whether `text` is the latest line an event still owed to a client already
+// holds: a failure that keeps happening says nothing new until it changes.
+export function repeats(last: HeldEvent | null, text: string): boolean {
+  return (
+    last !== null &&
+    !last.answered &&
+    (last.text === text || last.text.endsWith(`\n${text}`))
+  );
 }
 
 // [LAW:single-enforcer] The one rule for which answer marks an event: one that

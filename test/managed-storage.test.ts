@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
@@ -71,6 +72,7 @@ function rig(
   const lines: string[] = [];
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters,
     logger,

@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.2 —
 // persistent config writes — driven through the real spine, mirroring
 // dsl-actions.test.ts's model for `set`:
@@ -816,6 +817,7 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,

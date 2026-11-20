@@ -15,6 +15,7 @@ import {
   type Refreshes,
 } from "../../utils/refresh-ledger";
 import { WatcherRegistry } from "./watchers";
+import { threwLine } from "../foundations/verb-error.js";
 import {
   specOf,
   type HeldWatch,
@@ -352,10 +353,11 @@ export class GitDataProvider {
       this.ownsWatchers = false;
     } else {
       // Auto-constructed registry shares the same logger, so cache and watcher
-      // events land together; with the default logger both stay quiet.
+      // events land together, a delivery that threw at error.
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
+        failed: (...threw) => this.logger("error", threwLine(...threw)),
       });
       this.ownsWatchers = true;
     }

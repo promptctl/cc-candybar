@@ -7,6 +7,7 @@ import {
   answeredBy,
   eventHoldAt,
   joinedEvent,
+  repeats,
 } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 
@@ -32,6 +33,17 @@ test("past the hold a request is owed an unanswered event, and a feed is not", (
 test("past the hold an answered event is over for every render", () => {
   expect(eventHoldAt(answered, HOLD, at(110), "request")).toBe("over");
   expect(eventHoldAt(answered, HOLD, at(110), "feed")).toBe("over");
+});
+
+test("a failure an unanswered event already holds last repeats it; a different one, or one after the answer, does not", () => {
+  const first = joinedEvent(null, "a broke", at(1));
+  const both = joinedEvent(first, "b broke", at(2));
+  expect(repeats(null, "a broke")).toBe(false);
+  expect(repeats(first, "a broke")).toBe(true);
+  expect(repeats(both, "b broke")).toBe(true);
+  expect(repeats(both, "a broke")).toBe(false);
+  expect(repeats(both, "broke")).toBe(false);
+  expect(repeats({ ...both, answered: true }, "b broke")).toBe(false);
 });
 
 test("an answer marks the latest event it carried, once, and never a newer one", () => {

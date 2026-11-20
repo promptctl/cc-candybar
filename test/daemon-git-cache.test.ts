@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -1272,6 +1273,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({
+      failed: failTest,
       clock: systemTimekeeper,
       counters,
       logger,
@@ -1520,7 +1522,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(
+            l,
+          ),
         ),
       ).toBe(true);
       expect(counters).toEqual({

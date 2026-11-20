@@ -13,7 +13,11 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
+  threwLine,
+  type ThrewSink,
 } from "./foundations/verb-error.js";
+import { eventLine } from "../utils/logfmt.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -86,6 +90,7 @@ import {
 import {
   answeredBy,
   joinedEvent,
+  repeats,
   type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
@@ -265,14 +270,46 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const stats = new RuntimeStats(clock);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
+  // [LAW:one-source-of-truth] How the last renderer process ended, and the
+  // daemon's failures that no session's bar holds, each held for the bar
+  // until an answer has carried it.
+  // [LAW:no-ambient-temporal-coupling] Declared before the watcher registry,
+  // whose deliveries report through them.
+  let rendererEnded: HeldEvent | null = null;
+  let daemonFailed: HeldEvent | null = null;
+  // [LAW:single-enforcer] The one writer of a failure no session's bar holds:
+  // a renderer's act or take, a watch delivery, a config discovery. The
+  // unacknowledged text is included in the next warning, and a failure it
+  // already holds unanswered adds nothing. Answers whether it held anew.
+  function unheard(text: string, fromEnvironment?: true): boolean {
+    const prior = daemonFailed;
+    if (repeats(prior, text)) return false;
+    daemonFailed = environmentOutput(
+      joinedEvent(prior, text, instant()),
+      fromEnvironment === true ||
+        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    );
+    // [LAW:no-ambient-temporal-coupling] Building is synchronous and every
+    // caller runs on the clock or a turn, so the launcher this reads exists.
+    restateFaults();
+    return true;
+  }
+  // [LAW:no-silent-failure] Daemon work that threw: on every bar, and its
+  // full detail in daemon.log.
+  const threw: ThrewSink = (event, about, thrown) => {
+    const shown = eventLine(event, [
+      ...about,
+      ["error", failureOf(thrown).message],
+    ]);
+    if (unheard(shown)) log("error", threwLine(event, about, thrown));
+  };
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
-  // Non-daemon consumers (var-system tests, future library use) take the
-  // default debug-routed loggers and never write to daemon log files.
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
     logger: log,
+    failed: threw,
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -288,21 +325,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, daemonFailed: null },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
-        actFailed,
+        daemonFailed,
       }),
     );
   }
@@ -350,9 +382,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             changed = true;
           }
           break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
+        case "daemon-failed":
+          if (daemonFailed !== null && answeredBy(daemonFailed, event)) {
+            daemonFailed = { ...daemonFailed, answered: true };
             changed = true;
           }
           break;
@@ -597,6 +629,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    failed: threw,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });
@@ -752,16 +785,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard,
       },
     );
     return { reported, entry, stores, link, renderer };

@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 import { systemTimekeeper } from "../src/time";
 import fs from "node:fs";
 import os from "node:os";
@@ -66,7 +67,11 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const logger = (level: string, msg: string) => lines.push(`${level} ${msg}`);
   const events = new FileEventDelivery({
     clock: systemTimekeeper,
-    watchers: new WatcherRegistry({ clock: systemTimekeeper, logger }),
+    watchers: new WatcherRegistry({
+      failed: failTest,
+      clock: systemTimekeeper,
+      logger,
+    }),
     logger,
     identityOf: opts.identityOf,
   });

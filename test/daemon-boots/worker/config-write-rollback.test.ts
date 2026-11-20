@@ -4,6 +4,7 @@ import path from "node:path";
 import { linksOf } from "../../../src/click/read";
 import { writeConfigFile } from "../../../src/daemon/file-rewrites";
 import { textOf } from "../../../src/render/frame";
+import { fieldsOf } from "../../../src/utils/logfmt";
 import {
   frameRequest,
   refusedClick,
@@ -143,9 +144,17 @@ test.each(["restored", "unrestored"] as const)(
       const landings = logLines(env).filter((line) =>
         line.includes("config discovery why=landed"),
       );
-      expect(landings).toEqual(
+      expect(
+        landings.map((line) => Object.fromEntries(fieldsOf(line))),
+      ).toEqual(
         restore === "unrestored"
-          ? [expect.stringContaining("followed=1 discovered=1 moved=1")]
+          ? [
+              expect.objectContaining({
+                followed: "1",
+                observed: "1",
+                moved: "1",
+              }),
+            ]
           : [],
       );
     } finally {

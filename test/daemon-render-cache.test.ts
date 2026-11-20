@@ -1,3 +1,4 @@
+import { failTest } from "./helpers/threw.js";
 // [LAW:single-enforcer] Tests for the RenderCache invariants that bzh.2
 // changed: cache identity (projectDir+cwd, args ignored), last-known-good
 // preservation across failed reloads, candidate-dir watcher firing when a
@@ -60,9 +61,7 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  repoConfigsPath,
-} from "../src/daemon/config-discovery/repo-configs";
+import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
@@ -114,6 +113,7 @@ function makeCache(
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     counters,
     logger: () => {},
@@ -1140,9 +1140,7 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(book, declined),
-      );
+      await reloads.after(entry, () => writeFileSync(book, declined));
       expect(entry.configLayers).toEqual([]);
       expect(entry.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");
@@ -1441,6 +1439,7 @@ describe("RenderCache close", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({
+      failed: failTest,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1496,6 +1495,7 @@ describe("RenderCache close", () => {
 describe("RenderCache frames and pins", () => {
   function pinCache(source = SOURCES_NOTHING) {
     const watchers = new WatcherRegistry({
+      failed: failTest,
       clock: systemTimekeeper,
       logger: () => {},
     });
@@ -1612,6 +1612,7 @@ describe("RenderCache frames and pins", () => {
     "a failed pinned %s successor keeps its owner and reopens on corrective config under pressure",
     (which) => {
       const watchers = new WatcherRegistry({
+        failed: failTest,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1720,6 +1721,7 @@ describe("RenderCache frames and pins", () => {
   // forgets it.
   test("a retired session's open failure is forgotten", () => {
     const watchers = new WatcherRegistry({
+      failed: failTest,
       clock: systemTimekeeper,
       logger: () => {},
     });

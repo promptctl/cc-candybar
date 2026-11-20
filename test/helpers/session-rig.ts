@@ -1,3 +1,4 @@
+import { failTest } from "./threw.js";
 // A session's view, opened through the daemon's own composition (the render
 // cache serving views from the session source) over owners that answer one
 // fixed world at one fixed instant, whichever machine runs the test.
@@ -158,6 +159,7 @@ export function sessionRig(
     cleanups,
   );
   const watchers = new WatcherRegistry({
+    failed: failTest,
     clock: systemTimekeeper,
     logger: () => {},
   });
