@@ -2,6 +2,147 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-913",
+      "ref": "refs/pull/913/merge",
+      "sha": "3562934c0cfeebe5cd7dc5ee34767dbc4140952c",
+      "timestamp": "2026-11-20T00:01:57.771Z",
+      "commits": [
+        {
+          "sha": "3562934c0cfeebe5cd7dc5ee34767dbc4140952c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T00:01:03Z",
+          "message": "Merge 92e6739a42c1799d14f0ecec0099d4e84fb01817 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+        },
+        {
+          "sha": "92e6739a42c1799d14f0ecec0099d4e84fb01817",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:00:52-07:00",
+          "message": "build: generate the histogram patch lock with the CI toolchain\n"
+        },
+        {
+          "sha": "bf053162ed5486ebe36afd2d34e50a2944a1806e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:59:14-07:00",
+          "message": "fix(recording): preserve provenance of environment-derived process output\n"
+        },
+        {
+          "sha": "fba587e38b894a1c4e38251d6d2a2c0c49b8fca9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:57:27-07:00",
+          "message": "test(recording): replay captured locale and time zone\n"
+        },
+        {
+          "sha": "9318db7d753b0c9909ea09da67f697cb06fe0c93",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:56:27-07:00",
+          "message": "docs(cli): explain recording worker state on replacement\n"
+        },
+        {
+          "sha": "390fde0a1f09e7c33e143a88e445f894138d4d8c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:55:50-07:00",
+          "message": "fix(renderer): project native errors within plain causes\n"
+        },
+        {
+          "sha": "9d5ddf8615f1769abb063d348e7873ba79ad45e9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:55:40-07:00",
+          "message": "fix(renderer): keep transport warnings and retired views local\n"
+        },
+        {
+          "sha": "095902f1336deb95ed90ce665a1a98632f8c73dc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:52:59-07:00",
+          "message": "fix(cli): bound replay output and require a regular input\n"
+        },
+        {
+          "sha": "9c29e44da0bfd5dfd8feaa0c08deab5e7f56d57a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:54:34-07:00",
+          "message": "fix(renderer): draw with the locale and time zone supplied by the host\n"
+        },
+        {
+          "sha": "ee7b688b1f05f4a14bc03619d2bf842f8aa36450",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:50:43-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/record-renderer-session\n"
+        },
+        {
+          "sha": "561c590e4edd22ac5e6dc0788299b0ea3130df7c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:49:12-07:00",
+          "message": "fix(renderer): use one codec for histogram diagnostics\n"
+        },
+        {
+          "sha": "c3b0532e88d1ba32dd81ef67fc9cd92f2b169f6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:50:42-07:00",
+          "message": "fix(recording): keep slow storage outside live renderer turns\n"
+        },
+        {
+          "sha": "a2446f2ac1ab63fd9a81ccaf22320123b8375625",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:42:59-07:00",
+          "message": "test(daemon): record and replay live renderer sessions\n"
+        },
+        {
+          "sha": "ab42d6581db48871d84219a59a8f9223aa48c6c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:45:32-07:00",
+          "message": "feat(cli): record and replay a selected renderer\n"
+        },
+        {
+          "sha": "bf6d248f81683804c33a6ccc711940ff2e05d81d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:43:01-07:00",
+          "message": "feat(daemon): record a selected renderer at its generation boundary\n"
+        },
+        {
+          "sha": "1adc91c10b81300109abc5156cb5242c5efc7cd7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:40:46-07:00",
+          "message": "feat(recording): refuse capture of direct environment values\n"
+        },
+        {
+          "sha": "29fccf6ea7cbbe4738262d2a5b070ef459569d50",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:40:01-07:00",
+          "message": "test(renderer): replay a captured failure and recovery exactly\n"
+        },
+        {
+          "sha": "213559fe540674d9e162b895576ebd497ef2e47f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:37:29-07:00",
+          "message": "fix(renderer): keep runtime stacks outside semantic answers\n"
+        },
+        {
+          "sha": "f4f3962092824a3954ab199659e4fe22aca9f4b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:36:19-07:00",
+          "message": "feat(renderer): replay recorded turns offline\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6611e97d364f8951f711c89a3c951456c0e94ca7",
