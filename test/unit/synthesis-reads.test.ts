@@ -107,6 +107,26 @@ describe("unresolvedReads", () => {
     expect(unresolvedReads(replacement, placed)).toEqual(["replacementGhost"]);
   });
 
+  test("a replacement can break the binding of an unchanged read", () => {
+    const { config, placed } = parseAndPlace(
+      "<t>",
+      AUTHORED,
+      undefined,
+      DEFAULT_DSL_CONFIG,
+    );
+    const segment = config.segments.modelTag;
+    if (segment === undefined) throw new Error("missing authored modelTag");
+    const replacement: DslConfig = {
+      ...config,
+      segments: {
+        ...config.segments,
+        modelTag: { ...segment, vars: {} },
+      },
+    };
+    expect(unresolvedReads(config, placed)).toEqual([]);
+    expect(unresolvedReads(replacement, placed)).toEqual(["modelTag.caption"]);
+  });
+
   test("a minted variable's unresolved read is named", () => {
     const { config, placed } = parseAndPlace("<t>", "{}");
     const broken: DslConfig = {

@@ -27,8 +27,8 @@ import {
   SESSION_KEY_TO_EFFECTIVE_VAR,
 } from "../../src/config/setting-projections.js";
 
-// Every variable `config` reads that the synthesis minted over `before`, and
-// every node of the preset trees, author nodes included. Two kinds of read:
+// Every read the synthesis minted or broke over `before`, and every node of
+// the preset trees, author nodes included. Two kinds of read:
 // the dotted refs of every template (segment fields, node `when`s and the
 // lead/trail drawn in a segment node's cell, template variables, copy/open
 // actions); and the `.effective` projection a `set` or `persist` on a setting
@@ -37,7 +37,13 @@ export function synthesisReads(
   config: DslConfig,
   before: DslConfig,
 ): Set<string> {
+  return changedReads(config, before).reads;
+}
+
+function changedReads(config: DslConfig, before: DslConfig) {
   const helpers = config.helpers;
+  const priorScope = templateScopeOf(before);
+  const scope = templateScopeOf(config);
   const minted = <T>(
     all: Readonly<Record<string, T>>,
     had: Readonly<Record<string, T>>,
@@ -52,16 +58,23 @@ export function synthesisReads(
     for (const ref of templateReads(template ?? "", helpers).keys())
       reads.add(ref);
   };
-  // [LAW:behavior-not-structure] Compare the reads a segment contributes.
-  // A new object may only have received resolved types for authored locals,
-  // and a replacement may keep its already validated reads while adding more.
+  // [LAW:behavior-not-structure] Synthesis can add a read or break an
+  // existing binding without changing the template. Leave inherited
+  // segment-only reads (such as .settings) to their authored cross-check.
   for (const [name, segment] of Object.entries(config.segments)) {
     const prior = ownValue(before.segments, name);
-    if (prior === segment && before.helpers === helpers) continue;
+    const current = segmentReads(segment, helpers);
     const previous =
-      prior === undefined ? undefined : segmentReads(prior, before.helpers);
-    for (const ref of segmentReads(segment, helpers)) {
-      if (!previous?.has(ref)) reads.add(ref);
+      prior === segment && before.helpers === helpers
+        ? current
+        : prior && segmentReads(prior, before.helpers);
+    for (const ref of current) {
+      if (
+        !previous?.has(ref) ||
+        (refResolves(ref, priorScope) && !refResolves(ref, scope))
+      ) {
+        reads.add(ref);
+      }
     }
   }
   for (const name of presetNames(config.presets)) {
@@ -87,7 +100,7 @@ export function synthesisReads(
     if (setBack !== undefined) reads.add(setBack);
     if (persistBack !== undefined) reads.add(persistBack);
   }
-  return reads;
+  return { reads, scope };
 }
 
 // Read bodies in the scope their segment declared so a reference reached
@@ -110,17 +123,12 @@ function segmentReads(
   return reads;
 }
 
-// Every read the synthesis minted into `config`, over `before` (the merged,
-// cross-referenced config it was synthesized from), that `config` does not
-// resolve. Author nodes in the trees resolved in cross-ref against the merged
-// config, and the synthesized config's scope only adds to it, so they read
-// clean here.
+// Every newly unresolved read after synthesis, relative to the merged,
+// cross-referenced config it was synthesized from.
 export function unresolvedReads(
   config: DslConfig,
   before: DslConfig,
 ): string[] {
-  const scope = templateScopeOf(config);
-  return [...synthesisReads(config, before)].filter(
-    (ref) => !refResolves(ref, scope),
-  );
+  const { reads, scope } = changedReads(config, before);
+  return [...reads].filter((ref) => !refResolves(ref, scope));
 }
