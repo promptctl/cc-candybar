@@ -39,7 +39,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, pendingOf, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 

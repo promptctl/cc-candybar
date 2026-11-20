@@ -3,7 +3,7 @@ import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
 // this worker's own environment, home and temporary directory. A test that

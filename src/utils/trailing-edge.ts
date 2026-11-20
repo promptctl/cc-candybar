@@ -32,6 +32,8 @@
 // records itself and hands back nothing, because the loop already in flight is
 // the one that will honour it. A caller that must await the work folds over
 // these two arms rather than asking a second question about which happened.
+import { throwAll } from "./run-each.js";
+
 export type Trigger =
   | { readonly kind: "started"; readonly done: Promise<void> }
   | { readonly kind: "queued" };
@@ -72,18 +74,26 @@ export class TrailingEdge {
   }
 
   private async loop(key: string, work: () => Promise<void>): Promise<void> {
+    // [LAW:no-silent-failure] A pass that throws does not cost the pass queued
+    // behind it: the loop goes on, and what each threw is thrown at its end.
+    const threw: unknown[] = [];
     try {
       do {
         // Cleared BEFORE the pass, never after: a trigger that lands while
         // `work` is awaiting must survive into the `while`, and one cleared
         // afterwards would be the change this whole mechanism exists to keep.
         this.again.delete(key);
-        await work();
+        try {
+          await work();
+        } catch (thrown) {
+          threw.push(thrown);
+        }
       } while (this.again.has(key));
     } finally {
       this.running.delete(key);
       this.again.delete(key);
     }
+    throwAll(threw);
   }
 
   // Drop every record of running and pending work — the teardown path of an

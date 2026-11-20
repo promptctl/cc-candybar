@@ -12,7 +12,7 @@ import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { daemonFactsOf } from "./daemon-facts";
 import { TEST_ENVIRONMENT } from "./session-environment";
 

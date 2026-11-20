@@ -20,7 +20,7 @@ import { instantOf } from "../src/utils/instant";
 import { contrastRatio } from "@promptctl/rich-js";
 import { truecolorOf } from "./helpers/frame";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "plain" as const,

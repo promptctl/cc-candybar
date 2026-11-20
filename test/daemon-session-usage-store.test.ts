@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { reaction } from "mobx";
 import { HOST } from "./helpers/host";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):

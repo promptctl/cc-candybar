@@ -38,7 +38,8 @@ import {
   type RendererBoot,
 } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
-import { systemTimekeeper, type Timekeeper } from "../../../src/time";
+import { type Timekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import { processProbe } from "../../helpers/host";
 import {
   daemonPaths,

@@ -16,7 +16,8 @@ import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
-import { systemTimekeeper, type Timekeeper } from "../src/time";
+import { type Timekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { heldClock } from "./helpers/held-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 

@@ -20,7 +20,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { NO_FILL } from "../src/template-engine/colors";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const THEME = "textual-dark";
 

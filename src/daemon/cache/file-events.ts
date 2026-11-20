@@ -91,14 +91,14 @@ export class FileEventDelivery {
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
-  private readonly clock: Pick<Timekeeper, "now" | "every">;
+  private readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
 
   constructor(opts: {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
     // [LAW:effects-at-boundaries] The daemon's clock: the probe period, and
     // the times probes and spans are stamped with.
-    readonly clock: Pick<Timekeeper, "now" | "every">;
+    readonly clock: Pick<Timekeeper, "now" | "every" | "detach">;
     readonly identityOf?: IdentityRead;
   }) {
     this.watchers = opts.watchers;
@@ -131,11 +131,10 @@ export class FileEventDelivery {
       throw new Error("file events: the owner was started twice");
     }
     const stopPeriod = this.clock.every(
+      "file events probe",
       PROBE_EVERY_MS,
-      () => void this.tick(),
-      {
-        unref: true,
-      },
+      () => this.tick(),
+      { unref: true },
     );
     let identity: FolderIdentity | "gone";
     try {
@@ -177,7 +176,7 @@ export class FileEventDelivery {
       return;
     }
     this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
+    this.clock.detach("file events probe", () => this.tick());
   }
 
   stats(): FileEventsStats {

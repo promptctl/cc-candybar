@@ -15,21 +15,93 @@ export interface TimerOptions {
 // where a wall time is meant, or the reverse: the two differ by decades.
 export type Monotonic = number & { readonly __monotonic: true };
 
+// The machine's readings and timers, bare: what a clock is built over. Its
+// timers take no task name, so a source never stands where a clock's task
+// methods are asked for, and nothing holding one schedules a task whose throw
+// goes unreported.
+export interface TimerSource {
+  now(): number;
+  monotonic(): Monotonic;
+  timer(ms: number, fire: () => void, options?: TimerOptions): () => void;
+  interval(ms: number, fire: () => void, options?: TimerOptions): () => void;
+  turn(fire: () => void): () => void;
+}
+
+// Work a clock runs for its owner. Nothing awaits it, so a promise it returns
+// is the clock's to settle; any other value is dropped.
+export type Task = () => unknown;
+
+// Where a clock hands what a task threw or rejected with, under the task's
+// name and the wall reading when it was caught.
+export type ReportThrow = (task: string, thrown: unknown, at: number) => void;
+
 export interface Timekeeper {
   // Wall time, in epoch milliseconds: the one wall reading. A `Date` is
   // `new Date(clock.now())`, and a file's age is `clock.now() - mtimeMs`.
   now(): number;
   // Milliseconds since an arbitrary start that never steps back, for spans.
   monotonic(): Monotonic;
+  // [LAW:nothing-unseen] Every task is named in the words a person reads when
+  // it throws: what it does, then its subject (`git refresh /repo`).
+  //
   // Runs `fire` on a later turn, once `ms` have passed, unless what it returns
   // clears it first. Never before it returns: its callers arm it before they
   // are ready to be fired at.
-  after(ms: number, fire: () => void, options?: TimerOptions): () => void;
-  // Runs `fire` every `ms` until what it returns clears it.
-  every(ms: number, fire: () => void, options?: TimerOptions): () => void;
+  after(
+    task: string,
+    ms: number,
+    fire: Task,
+    options?: TimerOptions,
+  ): () => void;
+  // Runs `fire` every `ms` until what it returns clears it, past a throw too.
+  every(
+    task: string,
+    ms: number,
+    fire: Task,
+    options?: TimerOptions,
+  ): () => void;
   // Runs `fire` on the loop's next turn, after the work now running.
-  defer(fire: () => void): () => void;
+  defer(task: string, fire: Task): () => void;
+  // Runs `fire` now, and nothing awaits it: the one way to start work whose
+  // end no caller waits on.
+  detach(task: string, fire: Task): void;
 }
+
+// [LAW:single-enforcer] The one builder of a clock's task methods, so every
+// task any clock runs reports what it throws: a sync throw or a rejection goes
+// to `report`, and the task is otherwise run as the source runs it.
+export function clockOver(
+  source: TimerSource,
+  report: ReportThrow,
+): Timekeeper {
+  const run = (task: string, fire: Task) => (): void => {
+    let settled: unknown;
+    try {
+      settled = fire();
+    } catch (thrown) {
+      report(task, thrown, source.now());
+      return;
+    }
+    if (settled instanceof Promise)
+      settled.catch((thrown: unknown) => report(task, thrown, source.now()));
+  };
+  return {
+    now: () => source.now(),
+    monotonic: () => source.monotonic(),
+    after: (task, ms, fire, options) =>
+      source.timer(ms, run(task, fire), options),
+    every: (task, ms, fire, options) =>
+      source.interval(ms, run(task, fire), options),
+    defer: (task, fire) => source.turn(run(task, fire)),
+    detach: (task, fire) => run(task, fire)(),
+  };
+}
+
+// A command's reporter: the throw ends the process, as an unhandled one does,
+// now naming the task. The daemon's reporter holds it for every bar instead.
+export const rethrowing: ReportThrow = (task, thrown) => {
+  throw new Error(`${task} threw`, { cause: thrown });
+};
 
 // [LAW:single-enforcer] A span in whole milliseconds between two monotonic
 // readings: every duration src records or prints is one of these.
@@ -46,27 +118,29 @@ export function elapsedMs(
 }
 
 // [LAW:single-enforcer] The one place src reads the real clock, sets a timer
-// or waits for a loop turn. It holds no state; `after` and `every` read the
-// timer globals when they are called, so jest's fake timers still drive code
-// handed it. `defer` is `node:timers`' own, which jest's fakes leave alone.
-export const systemTimekeeper: Timekeeper = {
+// or waits for a loop turn. It holds no state; `timer` and `interval` read the
+// timer globals when they are called, so jest's fake timers still drive a
+// clock over it. `turn` is `node:timers`' own, which jest's fakes leave alone.
+// The eslint config lets only the process world (src/host.ts) and test helpers
+// import it.
+export const systemTimers: TimerSource = {
   now: () => Date.now(),
   monotonic: () => performance.now() as Monotonic,
-  after: (ms, fire, options) => {
+  timer: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {
       timer.unref();
     }
     return () => clearTimeout(timer);
   },
-  every: (ms, fire, options) => {
+  interval: (ms, fire, options) => {
     const timer = setInterval(fire, ms);
     if (options?.unref) {
       timer.unref();
     }
     return () => clearInterval(timer);
   },
-  defer: (fire) => {
+  turn: (fire) => {
     const turn = setImmediate(fire);
     return () => clearImmediate(turn);
   },
@@ -77,6 +151,7 @@ export const systemTimekeeper: Timekeeper = {
 // an `AbortError` whose `cause` is the signal's reason.
 export function sleep(
   clock: Pick<Timekeeper, "after">,
+  task: string,
   ms: number,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -95,7 +170,7 @@ export function sleep(
       cancel();
       reject(aborted());
     };
-    const cancel = clock.after(ms, () => {
+    const cancel = clock.after(task, ms, () => {
       signal?.removeEventListener("abort", onAbort);
       resolve();
     });
@@ -107,10 +182,12 @@ export function sleep(
 // have passed, and does not keep the process alive while it waits.
 export function timeoutSignal(
   clock: Pick<Timekeeper, "after">,
+  task: string,
   ms: number,
 ): AbortSignal {
   const timeout = new AbortController();
   clock.after(
+    task,
     ms,
     () =>
       timeout.abort(

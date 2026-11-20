@@ -292,7 +292,7 @@ async function drawBarPane(
       }
     }
     redraw();
-    await sleep(world.clock, TICK_MS);
+    await sleep(world.clock, "bar pane tick", TICK_MS);
     const asked = await askPlacement(world, tmux, pane);
     placementAnswered(asked);
     if (asked.kind === "ok") placement = asked.placement;

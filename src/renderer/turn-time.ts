@@ -13,7 +13,6 @@ import {
   type Readings,
   type Tick,
 } from "../utils/instant.js";
-import type { Timekeeper } from "../time.js";
 import { runEach } from "../utils/run-each.js";
 
 interface Deferral {
@@ -22,8 +21,14 @@ interface Deferral {
 }
 
 // The face of the turn's time a variable store reads: the wall in epoch
-// milliseconds, for ages and stamps, and work held for later.
-export type TurnClock = Pick<Timekeeper, "now" | "after">;
+// milliseconds, for ages and stamps, and work held for later. Its work is
+// named as a clock's task is, so a Timekeeper serves where one is asked for,
+// and runs inside the due turn: what it throws is that turn's, classified as
+// the turn's own throw is, so the name goes no further.
+export interface TurnClock {
+  now(): number;
+  after(task: string, ms: number, run: () => void): () => void;
+}
 
 export class TurnTime {
   private readings: Readings | null = null;
@@ -59,7 +64,7 @@ export class TurnTime {
 
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
-  after(ms: number, run: () => void): () => void {
+  after(_task: string, ms: number, run: () => void): () => void {
     const deferral = { until: (this.tick + ms / 1000) as Tick, run };
     this.held.add(deferral);
     return () => void this.held.delete(deferral);
@@ -95,6 +100,6 @@ export class TurnTime {
   // epoch milliseconds, and its held work.
   readonly clock: TurnClock = {
     now: () => this.at * 1000,
-    after: (ms, run) => this.after(ms, run),
+    after: (task, ms, run) => this.after(task, ms, run),
   };
 }

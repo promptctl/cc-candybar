@@ -71,7 +71,7 @@ import { textOf } from "../src/render/frame";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
 import {

@@ -340,7 +340,7 @@ export interface SourceRunsDeps {
   // Who a shell run's program belongs to.
   readonly launcher: Launcher;
   // What the periods are armed and the refreshes timed on: the daemon's.
-  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
+  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every" | "detach">;
   readonly logger?: DaemonLogger;
   // [LAW:single-enforcer] The daemon's one ledger, which every run is recorded
   // in; an owner outside the daemon keeps its own.
@@ -424,7 +424,6 @@ export class SourceRuns {
         // watch, so a key that moves every tick leaves no child behind.
         maxEntries: 0,
         lines: REFRESH_TRIGGERS,
-        logger,
         ledger,
         clock: deps.clock,
       });

@@ -85,7 +85,7 @@ import { contrastRatio } from "@promptctl/rich-js";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS } from "./helpers/history-step";
 

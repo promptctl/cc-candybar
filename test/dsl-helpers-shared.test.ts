@@ -9,7 +9,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { SessionState } from "../src/renderer/session-state";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // [LAW:verifiable-goals] The 2026-09-03 outage in numbers: the helper preamble
 // re-parsed into every template cost ~30 MB per registered config; the daemon

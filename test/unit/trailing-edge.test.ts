@@ -179,4 +179,25 @@ describe("TrailingEdge", () => {
     await doneB;
     expect(edge.size).toBe(0);
   });
+
+  it("a pass that throws still runs the pass queued behind it, and the loop throws what it threw", async () => {
+    const edge = new TrailingEdge();
+    const broke = new Error("the pass broke");
+    let passes = 0;
+    let fail: (thrown: unknown) => void = () => {};
+    const work = (): Promise<void> => {
+      passes++;
+      return passes === 1
+        ? new Promise<void>((_, reject) => (fail = reject))
+        : Promise.resolve();
+    };
+
+    const done = started(edge.run("k", work));
+    expect(edge.run("k", work).kind).toBe("queued");
+    fail(broke);
+
+    await expect(done).rejects.toBe(broke);
+    expect(passes).toBe(2);
+    expect(edge.size).toBe(0);
+  });
 });

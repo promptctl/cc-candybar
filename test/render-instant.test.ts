@@ -14,7 +14,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,

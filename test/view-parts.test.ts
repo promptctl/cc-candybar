@@ -27,7 +27,7 @@ import { instantOf, type Instant } from "../src/utils/instant";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { textOf, type Frame } from "../src/render/frame";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const OPTS = {

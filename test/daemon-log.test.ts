@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DaemonLog, MAX_BYTES, MAX_WAITING_BYTES } from "../src/daemon/log";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // The log sink's contract (src/daemon/log.ts): a line is in the file once the
 // log drains, every line logged before the process exits is in the file, and
@@ -233,7 +233,7 @@ describe("DaemonLog", () => {
           "tsx",
           "-e",
           `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("src/time.ts"))};` +
+            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
             `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
             `log.log("info", "first"); await log.drained();` +
             `process.on("exit", () => log.log("warn", "from exit")); process.exit(0);`,
@@ -259,7 +259,7 @@ describe("DaemonLog", () => {
           "tsx",
           "-e",
           `import { DaemonLog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
-            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("src/time.ts"))};` +
+            `import { systemTimekeeper } from ${JSON.stringify(path.resolve("test/helpers/system-clock.ts"))};` +
             `const log = new DaemonLog(${JSON.stringify(path.join(dir, "cc-candybar", "daemon.log"))}, systemTimekeeper);` +
             `for (let i = 0; i < ${lines}; i++) log.log("info", "line " + i + " " + "x".repeat(200));` +
             `log.log("warn", "death line"); process.exit(0);`,

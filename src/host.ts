@@ -1,7 +1,12 @@
 import os from "node:os";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
-import { systemTimekeeper, type Timekeeper } from "./time.js";
+import {
+  clockOver,
+  systemTimers,
+  type ReportThrow,
+  type Timekeeper,
+} from "./time.js";
 import type { Host } from "./host-facts.js";
 
 // [LAW:effects-at-boundaries] The machine's facts (src/host-facts.ts), read
@@ -25,13 +30,23 @@ export interface World {
 // launch, so a variable the process sets after this still reaches the
 // children it launches, apart from the repository-scoped ones. The renderer
 // process takes its transport's monotonic reader directly from the CLI entry.
-export function processWorld(): World {
+// The machine's readings alone, with nothing to schedule on: for the renderer
+// process, whose held work runs on its own turns.
+export const machineReadings: Pick<Timekeeper, "now" | "monotonic"> = {
+  now: () => systemTimers.now(),
+  monotonic: () => systemTimers.monotonic(),
+};
+
+export function processWorld(report: ReportThrow): World {
   const host: Host = {
     env: process.env,
     home: os.homedir(),
     tmp: os.tmpdir(),
   };
-  const clock = systemTimekeeper;
+  // [LAW:single-enforcer] The process's one clock, built over the machine's
+  // timers with the reporter the process main chose, so every task anything
+  // handed this world runs reports what it throws.
+  const clock = clockOver(systemTimers, report);
   return {
     host,
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),

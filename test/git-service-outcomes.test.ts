@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { GitService } from "../src/daemon/cache/git-service";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });

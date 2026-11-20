@@ -13,7 +13,7 @@ import { PassThrough } from "node:stream";
 
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
-import { systemTimekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
 import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";

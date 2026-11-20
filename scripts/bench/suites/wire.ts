@@ -11,6 +11,7 @@
 
 import fs from "node:fs";
 import { processWorld } from "../../../src/host.js";
+import { rethrowing } from "../../../src/time.js";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
 import { linksOf } from "../../../src/click/read.js";
@@ -374,7 +375,7 @@ const configReload = (entries: number): Benchmark => ({
 
 async function click(url: string): Promise<number> {
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(processWorld(), url);
+  const outcome = await tryClickViaDaemon(processWorld(rethrowing), url);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.

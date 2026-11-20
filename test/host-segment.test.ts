@@ -53,7 +53,7 @@ import {
   requestPayload,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 

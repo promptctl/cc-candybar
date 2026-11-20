@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import fs from "node:fs";
 import { processLauncher } from "./helpers/host";
 import os from "node:os";

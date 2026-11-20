@@ -51,7 +51,7 @@ import {
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

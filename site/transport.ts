@@ -11,6 +11,7 @@ import { inProcessRenderer } from "../src/in-process-renderer";
 import { plainEnvironment } from "../src/daemon/foundations/session-env";
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
+import { TaskThrowInbox } from "../src/daemon/task-throws";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -68,13 +69,17 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The simulated page serves without arming production socket resources.
 // The page is a process main of its own: it reads the machine it runs on (the
 // simulated one, under the node shims) once.
-const WORLD = processWorld();
+// [LAW:single-enforcer] Its clock reports as the daemon's does, into the
+// inbox the page's bar shows task throws from.
+const TASK_THROWS = new TaskThrowInbox();
+const WORLD = processWorld(TASK_THROWS.report);
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 const pageDaemon = createDaemon({
   region: systemRegion(),
   ...adapters,
+  taskThrows: TASK_THROWS,
   renderer: inProcessRenderer(),
   paths,
   host: HOST,

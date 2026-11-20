@@ -115,7 +115,7 @@ export async function obtainDaemon(
     }
     // Lock contended. Another caller is in the spawn window — brief wait,
     // then re-check for the socket they're bringing up.
-    await sleep(clock, 20);
+    await sleep(clock, "daemon spawn wait", 20);
     if (await canConnect(socketPath(host), settings.connectTimeoutMs, clock)) {
       return { kind: "attached" };
     }
@@ -214,7 +214,7 @@ async function pollUntilReady(
     if (await canConnect(socketPath(host), connectTimeoutMs, clock)) {
       return true;
     }
-    await sleep(clock, 20);
+    await sleep(clock, "daemon socket wait", 20);
   }
   return false;
 }
@@ -673,7 +673,14 @@ function canConnect(
     };
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
-    clearTimer = clock.after(timeoutMs, () => done(false), { unref: true });
+    clearTimer = clock.after(
+      "daemon connect timeout",
+      timeoutMs,
+      () => done(false),
+      {
+        unref: true,
+      },
+    );
   });
 }
 

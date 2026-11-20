@@ -37,7 +37,7 @@ import { cellWidth } from "../src/render/picker";
 import { effectsOf } from "./helpers/click";
 import { VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

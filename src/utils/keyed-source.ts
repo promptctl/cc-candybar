@@ -6,7 +6,6 @@ import type {
   SourceRecord,
   SourceScope,
 } from "./refresh-ledger";
-import type { DaemonLogger } from "./logger";
 import { elapsedMs, type Timekeeper } from "../time";
 import type { Holds, Release } from "./holds";
 import { Period, periodOf, type Every } from "./period";
@@ -74,15 +73,14 @@ export interface KeyedSourceSpec<I, T> {
   readonly watch: (input: I, changed: () => void) => Release;
   // How many entries nothing holds are kept, least recently read first out.
   readonly maxEntries: number;
-  readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
   // The triggers whose clean refresh writes its line
   // (SourceDeclaration.lines): every one (`REFRESH_TRIGGERS`) for a source
   // whose each read is news.
   readonly lines: readonly RefreshTrigger[];
-  // [LAW:effects-at-boundaries] Times each refresh and arms each entry's
-  // period.
-  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
+  // [LAW:effects-at-boundaries] Times each refresh, runs it, and arms each
+  // entry's period.
+  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "detach">;
 }
 
 interface Entry<I, T> extends Readable<T> {
@@ -259,6 +257,7 @@ export class KeyedSource<I, T> {
       changed: false,
       superseding: 0,
       revisit: revisitOf(this.spec.every(input), this.spec.clock, {
+        task: `${this.spec.name} period ${this.spec.fields(input, 0)}`,
         period: () => this.refresh(entry, "period"),
         holdReturned: () => this.refresh(entry, "change"),
       }),
@@ -293,33 +292,42 @@ export class KeyedSource<I, T> {
     const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal, by))
-      .then((outcome) => {
-        const fields = this.spec.fields(entry.input, entry.holders);
+    // [LAW:no-silent-failure] What the refresh throws past its read is the
+    // clock's to report, on every bar.
+    this.spec.clock.detach(
+      `${this.spec.name} refresh ${this.spec.fields(entry.input, entry.holders)}`,
+      async () => {
+        const outcome = await attempt(() =>
+          this.spec.read(entry.input, flight.signal, by),
+        );
         const ms = elapsedMs(this.spec.clock, startedAt);
         // [LAW:no-silent-failure] A read the owner abandoned (a supersede, a
         // drop) was told to stop, so what it answers is the owner's doing,
         // never a failure the source met: it is an event and a count of its
         // own, not a refresh.
         if (flight.signal.aborted) {
-          this.refreshes.abandoned(fields, by, ms);
+          this.refreshes.abandoned(
+            this.spec.fields(entry.input, entry.holders),
+            by,
+            ms,
+          );
           return;
         }
         // The flight that answered is the entry's: every path that replaces
         // one (a supersede, a drop) aborts it first, so a read not aborted
-        // is the one whose answer is stored.
+        // is the one whose answer is stored, however its record ends.
         try {
-          this.refreshes.recorded(fields, by, outcome, ms);
+          this.refreshes.recorded(
+            this.spec.fields(entry.input, entry.holders),
+            by,
+            outcome,
+            ms,
+          );
         } finally {
           this.store(entry, outcome);
         }
-      })
-      .catch((e: unknown) => {
-        this.spec.logger(
-          "error",
-          `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`,
-        );
-      });
+      },
+    );
   }
 
   private store(entry: Entry<I, T>, outcome: Outcome<T>): void {
@@ -388,11 +396,15 @@ interface Revisit {
 
 function revisitOf(
   every: Every | null,
-  clock: Pick<Timekeeper, "monotonic" | "after">,
-  read: { readonly period: () => void; readonly holdReturned: () => void },
+  clock: Pick<Timekeeper, "monotonic" | "after" | "detach">,
+  read: {
+    readonly task: string;
+    readonly period: () => void;
+    readonly holdReturned: () => void;
+  },
 ): Revisit {
   if (every === null) return new HoldReturn(read.holdReturned);
-  const period = new Period(read.period, clock);
+  const period = new Period(read.task, read.period, clock);
   return {
     landed: (outcome) => period.landed(periodOf(every, outcome)),
     hold: (held) => period.hold(held),

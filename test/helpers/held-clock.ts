@@ -1,5 +1,12 @@
 import fs from "node:fs";
-import type { Monotonic, Timekeeper } from "../../src/time";
+import {
+  clockOver,
+  rethrowing,
+  type Monotonic,
+  type ReportThrow,
+  type Timekeeper,
+  type TimerSource,
+} from "../../src/time";
 
 // A clock a test moves by hand. Both of its readings and every timer it hands
 // out stand still until `advance`, so it belongs on a daemon its case owns,
@@ -33,7 +40,12 @@ export interface HeldClock extends Timekeeper {
 // `start` is the wall time it stands at. A test with no reason to pick one names
 // the real now itself (`new Date()`), so the choice is in the test and the unit
 // project, which refuses the real clock, can still build one.
-export function heldClock(start: Date): HeldClock {
+// What its tasks throw goes to `report`: a case that expects none lets it
+// throw (`rethrowing`), and one that asserts a throw collects it.
+export function heldClock(
+  start: Date,
+  report: ReportThrow = rethrowing,
+): HeldClock {
   let elapsed = 0;
   // A repeating timer keeps its record and re-arms a period from where it fired,
   // as an interval does after a blocked loop: one late run, not one per missed
@@ -84,13 +96,18 @@ export function heldClock(start: Date): HeldClock {
     timers.add(timer);
     return () => timers.delete(timer);
   };
-  return {
+  // [LAW:single-enforcer] A source like the machine's, so the clock a case
+  // holds is built as the process's is, and reports through the same guard.
+  const source: TimerSource = {
     // Whole milliseconds, as `Date.now()` reads them.
     now: () => Math.trunc(start.getTime() + elapsed),
     monotonic: () => elapsed as Monotonic,
-    after: (ms, fire) => arm(ms, fire),
-    every: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
-    defer: (fire) => arm(0, fire),
+    timer: (ms, fire) => arm(ms, fire),
+    interval: (ms, fire) => arm(Math.max(1, ms), fire, Math.max(1, ms)),
+    turn: (fire) => arm(0, fire),
+  };
+  return {
+    ...clockOver(source, report),
     advance: (ms) => fireThrough(elapsed + span(ms)),
     settle: (ms) => settleThrough(elapsed + span(ms)),
     burn: (ms) => {

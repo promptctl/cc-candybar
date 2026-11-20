@@ -8,11 +8,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  systemTimekeeper,
-  type Monotonic,
-  type Timekeeper,
-} from "../../../src/time";
+import { type Monotonic, type Timekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -34,6 +31,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
+import { TaskThrowInbox } from "../../../src/daemon/task-throws";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { fakeLauncher } from "../../helpers/fake-launcher";
@@ -276,6 +274,30 @@ describe("a connection to a daemon built in this worker", () => {
     expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
     insideHold.settled(true);
     expect(standingReads()).toBe(before + 1);
+  });
+
+  test("a task its clock reports draws on every bar, once per task, and every throw is counted", async () => {
+    const taskThrows = new TaskThrowInbox();
+    const running = startDaemon(process.env, { taskThrows });
+    started = running;
+    const reply = async (session: string) => {
+      const result = await running.daemon.reply(
+        renderRequest(session, undefined),
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      result.settled(false);
+      return drawn(result.resp);
+    };
+    expect(await reply("task-throw-a")).not.toMatch(/⚠/);
+
+    const now = running.daemon.clock.now();
+    taskThrows.report("session sweep", new Error("it broke"), now);
+    taskThrows.report("session sweep", new Error("it broke again"), now);
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
+    expect(await reply("task-throw-b")).toMatch(/⚠\s+1/);
+    expect(running.daemon.stats.tasksThrew).toBe(2);
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

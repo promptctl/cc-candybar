@@ -84,14 +84,6 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       }
     }
   };
-  // [LAW:no-silent-failure] A failed sample is logged at the timer boundary.
-  const check = (): void => {
-    try {
-      sample();
-    } catch (error) {
-      log("error", `binary check failed: ${(error as Error).message}`);
-    }
-  };
   return {
     arm() {
       for (const { path, stamp } of boot) {
@@ -102,7 +94,9 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
           );
         }
       }
-      stopSampling = clock.every(intervalMs, check, {
+      // [LAW:no-silent-failure] A sample that throws reaches the clock, which
+      // shows it on every bar, and the next sample runs on its period.
+      stopSampling = clock.every("binary check", intervalMs, sample, {
         unref: true,
       });
     },

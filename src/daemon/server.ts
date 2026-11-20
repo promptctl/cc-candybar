@@ -24,6 +24,7 @@ import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
 import type { World } from "../host";
+import type { TaskThrowInbox } from "./task-throws.js";
 import {
   createDaemon,
   type PreparedDaemon,
@@ -70,6 +71,8 @@ let startup: Promise<void> | null = null;
 // nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
 interface DaemonProcess {
   readonly world: World;
+  // What the world's clock reports its tasks' throws into.
+  readonly taskThrows: TaskThrowInbox;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
@@ -111,9 +114,14 @@ function processEntry(): string {
   return entry;
 }
 
-export function runDaemon(world: World): void {
+export function runDaemon(world: World, taskThrows: TaskThrowInbox): void {
   const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
+  thisProcess = {
+    world,
+    taskThrows,
+    paths,
+    log: new DaemonLog(paths.log, world.clock),
+  };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -155,7 +163,7 @@ async function boot(): Promise<void> {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const { world, paths, log: daemonLog } = daemonProcess();
+  const { world, taskThrows, paths, log: daemonLog } = daemonProcess();
   const { host } = world;
   const memoryLimit = memoryLimitBytes(host.env);
 
@@ -217,6 +225,7 @@ async function boot(): Promise<void> {
     paths,
     memoryLimitBytes: memoryLimit,
     clock: world.clock,
+    taskThrows,
     exit: shutdown,
   });
   prepared = daemon;
@@ -489,7 +498,7 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  daemonProcess().world.clock.after(500, () =>
+  daemonProcess().world.clock.after("exit backstop", 500, () =>
     process.kill(process.pid, "SIGKILL"),
   );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
@@ -505,7 +514,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  void closeThenExit(code);
+  daemonProcess().world.clock.detach("daemon close", () => closeThenExit(code));
 }
 
 // [LAW:no-ambient-temporal-coupling] The daemon's close awaits the renderer's

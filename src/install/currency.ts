@@ -75,7 +75,11 @@ export async function fetchLatestVersion(
   const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
   try {
     const res = await fetchImpl(url, {
-      signal: timeoutSignal(clock, REGISTRY_TIMEOUT_MS),
+      signal: timeoutSignal(
+        clock,
+        `registry lookup ${url}`,
+        REGISTRY_TIMEOUT_MS,
+      ),
     });
     if (!res.ok) {
       return failed(`registry responded ${res.status} for ${url}`, "read");

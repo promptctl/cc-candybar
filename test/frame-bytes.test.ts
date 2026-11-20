@@ -31,7 +31,7 @@ import { SessionEffects } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");

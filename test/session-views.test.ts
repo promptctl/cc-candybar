@@ -31,7 +31,7 @@ import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";

@@ -475,6 +475,15 @@ export function drawRender(
   ): MaybeError => ({ kind, about, text, copy: text });
   const said = (kind: DrawError["kind"], text: string | null | undefined) =>
     sourced(kind, text ?? "", text);
+  const { daemon } = document;
+  // [LAW:no-silent-failure] A daemon task that threw is a fault in the daemon,
+  // an error on every bar by the same event hold as a renderer's end. Each
+  // task is one message about itself, however often it threw.
+  const tasksThrew = daemon.taskThrows.flatMap(({ task, event }) =>
+    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, drawing.by) === "over"
+      ? []
+      : [{ kind: "task-threw" as const, task, event }],
+  );
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
@@ -493,6 +502,15 @@ export function drawRender(
       }),
     ),
     said("click", clickShown?.text),
+    ...tasksThrew.map(
+      ({ task, event }): MaybeError => ({
+        kind: "task-threw",
+        subject: task,
+        about: `task-threw\0${task}`,
+        text: event.text,
+        copy: event.text,
+      }),
+    ),
   ].flatMap(({ about, text, copy, ...named }) =>
     text != null && copy != null ? [{ ...named, about, text, copy }] : [],
   );
@@ -506,7 +524,6 @@ export function drawRender(
   const configWatch = entry.snapshot.watch;
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
-  const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const launchEvents = launched.flatMap((warning) =>
     "event" in warning ? [warning] : [],
@@ -517,9 +534,12 @@ export function drawRender(
   ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
-  const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
-    event.answered ? [] : [{ kind, event }],
-  );
+  const eventsShown: readonly DisplayedEvent[] = [
+    ...[...launchEvents, ...held].flatMap(({ kind, event }) =>
+      event.answered ? [] : [{ kind, event }],
+    ),
+    ...tasksThrew.filter(({ event }) => !event.answered),
+  ];
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
@@ -788,9 +808,16 @@ export function drawRender(
 }
 
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
-// the kind its fault is noted by, and the file a dropped write names.
+// the kind its fault is noted by, and what it is about: the file a dropped
+// write names, or the task that threw.
 interface DrawError extends SourcedText {
-  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "dropped"
+    | "click"
+    | "task-threw";
   readonly subject?: string;
 }
 

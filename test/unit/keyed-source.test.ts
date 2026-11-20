@@ -10,7 +10,7 @@ import {
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
@@ -60,7 +60,6 @@ function sourceOf(
     watch: NO_WATCH,
     maxEntries: opts.maxEntries ?? 64,
     lines: REFRESH_TRIGGERS,
-    logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
     clock: opts.clock ?? systemTimekeeper,
   });
@@ -382,7 +381,6 @@ describe("KeyedSource", () => {
         watch: NO_WATCH,
         maxEntries: 64,
         lines: REFRESH_TRIGGERS,
-        logger: () => {},
         ledger: new RefreshLedger(),
         clock: systemTimekeeper,
       });

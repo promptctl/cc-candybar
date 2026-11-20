@@ -23,6 +23,7 @@ import type { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import type { Locations } from "../../src/config/loader/chain-places";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
+import { systemTimekeeper } from "./system-clock";
 import {
   loadOrigin,
   RenderCache,
@@ -85,6 +86,7 @@ export function configHost(
     locations: world.locations,
     stateDir: world.stateDir,
     watchers: world.watchers,
+    clock: systemTimekeeper,
     log: world.log ?? (() => {}),
     reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
@@ -131,7 +133,10 @@ export function loadDiscovered(
   { stateDir, ...deps }: StateDeps & { readonly stateDir: string },
 ): LoadOutcome & { readonly snapshot: ConfigSnapshot } {
   const { snapshot } = discover(
-    { ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)), cwd },
+    {
+      ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)),
+      cwd,
+    },
     readShared({ locations: deps.locations, stateDir }),
   );
   return { ...loadOrigin(cwd, snapshot, deps), snapshot };

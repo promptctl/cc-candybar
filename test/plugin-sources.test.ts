@@ -80,7 +80,7 @@ import {
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
 import { NOTHING_READ } from "../src/dsl/view-source";

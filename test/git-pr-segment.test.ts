@@ -17,7 +17,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { registerDslConfig } from "../src/dsl/render";
 import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the

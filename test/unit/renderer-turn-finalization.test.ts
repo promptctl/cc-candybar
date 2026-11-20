@@ -140,7 +140,7 @@ function rig(
     NO_ACTS,
   );
   const due = (work: () => void = () => {}) => {
-    parts.time.during(readingsAt(clock), () => parts.time.after(0, work));
+    parts.time.during(readingsAt(clock), () => parts.time.after("test task", 0, work));
     return host.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
   };
   const setTheme = (theme: string) => state.set(SESSION, "theme", theme);
@@ -324,7 +324,7 @@ test("the first failure in collection still lands history, holds subscriptions, 
   });
   const failed = await fixture.due(() => {
     fixture.journalTheme("nord");
-    fixture.time.after(2_000, wake);
+    fixture.time.after("test task", 2_000, wake);
     rejectState = true;
     runInAction(() => blocked.set(true));
   });

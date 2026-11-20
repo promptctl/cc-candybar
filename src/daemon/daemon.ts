@@ -13,7 +13,9 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
 } from "./foundations/verb-error.js";
+import type { TaskThrowInbox } from "./task-throws.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -58,7 +60,7 @@ import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import { instantAt, instantOf, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
@@ -84,12 +86,12 @@ import {
   type SessionEnvironment,
 } from "./foundations/session-env.js";
 import {
-  answeredBy,
+  heldEventText,
   joinedEvent,
   type DisplayedEvent,
-  type HeldEvent,
 } from "../utils/event-hold.js";
-import { compareStructural, observable, runInAction } from "mobx";
+import { HeldSlot } from "./held-slot.js";
+import { compareStructural, observable, reaction, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
@@ -180,6 +182,9 @@ export interface DaemonInputs extends DaemonAdapters {
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
+  // What the clock's tasks threw: the reporter the clock was built over
+  // (src/time.ts `clockOver`), which every bar shows.
+  readonly taskThrows: TaskThrowInbox;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -288,21 +293,32 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+      taskThrows: [],
+    },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
+  // [LAW:one-source-of-truth] How the last renderer process ended, the acts
+  // that failed with no session's bar to hold them, and what each of the
+  // daemon's tasks threw, each held until no bar can show it.
+  const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
+  const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
+  const taskThrown = new Map<string, HeldSlot>();
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
-        actFailed,
+        rendererEnded: rendererEnded.event(),
+        actFailed: actFailed.event(),
+        taskThrows: [...taskThrown].flatMap(([task, slot]) => {
+          const event = slot.event();
+          return event === null ? [] : [{ task, event }];
+        }),
       }),
     );
   }
@@ -339,22 +355,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // owner of the daemon's latest occurrences, independent of their renderer.
   const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
     let changed = false;
-    for (const { kind, event } of shown) {
-      switch (kind) {
+    for (const shownEvent of shown) {
+      switch (shownEvent.kind) {
         case "launch-pipes":
-          if (launcher.answeredPipeEvent(event)) changed = true;
+          if (launcher.answeredPipeEvent(shownEvent.event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
+          if (rendererEnded.answer(shownEvent.event)) changed = true;
           break;
         case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
+          if (actFailed.answer(shownEvent.event)) changed = true;
+          break;
+        case "task-threw":
+          if (taskThrown.get(shownEvent.task)?.answer(shownEvent.event))
             changed = true;
-          }
           break;
       }
     }
@@ -362,6 +376,42 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // publish new facts only when the first confirmation changes an owner.
     if (changed) restateFaults();
   };
+  // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
+  // those thrown before this daemon was built included: every throw counts,
+  // a task's first holds an error on every bar and logs its full detail once,
+  // and a recurrence while it is held moves nothing.
+  const takeThrows = (): void => {
+    for (const { task, thrown, at } of inputs.taskThrows.take()) {
+      stats.tasksThrew++;
+      if (taskThrown.has(task)) continue;
+      const failure = failureOf(thrown);
+      log("error", `${task} threw: ${failure.detail}`);
+      const slot = new HeldSlot(clock, `task throw hold ${task}`, () => {
+        taskThrown.delete(task);
+        restateFaults();
+      });
+      taskThrown.set(task, slot);
+      // A thrown message can carry a launched command's output, and nothing
+      // here can tell which do, so each refuses a recording while it shows.
+      slot.hold(
+        environmentOutput(
+          {
+            text: heldEventText(`${task} threw: ${failure.message}`),
+            at: instantOf(new Date(at)),
+            revision: 1,
+            answered: false,
+          },
+          true,
+        ),
+      );
+    }
+    restateFaults();
+  };
+  const stopTakingThrows = reaction(
+    () => inputs.taskThrows.waitingCount(),
+    takeThrows,
+    { fireImmediately: true },
+  );
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -596,6 +646,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     stateDir: paths.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
+    clock,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
@@ -705,10 +756,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ended: (event) => {
         // [LAW:types-are-the-program] A later exit can have the same text and
         // instant as an earlier one, even as an old reply is still writing.
-        rendererEnded = {
+        rendererEnded.hold({
           ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1,
-        };
+          revision: (rendererEnded.event()?.revision ?? 0) + 1,
+        });
         restateFaults();
       },
     });
@@ -754,11 +805,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         acknowledgeDisplayed,
         unheard: (text, fromEnvironment) => {
           // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+          const prior = actFailed.event();
+          actFailed.hold(
+            environmentOutput(
+              joinedEvent(prior, text, instant()),
+              fromEnvironment === true ||
+                (prior !== null &&
+                  !prior.answered &&
+                  isEnvironmentOutput(prior)),
+            ),
           );
           restateFaults();
         },
@@ -848,20 +903,17 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
-          void former.renderer
-            .deliver(
-              () => ({
-                kind: "event",
-                event: { kind: "retire", session },
-              }),
-              [["why", "renderer-moved"]],
-            )
-            .catch((error: unknown) => {
-              log(
-                "error",
-                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
-              );
-            });
+          clock.detach(
+            `renderer ${former.renderer.name} retire ${session}`,
+            () =>
+              former.renderer.deliver(
+                () => ({
+                  kind: "event",
+                  event: { kind: "retire", session },
+                }),
+                [["why", "renderer-moved"]],
+              ),
+          );
         frameFeeds.handedIn(null);
         frameFeeds.announce();
       }
@@ -1091,6 +1143,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ),
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
+      // [LAW:no-ambient-temporal-coupling] A closed daemon takes no throws and
+      // ends no holds, so a later daemon over the same clock owns its own.
+      [
+        "held events close",
+        () => {
+          stopTakingThrows();
+          for (const slot of [rendererEnded, actFailed, ...taskThrown.values()])
+            slot.dispose();
+        },
+      ],
       ...attached.map(
         ({ renderer, link }): TeardownStep => [
           `${renderer.name} renderer close`,

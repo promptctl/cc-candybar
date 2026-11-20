@@ -1,5 +1,5 @@
 import { waitWithin } from "../src/utils/reading";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const after = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,6 +14,7 @@ const unexpected = (e: unknown): void => {
 test("work that ends inside the time answers, and its signal is aborted once the wait ends", async () => {
   let seen: AbortSignal | undefined;
   const end = await waitWithin(
+    "test wait",
     async (signal) => {
       seen = signal;
       await after(10);
@@ -30,6 +31,7 @@ test("work that ends inside the time answers, and its signal is aborted once the
 test("work still out at the deadline ends the wait there, and its signal aborts", async () => {
   let seen: AbortSignal | undefined;
   const end = await waitWithin(
+    "test wait",
     (signal) => {
       seen = signal;
       return after(1000);
@@ -48,6 +50,7 @@ test("a wait ends when its time does, and not before", async () => {
   try {
     let end: string | undefined;
     void waitWithin(
+      "test wait",
       () => new Promise(() => {}),
       110,
       unexpected,
@@ -68,6 +71,7 @@ test("a wait ends when its time does, and not before", async () => {
 test("a rejection inside the time is the wait's", async () => {
   await expect(
     waitWithin(
+      "test wait",
       () => Promise.reject(new Error("bug")),
       1000,
       unexpected,
@@ -80,6 +84,7 @@ test("a rejection inside the time is the wait's", async () => {
 test("a rejection after the deadline goes to its owner's report, never dropped", async () => {
   const late: unknown[] = [];
   const end = await waitWithin(
+    "test wait",
     async () => {
       await after(30);
       throw new Error("late bug");
@@ -99,14 +104,15 @@ test("its owner closing ends the wait there, with its timer cleared and its work
   let seen: AbortSignal | undefined;
   const cleared: string[] = [];
   const waiting = waitWithin(
+    "test wait",
     (signal) => {
       seen = signal;
       return new Promise(() => {});
     },
     60_000,
     unexpected,
-    (ms, fire) => {
-      const clear = systemTimekeeper.after(ms, fire);
+    (task, ms, fire) => {
+      const clear = systemTimekeeper.after(task, ms, fire);
       return () => {
         cleared.push("timer");
         clear();
@@ -125,6 +131,7 @@ test("a wait begun after its owner closed ends at once", async () => {
   owner.abort();
   expect(
     await waitWithin(
+      "test wait",
       () => new Promise(() => {}),
       60_000,
       unexpected,

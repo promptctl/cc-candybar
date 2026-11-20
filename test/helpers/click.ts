@@ -63,7 +63,7 @@ import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { NO_CONFIGS } from "./renderers";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept

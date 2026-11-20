@@ -67,7 +67,7 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";

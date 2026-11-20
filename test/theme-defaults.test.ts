@@ -40,7 +40,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>

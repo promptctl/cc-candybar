@@ -197,6 +197,7 @@ export async function answerStatusline(
         deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
       });
       const ended = await waitWithin(
+        `render wait ${session}`,
         (signal) => collector.settled(session, signal),
         budget,
         // [LAW:no-silent-failure] A late failure belongs to the session.

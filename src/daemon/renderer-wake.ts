@@ -49,7 +49,9 @@ export type DueEnded = {
 );
 
 export interface WakeDeps {
-  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
+  readonly clock: Pick<Timekeeper, "monotonic" | "after" | "detach">;
+  // The wake's task name, with the renderer it wakes.
+  readonly task: string;
   // Hands the renderer its `due`, resolving with how the turn ended, or the
   // failure that made none: refused once the wake has closed. Each turn's
   // line is the host's.
@@ -126,7 +128,7 @@ export class RendererWake {
       LONGEST_TIMER_MS,
       Math.max(0, (tick - tickAt(clock)) * 1000),
     );
-    return clock.after(ms, () => {
+    return clock.after(this.deps.task, ms, () => {
       if (this.state.kind !== "armed" || this.state.tick !== tick) return;
       // Fired early: the rest is waited out.
       if (tickAt(clock) < tick) {
@@ -136,11 +138,8 @@ export class RendererWake {
       this.state = { kind: "queued" };
       // [LAW:no-silent-failure] A `due` that rejected failed: the wake
       // hears it as one that threw, so it is said and the wake arms again.
-      void this.deliverDue(tick).catch((thrown: unknown) =>
-        this.deps.log(
-          `wake could not record its due: ${failureOf(thrown).detail}`,
-        ),
-      );
+      // What its answer throws past that reaches the clock.
+      clock.detach(this.deps.task, () => this.deliverDue(tick));
     });
   }
 

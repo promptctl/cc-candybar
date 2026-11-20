@@ -8,6 +8,7 @@
 
 import path from "node:path";
 import { processWorld } from "../../../src/host.js";
+import { rethrowing } from "../../../src/time.js";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id.js";
@@ -45,7 +46,7 @@ const gitBenchmark = ([
     try {
       const repo = path.join(root, "repo");
       makeRepo(repo, shape);
-      const service = new GitService(processWorld().launcher);
+      const service = new GitService(processWorld(rethrowing).launcher);
       const ms = await repeat(plan.samples, async () => {
         const info = await service.getGitInfo(repo);
         // [LAW:no-silent-failure] A read that failed, or saw a tree other
@@ -116,8 +117,8 @@ const coldFold = ([
       writeTranscript(transcript, SESSION, root, turns);
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
-          host: processWorld().host,
-          clock: processWorld().clock,
+          host: processWorld(rethrowing).host,
+          clock: processWorld(rethrowing).clock,
           sweepIntervalMs: 0,
         });
         await folded(store, transcript, turns);
@@ -150,8 +151,8 @@ const warmFold = (
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
       const store = new SessionUsageStore({
-        host: processWorld().host,
-        clock: processWorld().clock,
+        host: processWorld(rethrowing).host,
+        clock: processWorld(rethrowing).clock,
         sweepIntervalMs: 0,
       });
       let turns = WARM_TURNS;

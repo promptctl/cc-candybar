@@ -124,6 +124,8 @@ export type WaitEnd = "answered" | "deadline" | "closed";
 // of it after the wait ended is no one's answer: it goes to `late`, its
 // owner's report, with how the wait ended.
 export function waitWithin(
+  // The deadline's task name.
+  task: string,
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
   late: (e: unknown, ended: "deadline" | "closed") => void,
@@ -132,14 +134,14 @@ export function waitWithin(
 ): Promise<WaitEnd> {
   const wait = new AbortController();
   const end = (why: "deadline" | "closed") => () => wait.abort(why);
-  const clear = after(Math.max(0, ms), end("deadline"));
+  const clear = after(task, Math.max(0, ms), end("deadline"));
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () =>
       resolve(wait.signal.reason as WaitEnd),
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    void work(wait.signal).then(
+    work(wait.signal).then(
       () => resolve("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own
       // while it listens, its owner's after. Work that answered never

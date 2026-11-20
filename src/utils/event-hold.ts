@@ -1,12 +1,13 @@
 // How long an event-shaped error shows: the daemon's one rule for it, read by
 // every render against its own instant.
 //
-// [LAW:no-ambient-temporal-coupling] Nothing is timed and nothing clears the
-// record: each render asks whether its instant is inside the hold, so a pushed
-// frame and a statusline request agree by construction. Past the hold a
-// request is still owed the error until an answer has carried it, because
-// Claude Code with no `statusLine.refreshInterval` asks only on events, and an
-// error that expired unseen would be silent.
+// [LAW:no-ambient-temporal-coupling] Each render asks whether its instant is
+// inside the hold, so a pushed frame and a statusline request agree by
+// construction. Past the hold a request is still owed the error until an
+// answer has carried it, because Claude Code with no
+// `statusLine.refreshInterval` asks only on events, and an error that expired
+// unseen would be silent. Its owner lets it go only once neither holds, so the
+// facts carry an event only while some bar can show it.
 
 import type { Instant } from "./instant.js";
 import type { Drawing } from "../config/lanes.js";
@@ -31,10 +32,16 @@ export interface HeldEvent {
 
 // [LAW:types-are-the-program] A frame names the daemon's occurrence and its
 // owner. Session click errors never leave the renderer's delivery record.
-export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
-  readonly event: HeldEvent;
-}
+export type DisplayedEvent =
+  | {
+      readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+      readonly event: HeldEvent;
+    }
+  | {
+      readonly kind: "task-threw";
+      readonly task: string;
+      readonly event: HeldEvent;
+    };
 
 // `held` inside the hold, `owed` past it to a request no answer has served,
 // `over` once neither holds.

@@ -310,12 +310,16 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
-  private readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
+  private readonly clock: Pick<
+    Timekeeper,
+    "monotonic" | "after" | "every" | "detach"
+  >;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
-    // times the reads are stamped and timed with.
-    clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
+    // times the reads are stamped and timed with, and the lookups and passes
+    // nothing awaits.
+    clock: Pick<Timekeeper, "monotonic" | "after" | "every" | "detach">;
     periodMs?: number;
     maxRepos?: number;
     // How many forge lookups may be out at once, across every repo.
@@ -501,9 +505,11 @@ export class GitDataProvider {
   // ([LAW:single-enforcer] the key moves only in a pass).
   private built(root: string): RepoState {
     const pr: PrSource = {
-      period: new Period(() => {
-        void this.readPr(state, pr, "period");
-      }, this.clock),
+      period: new Period(
+        `PR lookup ${root}`,
+        () => this.readPr(state, pr, "period"),
+        this.clock,
+      ),
       seen: new Map(),
       // Its key is the first pass's to set.
       missed: true,
@@ -516,9 +522,11 @@ export class GitDataProvider {
       root,
       refresh: new TrailingEdge(),
       watch: this.followWatch(root, null).watch,
-      period: new Period(() => {
-        void state.refresh.share(PASS, () => this.refreshPass(state));
-      }, this.clock),
+      period: new Period(
+        `git refresh ${root}`,
+        () => state.refresh.share(PASS, () => this.refreshPass(state)),
+        this.clock,
+      ),
       value: { reading: unread(), missed: false },
       pr,
       holders: 0,
@@ -557,19 +565,25 @@ export class GitDataProvider {
 
   private changedPass(state: RepoState, reason: PassReason): void {
     state.asked.add(reason);
-    state.refresh.run(PASS, () => this.refreshPass(state));
+    this.runPass(state);
   }
 
-  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
-  // when the pass ENDS, after its every await, so a tick that shares a running
+  // [LAW:no-silent-failure] A loop this starts is the clock's, which reports
+  // what its passes threw; a trigger the running loop takes has nothing to
+  // hand over.
+  private runPass(state: RepoState): void {
+    const trigger = state.refresh.run(PASS, () => this.refreshPass(state));
+    if (trigger.kind === "started")
+      this.clock.detach(`git refresh ${state.root}`, () => trigger.done);
+  }
+
+  // The loop's work, whose throw reaches the clock that started it.
+  // [LAW:no-ambient-temporal-coupling] The period lands when the pass ENDS,
+  // however it ends, after its every await, so a tick that shares a running
   // pass is always followed by the landing that schedules the next one.
   private async refreshPass(state: RepoState): Promise<void> {
     try {
       await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -606,9 +620,7 @@ export class GitDataProvider {
   // include it, so it queues a pass rather than sharing one; a reason already
   // in `asked` means such a pass is queued, and it will see this one too.
   private queue(state: RepoState, before: number): void {
-    if (state.asked.size > before) {
-      state.refresh.run(PASS, () => this.refreshPass(state));
-    }
+    if (state.asked.size > before) this.runPass(state);
   }
 
   private held(state: RepoState): void {
@@ -714,7 +726,9 @@ export class GitDataProvider {
     }
     renew(pr, "unread");
     pr.missed = false;
-    void this.readPr(state, pr, "first");
+    this.clock.detach(`PR lookup ${state.root}`, () =>
+      this.readPr(state, pr, "first"),
+    );
     return "looked-up";
   }
 
@@ -744,12 +758,7 @@ export class GitDataProvider {
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
-      this.prRefreshes.recorded(
-        `${state.root} key=${logfmtValue(key)}`,
-        by,
-        outcome,
-        elapsedMs(this.clock, startedAt),
-      );
+      const took = elapsedMs(this.clock, startedAt);
       // Kept under its own key whether or not the PR has moved on since.
       const at = this.clock.monotonic();
       const answer: PrAnswer = {
@@ -764,9 +773,18 @@ export class GitDataProvider {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
-      if (pr.key !== key || pr.missed) return;
-      settle(pr, outcome);
-      pr.period.landed(prPeriodOf(answer), at);
+      if (pr.key === key && !pr.missed) {
+        settle(pr, outcome);
+        pr.period.landed(prPeriodOf(answer), at);
+      }
+      // [LAW:no-ambient-temporal-coupling] Recorded after the answer is kept
+      // and the period lands, so a throw in the record costs neither.
+      this.prRefreshes.recorded(
+        `${state.root} key=${logfmtValue(key)}`,
+        by,
+        outcome,
+        took,
+      );
     });
     pr.inFlight = { key, done };
     return done;

@@ -38,7 +38,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;

@@ -3,7 +3,7 @@
 // carry the cause, not only the class of failure.
 
 import { systemLauncher } from "../src/proc/system-launcher";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
   clickLaunch,

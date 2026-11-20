@@ -26,7 +26,7 @@ import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
 import { RendererDown } from "../../../src/daemon/foundations/verb-error";
 import { systemLauncher } from "../../../src/proc/system-launcher";
-import { systemTimekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import {
   DISCLOSURE_CLOSED,

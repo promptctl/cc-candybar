@@ -198,6 +198,7 @@ export function makeOwnershipWatch(
     // unref so the check never keeps the process alive on its own — it only ever
     // hastens an exit, never delays one.
     const disarm = deps.clock.every(
+      "socket ownership check",
       intervalMs,
       () => {
         // [LAW:no-ambient-temporal-coupling] Self-disarm once displaced: the watch

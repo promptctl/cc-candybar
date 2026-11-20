@@ -10,7 +10,7 @@ import type {
 } from "../src/renderer-interface/interface";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { WireFrame } from "../src/render/frame";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import type { Instant, Tick } from "../src/utils/instant";
 import { hostOf } from "./helpers/host";
 

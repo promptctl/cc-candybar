@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import { locations } from "../../../src/daemon/paths.js";
 import { processWorld } from "../../../src/host.js";
+import { rethrowing } from "../../../src/time.js";
 import path from "node:path";
 
 import {
@@ -59,7 +60,7 @@ async function prepared(
   const warnings: string[] = [];
   // An example file is explicit: no repository supplies it.
   const config = await prepareConfig(
-    processWorld(),
+    processWorld(rethrowing),
     layers.map(homeLayer),
     cwd,
     warnings,
@@ -162,7 +163,7 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, () => {
-          const locs = locations(processWorld().host);
+          const locs = locations(processWorld(rethrowing).host);
           loadSnapshot(
             snapshotOf(
               sessionPlugins(installedRoots(locs), diskFiles.checkout(cwd)),

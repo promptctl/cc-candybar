@@ -1,4 +1,5 @@
 import { compareStructural } from "mobx";
+import { runEach } from "../../utils/run-each.js";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
@@ -692,17 +693,22 @@ export class WatcherRegistry {
       window.pending = {
         changes,
         cancel: this.clock.after(
+          "watch delivery",
           DEBOUNCE_MS,
           () => {
             window.pending = null;
-            for (const [changed, gathered] of changes) {
-              if (this.slots.get(changed.key) !== changed) continue;
-              const heard = heardOf(gathered);
-              for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
-            }
-            if (window.completed !== undefined)
-              this.notify(null, window.completed);
+            // [LAW:no-silent-failure] Every holder hears the window, whatever
+            // one before it threw; what they threw reaches the clock.
+            runEach([
+              ...[...changes].flatMap(([changed, gathered]) => {
+                if (this.slots.get(changed.key) !== changed) return [];
+                const heard = heardOf(gathered);
+                return [...changed.holders].map(
+                  (holder) => () => holder.onInvalidate(heard),
+                );
+              }),
+              ...(window.completed === undefined ? [] : [window.completed]),
+            ]);
           },
           { unref: true },
         ),
@@ -718,16 +724,6 @@ export class WatcherRegistry {
           ? { kind: "changed", paths: new Set(invalidation.paths) }
           : invalidation,
     );
-  }
-
-  private notify(key: string | null, take: () => void): void {
-    try {
-      take();
-    } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
-    }
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -813,9 +809,14 @@ export class WatcherRegistry {
   // thread to render anyway.
   private armSweep(): void {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
-    this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
-      unref: true,
-    });
+    this.sweep = this.clock.every(
+      "polled paths read",
+      POLL_MS,
+      () => this.readPolled(),
+      {
+        unref: true,
+      },
+    );
   }
 
   private disarmSweep(): void {

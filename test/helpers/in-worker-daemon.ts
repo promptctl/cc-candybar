@@ -36,7 +36,9 @@ import {
   sendOne,
   type Request,
 } from "../../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
+import { clockOver, systemTimers } from "../../src/time";
+import { TaskThrowInbox } from "../../src/daemon/task-throws";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
@@ -99,17 +101,22 @@ export function prepareDaemon(
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
-  const daemonLog =
-    overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
+  // [LAW:single-enforcer] The daemon's clock as the process builds it: what
+  // its tasks throw goes to its inbox, so a case sees a throw where a user
+  // does, on the bar.
+  const taskThrows = overrides.taskThrows ?? new TaskThrowInbox();
+  const clock = overrides.clock ?? clockOver(systemTimers, taskThrows.report);
+  const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, clock);
   try {
     const daemon = createDaemon({
       region: systemRegion(),
-      ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      ...productionAdapters(paths, daemonLog, clock),
       renderer: inProcessRenderer(),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
-      clock: systemTimekeeper,
+      clock,
+      taskThrows,
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -120,7 +127,7 @@ export function prepareDaemon(
       paths,
       daemonLog,
       profile: (name, log) => ({
-        ...fileStorage(profilePaths(paths, name), log, systemTimekeeper),
+        ...fileStorage(profilePaths(paths, name), log, clock),
         ...overrides.profile?.(log),
       }),
     });

@@ -16,7 +16,7 @@ import {
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 import { instantOf, type Instant } from "../../src/utils/instant";
 import { DAEMON_EVENT_HOLD_S } from "../../src/utils/event-hold";
 

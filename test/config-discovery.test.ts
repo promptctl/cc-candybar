@@ -39,7 +39,8 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
+import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
@@ -108,6 +109,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
     stateDir: state,
     watchers,
     files: () => files,
+    clock,
     log: (_level, line) => logged.push(line),
     moved: (renderer, origins) => {
       for (const origin of origins) {
@@ -603,18 +605,21 @@ test("one failed rediscovery leaves the writer and another holder the successful
   const b = named("failed-once");
   const name = rendererNameOf("next");
   let refuse = false;
+  const threw: Array<{ task: string; thrown: unknown }> = [];
   const {
     service,
     discovery: writer,
     delivered,
-    logged,
-  } = discoveryRig({
-    ...diskFiles,
-    text(read) {
-      if (refuse && read === b.file) throw new Error("rediscovery failed");
-      return diskFiles.text(read);
+  } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (refuse && read === b.file) throw new Error("rediscovery failed");
+        return diskFiles.text(read);
+      },
     },
-  });
+    clockOver(systemTimers, (task, thrown) => threw.push({ task, thrown })),
+  );
   const second = service.forRenderer(name);
   const origins = [a.origin, b.origin];
   writer.follow(origins);
@@ -627,11 +632,12 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
+  expect(threw).toEqual([
+    {
+      task: expect.stringMatching(/^config discovery .*failed-once/),
+      thrown: new Error("rediscovery failed"),
+    },
+  ]);
 
   refuse = false;
   service.again("events-resumed");
@@ -846,6 +852,7 @@ function physicalDiscovery(
     stateDir: state,
     watchers,
     openText: countingText(reads, opens),
+    clock: systemTimekeeper,
     log: () => {},
     moved: () => {},
     reloaded,
@@ -1367,6 +1374,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
       if (at === file) fs.unlinkSync(file);
       return result;
     },
+    clock,
     log: () => {},
     moved: (_renderer, origins) => moved.push(...origins),
   });

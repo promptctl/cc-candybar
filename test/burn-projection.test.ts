@@ -39,7 +39,7 @@ import {
   settled,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds

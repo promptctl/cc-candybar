@@ -11,7 +11,8 @@ import {
   handleConnection,
   type ConnectionDaemon,
 } from "../src/daemon/connection";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
+import { clockOver, systemTimers } from "../src/time";
 import { NOTHING_TO_SETTLE } from "../src/daemon/statusline-answer";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
@@ -309,9 +310,11 @@ describe("a connection over a stream", () => {
   });
 
   // [LAW:single-enforcer] A verdict is the socket's one answer: a click that
-  // throws as it starts to land writes nothing further to the ended socket.
+  // throws as it starts to land writes nothing further to the ended socket,
+  // and its throw reaches the daemon's clock.
   test("a url frame whose click throws after its verdict was written is told nothing more", async () => {
     const log = jest.fn();
+    const threw: Array<{ task: string; thrown: unknown }> = [];
     const daemon = standIn({
       handle: async () => ({
         ...urlAnswer(Promise.resolve(), true),
@@ -319,6 +322,9 @@ describe("a connection over a stream", () => {
           throw new Error("the click broke as it began");
         },
       }),
+      clock: clockOver(systemTimers, (task, thrown) =>
+        threw.push({ task, thrown }),
+      ),
       log,
     });
     const { client, received } = open(daemon);
@@ -330,9 +336,16 @@ describe("a connection over a stream", () => {
     expect({
       received,
       warnings: log.mock.calls.filter(([level]) => level === "warn"),
+      threw,
     }).toEqual({
       received: [expect.objectContaining({ code: "BAD_REQUEST" })],
       warnings: [],
+      threw: [
+        {
+          task: "url click landing",
+          thrown: new Error("the click broke as it began"),
+        },
+      ],
     });
   });
 

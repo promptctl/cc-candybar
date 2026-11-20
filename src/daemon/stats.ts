@@ -60,6 +60,8 @@ export class RuntimeStats {
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
+  // Every throw the daemon's tasks reported, recurrences included.
+  tasksThrew = 0;
   private readonly unknownHookFields = new Set<string>();
 
   // [LAW:one-source-of-truth] The daemon's clock, which these counters read
@@ -348,6 +350,7 @@ export class RuntimeStats {
         inFlight: this.inFlight,
         took: durationsOf(this.took),
       },
+      tasksThrew: this.tasksThrew,
       unknownHookFields: [...this.unknownHookFields],
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
