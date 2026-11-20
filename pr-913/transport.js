@@ -59742,7 +59742,7 @@ var SPRIG = sprigDatetime(() => {
 });
 var DAY_MS = 864e5;
 var DATE_LIMIT_MS = 864e13;
-var ISO = /^(?:\d{4}|[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
+var ISO = /^(?:\d{4}|(?!-000000)[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
 var NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
 function legacyDate(value) {
   if (!value.includes("(")) return { tokens: value, end: value.length };
