@@ -2421,10 +2421,10 @@ var require_primordials = __commonJS({
       getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
       ownKeys: ReflectOwnKeys
     } = Reflect;
-    var { apply, bind, call } = Function.prototype;
+    var { apply: apply2, bind, call } = Function.prototype;
     var uncurryThis = bind.bind(call);
     primordials.uncurryThis = uncurryThis;
-    var applyBind = bind.bind(apply);
+    var applyBind = bind.bind(apply2);
     primordials.applyBind = applyBind;
     var varargsMethods = [
       // 'ArrayPrototypeConcat' is omitted, because it performs the spread
@@ -56306,11 +56306,11 @@ function checkMenuDecls(ctx, out) {
     }
   }
 }
-function identityIssue(apply) {
-  if (apply === "") {
+function identityIssue(apply2) {
+  if (apply2 === "") {
     return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
   }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+  if (menuMember(apply2) === DISCLOSURE_CLOSED) {
     return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
   }
   return void 0;
@@ -56343,11 +56343,11 @@ function synthesizePlacementMenus(config, issues) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
+        const { apply: apply2, options } = call;
+        const member = menuMember(apply2);
+        const stateKey = menuStateKey(id2, apply2, options.key);
         const pageKey2 = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply2}`;
         const clashKey = [stateKey, pageKey2].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
@@ -56367,7 +56367,7 @@ function synthesizePlacementMenus(config, issues) {
         if (prior !== void 0 && prior !== claimant) {
           issue3(
             node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply2}"`}.`
           );
           continue;
         }
@@ -57948,9 +57948,9 @@ function insertTerm(ctx, anchor, relation) {
 }
 function insertGap(preset, anchor, relation) {
   const gap = `${relation}.${escapedIdent(anchor)}`;
-  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const apply2 = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
+  return { apply: apply2, host, stateKey: menuStateKey(host, apply2, void 0) };
 }
 function spliceContainer(node, ctx) {
   const children2 = [];
@@ -59732,6 +59732,163 @@ function formatterFuncs(locale) {
   };
 }
 
+// src/template-engine/datetime.ts
+init_globals();
+var DATE_CLOCK_FUNCTIONS = ["now", "ago"];
+var SPRIG = sprigDatetime(() => {
+  throw new Error(
+    "a sprig date function other than now and ago read the clock"
+  );
+});
+var DAY_MS = 864e5;
+var DATE_LIMIT_MS = 864e13;
+var ISO = /^(?:\d{4}|[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
+var NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
+var NUMERIC_ZONE = /\d:.*[+-]\d/s;
+function legacyDate(value) {
+  if (!value.includes("(")) return { tokens: value, end: value.length };
+  let depth = 0;
+  let start = 0;
+  let tokens = "";
+  for (let i2 = 0; i2 < value.length; i2++) {
+    const character = value.charAt(i2);
+    if (character === "(") {
+      if (depth === 0) {
+        start = i2;
+        tokens += " ";
+      }
+      depth++;
+    } else if (character === ")" && depth > 0) depth--;
+    else if (depth === 0) tokens += character;
+  }
+  return { tokens, end: depth === 0 ? value.length : start };
+}
+function hasLegacyZone(value) {
+  const firstNumber = value.search(/\d/);
+  if (firstNumber < 0) return false;
+  const timed2 = value.slice(firstNumber);
+  return NAMED_ZONE.test(timed2) || NUMERIC_ZONE.test(timed2);
+}
+function wallTimeIn(timeZone) {
+  let offsets;
+  const offsetAt = (instant) => {
+    offsets ??= new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset"
+    });
+    const name = offsets.formatToParts(instant).find(({ type: type3 }) => type3 === "timeZoneName")?.value;
+    if (name === "GMT") return 0;
+    const offset = /^GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(name ?? "");
+    if (!offset) throw new Error(`could not determine offset for ${timeZone}`);
+    const [, sign, hours, minutes, seconds = "0"] = offset;
+    const magnitude = Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+    return (sign === "-" ? -magnitude : magnitude) * 1e3;
+  };
+  return (wall) => {
+    const before = offsetAt(Math.max(-DATE_LIMIT_MS, wall - DAY_MS));
+    const after = offsetAt(Math.min(DATE_LIMIT_MS, wall + DAY_MS));
+    if (before === after) return wall - before;
+    const earlier = wall - Math.max(before, after);
+    return Math.abs(earlier) <= DATE_LIMIT_MS && earlier + offsetAt(earlier) === wall ? earlier : wall - Math.min(before, after);
+  };
+}
+function dateInput(value, wallTime) {
+  if (typeof value !== "string") return value;
+  const iso2 = ISO.exec(value);
+  const { tokens, end } = iso2 === null ? legacyDate(value) : { tokens: value, end: value.length };
+  const absolute2 = iso2 === null ? hasLegacyZone(tokens) : iso2[1] === void 0 || iso2[2] !== void 0;
+  let instant = Date.parse(
+    absolute2 ? value : value.slice(0, end) + (iso2 === null ? " GMT" : "Z")
+  );
+  if (!absolute2 && Number.isFinite(instant)) instant = wallTime(instant);
+  const date2 = new Date(instant);
+  if (Number.isNaN(date2.getTime()))
+    throw new Error(`sprig: cannot parse date value ${JSON.stringify(value)}`);
+  return date2;
+}
+var DisplayDate = class extends Date {
+  #describe;
+  constructor(instant, describe3) {
+    super(instant);
+    this.#describe = describe3;
+  }
+  toString() {
+    return Number.isNaN(this.getTime()) ? "Invalid Date" : this.#describe(this);
+  }
+};
+function apply(spec, name, ...args) {
+  const func = spec[name];
+  if (func === void 0)
+    throw new Error(`Sprig date function unavailable: ${name}`);
+  return Reflect.apply(func.fn, void 0, args);
+}
+function dateFunctions(timeZone, clock) {
+  const wallTime = wallTimeIn(timeZone);
+  const input = (value) => dateInput(value, wallTime);
+  let longName;
+  const describe3 = (date2) => {
+    longName ??= new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "long"
+    });
+    const zone = longName.formatToParts(date2).find(({ type: type3 }) => type3 === "timeZoneName")?.value;
+    const local = apply(
+      SPRIG,
+      "dateInZone",
+      "Mon Jan 02 2006 15:04:05 GMT-0700",
+      date2,
+      timeZone
+    );
+    return `${String(local)} (${zone ?? timeZone})`;
+  };
+  const display = (value) => {
+    if (!(value instanceof Date))
+      throw new Error("Sprig date function did not return a Date");
+    return new DisplayDate(value.getTime(), describe3);
+  };
+  const timed2 = sprigDatetime(clock);
+  const bind = (name, fn) => {
+    const spec = SPRIG[name];
+    if (spec === void 0)
+      throw new Error(`Sprig date function unavailable: ${name}`);
+    return { ...spec, fn };
+  };
+  const [now2, ago2] = DATE_CLOCK_FUNCTIONS;
+  return {
+    ...SPRIG,
+    date: bind(
+      "date",
+      (layout, value) => apply(SPRIG, "dateInZone", layout, input(value), timeZone)
+    ),
+    dateInZone: bind(
+      "dateInZone",
+      (layout, value, zone) => apply(SPRIG, "dateInZone", layout, input(value), zone)
+    ),
+    htmlDate: bind(
+      "htmlDate",
+      (value) => apply(SPRIG, "htmlDateInZone", input(value), timeZone)
+    ),
+    htmlDateInZone: bind(
+      "htmlDateInZone",
+      (value, zone) => apply(SPRIG, "htmlDateInZone", input(value), zone)
+    ),
+    dateModify: bind(
+      "dateModify",
+      (duration2, value) => display(apply(SPRIG, "dateModify", duration2, input(value)))
+    ),
+    toDate: bind(
+      "toDate",
+      (layout, value) => display(apply(SPRIG, "toDate", layout, value))
+    ),
+    unixEpoch: bind(
+      "unixEpoch",
+      (value) => apply(SPRIG, "unixEpoch", input(value))
+    ),
+    [now2]: bind(now2, () => display(clock())),
+    [ago2]: bind(ago2, (value) => apply(timed2, ago2, input(value)))
+  };
+}
+
 // src/utils/instant.ts
 init_globals();
 var instantOf = (date2) => date2.getTime() / 1e3;
@@ -59800,21 +59957,7 @@ function animationPair(frame2, timeline) {
   }
   return { frames, stepped: stepped2 };
 }
-var SPRIG_CLOCK_READERS = /* @__PURE__ */ new Set(["now", "ago"]);
-function sprigDatetimeWhere(clock, readsClock) {
-  return Object.fromEntries(
-    Object.entries(sprigDatetime(clock)).filter(
-      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock
-    )
-  );
-}
-var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS"
-  );
-}, false);
 var CLOCK_FACTORIES = [
-  (clock) => sprigDatetimeWhere(clock.now, true),
   (clock) => animationPair(clock.frame, clock.timeline),
   (clock) => Object.fromEntries(
     Object.entries(animationPair(clock.frame)).map(([name, func]) => [
@@ -59827,9 +59970,10 @@ var CLOCK_FACTORIES = [
 function clockFuncs(factories) {
   return Object.assign({}, ...factories.map((factory) => factory(CLOCK)));
 }
-var CLOCK_FUNCTIONS = new Set(
-  Object.keys(clockFuncs(CLOCK_FACTORIES))
-);
+var CLOCK_FUNCTIONS = /* @__PURE__ */ new Set([
+  ...DATE_CLOCK_FUNCTIONS,
+  ...Object.keys(clockFuncs(CLOCK_FACTORIES))
+]);
 function engineClockFunctions(extra) {
   return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
@@ -59839,7 +59983,7 @@ function createCcCandybarEngine(opts) {
   const depth = () => ({ depth: drawnAt() });
   return createEngine({
     fromString: (s) => new RichText(s),
-    toString: (rt) => rt.plain,
+    toString: (rt) => rt instanceof Date ? rt.toString() : rt.plain,
     // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
     // prints as Go prints a map, instead of leaking the object into the
     // fragments as if it were text.
@@ -59862,24 +60006,7 @@ function createCcCandybarEngine(opts) {
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...SPRIG_DATE_FUNCS,
-      // [LAW:effects-at-boundaries] Local date functions use the zone supplied
-      // by the host, through the library’s existing explicitly zoned variants.
-      date: {
-        ...SPRIG_DATE_FUNCS.date,
-        fn: (layout, value) => Reflect.apply(SPRIG_DATE_FUNCS.dateInZone.fn, void 0, [
-          layout,
-          value,
-          region.timeZone
-        ])
-      },
-      htmlDate: {
-        ...SPRIG_DATE_FUNCS.htmlDate,
-        fn: (value) => Reflect.apply(SPRIG_DATE_FUNCS.htmlDateInZone.fn, void 0, [
-          value,
-          region.timeZone
-        ])
-      },
+      ...dateFunctions(region.timeZone, CLOCK.now),
       ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
@@ -67250,15 +67377,15 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
-function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = clickSession(runtime, "picker");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
   const optionFace = (i2, label2) => {
-    const option = apply.options[i2];
+    const option = apply2.options[i2];
     return itemPaint(
-      { index: i2, count: apply.options.length },
+      { index: i2, count: apply2.options.length },
       option,
       label2,
       option === current
@@ -67266,12 +67393,12 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
   const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
+  const catalogue = apply2.library && {
+    groups: apply2.library.groups,
+    entries: apply2.options.map(apply2.library.entry)
   };
-  const labelOf = apply.labelOf ?? ((option) => option);
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
+  const labelOf = apply2.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply2.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -67285,7 +67412,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
+    current === void 0 ? -1 : apply2.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -67303,7 +67430,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     ...realize(declared, option, option, store, sessionId2).effects,
     ...closeEffects
   ]);
-  const optionCell = (face, i2) => linkOver(face, optionTarget(apply.options[i2]));
+  const optionCell = (face, i2) => linkOver(face, optionTarget(apply2.options[i2]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
@@ -67323,7 +67450,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
             args: [
               sessionId2,
               page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
+              String(pageHolding(apply2.options.indexOf(option)))
             ]
           }
         ]),
@@ -67354,10 +67481,10 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
       lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i2) => cellWidth2(labelOf(apply.options[i2])))
+      ...section.indices.map((i2) => cellWidth2(labelOf(apply2.options[i2])))
     );
     for (const i2 of section.indices) {
-      const name = labelOf(apply.options[i2]);
+      const name = labelOf(apply2.options[i2]);
       const authored = catalogue.entries[i2].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
@@ -67390,7 +67517,7 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
           );
         }
-        const apply = requireOptionKind(runtime, applyName, "picker");
+        const apply2 = requireOptionKind(runtime, applyName, "picker");
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
@@ -67400,7 +67527,7 @@ function pickerFuncs(runtime, activeSegment) {
         const drawnAt = activeSegment.drawnAt();
         const draw2 = (ground) => renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           inBody === true ? { kind: "led" } : {
             kind: "own",
@@ -67416,14 +67543,14 @@ function pickerFuncs(runtime, activeSegment) {
             active2,
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             ground
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        const [, ...rows] = apply2.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
         return draw2(band.state)[0];
@@ -67444,23 +67571,23 @@ function ringAround(options, current) {
   const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
+function renderCarousel(applyName, apply2, openName, label2, runtime) {
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
   const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
+  if (!store.has(apply2.stateVar)) {
     throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = clickSession(runtime, "carousel");
-  const { options } = apply;
+  const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => actionTarget(
     realize(declared, ring(offset), ring(offset), store, sessionId2).effects
@@ -67473,7 +67600,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
       // when the domain is colour-valued.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         ring(0),
         label2
       ),
@@ -67530,18 +67657,18 @@ init_globals();
 init_globals();
 var SWATCHES_RANDOM = "?";
 function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
+  const apply2 = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
-  if (apply.paletteOf === void 0) {
+  if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
     );
   }
-  return apply;
+  return apply2;
 }
 function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
@@ -67550,14 +67677,14 @@ function randomOther(seed, count, centre) {
   return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
 }
 function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
+  const apply2 = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
+  if (!apply2.options.includes(option)) {
     throw new Error(
       `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
     );
   }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+  return apply2.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 function swatchFuncs(runtime) {
   return {
@@ -67582,7 +67709,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
   return {
     swatches: {
       fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const apply2 = requireSwatchable(runtime, applyName, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
@@ -67597,12 +67724,12 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
+        const { options } = apply2;
         const count = options.length;
         const steps2 = () => {
           const at = ringAround(
             options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+            readVar(renderBinding(runtime, "swatches").store, apply2.stateVar)
           );
           return [
             { glyph: CAROUSEL_PREV, option: options[at(-1)] },
@@ -67615,7 +67742,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         };
         const [line] = renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           { kind: "led" },
           true,
@@ -67623,7 +67750,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           swatchPaint(
             active2,
             renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             active2.bg
           ),
@@ -67825,10 +67952,10 @@ function renderMenu(applyName, displays, options, runtime) {
       placement.disclosure,
       drawnAt
     ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
+    const apply2 = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
-      apply,
+      apply2,
       { key: pageKey2, stateVar: pageKey2 },
       {
         kind: "own",
@@ -67849,7 +67976,7 @@ function renderMenu(applyName, displays, options, runtime) {
         placement,
         options.distribution,
         renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         drawnAt,
         plane
       ),
@@ -86187,9 +86314,9 @@ var jsonParser = (text4) => {
 var jsonDocumentParser = (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
 
 // src/daemon/cache/managed-storage.ts
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
-var STORAGE_SWEEP_EVERY_MS = DAY_MS;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
+var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS2;
+var STORAGE_SWEEP_EVERY_MS = DAY_MS2;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
 var fileOf = (f) => import_node_path24.default.join(f.folder, fileName(f.sessionId));

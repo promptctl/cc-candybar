@@ -4,15 +4,22 @@
     {
       "version": "pr-913",
       "ref": "refs/pull/913/merge",
-      "sha": "1b357655c9b9b8a9d7c87a3a65b0aca75876a0ca",
-      "timestamp": "2026-11-20T00:09:20.553Z",
+      "sha": "189fba7986ff5cff9df4e84e7c8020daa778417f",
+      "timestamp": "2026-11-20T00:10:39.868Z",
       "commits": [
         {
-          "sha": "1b357655c9b9b8a9d7c87a3a65b0aca75876a0ca",
+          "sha": "189fba7986ff5cff9df4e84e7c8020daa778417f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:08:03Z",
-          "message": "Merge fcd52cc1ea884a975166209b55f2086bcc167b53 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+          "timestamp": "2026-11-20T00:09:31Z",
+          "message": "Merge 76268ff9af760d67d5031339547d2a2037cd5965 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+        },
+        {
+          "sha": "76268ff9af760d67d5031339547d2a2037cd5965",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:08:39-07:00",
+          "message": "fix(renderer): bind template dates to the host time zone\n"
         },
         {
           "sha": "fcd52cc1ea884a975166209b55f2086bcc167b53",
