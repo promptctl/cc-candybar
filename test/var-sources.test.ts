@@ -19,7 +19,6 @@ import {
   parseDuration,
   type Published,
   type SourceParse,
-  type VarValue,
 } from "../src/var-system";
 import {
   SourceRuns,
@@ -178,7 +177,7 @@ function runsOver(deps: Partial<SourceRunsDeps> = {}): SourceRuns {
 }
 function registryOver(
   store: VariableStore,
-  defaultEmptyValue?: VarValue,
+  defaultEmptyValue?: string,
   sessionState?: SessionState,
   parent?: SourceRegistry | null,
   env?: Environment,
@@ -363,10 +362,13 @@ describe("SourceRegistry — input: before its first payload", () => {
     registry.declareInput("count", "count", "number", undefined, "computed");
     feedInputs(registry, { count: "not a number" });
     // An input is derived: its error is recorded when it is read.
-    expect(store.read("count")).toBe(0);
+    expect(() => store.read("count")).toThrow(/variable "count": Cannot cast/);
     expect(registry.getLastError("count")).toBeDefined();
     feedInputs(registry, { count: pendingOf("unread") });
     expect(() => store.read("count")).toThrow(/no value yet/);
+    expect(registry.getLastError("count")).toBeUndefined();
+    feedInputs(registry, { count: 0 });
+    expect(store.read("count")).toBe(0);
     expect(registry.getLastError("count")).toBeUndefined();
   });
 

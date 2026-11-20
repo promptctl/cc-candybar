@@ -460,20 +460,22 @@ export function bindSelf(template: string, self: string, ns: string): string {
     );
 }
 
+// A file and a resolved config both name global and segment-local variables.
+interface VariableDeclarations<Decl extends VariableDecl> {
+  readonly variables: Readonly<Record<string, Decl>>;
+  readonly segments: Readonly<
+    Record<string, { readonly vars?: Readonly<Record<string, Decl>> }>
+  >;
+}
+
 // Every variable the config declares, under the name the store holds it by
 // (a global by its own name, a segment's local as `segName.varName`), with the
 // config path that declares it.
 // [LAW:one-source-of-truth] The one spelling of a segment variable's store name.
-export function* declarationsAt(
-  // What it reads: a config's variables and its segments' own vars, so an
-  // authored file's sections answer as a built config's do.
-  config: Pick<DslConfig, "variables"> & {
-    readonly segments: Readonly<
-      Record<string, Pick<DslConfig["segments"][string], "vars">>
-    >;
-  },
+export function* declarationsAt<Decl extends VariableDecl>(
+  config: VariableDeclarations<Decl>,
 ): IterableIterator<
-  readonly [name: string, decl: VariableDecl, at: readonly string[]]
+  readonly [name: string, decl: Decl, at: readonly string[]]
 > {
   for (const [name, decl] of Object.entries(config.variables)) {
     yield [name, decl, ["variables", name]];
@@ -489,9 +491,9 @@ export function* declarationsAt(
   }
 }
 
-export function* declaredVariables(
-  config: Pick<DslConfig, "variables" | "segments">,
-): IterableIterator<readonly [name: string, decl: VariableDecl]> {
+export function* declaredVariables<Decl extends VariableDecl>(
+  config: VariableDeclarations<Decl>,
+): IterableIterator<readonly [name: string, decl: Decl]> {
   for (const [name, decl] of declarationsAt(config)) yield [name, decl];
 }
 
