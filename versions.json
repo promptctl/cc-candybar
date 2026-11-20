@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
-      "timestamp": "2026-11-20T00:54:05.750Z",
-      "commits": [
-        {
-          "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T00:52:58Z",
-          "message": "chore(release): set `package.json` to 1.236.1\n\n## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)\n\n### Bug Fixes\n\n* **daemon:** reobserve files after incomplete config rollback ([#898](https://github.com/promptctl/cc-candybar/issues/898)) ([95143c6](https://github.com/promptctl/cc-candybar/commit/95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-904",
       "ref": "refs/pull/904/merge",
-      "sha": "aa97a9ac671c05c53106b0fa803bf24f1d44404a",
-      "timestamp": "2026-11-20T00:32:12.095Z",
+      "sha": "5615bd9a0e5aa5f5bf07108418172e56a01b3797",
+      "timestamp": "2026-11-20T11:04:57.114Z",
       "commits": [
         {
-          "sha": "aa97a9ac671c05c53106b0fa803bf24f1d44404a",
+          "sha": "5615bd9a0e5aa5f5bf07108418172e56a01b3797",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:30:59Z",
-          "message": "Merge cc41c02466f2c6a32dda5c391da299cf6dc94452 into 2f98785f9d103f1d4991daf0555308a3b09aabe9\n"
+          "timestamp": "2026-11-20T11:03:59Z",
+          "message": "Merge e09a4ac6ad227d2be6e6e98a3f00badf645b8a34 into a3a568d69f6f3ad58a5cb426776392244be3a484\n"
+        },
+        {
+          "sha": "e09a4ac6ad227d2be6e6e98a3f00badf645b8a34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:03:04-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/named-edit-conflict-proof\n"
         },
         {
           "sha": "cc41c02466f2c6a32dda5c391da299cf6dc94452",
@@ -70,6 +62,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T12:02:08-07:00",
           "message": "test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
+      "timestamp": "2026-11-20T00:54:05.750Z",
+      "commits": [
+        {
+          "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T00:52:58Z",
+          "message": "chore(release): set `package.json` to 1.236.1\n\n## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)\n\n### Bug Fixes\n\n* **daemon:** reobserve files after incomplete config rollback ([#898](https://github.com/promptctl/cc-candybar/issues/898)) ([95143c6](https://github.com/promptctl/cc-candybar/commit/95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd))\n"
         }
       ]
     },
