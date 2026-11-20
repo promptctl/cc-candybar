@@ -40,6 +40,7 @@ import {
   childPath,
   placementId,
 } from "../config/dsl-types.js";
+import { placementRow, type PlacementRow } from "../config/setting-table.js";
 import { placementPalette } from "../themes/palette-resolvers.js";
 import { groundOf } from "../template-engine/colors.js";
 import { FOLLOW_BAR, type PlacementEffect } from "../themes/policy.js";
@@ -83,6 +84,9 @@ export interface CompiledSegmentNode {
   // the default — so the render reads a finished object, never a fallback.
   readonly id: string;
   readonly settings: PlacementSettings;
+  // The settings a session may pick for it (SegmentNode.drafts): what a
+  // drawn placement reports, so a stale pick it wears is warned of.
+  readonly slots: readonly PlacementRow[];
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
@@ -313,7 +317,7 @@ export interface NodeRenderCtx {
   // returns what comes back — those, or, while it dissolves off the bar, the
   // rows it last drew in place of its own (`SessionEffects.motion`,
   // brandon-effects-2gka.3vt).
-  placed(id: string, lines: RenderedLines): RenderedLines;
+  placed(node: CompiledSegmentNode, lines: RenderedLines): RenderedLines;
   // What the view's last drawn frame showed of the placement `id`: none in a
   // view that has drawn none, or where the walk never reached it.
   lastDrawn(id: string): PlacementRecord<RenderedLine> | undefined;
@@ -709,6 +713,7 @@ const segmentType: NodeType<"segment"> = {
       name: node.name,
       id: placementId(node),
       settings: cctx.placementSettings(node),
+      slots: Object.values(node.drafts ?? {}).map(placementRow),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...(node.opens !== undefined && {
@@ -735,7 +740,7 @@ const segmentType: NodeType<"segment"> = {
   // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
   // hidden, gated off, drawn, broken — is reported to the session's record, so
   // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx)),
+  render: (node, ctx) => ctx.placed(node, drawSegment(node, ctx)),
 };
 
 // What one placement draws this frame: nothing, its rows (with the menus it

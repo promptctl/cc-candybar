@@ -29,7 +29,6 @@ const BASE_THEME = "textual-dark";
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
-    activeStyle: { kind: 'state', key: 'endcaps', default: '' },
   },
   actions: {
     applyEndcaps: { set: 'endcaps', from: 'endcaps' },

@@ -33,7 +33,7 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeySeed, configKeySeed } from "./key-seeds";
+import { stateKeyShown, configKeySeed } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
@@ -97,10 +97,8 @@ import {
   settingDrafts,
   themeDefaultSave,
 } from "../setting-drafts";
-import {
-  SETTING_PROJECTIONS,
-  SETTINGS,
-} from "../../config/setting-projections";
+import { SETTINGS } from "../../config/setting-projections";
+import { settingTable } from "../../config/setting-table";
 import { decodeLayoutOp } from "../../config/layout-ops";
 import { presetNames, presetRoot } from "../../config/presets";
 import {
@@ -438,16 +436,14 @@ const stepState: VerbHandler = (args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped =
-    stored && STEP_INT_RE.test(stored)
-      ? clampTo(params, parseInt(stored, 10))
-      : stepFrom(
-          "step-state",
-          key,
-          params,
-          stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key),
-        );
+  // [LAW:one-source-of-truth] A step moves from what the bar shows: a
+  // setting's fold, so a stale pick steps from the value the bar wears.
+  const clamped = stepFrom(
+    "step-state",
+    key,
+    params,
+    stateKeyShown(config, (k) => ctx.sessionState.get(sid, k), key),
+  );
   const next = stepWithin(clamped, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
@@ -487,24 +483,24 @@ function clampTo(params: RangeParams, n: number): number {
   return Math.max(params.min, Math.min(params.max, n));
 }
 
-// [LAW:no-defensive-null-guards] "unset" is a real state: an unset key steps
-// from the value its session's config shows before any click (`declared`,
-// resolved from the session's picks). A key whose config shows nothing steps from `min`; one that shows a
-// non-integer is a stepper over a value that is no number, refused loudly
-// rather than stepped from a guess.
+// [LAW:no-defensive-null-guards] "unset" is a real state: a key steps from
+// the value it shows (`shown`, resolved from the session's picks). A key that
+// shows nothing steps from `min`; one that shows a non-integer is a stepper
+// over a value that is no number, refused loudly rather than stepped from a
+// guess.
 function stepFrom(
   verb: string,
   key: string,
   params: RangeParams,
-  declared: string | null,
+  shown: string | null,
 ): number {
-  if (declared === null) return params.min;
-  if (!STEP_INT_RE.test(declared)) {
+  if (shown === null) return params.min;
+  if (!STEP_INT_RE.test(shown)) {
     throw new BadVerbArgs(
-      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`,
+      `${verb}: "${key}" shows ${JSON.stringify(shown)}, not an integer to step`,
     );
   }
-  return clampTo(params, parseInt(declared, 10));
+  return clampTo(params, parseInt(shown, 10));
 }
 
 // ─── The durable store: which file, and the history over it ─────────────────
@@ -776,11 +772,12 @@ const save: VerbHandler = (args, ctx) => {
   const pick = (key: string) => ctx.sessionState.get(sid, key);
   const drafts = settingDrafts(config, pick);
   const placements = placementDrafts(config, pick);
-  // Nothing unsaved is the save's own postcondition already holding — a second
-  // click on a bar drawn before the first save released its picks — so it is
-  // a recorded no-op, never a failure the bar reports.
+  // Nothing unsaved writes nothing — a second click on a bar drawn before the
+  // first save released its picks — so it is a recorded no-op, never a
+  // failure the bar reports, and the bar draws what the file holds.
   if (drafts.length + placements.length === 0) {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
+    releaseSaved(ctx, config);
     ctx.finishEdit("save");
     return;
   }
@@ -792,13 +789,7 @@ const save: VerbHandler = (args, ctx) => {
   });
   gatePlacements("save", gate, placements);
   const into = heldLayer(ctx, origin, role);
-  writeDrafts(editStore(ctx, sid), into, pairs, placements);
-  for (const key of [
-    ...drafts.map((d) => d.sessionKey),
-    ...placements.map((p) => p.key),
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
+  releaseSaved(ctx, writeDrafts(editStore(ctx, sid), into, pairs, placements));
   ctx.finishEdit("save");
   ctx.log(
     "info",
@@ -808,6 +799,24 @@ const save: VerbHandler = (args, ctx) => {
     ].join(" ")} → ${into.path} (session=${sid})`,
   );
 };
+
+// [LAW:single-enforcer] THE release every save makes: a save is the user
+// deciding what the bar draws, so once `written` holds it, every pick of a
+// setting that is no draft against `written` lets go — the session follows
+// the file again. A pick its setting cannot hold is never written and never a
+// draft, so a save releases it too, and the bar keeps what was saved when
+// its domain returns.
+function releaseSaved(ctx: ClickContext, written: DslConfig): void {
+  const sid = ctx.session;
+  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const drafted = new Set([
+    ...settingDrafts(written, pick).map((d) => d.sessionKey),
+    ...placementDrafts(written, pick).map((p) => p.key),
+  ]);
+  for (const key of settingTable(written).rows.keys()) {
+    if (!drafted.has(key)) ctx.sessionState.clear(sid, key);
+  }
+}
 
 // [LAW:single-enforcer] A placement's value re-crosses the gate its control's
 // click passed, as a display setting's does.
@@ -851,7 +860,7 @@ const savePreset: VerbHandler = (args, ctx) => {
   });
   gatePlacements("save-preset", gate, snapshot.placements);
   const into = heldLayer(ctx, origin, role);
-  const name = writePreset(
+  const { name, config: written } = writePreset(
     editStore(ctx, sid),
     into,
     snapshot.from,
@@ -859,13 +868,8 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
-  for (const key of [
-    ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
-    ...snapshot.placements.map((p) => p.key),
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
+  releaseSaved(ctx, written);
   ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${into.path} (session=${sid})`,
@@ -874,9 +878,9 @@ const savePreset: VerbHandler = (args, ctx) => {
 
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
-// written layer takes the session's shade, variation and style, and each of the
-// session's picks of those three that the written file draws is released,
-// so the session follows the file again, as a save's do. A field the config's
+// written layer takes the session's shade, variation and style, and the
+// session's picks the written file draws are released (releaseSaved), as a
+// save's are. A field the config's
 // globals declare is not the rung's to save (themeDefaultSave), so a pick of it
 // is still a draft, and stays, so the bar does not move under the click.
 // [LAW:no-ambient-temporal-coupling] The write and the release land together,
@@ -898,20 +902,10 @@ const saveThemeDefault: VerbHandler = (args, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const written = writeThemeDefault(
-    editStore(ctx, sid),
-    into,
-    save.theme,
-    save.look,
+  releaseSaved(
+    ctx,
+    writeThemeDefault(editStore(ctx, sid), into, save.theme, save.look),
   );
-  const pick = (key: string) => ctx.sessionState.get(sid, key);
-  const drafted = new Set(
-    settingDrafts(written, pick).map((d) => d.sessionKey),
-  );
-  const released = THEME_DEFAULT_FIELDS.map(
-    (f) => SETTINGS[f].sessionKey,
-  ).filter((key) => !drafted.has(key));
-  for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
     `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${into.path} (session=${sid})`,

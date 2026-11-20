@@ -265,7 +265,7 @@ describe("step-state handler", () => {
   test("an unset key whose config shows a non-integer is refused, not stepped from min", async () => {
     const { sessionState, click } = session(stepper("wide"));
     await expect(click(2)).rejects.toThrow(
-      /"step-test-hue" shows "wide" before any click/,
+      /"step-test-hue" shows "wide", not an integer/,
     );
     expect(sessionState.get(S1, KEY)).toBeNull();
   });

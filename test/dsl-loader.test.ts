@@ -755,7 +755,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
       `{ kind: "time", layout: "15:04" }`,
-      `{ kind: "state", key: "theme" }`,
+      `{ kind: "state", key: "picked" }`,
     ]) {
       expect(
         parseAndValidate(FILE, `{ variables: { x: ${decl} } }`).variables.x,
