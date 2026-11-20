@@ -4,15 +4,29 @@
     {
       "version": "pr-913",
       "ref": "refs/pull/913/merge",
-      "sha": "189fba7986ff5cff9df4e84e7c8020daa778417f",
-      "timestamp": "2026-11-20T00:10:39.868Z",
+      "sha": "3a7130aa9b65b86c8199c4fce5fbf5b128a5d9ce",
+      "timestamp": "2026-11-20T00:11:52.172Z",
       "commits": [
         {
-          "sha": "189fba7986ff5cff9df4e84e7c8020daa778417f",
+          "sha": "3a7130aa9b65b86c8199c4fce5fbf5b128a5d9ce",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:09:31Z",
-          "message": "Merge 76268ff9af760d67d5031339547d2a2037cd5965 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+          "timestamp": "2026-11-20T00:09:48Z",
+          "message": "Merge 410171279391117ddfcaffeba02dbc3325b22278 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+        },
+        {
+          "sha": "410171279391117ddfcaffeba02dbc3325b22278",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:09:10-07:00",
+          "message": "test(daemon): build the alternate renderer at its source seam\n"
+        },
+        {
+          "sha": "2664f2eceb107bc4c6b36b4a3ee5bde6025976cf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:09:12-07:00",
+          "message": "perf(renderer): keep legacy date zone detection linear\n"
         },
         {
           "sha": "76268ff9af760d67d5031339547d2a2037cd5965",

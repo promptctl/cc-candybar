@@ -59744,7 +59744,6 @@ var DAY_MS = 864e5;
 var DATE_LIMIT_MS = 864e13;
 var ISO = /^(?:\d{4}|[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
 var NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
-var NUMERIC_ZONE = /\d:.*[+-]\d/s;
 function legacyDate(value) {
   if (!value.includes("(")) return { tokens: value, end: value.length };
   let depth = 0;
@@ -59767,7 +59766,9 @@ function hasLegacyZone(value) {
   const firstNumber = value.search(/\d/);
   if (firstNumber < 0) return false;
   const timed2 = value.slice(firstNumber);
-  return NAMED_ZONE.test(timed2) || NUMERIC_ZONE.test(timed2);
+  if (NAMED_ZONE.test(timed2)) return true;
+  const colon = timed2.search(/\d:/);
+  return colon !== -1 && /[+-]\d/.test(timed2.slice(colon + 2));
 }
 function wallTimeIn(timeZone) {
   let offsets;
