@@ -4,15 +4,22 @@
     {
       "version": "pr-917",
       "ref": "refs/pull/917/merge",
-      "sha": "2cc39ba05b921dd7956adf70cff61ad33830949b",
-      "timestamp": "2026-11-20T14:12:19.945Z",
+      "sha": "5f927c4fc7391a567b8827628a83b3cc34c8198c",
+      "timestamp": "2026-11-20T14:42:48.712Z",
       "commits": [
         {
-          "sha": "2cc39ba05b921dd7956adf70cff61ad33830949b",
+          "sha": "5f927c4fc7391a567b8827628a83b3cc34c8198c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T07:11:19-07:00",
-          "message": "Merge 90fed947cedc0ea8711f36745ed26d64eac2e620 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T14:41:28Z",
+          "message": "Merge b1f4cafedb4b752b158d2f2274c06aa704201783 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "b1f4cafedb4b752b158d2f2274c06aa704201783",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T07:41:16-07:00",
+          "message": "fix(daemon): own a rebound config watch in its entry and deliver moved configs by holder\n\nDiscovery writes each origin's entry in the step that moves its watch, with\nnothing fallible between. Each renderer hands discovery where its moved\norigins go, so no delivery resolves a name. Owed origins live on their\nentries, one batch trigger replaces three parameters, and git refresh and\nwake throws reach the daemon's one throw writer.\n"
         },
         {
           "sha": "90fed947cedc0ea8711f36745ed26d64eac2e620",
