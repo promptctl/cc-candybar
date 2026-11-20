@@ -28279,12 +28279,6 @@ var inspect = (v) => {
   }
 };
 
-// src/utils/logfmt.ts
-init_globals();
-var BARE = /^[^\s"=\\]+$/;
-var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
-var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
-
 // src/daemon/foundations/verb-error.ts
 var BadVerbArgs = class extends Error {
   constructor(message) {
@@ -28336,7 +28330,6 @@ function classified(thrown2, detailOf2) {
 function failureOf(thrown2) {
   return classified(thrown2, inspect);
 }
-var threwLine = (event, about, thrown2) => eventLine(event, [...about, ["error", failureOf(thrown2).detail]]);
 function rendererFailureOf(thrown2) {
   return classified(thrown2, (value) => rendererDetail(value, /* @__PURE__ */ new Set()));
 }
@@ -28447,10 +28440,6 @@ function joinedEvent(last2, text4, at) {
     revision: (last2?.revision ?? 0) + 1,
     answered: false
   };
-}
-function repeats(last2, text4) {
-  return last2 !== null && !last2.answered && (last2.text === text4 || last2.text.endsWith(`
-${text4}`));
 }
 function answeredBy(last2, shown) {
   return !last2.answered && sameOccurrence(last2, shown);
@@ -70461,6 +70450,12 @@ function writeLogLines(log, lines2) {
 }
 var quietLogger = (_level, message) => debug(message);
 
+// src/utils/logfmt.ts
+init_globals();
+var BARE = /^[^\s"=\\]+$/;
+var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
+
 // src/renderer/render-cache.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -79305,6 +79300,11 @@ function locations(host) {
   };
 }
 
+// src/daemon/foundations/work-threw.ts
+init_globals();
+var threwLine = (event, fields2, thrown2) => eventLine(event, [...fields2, ["failed", failureOf(thrown2).detail]]);
+var loggedThrew = (logger) => (event, fields2, thrown2) => logger("error", threwLine(event, fields2, thrown2));
+
 // src/daemon/reply.ts
 init_globals();
 
@@ -79588,7 +79588,7 @@ var WatcherRegistry = class {
   sweep = null;
   counters;
   logger;
-  failed;
+  threw;
   clock;
   closed = false;
   nodeWalksTrees;
@@ -79596,16 +79596,17 @@ var WatcherRegistry = class {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
-    this.failed = opts.failed;
+    this.threw = opts.threw;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
   // [LAW:single-enforcer] A consumer that reloads several slots together can
   // share their delivery window. Each slot still receives only its own paths.
   // Keys acquired in this window belong to it until their last release.
-  batch(by, completed) {
+  // `name` is what a throw from `completed` is reported as.
+  batch(name, completed) {
     const window2 = {
       pending: null,
-      completed: { by, take: completed }
+      completed: () => this.notify(["window", name], completed)
     };
     const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
     return {
@@ -79925,13 +79926,11 @@ var WatcherRegistry = class {
               const heard = heardOf(gathered2);
               for (const holder of changed.holders)
                 this.notify(
-                  "watch",
-                  changed.key,
+                  ["watch", changed.key],
                   () => holder.onInvalidate(heard)
                 );
             }
-            if (window2.completed !== void 0)
-              this.notify("batch", window2.completed.by, window2.completed.take);
+            if (window2.completed !== void 0) window2.completed();
           },
           { unref: true }
         )
@@ -79944,13 +79943,13 @@ var WatcherRegistry = class {
       gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
     );
   }
-  // [LAW:single-enforcer] The one catch around a delivery, for every
-  // consumer: the sink hears which watch, or which window's consumer, threw.
-  notify(to, name, take) {
+  // [LAW:no-silent-failure] One delivery's throw is reported as what threw
+  // and cannot keep the rest of the window from being heard.
+  notify(about, take) {
     try {
       take();
     } catch (thrown2) {
-      this.failed("watch delivery threw", [[to, name]], thrown2);
+      this.threw("watch delivery threw", [about], thrown2);
     }
   }
   makeHandle(slot, holder) {
@@ -80963,10 +80962,7 @@ var SourceRuns = class {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({
-        clock: deps.clock,
-        failed: (...threw2) => logger("error", threwLine(...threw2))
-      }),
+      deps.watchers ?? new WatcherRegistry({ clock: deps.clock, threw: loggedThrew(logger) }),
       deps.fileEvents ?? NO_FILE_EVENTS
     );
     const source = (kind) => new KeyedSource({
@@ -83073,7 +83069,7 @@ var GitDataProvider = class {
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
-        failed: (...threw2) => this.logger("error", threwLine(...threw2))
+        threw: loggedThrew(this.logger)
       });
       this.ownsWatchers = true;
     }
@@ -90361,16 +90357,19 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return { kind: "failed", reason: failureOf(thrown2).detail };
     }
   };
-  const notTaken = (what, failure2) => {
-    const text4 = `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`;
-    log("error", text4);
-    world.unheard(text4);
-  };
+  const notTaken = (what, thrown2) => world.threw(
+    "renderer work not taken",
+    [
+      ["renderer", name],
+      ["work", what]
+    ],
+    thrown2
+  );
   const recordTaken = (what, operation) => {
     try {
       return operation();
     } catch (thrown2) {
-      notTaken(what, failureOf(thrown2));
+      notTaken(what, thrown2);
       return null;
     }
   };
@@ -90455,7 +90454,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       for (const origin of named2) markUnreceived(origin);
       const failure2 = failureOf(thrown2);
       followFailure = failure2;
-      notTaken("configs", failure2);
+      notTaken("configs", thrown2);
       return { kind: "failed", failure: failure2 };
     }
   };
@@ -90640,11 +90639,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver2 = recorded2("last");
-  const unawaited = (what, settling) => void settling.catch((thrown2) => {
-    const text4 = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown2).detail}`;
-    log("error", text4);
-    world.unheard(text4);
-  });
+  const unawaited = (what, settling) => void settling.catch(
+    (thrown2) => world.threw(
+      "renderer turn unsettled",
+      [
+        ["renderer", name],
+        ["work", what]
+      ],
+      thrown2
+    )
+  );
   const command = async (event) => {
     const { turn } = await taken2(() => ({ kind: "event", event }));
     if (turn.kind === "threw") {
@@ -91667,9 +91671,10 @@ var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
-    this.watches = deps.watchers.batch("config discovery", () => {
-      this.heard([], "config-watch", "observed", null);
-    });
+    this.watches = deps.watchers.batch(
+      "config-discovery",
+      () => this.heard("config-watch", "observed")
+    );
   }
   deps;
   followed = /* @__PURE__ */ new Map();
@@ -91677,8 +91682,9 @@ var ConfigDiscovery = class {
   // snapshot. A weak key cannot hold an old revision after its last owner.
   observations = /* @__PURE__ */ new WeakMap();
   watches;
-  // [LAW:one-source-of-truth] The origins owed a rediscovery. One leaves only
-  // once its own rediscovery has written its entry.
+  // [LAW:one-source-of-truth] The followed origins a change may have moved
+  // that no batch has discovered again yet. A key leaves only when its entry
+  // is written, so an origin that fails stays owed.
   owed = /* @__PURE__ */ new Set();
   texts;
   closed = false;
@@ -91688,7 +91694,7 @@ var ConfigDiscovery = class {
   forRenderer(renderer) {
     const held = (origin) => {
       const followed = this.followed.get(originKey(origin));
-      return followed?.holders.has(renderer) ? followed.snapshot : void 0;
+      return followed?.renderers.has(renderer) ? followed.snapshot : void 0;
     };
     return {
       follow: (origins) => this.follow(renderer, origins),
@@ -91729,7 +91735,7 @@ var ConfigDiscovery = class {
     if (previous2 !== void 0) take(previous2);
     for (const followed of this.followed.values()) {
       if (wanted.size === 0) break;
-      if (!followed.holders.has(renderer)) continue;
+      if (!followed.renderers.has(renderer)) continue;
       take(followed.managedFolders);
       const retained = this.retainedOf(renderer, followed.origin);
       if (retained === "current" || retained === void 0) continue;
@@ -91749,42 +91755,36 @@ var ConfigDiscovery = class {
       const shared = this.batch();
       const observed2 = [];
       for (const [key, origin] of fresh) {
-        const watched = this.watched(origin, shared, null);
-        let found2;
-        try {
-          found2 = this.observedAt(watched, shared);
-        } catch (thrown2) {
-          watched.watch.handle.release();
-          throw thrown2;
-        }
+        const { found: found2, rebound } = this.discovered(origin, shared, null);
         this.followed.set(key, {
           ...found2,
-          holders: /* @__PURE__ */ new Map([[renderer, found2.digest]]),
+          renderers: /* @__PURE__ */ new Set([renderer]),
           selected: /* @__PURE__ */ new Map()
         });
         observed2.push(found2);
+        this.bound(origin, rebound);
       }
       this.reloaded(observed2);
     }
     let released = 0;
-    for (const [key, { holders, selected, watch: watch2, digest: digest2 }] of this.followed) {
+    for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
       if (wanted.has(key)) {
-        holders.set(renderer, holders.get(renderer) ?? digest2);
+        renderers.add(renderer);
         continue;
       }
       selected.delete(renderer);
-      if (!holders.delete(renderer) || holders.size > 0) continue;
+      if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
-      this.owed.delete(key);
       watch2.handle.release();
       released++;
     }
+    if (fresh.length + released === 0) return;
     this.deps.log(
       "info",
       eventLine("config discovery", [
         ["why", "follow"],
         ["followed", String(this.followed.size)],
-        ["observed", String(fresh.length)],
+        ["discovered", String(fresh.length)],
         ["released", String(released)]
       ])
     );
@@ -91798,7 +91798,7 @@ var ConfigDiscovery = class {
     for (const { origin, digest: digest2 } of entries) {
       const key = originKey(origin);
       const followed = this.followed.get(key);
-      if (!followed?.holders.has(renderer))
+      if (!followed?.renderers.has(renderer))
         throw new Error(`selected config origin is not followed: ${key}`);
       if (digest2 === null) {
         next2.set(key, null);
@@ -91836,15 +91836,15 @@ var ConfigDiscovery = class {
   landed(writer, files) {
     const landingPath = directoryEntries();
     const changed = files.flatMap((file) => [file, landingPath(file)]);
-    const touched = [...this.followed].filter(
-      ([, { landingPaths }]) => changed.some((file) => landingPaths.has(file))
-    ).map(([key]) => key);
-    return this.heard(touched, "landed", "observed", writer);
+    for (const [key, { landingPaths }] of this.followed)
+      if (changed.some((file) => landingPaths.has(file))) this.owed.add(key);
+    return this.rediscovered("landed", "observed", writer);
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
-    this.heard([...this.followed.keys()], why, "moved", null);
+    for (const key of this.followed.keys()) this.owed.add(key);
+    this.heard(why, "moved");
   }
   close() {
     if (this.closed) return;
@@ -91854,98 +91854,83 @@ var ConfigDiscovery = class {
     this.followed.clear();
     this.texts.clear();
   }
-  // [LAW:single-enforcer] The one discovery batch, for a watch, a write and a
-  // catch-up alike: `keys` join the origins owed a rediscovery, every owed
-  // origin is discovered again, and every holder is handed what it is owed.
-  // Answers the writer's own origins, for its slot.
-  heard(keys2, why, recover, writer) {
-    if (this.closed) return [];
-    for (const key of keys2) this.owed.add(key);
-    const { observed: observed2, moved: moved2 } = this.rediscovered(why);
-    const { handed, sent } = this.publish(writer);
-    this.deps.log(
-      "info",
-      eventLine("config discovery", [
-        ["why", why],
-        ["followed", String(this.followed.size)],
-        ["observed", String(observed2.length)],
-        ["moved", String(moved2.length)],
-        ["sent", String(sent)],
-        ["owed", String(this.owed.size)]
-      ])
-    );
-    this.reloaded(recover === "observed" ? observed2 : moved2);
-    return handed;
+  // The owed origins may have changed: those whose snapshot moved go to
+  // their holders.
+  heard(why, recover) {
+    if (this.closed) return;
+    this.rediscovered(why, recover, null);
   }
-  // [LAW:one-source-of-truth] Recipients come from what each holder was last
-  // handed: every holder whose digest differs from its origin's, whichever
-  // batch moved the origin and whatever threw since. The writer's come back
-  // for its own slot; every other renderer gets its turns.
-  publish(writer) {
-    const owedBy = /* @__PURE__ */ new Map();
-    for (const followed of this.followed.values())
-      for (const [renderer, digest2] of followed.holders)
-        if (digest2 !== followed.digest)
-          owedBy.set(renderer, [...owedBy.get(renderer) ?? [], followed]);
-    let sent = 0;
-    for (const [renderer, owed] of owedBy) {
-      if (renderer === writer) continue;
-      try {
-        this.deps.moved(
-          renderer,
-          owed.map(({ origin }) => origin)
-        );
-        handedTo(renderer, owed);
-        sent++;
-      } catch (thrown2) {
-        this.deps.failed(
-          "config hand-off threw",
-          [["renderer", renderer]],
-          thrown2
-        );
+  // [LAW:single-enforcer] The snapshot's current holders define recipients
+  // for both a watch and a landed write. Only the writer already has a slot.
+  publish(moved2, writer) {
+    const byRenderer = /* @__PURE__ */ new Map();
+    for (const { origin, renderers } of moved2)
+      for (const renderer of renderers) {
+        const origins = byRenderer.get(renderer) ?? [];
+        origins.push(origin);
+        byRenderer.set(renderer, origins);
       }
-    }
-    if (writer === null) return { handed: [], sent };
-    const mine = owedBy.get(writer) ?? [];
-    handedTo(writer, mine);
-    return { handed: mine.map(({ origin }) => origin), sent };
+    for (const [renderer, origins] of byRenderer)
+      if (renderer !== writer) this.deps.moved(renderer, origins);
+    return writer === null ? [] : byRenderer.get(writer) ?? [];
   }
-  // [LAW:single-enforcer] Discovers every owed origin again: one read of what
-  // they share, each origin's watch following where its config can change
-  // now. An origin leaves the owed set once its own entry is written.
-  rediscovered(why) {
-    const owed = [...this.followed].filter(([key]) => this.owed.has(key));
-    const observed2 = [];
-    const moved2 = [];
-    if (owed.length === 0) return { observed: observed2, moved: moved2 };
+  // [LAW:single-enforcer] The one batch that discovers the owed origins
+  // again: one read of what they share, each origin's watch following where
+  // its config can change now. Those whose snapshot digests anew go to their
+  // holders; the writer's are answered for its own slot.
+  rediscovered(why, recover, writer) {
+    const keys2 = [...this.owed];
+    if (keys2.length === 0) return [];
     const shared = this.batch();
-    for (const [key, was] of owed) {
+    const moved2 = [];
+    const observed2 = [];
+    for (const key of keys2) {
+      const was = this.followed.get(key);
+      if (was === void 0) {
+        this.owed.delete(key);
+        continue;
+      }
       try {
-        const watched = this.watched(was.origin, shared, was.watch);
-        this.followed.set(key, { ...was, watch: watched.watch });
-        const found2 = this.observedAt(watched, shared);
+        const { found: found2, rebound } = this.discovered(
+          was.origin,
+          shared,
+          was.watch
+        );
         const now2 = {
           ...found2,
           snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
-          holders: was.holders,
+          renderers: was.renderers,
           selected: was.selected
         };
         this.followed.set(key, now2);
         this.owed.delete(key);
         observed2.push(now2);
         if (now2.digest !== was.digest) moved2.push(now2);
+        this.bound(was.origin, rebound);
       } catch (thrown2) {
-        this.deps.failed(
+        this.deps.threw(
           "config discovery threw",
           [
-            ["origin", key],
-            ["why", why]
+            ["why", why],
+            ["origin", key]
           ],
           thrown2
         );
       }
     }
-    return { observed: observed2, moved: moved2 };
+    const answered = this.publish(moved2, writer);
+    this.deps.log(
+      "info",
+      eventLine("config discovery", [
+        ["why", why],
+        ["followed", String(this.followed.size)],
+        ["discovered", String(keys2.length)],
+        ["moved", String(moved2.length)],
+        ["owed", String(this.owed.size)]
+      ])
+    );
+    this.reloaded(recover === "observed" ? observed2 : moved2);
+    return answered;
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -91981,8 +91966,9 @@ var ConfigDiscovery = class {
     };
   }
   // What discovery finds at `origin` now, with its watch following the
-  // targets that finding names. The caller owns the watch from here.
-  watched(origin, shared, held) {
+  // targets that finding names, and what that watch cannot hear in the
+  // snapshot. `rebound` names the targets when the watch moved to them.
+  discovered(origin, shared, held) {
     const found2 = discover(
       {
         ...configQuery(origin.projectDir, origin.target),
@@ -92004,12 +91990,6 @@ var ConfigDiscovery = class {
       },
       shared.observed
     );
-    return { origin, found: found2, spec, watch: watch2, move };
-  }
-  // The watched origin's snapshot, with what its watch cannot hear. Runs
-  // once the caller owns the watch, so nothing here can orphan it.
-  observedAt({ origin, found: found2, spec, watch: watch2, move }, shared) {
-    if (move === "rebound") this.bound(origin, spec);
     const snapshot = {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
@@ -92027,17 +92007,24 @@ var ConfigDiscovery = class {
     };
     this.observations.set(snapshot, observed2);
     return {
-      ...observed2,
-      watch: watch2,
-      landingPaths: new Set(
-        spec.targets.polled.flatMap((file) => [file, shared.landingPath(file)])
-      )
+      found: {
+        ...observed2,
+        watch: watch2,
+        landingPaths: new Set(
+          paths2.targets.polled.flatMap((file) => [
+            file,
+            shared.landingPath(file)
+          ])
+        )
+      },
+      rebound: move === "rebound" ? paths2 : null
     };
   }
   // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
   // candidate appeared, a link was re-pointed), and which directories the
   // origin now hears: a change that fires nothing is read against this line.
   bound(origin, paths2) {
+    if (paths2 === null) return;
     const { projectDir, cwd: cwd2 } = origin;
     this.deps.log(
       "info",
@@ -92050,9 +92037,6 @@ var ConfigDiscovery = class {
       );
   }
 };
-function handedTo(renderer, origins) {
-  for (const { holders, digest: digest2 } of origins) holders.set(renderer, digest2);
-}
 function watchTargetsFor(found2) {
   const { snapshot, targets } = found2;
   const { roots } = targets;
@@ -92158,28 +92142,24 @@ function createDaemon(inputs) {
   const recordings = inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   let rendererEnded = null;
   let daemonFailed = null;
-  function unheard(text4, fromEnvironment) {
+  const held = (text4, fromEnvironment) => {
     const prior = daemonFailed;
-    if (repeats(prior, text4)) return false;
     daemonFailed = environmentOutput(
       joinedEvent(prior, text4, instant()),
-      fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
+      fromEnvironment || prior !== null && !prior.answered && isEnvironmentOutput(prior)
     );
-    restateFaults();
-    return true;
-  }
-  const threw2 = (event, about, thrown2) => {
-    const shown = eventLine(event, [
-      ...about,
-      ["error", failureOf(thrown2).message]
-    ]);
-    if (unheard(shown)) log("error", threwLine(event, about, thrown2));
+    if (phase.kind !== "building") restateFaults();
+  };
+  const threw2 = (event, fields2, thrown2) => {
+    const line = threwLine(event, fields2, thrown2);
+    log("error", line);
+    held(line, false);
   };
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
     logger: log,
-    failed: threw2
+    threw: threw2
   });
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
@@ -92274,7 +92254,6 @@ function createDaemon(inputs) {
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
-  restateFaults();
   const sourceRuns = new SourceRuns({
     launcher,
     clock,
@@ -92425,8 +92404,16 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
-    failed: threw2,
-    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
+    threw: threw2,
+    // [LAW:no-silent-failure] Only a connected renderer follows an origin,
+    // and none is ever removed, so a holder with no runtime is a broken
+    // invariant, reported as the batch's throw.
+    moved: (name, origins) => {
+      const runtime = renderers.get(name);
+      if (runtime === void 0)
+        throw new Error(`config moved for renderer ${name}, never connected`);
+      runtime.renderer.moved(origins);
+    },
     reloaded: (folders) => managedStorage.recheck(folders)
   });
   const declared = /* @__PURE__ */ new Map();
@@ -92549,7 +92536,8 @@ function createDaemon(inputs) {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard
+        unheard: (text4, fromEnvironment) => held(text4, fromEnvironment === true),
+        threw: threw2
       }
     );
     return { reported, entry, stores, link, renderer };
@@ -92728,6 +92716,7 @@ function createDaemon(inputs) {
     }
   };
   phase = { kind: "built" };
+  restateFaults();
   function serve() {
     if (serving()) return served;
     if (phase.kind !== "built") throw new DaemonClosing("serve");

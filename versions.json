@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-916",
-      "ref": "refs/pull/916/merge",
-      "sha": "41e17748617676dec4678962d35b42c79b748b0d",
-      "timestamp": "2026-11-20T13:42:47.786Z",
+      "version": "pr-917",
+      "ref": "refs/pull/917/merge",
+      "sha": "2cc39ba05b921dd7956adf70cff61ad33830949b",
+      "timestamp": "2026-11-20T14:12:19.945Z",
       "commits": [
         {
-          "sha": "41e17748617676dec4678962d35b42c79b748b0d",
+          "sha": "2cc39ba05b921dd7956adf70cff61ad33830949b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T06:41:32-07:00",
-          "message": "Merge 073663efa313b90c632a570ea9a8b079878b5183 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T07:11:19-07:00",
+          "message": "Merge 90fed947cedc0ea8711f36745ed26d64eac2e620 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "073663efa313b90c632a570ea9a8b079878b5183",
+          "sha": "90fed947cedc0ea8711f36745ed26d64eac2e620",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T06:41:14-07:00",
-          "message": "fix(daemon): keep owed config deliveries as data and show every failed delivery\n\nA discovery batch's steps are irreversible: a watch rebinds, an entry is\nwritten, a holder is handed its turn. Each origin's holders now record the\ndigest each renderer was last handed, so publishing hands every holder whose\ndigest differs from its origin's, whichever batch moved it and whatever threw\nsince. An origin stays owed a rediscovery until its own entry is written, and\nthe entry takes its rebound watch before anything else can throw.\n\nOne origin's or one renderer's throw is reported and leaves its obligation for\nthe next batch without holding back the others. Every watch delivery that\nthrows, discovery's included, goes through one daemon writer that logs it and\nholds it for every bar; a failure already held unanswered is not added again.\nThe watcher registry takes that sink as a required argument.\n\nThe held daemon failure is renamed daemonFailed (wire version 14), since it\nnow holds more than failed acts. Each discovery batch and follow writes one\nlogfmt record, one that changed nothing included.\n"
+          "timestamp": "2026-11-20T07:10:58-07:00",
+          "message": "fix(daemon): show every throw on the config-watch path on every bar\n\nA throw from a watch delivery, from a config rediscovery or from the\nrenderer host's failed takes and unsettled turns now goes through one\ndaemon writer. That writer logs one logfmt record per occurrence and\nholds the same line for every bar as the daemon's failure, renamed from\nact failures; the renderer wire version goes to 14.\n\nThe watcher registry now has to be given a failure sink, and a delivery\nwindow is named. Config discovery keeps an owed set of origins. An\norigin leaves it only once its entry is written, so an origin that\nfails is retried by the next batch instead of losing the change it\nheard. The entry takes over a rebound watch before anything that can\nthrow runs.\n\nTicket: candybar-law-review-ibyq.3zh\n"
         }
       ]
     },
