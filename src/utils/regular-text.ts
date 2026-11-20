@@ -5,7 +5,9 @@ import {
   openSync,
   readFileSync,
   type BigIntStats,
+  type Stats,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { types } from "node:util";
 import { debug } from "./logger.js";
 
@@ -15,6 +17,13 @@ export interface RegularTextFile {
   stat(): BigIntStats;
 }
 
+const READ_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;
+
+function regular<T extends Pick<Stats, "isFile">>(stats: T): T {
+  if (!stats.isFile()) throw new Error("not a file");
+  return stats;
+}
+
 // [LAW:single-enforcer] Opening a pipe without a writer must never stop the
 // host loop. Check the opened descriptor and read that same file, even if its
 // name is replaced before the read.
@@ -22,11 +31,10 @@ export function withRegularTextFile<T>(
   path: string,
   use: (file: RegularTextFile) => T,
 ): T {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  const fd = openSync(path, READ_FLAGS);
   try {
     const stat = () => fstatSync(fd, { bigint: true });
-    const observed = stat();
-    if (!observed.isFile()) throw new Error("not a file");
+    const observed = regular(stat());
     return use({ observed, stat, text: () => readFileSync(fd, "utf8") });
   } finally {
     // [LAW:no-silent-failure] A close error must not hide the read's result.
@@ -40,6 +48,25 @@ export function withRegularTextFile<T>(
 
 export function readRegularTextSync(path: string): string {
   return withRegularTextFile(path, (file) => file.text());
+}
+
+// [LAW:effects-at-boundaries] Streaming uses the same opened-file gate.
+// The iterator owns the descriptor through EOF or the reader's early return.
+export async function* readRegularTextLines(
+  path: string,
+): AsyncIterable<string> {
+  const handle = await open(path, READ_FLAGS);
+  try {
+    regular(await handle.stat());
+    const lines = handle.readLines({ encoding: "utf8", autoClose: false });
+    try {
+      yield* lines;
+    } finally {
+      lines.close();
+    }
+  } finally {
+    await handle.close();
+  }
 }
 
 // [LAW:no-silent-failure] Only a missing file can be created as an empty

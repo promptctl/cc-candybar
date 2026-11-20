@@ -1,3 +1,4 @@
+import { type RegionalSettings } from "../utils/region.js";
 import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
 import {
   compareShallow,
@@ -153,7 +154,7 @@ const MAX_UNPINNED_FAILURES = 256;
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
-> {
+> extends Pick<StateDeps, "region"> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -180,6 +181,7 @@ export interface RenderDeps<
 
 // What building one config's state needs.
 export interface StateDeps {
+  readonly region?: RegionalSettings;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
   readonly clock: TurnClock;
@@ -624,7 +626,7 @@ function plugins(p: LoadedFile["plugins"]) {
     loaded: p.loaded,
     dropped: p.dropped,
     reached: [...p.reached].sort(),
-    rendering: [...p.rendering].sort(([a], [b]) => a.localeCompare(b)),
+    rendering: [...p.rendering].sort(([a], [b]) => (a < b ? -1 : 1)),
   } satisfies Projection<LoadedFile["plugins"]>;
 }
 
@@ -665,7 +667,7 @@ function loadKey(inputs: LoadInputs): string {
       placed: null,
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([name, folder]) => [name, folder] as const),
   } satisfies Projection<LoadInputs>);
 }
@@ -744,6 +746,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
+    deps.region,
   );
 
   let registration: Registration;

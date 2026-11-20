@@ -10,7 +10,10 @@
 
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
-import { failureOf, type Failure } from "../daemon/foundations/verb-error";
+import {
+  rendererFailureOf,
+  type Failure,
+} from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -40,12 +43,14 @@ import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
 import type { Locations } from "../config/loader/chain-places";
 import type { StoredState, StoreWrite } from "./stored-state";
+import type { RegionalSettings } from "../utils/region.js";
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
 export interface RendererBoot {
   readonly stored: StoredState;
   readonly locations: Locations;
+  readonly region: RegionalSettings;
   readonly memoryLimitBytes: number;
 }
 
@@ -83,6 +88,7 @@ export interface TimedRenderer {
 export function timed(
   renderer: Renderer,
   monotonic: () => number,
+  warn: (message: string) => void,
 ): TimedRenderer {
   return {
     answer: async (input) => {
@@ -91,17 +97,12 @@ export function timed(
       try {
         return { ...output, turnMs: Math.round(monotonic() - from) };
       } catch (thrown) {
-        // [LAW:no-silent-failure] Measuring a completed turn must not discard
-        // its effects, writes or diagnostics.
-        const missed: LogLine = {
-          level: "warn",
-          line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
-        };
-        const diagnostics: [LogLine, ...LogLine[]] =
-          output.diagnostics === undefined
-            ? [missed]
-            : [...output.diagnostics, missed];
-        return { ...output, turnMs: null, diagnostics };
+        // [LAW:effects-at-boundaries] Timing is transport telemetry. Its
+        // failure leaves the completed renderer answer intact for replay.
+        warn(
+          `renderer turn timing failed: ${rendererFailureOf(thrown).detail}`,
+        );
+        return { ...output, turnMs: null };
       }
     },
   };

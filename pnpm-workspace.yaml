@@ -22,3 +22,8 @@ strictPeerDependencies: true
 # supply-chain release-age delay so a fresh release installs immediately.
 minimumReleaseAgeExclude:
   - "@promptctl/*"
+
+# [LAW:one-source-of-truth] Pin the histogram codec in the shared package so
+# source and bundled renderers emit identical diagnostics and one HDR format.
+patchedDependencies:
+  hdr-histogram-js@3.0.1: patches/hdr-histogram-js@3.0.1.patch

@@ -37,6 +37,7 @@
 //    budget AND duration/time-remaining formatters moved to DSL helper templates
 //    — see DEFAULT_DSL_CONFIG.helpers.)
 
+import { systemRegion, type RegionalSettings } from "../utils/region.js";
 import {
   createEngine,
   type Engine,
@@ -45,7 +46,6 @@ import {
   sprigStrings,
   sprigLists,
   sprigMath,
-  sprigDatetime,
   sprigConversions,
   sprigFlow,
   sprigDicts,
@@ -61,6 +61,7 @@ import {
 } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs, relativeTimeFuncs } from "./funcs.js";
 import type { Clock, ClockFactory } from "./clock.js";
+import { DATE_CLOCK_FUNCTIONS, dateFunctions } from "./datetime.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import { authoredLinks } from "../render/link-style.js";
 
@@ -182,29 +183,7 @@ function animationPair(
 // readout of real time — the lane toggles' spinner, which shows frames arriving
 // at 30 a second and would read frozen at 20x (brandon-menus-sjhy.nt2)
 // [LAW:one-type-per-behavior].
-// sprig's datetime vocabulary bundles functions of their arguments with the
-// two that read its clock; only those two are clock functions. The rest are
-// built over a clock that refuses, so a release of sprig that reads the clock
-// in another is a loud error rather than a projection nobody knows of
-// [LAW:no-silent-failure].
-const SPRIG_CLOCK_READERS = new Set(["now", "ago"]);
-
-function sprigDatetimeWhere(clock: () => Date, readsClock: boolean): FuncMap {
-  return Object.fromEntries(
-    Object.entries(sprigDatetime(clock)).filter(
-      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock,
-    ),
-  );
-}
-
-const SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS",
-  );
-}, false);
-
 const CLOCK_FACTORIES: readonly ClockFactory[] = [
-  (clock) => sprigDatetimeWhere(clock.now, true),
   (clock) => animationPair(clock.frame, clock.timeline),
   (clock) =>
     Object.fromEntries(
@@ -226,9 +205,10 @@ function clockFuncs(factories: readonly ClockFactory[]): FuncMap {
 // at load (src/config/loader/projections.ts). A compile's engine adds the
 // render's own clock factories (the swatch row's `?`) to its instance; only a
 // segment's templates can call those.
-export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set(
-  Object.keys(clockFuncs(CLOCK_FACTORIES)),
-);
+export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set([
+  ...DATE_CLOCK_FUNCTIONS,
+  ...Object.keys(clockFuncs(CLOCK_FACTORIES)),
+]);
 
 // The clock functions of an engine built with `extra` clock factories beside
 // its own — a compile's, whose segment templates can call the swatch row's.
@@ -255,15 +235,16 @@ const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
 // depth nobody stated. It carries no terminal: the detached daemon cannot see
 // the client's.
 export function createCcCandybarEngine(opts: {
+  readonly region?: RegionalSettings;
   readonly drawnAt: () => ColorDepth;
   readonly extraFuncs?: FuncMap;
   readonly clockFuncs?: readonly ClockFactory[];
 }): Engine<RichText> {
-  const { drawnAt, extraFuncs } = opts;
+  const { drawnAt, extraFuncs, region = systemRegion() } = opts;
   const depth = (): DrawnAt => ({ depth: drawnAt() });
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
-    toString: (rt) => rt.plain,
+    toString: (rt) => (rt instanceof Date ? rt.toString() : rt.plain),
     // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
     // prints as Go prints a map, instead of leaking the object into the
     // fragments as if it were text.
@@ -286,7 +267,7 @@ export function createCcCandybarEngine(opts: {
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...SPRIG_DATE_FUNCS,
+      ...dateFunctions(region.timeZone, CLOCK.now),
       ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
@@ -307,7 +288,7 @@ export function createCcCandybarEngine(opts: {
       // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
       // registered last so the domain meaning wins (revisited by the bdi
       // cleanup ticket).
-      ...formatterFuncs(),
+      ...formatterFuncs(region.locale),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
       // paths do not). Last so a feature can override on collision.

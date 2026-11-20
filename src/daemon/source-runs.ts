@@ -22,6 +22,7 @@
 // subscriptions, so a view reopened within a turn's output keeps its runs.
 
 import { SourceFiles } from "./source-files.js";
+import { environmentOutput } from "./environment-output.js";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launcher";
 import type { SourceRead, ReadMode } from "../facts/source-identity.js";
@@ -450,11 +451,16 @@ export class SourceRuns {
     }
     const held = run.value;
     const lane = this.byKind[held.run.identity.read.kind].declare(holds, held);
-    return {
-      digest,
-      current: () => lane.current(),
-      fault: () => this.faults.get(held.digest) ?? null,
-    };
+    // [LAW:one-source-of-truth] Only the run bound to the actual environment
+    // knows whether its child received values. A command may transform them.
+    return environmentOutput(
+      {
+        digest,
+        current: () => lane.current(),
+        fault: () => this.faults.get(held.digest) ?? null,
+      },
+      Object.keys(held.env).length > 0,
+    );
   }
 
   stats(): SourceRunsStats {
