@@ -160,12 +160,12 @@ export function actionHomeOf(filePath: string): ActionHome {
     : { text: filePath };
 }
 
-// [LAW:one-source-of-truth] A copy/open action emits the closed single-key
-// object its arm validates — symmetric to `templateArm(key)`'s parse.
-function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
+// [LAW:one-type-per-behavior] Every arm that takes one key and nothing else
+// emits the same closed object; only the key and its value's shape differ.
+function singleKeyJson(key: string, value: JsonNode): JsonNode {
   return {
     type: "object",
-    properties: { [key]: { type: "string" } },
+    properties: { [key]: value },
     required: [key],
     additionalProperties: false,
   };
@@ -269,18 +269,6 @@ function markerArm(key: MarkerKey): ArmParse<ActionDecl> {
   };
 }
 
-// [LAW:one-source-of-truth] Mirrors templateArmJson's shape one level
-// narrower: the value schema is `const: true`, not `type: string` — a
-// marker action carries no data, on the wire or in the schema.
-function markerArmJson(key: MarkerKey): JsonNode {
-  return {
-    type: "object",
-    properties: { [key]: { const: true } },
-    required: [key],
-    additionalProperties: false,
-  };
-}
-
 // [LAW:types-are-the-program] `preset` (brandon-save-undo-bwi.o6u) is the
 // shape: `"save"` alone, or `"delete"` with the `name` it removes — a
 // template, so its preset can be the one the bar is in.
@@ -357,13 +345,6 @@ function themeDefaultArm(
   return { themeDefault: "save" };
 }
 
-const THEME_DEFAULT_ARM_JSON: JsonNode = {
-  type: "object",
-  properties: { themeDefault: { const: "save" } },
-  required: ["themeDefault"],
-  additionalProperties: false,
-};
-
 // [LAW:parse-dont-validate] `slash` is the one place a line to type becomes a
 // SlashLine (src/claude-input/slash-line.ts); the verb and the edge take
 // nothing else.
@@ -387,13 +368,6 @@ function slashArm(
   }
   return { slash: parsed.line };
 }
-
-const SLASH_ARM_JSON: JsonNode = {
-  type: "object",
-  properties: { slash: { type: "string", pattern: SLASH_LINE_PATTERN } },
-  required: ["slash"],
-  additionalProperties: false,
-};
 
 // [LAW:types-are-the-program] `run` is a program and its arguments — one
 // template each, with no shell between — the variables laid over the
@@ -433,7 +407,9 @@ function runArm(
       `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run)}`,
     );
   }
-  const env = raw.env ?? {};
+  // [LAW:one-source-of-truth] Omitting a table is the one way to declare none;
+  // null is refused like any other non-table.
+  const env = raw.env === undefined ? {} : raw.env;
   if (
     !isPlainObject(env) ||
     Object.entries(env).some(
@@ -446,7 +422,7 @@ function runArm(
       `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env)}`,
     );
   }
-  const refreshes = raw.refreshes ?? [];
+  const refreshes = raw.refreshes === undefined ? [] : raw.refreshes;
   if (
     !Array.isArray(refreshes) ||
     refreshes.some((name) => typeof name !== "string" || name === "")
@@ -476,7 +452,13 @@ function runArm(
 const RUN_ARM_JSON: JsonNode = {
   type: "object",
   properties: {
-    run: { type: "array", items: { type: "string" }, minItems: 1 },
+    // The program comes first and is never empty; its arguments may be.
+    run: {
+      type: "array",
+      items: [{ type: "string", minLength: 1 }],
+      additionalItems: { type: "string" },
+      minItems: 1,
+    },
     env: {
       type: "object",
       propertyNames: { pattern: IDENTIFIER.source },
@@ -556,11 +538,22 @@ function slashFreeString(
     issue(ctx, at, emptyMessage);
     return null;
   }
-  if (v.includes("/")) {
+  if (!WIRE_VALUE.test(v)) {
     issue(ctx, at, slashMessage(v));
     return null;
   }
   return v;
+}
+
+// [LAW:one-source-of-truth] Each string shape a click delivers is one pattern:
+// the parser tests it and the schema publishes it, so an editor never accepts
+// a value the loader refuses. A wire value is non-empty and slash-free; a
+// layout op's segment name is also free of ":", the op-token delimiter.
+const WIRE_VALUE = /^[^/]+$/;
+const LAYOUT_NAME = /^[^/:]+$/;
+
+function patternJson(shape: RegExp): JsonNode {
+  return { type: "string", pattern: shape.source };
 }
 
 // [LAW:types-are-the-program] The key naming a value-source action's
@@ -628,7 +621,7 @@ const FROM_FIELDS_PERSIST: FieldSpecMap<{ from: OptionDomain }> = {
 const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
   min: requireIntSpec(),
   max: requireIntSpec(),
-  by: requireIntSpec(),
+  by: stepSpec(),
 };
 const INT_FIELDS: FieldSpecMap<{ int: true }> = { int: intMarkerSpec() };
 const CYCLE_FIELDS_SET: FieldSpecMap<{ cycle: readonly string[] }> = {
@@ -672,13 +665,10 @@ const INSERT_SEGMENT_FROM_FIELDS: FieldSpecMap<{
 };
 
 // [LAW:types-are-the-program] A bounded step is fully described by an integer
-// domain (min < max) and a non-zero integer increment (`by`; negative for a
-// down-step). The validator derives the range [min,max] (the wire gate); the
-// renderer wraps current ± by inside it. These two cross-field invariants are the
-// refinements `fields` cannot express — relating two fields, not one — carried as
-// DATA whose messages interpolate the assembled value. Unlike a stepper widget's
-// positive `step`, `by` may be negative (the down affordance), so the check is
-// non-zero, not positive.
+// domain (min < max) and a non-zero integer increment (`by`). The validator
+// derives the range [min,max] (the wire gate); the renderer wraps current ± by
+// inside it. min < max relates two fields, so it is the one refinement `fields`
+// cannot express, carried as DATA whose message interpolates the assembled value.
 interface BoundedPayload {
   min: number;
   max: number;
@@ -689,13 +679,6 @@ const minLessThanMax: Refinement<BoundedPayload> = {
   issue: (v) => ({
     field: "min",
     message: `min (${v.min}) must be less than max (${v.max})`,
-  }),
-};
-const byNonZero: Refinement<BoundedPayload> = {
-  ok: (v) => v.by !== 0,
-  issue: () => ({
-    field: "by",
-    message: `by must be a non-zero integer (the per-click increment; negative steps down)`,
   }),
 };
 
@@ -755,7 +738,7 @@ function valueSourceArm<P extends object>(
     json: {
       type: "object",
       properties: {
-        ...Object.fromEntries(keys.map((k) => [k, { type: "string" }])),
+        ...Object.fromEntries(keys.map((k) => [k, patternJson(WIRE_VALUE)])),
         ...source.properties,
       },
       required: [...keys, ...(source.required ?? [])],
@@ -774,7 +757,7 @@ function valueSourceArm<P extends object>(
 const SET_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("set", TO_FIELDS_SET),
   valueSourceArm("set", FROM_FIELDS_SET),
-  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax]),
   valueSourceArm("set", INT_FIELDS),
   valueSourceArm("set", CYCLE_FIELDS_SET),
 ];
@@ -786,7 +769,7 @@ const SET_ARMS: readonly ValueSourceArm[] = [
 const PERSIST_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("persist", TO_FIELDS_PERSIST),
   valueSourceArm("persist", FROM_FIELDS_PERSIST),
-  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax]),
   valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
   valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
   // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
@@ -820,8 +803,12 @@ function syntax(
   return { parse, variants };
 }
 
+// A marker carries no data, on the wire or in the schema: its value is `true`.
 const markerSyntax = (key: MarkerKey): ActionSyntax =>
-  syntax(markerArm(key), markerArmJson(key));
+  syntax(markerArm(key), singleKeyJson(key, { const: true }));
+
+const templateSyntax = (key: "copy" | "open"): ActionSyntax =>
+  syntax(templateArm(key), singleKeyJson(key, { type: "string" }));
 
 function valueSyntax(
   key: Discriminator,
@@ -838,17 +825,23 @@ function valueSyntax(
 const ACTION_ARMS: Record<ActionKey, ActionSyntax> = {
   set: valueSyntax("set", SET_ARMS),
   persist: valueSyntax("persist", PERSIST_ARMS),
-  copy: syntax(templateArm("copy"), templateArmJson("copy")),
-  open: syntax(templateArm("open"), templateArmJson("open")),
-  reset: syntax(resetArm, templateArmJson("reset")),
+  copy: templateSyntax("copy"),
+  open: templateSyntax("open"),
+  reset: syntax(resetArm, singleKeyJson("reset", patternJson(WIRE_VALUE))),
   undo: markerSyntax("undo"),
   redo: markerSyntax("redo"),
   back: markerSyntax("back"),
   rewind: markerSyntax("rewind"),
   save: markerSyntax("save"),
   preset: syntax(presetArm, ...presetArmJson()),
-  themeDefault: syntax(themeDefaultArm, THEME_DEFAULT_ARM_JSON),
-  slash: syntax(slashArm, SLASH_ARM_JSON),
+  themeDefault: syntax(
+    themeDefaultArm,
+    singleKeyJson("themeDefault", { const: "save" }),
+  ),
+  slash: syntax(
+    slashArm,
+    singleKeyJson("slash", { type: "string", pattern: SLASH_LINE_PATTERN }),
+  ),
   run: syntax(runArm, RUN_ARM_JSON),
   do: syntax(doArm, DO_ARM_JSON),
 };
@@ -943,7 +936,7 @@ function setLiteralSpec(discriminator: Discriminator): FieldSpec<string> {
   const wire = wireName(discriminator);
   return {
     required: true,
-    json: { type: "string" },
+    json: patternJson(WIRE_VALUE),
     parse: (ctx, path, field, raw) =>
       slashFreeString(
         ctx,
@@ -978,7 +971,7 @@ function fromSpec(discriminator: Discriminator): FieldSpec<OptionDomain> {
         { type: "string", minLength: 1 },
         {
           type: "array",
-          items: { type: "string", minLength: 1 },
+          items: patternJson(WIRE_VALUE),
           minItems: 1,
           uniqueItems: true,
         },
@@ -1012,7 +1005,7 @@ function fromSpec(discriminator: Discriminator): FieldSpec<OptionDomain> {
           );
           return undefined;
         }
-        const slashed = members.filter((m) => m.includes("/"));
+        const slashed = members.filter((m) => !WIRE_VALUE.test(m));
         if (slashed.length > 0) {
           issue(
             ctx,
@@ -1054,7 +1047,7 @@ function cycleSpec(discriminator: Discriminator): FieldSpec<readonly string[]> {
     required: true,
     json: {
       type: "array",
-      items: { type: "string", minLength: 1 },
+      items: patternJson(WIRE_VALUE),
       minItems: 2,
       uniqueItems: true,
     },
@@ -1079,7 +1072,7 @@ function cycleSpec(discriminator: Discriminator): FieldSpec<readonly string[]> {
         return undefined;
       }
       const empty = members.some((m) => m === "");
-      const slashed = members.filter((m) => m.includes("/"));
+      const slashed = members.filter((m) => !WIRE_VALUE.test(m));
       if (empty) {
         issue(
           ctx,
@@ -1140,7 +1133,7 @@ function intMarkerSpec(): FieldSpec<true> {
 function layoutNameSpec(field: string): FieldSpec<string> {
   return {
     required: true,
-    json: { type: "string" },
+    json: patternJson(LAYOUT_NAME),
     parse: (ctx, path, f, raw) => {
       const v = requireString(ctx, path, raw, f);
       if (v === null) return undefined;
@@ -1149,7 +1142,7 @@ function layoutNameSpec(field: string): FieldSpec<string> {
         issue(ctx, at, `${field} must be non-empty (a segment name)`);
         return undefined;
       }
-      if (v.includes("/") || v.includes(":")) {
+      if (!LAYOUT_NAME.test(v)) {
         issue(
           ctx,
           at,
@@ -1203,6 +1196,27 @@ function requireIntSpec(): FieldSpec<number> {
         return undefined;
       }
       return v;
+    },
+  };
+}
+
+// [LAW:types-are-the-program] `by` is the per-click increment of a bounded
+// step: an integer that is never zero, negative to step down. Unlike a stepper
+// widget's positive `step`, the sign carries the direction.
+function stepSpec(): FieldSpec<number> {
+  const int = requireIntSpec();
+  return {
+    required: true,
+    json: { ...int.json, not: { const: 0 } },
+    parse: (ctx, path, field, raw) => {
+      const v = int.parse(ctx, path, field, raw);
+      if (v !== 0) return v;
+      issue(
+        ctx,
+        `${path}.${field}`,
+        `${field} must be a non-zero integer (the per-click increment; negative steps down)`,
+      );
+      return undefined;
     },
   };
 }

@@ -715,10 +715,12 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "to": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               }
             },
             "required": [
@@ -731,7 +733,8 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "from": {
                 "anyOf": [
@@ -743,7 +746,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "pattern": "^[^/]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -761,7 +764,8 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "min": {
                 "type": "integer"
@@ -770,7 +774,10 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
               }
             },
             "required": [
@@ -785,7 +792,8 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "int": {
                 "const": true
@@ -801,13 +809,14 @@
             "type": "object",
             "properties": {
               "set": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "cycle": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[^/]+$"
                 },
                 "minItems": 2,
                 "uniqueItems": true
@@ -823,10 +832,12 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "to": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "layer": {
                 "enum": [
@@ -846,7 +857,8 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "from": {
                 "anyOf": [
@@ -858,7 +870,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "pattern": "^[^/]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -883,7 +895,8 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "min": {
                 "type": "integer"
@@ -892,7 +905,10 @@
                 "type": "integer"
               },
               "by": {
-                "type": "integer"
+                "type": "integer",
+                "not": {
+                  "const": 0
+                }
               },
               "layer": {
                 "enum": [
@@ -914,13 +930,14 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "cycle": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "pattern": "^[^/]+$"
                 },
                 "minItems": 2,
                 "uniqueItems": true
@@ -943,10 +960,12 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "removeSegment": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/:]+$"
               },
               "layer": {
                 "enum": [
@@ -966,13 +985,16 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "insertSegment": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/:]+$"
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/:]+$"
               },
               "relation": {
                 "enum": [
@@ -1000,7 +1022,8 @@
             "type": "object",
             "properties": {
               "persist": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "insertSegmentFrom": {
                 "anyOf": [
@@ -1012,7 +1035,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "minLength": 1
+                      "pattern": "^[^/]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -1020,7 +1043,8 @@
                 ]
               },
               "anchor": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/:]+$"
               },
               "relation": {
                 "enum": [
@@ -1072,7 +1096,8 @@
             "type": "object",
             "properties": {
               "reset": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[^/]+$"
               },
               "layer": {
                 "enum": [
@@ -1234,7 +1259,13 @@
             "properties": {
               "run": {
                 "type": "array",
-                "items": {
+                "items": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                ],
+                "additionalItems": {
                   "type": "string"
                 },
                 "minItems": 1

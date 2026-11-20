@@ -347,8 +347,8 @@ describe("config JSON Schema", () => {
   const ACTION_SHAPES: ReadonlyArray<readonly [string, object, boolean]> = [
     ["an empty program", { run: [""] }, false],
     ["an empty argument after the program", { run: ["echo", ""] }, true],
-    ["a null run environment", { run: ["echo"], env: null }, true],
-    ["a null run refresh list", { run: ["echo"], refreshes: null }, true],
+    ["a null run environment", { run: ["echo"], env: null }, false],
+    ["a null run refresh list", { run: ["echo"], refreshes: null }, false],
     ["a non-string run argument", { run: ["echo", 1] }, false],
     ["a blank reset target", { reset: "", layer: "project" }, false],
     ["a slash in a reset target", { reset: "section/key" }, false],
