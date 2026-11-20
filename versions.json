@@ -4,15 +4,22 @@
     {
       "version": "pr-913",
       "ref": "refs/pull/913/merge",
-      "sha": "3562934c0cfeebe5cd7dc5ee34767dbc4140952c",
-      "timestamp": "2026-11-20T00:01:57.771Z",
+      "sha": "1b357655c9b9b8a9d7c87a3a65b0aca75876a0ca",
+      "timestamp": "2026-11-20T00:09:20.553Z",
       "commits": [
         {
-          "sha": "3562934c0cfeebe5cd7dc5ee34767dbc4140952c",
+          "sha": "1b357655c9b9b8a9d7c87a3a65b0aca75876a0ca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:01:03Z",
-          "message": "Merge 92e6739a42c1799d14f0ecec0099d4e84fb01817 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+          "timestamp": "2026-11-20T00:08:03Z",
+          "message": "Merge fcd52cc1ea884a975166209b55f2086bcc167b53 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
+        },
+        {
+          "sha": "fcd52cc1ea884a975166209b55f2086bcc167b53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:07:51-07:00",
+          "message": "test(recording): verify orderly shutdown publishes a sealed capture\n"
         },
         {
           "sha": "92e6739a42c1799d14f0ecec0099d4e84fb01817",
