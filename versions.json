@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-921",
-      "ref": "refs/pull/921/merge",
-      "sha": "56c55eb2e3e3605e2a27be491065804a7b87b3c0",
-      "timestamp": "2026-11-20T17:46:18.388Z",
+      "version": "pr-922",
+      "ref": "refs/pull/922/merge",
+      "sha": "55099a2a8618090dac4ee7c5f065b1ab672a9609",
+      "timestamp": "2026-11-20T19:50:34.961Z",
       "commits": [
         {
-          "sha": "56c55eb2e3e3605e2a27be491065804a7b87b3c0",
+          "sha": "55099a2a8618090dac4ee7c5f065b1ab672a9609",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T10:45:14-07:00",
-          "message": "Merge 5b6ec33695fc353da33f58907485438267575c22 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T12:49:31-07:00",
+          "message": "Merge 2d6ada8709510622a9613ad3563d664252475967 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "5b6ec33695fc353da33f58907485438267575c22",
+          "sha": "2d6ada8709510622a9613ad3563d664252475967",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T10:40:51-07:00",
-          "message": "fix(daemon): a throw between the disk and the bar stands as one daemon defect\n\nEvery failure the git refresh, config rediscovery and watch delivery\npaths expect is already a value, so a throw there is a defect of the\ndaemon. It now stands in one observable ledger, keyed by the unit of\nwork that threw, set at the unit's boundary and cleared when the unit\nnext runs clean or its owner ends it. Every bar draws each defect as a\nred error.\n\n- The git pass no longer folds defects into failed reads; a pass that\n  throws keeps the repo's value and PR.\n- An origin whose rediscovery throws keeps its snapshot and watch; a\n  first follow finds every origin before committing any.\n- A delivery window's keys live in its own namespace, so following a\n  watch cannot throw mid-commit.\n\nTicket: candybar-law-review-ibyq.hck\n"
+          "timestamp": "2026-11-20T12:45:18-07:00",
+          "message": "fix(daemon): tell every bar through one leveled notice channel\n\nThe daemon's renderer-ended, act-failed and launcher pipe events become\nnotices: one channel whose level is a value, joined by what each is about.\nEvery error the daemon logs is a notice too, so a throw in background work\n(git refresh, PR lookup, watcher delivery, a renderer's taken output)\nreaches every bar instead of only the log. A request's record goes to the\nlog alone, since its answer already carries its outcome. A rejected PR\nlookup is answered as failed, so its readers and period move on.\n"
         }
       ]
     },

@@ -28404,9 +28404,6 @@ init_globals();
 // src/renderer/draw-bar.ts
 init_globals();
 
-// src/proc/launcher.ts
-init_globals();
-
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
@@ -28447,52 +28444,8 @@ function answeredBy(last2, shown) {
 function sameOccurrence(a, b) {
   return a.at === b.at && a.text === b.text && a.revision === b.revision;
 }
-
-// src/proc/launcher.ts
-function whyFailed(r) {
-  switch (r.reason) {
-    case "non-zero":
-      return `exited with code ${r.exitCode}`;
-    case "signal":
-      return `killed by ${r.signal ?? "a signal"}`;
-    // These are whole sentences: the launcher wrote them.
-    case "timeout":
-    case "output-limit":
-    case "rate-limited":
-    case "pipe-error":
-    case "spawn-error":
-      return r.error ?? r.reason;
-    default:
-      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
-  }
-}
-var SAID_LINE_CHARS = 200;
-var clipped = (line) => {
-  const kept = [];
-  for (const ch of line) {
-    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
-    kept.push(ch);
-  }
-  return line;
-};
-function saidBy(r, text4) {
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const t2 = text4.trim();
-  const firstEnd = t2.search(/[\r\n]/);
-  if (firstEnd === -1) return clipped(t2);
-  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
-  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
-}
-function failureText(r, where = "") {
-  const said2 = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
-}
-function launcherWarningsAt(facts, at, render3) {
-  return facts.flatMap((fact) => {
-    if (fact.kind === "lifeline") return [fact];
-    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
-    return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
-  });
+function sameNotice(a, b) {
+  return a.about === b.about && sameOccurrence(a, b);
 }
 
 // src/daemon/foundations/protocol.ts
@@ -46958,14 +46911,12 @@ var DIAGNOSTIC_LEVELS = {
   warning: { rank: 1, glyph: "\u26A0", colors: DIAGNOSTIC_WARNING_COLORS },
   info: { rank: 2, glyph: "\u2139", colors: DIAGNOSTIC_INFO_COLORS }
 };
-var ERROR_SEVERITY = {
-  level: "error",
-  glyph: DIAGNOSTIC_LEVELS.error.glyph
-};
-var WARNING_SEVERITY = {
-  level: "warning",
-  glyph: DIAGNOSTIC_LEVELS.warning.glyph
-};
+var plainSeverity = (level) => ({
+  level,
+  glyph: DIAGNOSTIC_LEVELS[level].glyph
+});
+var ERROR_SEVERITY = plainSeverity("error");
+var WARNING_SEVERITY = plainSeverity("warning");
 var APPROVAL_SEVERITY = {
   level: "info",
   glyph: "\u{1F512}"
@@ -46978,18 +46929,10 @@ var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
-function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
-  const plain = /* @__PURE__ */ new Set();
-  const plainOf3 = (text4, severity) => {
-    const made = plainMessage(text4, severity);
-    for (const m of made) plain.add(m);
-    return made;
-  };
-  const list2 = [
-    ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
-    ...notices,
-    ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
-  ].sort((a, b) => rankOf(a) - rankOf(b));
+function collectDiagnostics(sessionId2, by, texts, shaped2) {
+  const made = texts.flatMap(plainMessage);
+  const plain = new Set(made);
+  const list2 = [...made, ...shaped2].sort((a, b) => rankOf(a) - rankOf(b));
   const seen = /* @__PURE__ */ new Map();
   const minted = list2.map(
     (message, i2) => {
@@ -47015,7 +46958,13 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   );
   return minted;
 }
-function plainMessage({ about, text: message, copy: copy2 }, severity) {
+function plainMessage({
+  level,
+  about,
+  text: message,
+  copy: copy2
+}) {
+  const severity = plainSeverity(level);
   const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
   return first2 === void 0 ? [] : [{ severity, about, message, copy: copy2, lines: [first2, ...rest2] }];
 }
@@ -64551,6 +64500,7 @@ init_globals();
 var KEPT_FAULTS = "kept";
 var spelledFaults = (faults) => JSON.stringify(faults);
 var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
+var LEVELS3 = new Set(Object.keys(DIAGNOSTIC_LEVELS));
 
 // src/renderer/menu-idle.ts
 init_globals();
@@ -72750,18 +72700,6 @@ function drawRender(parts, setup, drawing2, feeds) {
       "load",
       configAccess.kind === "unavailable" ? configAccess.error : null
     ),
-    // [LAW:no-silent-failure] Work between the disk and the bar that threw
-    // may have left any bar behind, so every bar says so.
-    ...document.daemon.defects.map(
-      ({ kind, key, about, message }) => ({
-        ...sourced(
-          "defect",
-          `defect\0${kind}\0${key}`,
-          `${about}: ${kind} threw ${message}`
-        ),
-        subject: about
-      })
-    ),
     ...state.dropped.map(
       (e) => ({
         kind: "dropped",
@@ -72777,21 +72715,16 @@ function drawRender(parts, setup, drawing2, feeds) {
   );
   const configWatch = entry.snapshot.watch;
   const { daemon: daemon2 } = document;
-  const launched = launcherWarningsAt(daemon2.launcher, at, drawing2.by);
-  const launchEvents = launched.flatMap(
-    (warning) => "event" in warning ? [warning] : []
-  );
-  const held = [
-    daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
-    daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
-  ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [...launchEvents, ...held].flatMap(
-    ({ kind, event }) => event.answered ? [] : [{ kind, event }]
+  const notices = daemon2.notices.flatMap((notice) => {
+    const hold2 = eventHoldAt(notice, DAEMON_EVENT_HOLD_S, at, drawing2.by);
+    return hold2 === "over" ? [] : [{ notice, hold: hold2 }];
+  });
+  const eventsShown = notices.flatMap(
+    ({ notice }) => notice.answered ? [] : [notice]
   );
   const standing2 = [
     ...daemon2.fileEvents,
-    ...launched,
-    ...held,
+    ...daemon2.launcher,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarnings.map((message) => ({
       kind: "load",
@@ -72811,23 +72744,39 @@ function drawRender(parts, setup, drawing2, feeds) {
   const diagnostics = collectDiagnostics(
     sessionId2,
     drawing2.by,
-    errors2,
-    questions,
     [
-      // A standing warning is one per kind whose words change as it does (a
-      // pipe event's counts), so its kind alone is what it is about: a viewer
-      // open on it stays open. A render warning is about its words.
+      ...errors2.map(({ about, text: text4, copy: copy2 }) => ({
+        level: "error",
+        about,
+        text: text4,
+        copy: copy2
+      })),
+      // A notice is about what its producer named, so a later one joined to
+      // it changes its words under an open viewer without becoming another
+      // message.
+      ...notices.map(({ notice }) => ({
+        level: notice.level,
+        about: `notice\0${notice.about}`,
+        text: notice.text,
+        copy: notice.text
+      })),
+      // A standing warning is one per kind whose words change as it does, so
+      // its kind alone is what it is about: a viewer open on it stays open.
+      // A render warning is about its words.
       ...standing2.map((w) => ({
+        level: "warning",
         about: w.kind,
         text: w.message,
         copy: w.message
       })),
       ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
+        level: "warning",
         about: key,
         text: warning.message,
         copy: warning.message
       }))
-    ]
+    ],
+    questions
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
@@ -72910,6 +72859,9 @@ function drawRender(parts, setup, drawing2, feeds) {
   ].join(",") || "-";
   const faults = [
     ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
+    ...notices.map(
+      ({ notice }) => faultOf(notice.level, "notice", notice.text, notice.about)
+    ),
     ...standing2.map((w) => faultOf("warning", w.kind, w.message)),
     ...warnings.map(
       ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
@@ -72946,8 +72898,9 @@ function drawRender(parts, setup, drawing2, feeds) {
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: launchEvents[0]?.hold ?? "-",
+    // Each notice this frame showed, by what it is about and why (held, or
+    // owed past its hold); `-` for none.
+    notices: notices.map(({ notice, hold: hold2 }) => `${notice.about}:${hold2}`).join(",") || "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -72990,9 +72943,6 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
-function daemonEventAt(kind, event, at, render3) {
-  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
-}
 function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
@@ -77941,50 +77891,13 @@ var lifelineMessage = (fault) => `programs launched now would outlive their laun
 var pipeEventWords = (kind) => kind === "cut" ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes` : "output failed to read";
 var PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
 function pipeEvent(state, kind, category) {
-  const last2 = state.pipeEvent;
-  const counts = new Map(last2 === null || last2.answered ? [] : last2.counts);
-  const key = `${kind}\0${category}`;
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-  const said2 = [...counts].map(([at, n]) => {
-    const [k, c] = at.split("\0");
-    return `${n}\xD7 ${c} ${pipeEventWords(k)}`;
-  });
-  state.pipeEvent = {
-    text: `${PIPE_EVENT_LEAD}${said2.join("; ")}`,
-    at: state.scope.now(),
-    // [LAW:types-are-the-program] An old write must not answer a later event
-    // with the same count, category and instant.
-    revision: (last2?.revision ?? 0) + 1,
-    answered: false,
-    counts
-  };
   state.scope.observeWarnings({
     kind: "launch-pipes",
     text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`
   });
 }
-function answeredPipeEvent(state, event) {
-  const last2 = state.pipeEvent;
-  if (last2 === null || !answeredBy(last2, event)) return false;
-  state.pipeEvent = { ...last2, answered: true };
-  return true;
-}
 function standing(state) {
-  const event = state.pipeEvent;
-  return [
-    ...state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }],
-    ...event === null ? [] : [
-      {
-        kind: "launch-pipes",
-        event: {
-          text: event.text,
-          at: event.at,
-          revision: event.revision,
-          answered: event.answered
-        }
-      }
-    ]
-  ];
+  return state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }];
 }
 function spawnLifeline(state) {
   const { stats, clock } = state.scope;
@@ -78573,7 +78486,6 @@ function launcherWithState(owner, clock, spawner) {
     jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
     endJob: (pid2, status, end) => endJob(spawner, clock, pid2, status, end),
     standing: () => standing(state),
-    answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
       return { unreaped: [...state.unreaped.values()] };
@@ -78599,7 +78511,6 @@ function launcherWithState(owner, clock, spawner) {
         if (message !== null) process.emitWarning(message);
       },
       signal: new AbortController().signal,
-      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock
     },
@@ -78608,7 +78519,6 @@ function launcherWithState(owner, clock, spawner) {
     liveGroups: /* @__PURE__ */ new Set(),
     lifeline: null,
     fault: null,
-    pipeEvent: null,
     ending: /* @__PURE__ */ new Set(),
     unreaped: /* @__PURE__ */ new Map(),
     drains: /* @__PURE__ */ new Set()
@@ -79092,6 +79002,47 @@ var SessionBook = class {
 init_globals();
 var import_node_path12 = __toESM(require_path_browserify(), 1);
 
+// src/proc/launcher.ts
+init_globals();
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said2 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
+}
+
 // src/daemon/environment-output.ts
 init_globals();
 var FROM_ENVIRONMENT = /* @__PURE__ */ Symbol("output derived from a session environment");
@@ -79311,39 +79262,6 @@ function locations(host) {
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
-
-// src/daemon/foundations/defects.ts
-init_globals();
-var Defects = class {
-  constructor(log) {
-    this.log = log;
-  }
-  log;
-  standing = observable.map(void 0, {
-    deep: false
-  });
-  // How a unit's run ended: the failure it threw, or null once it returned
-  // or its owner ended it. [LAW:nothing-unseen] Logged as a defect starts,
-  // as its message changes and as it clears, never once per run.
-  settle(unit, failure2) {
-    const id2 = `${unit.kind}\0${unit.key}`;
-    const was = this.standing.get(id2);
-    if (was?.message === failure2?.message) return;
-    const fields2 = `kind=${valueOf(unit.kind)} about=${valueOf(unit.about)}`;
-    if (failure2 === null) this.log("info", `defect cleared ${fields2}`);
-    else
-      this.log(
-        "error",
-        `defect ${fields2} failed=${valueOf(failure2.message)} detail=${valueOf(failure2.detail)}`
-      );
-    runInAction(
-      () => failure2 === null ? this.standing.delete(id2) : this.standing.set(id2, { ...unit, message: failure2.message })
-    );
-  }
-  list() {
-    return [...this.standing.values()];
-  }
-};
 
 // src/daemon/reply.ts
 init_globals();
@@ -79620,8 +79538,6 @@ function dirsBelow(at, held, trusted, unlisted) {
     return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
   });
 }
-var PLAIN2 = "";
-var slotId = (namespace, key) => `${namespace}\0${key}`;
 var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
   dirs = /* @__PURE__ */ new Map();
@@ -79630,8 +79546,6 @@ var WatcherRegistry = class {
   sweep = null;
   counters;
   logger;
-  defects;
-  batches = 0;
   clock;
   closed = false;
   nodeWalksTrees;
@@ -79639,22 +79553,13 @@ var WatcherRegistry = class {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
-    this.defects = opts.defects ?? new Defects(this.logger);
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
   // [LAW:single-enforcer] A consumer that reloads several slots together can
-  // share their delivery window, named by `about`. Each slot still receives
-  // only its own paths.
-  batch(about, completed) {
-    const namespace = `batch ${++this.batches}`;
-    const window2 = {
-      namespace,
-      pending: null,
-      completed: {
-        unit: { kind: "watch delivery", key: namespace, about },
-        run: completed
-      }
-    };
+  // share their delivery window. Each slot still receives only its own paths.
+  // Keys acquired in this window belong to it until their last release.
+  batch(completed) {
+    const window2 = { pending: null, completed };
     const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
     return {
       acquire,
@@ -79662,7 +79567,6 @@ var WatcherRegistry = class {
         held,
         spec,
         observed2,
-        namespace,
         (key, targets) => acquire(key, targets, onInvalidate, observed2)
       )
     };
@@ -79693,8 +79597,11 @@ var WatcherRegistry = class {
         ridesStream: ridesStream(targets)
       };
     }
-    const namespace = window2?.namespace ?? PLAIN2;
-    const shared = this.slots.get(slotId(namespace, key));
+    const shared = this.slots.get(key);
+    if (shared !== void 0 && (window2 === void 0 ? shared.window.completed !== void 0 : shared.window !== window2))
+      throw new Error(
+        `watch ${valueOf(key)} belongs to another delivery window`
+      );
     if (shared !== void 0) {
       for (const { dir } of shared.listeners.values())
         this.judged(dir, "acquire");
@@ -79704,12 +79611,7 @@ var WatcherRegistry = class {
       shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? []),
       observed2
     );
-    const slot = shared ?? this.opened(
-      key,
-      targets,
-      window2 ?? { namespace, pending: null },
-      observed2
-    );
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null }, observed2);
     const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
     slot.holders.add(holder);
     const handle = this.makeHandle(slot, holder);
@@ -79722,17 +79624,13 @@ var WatcherRegistry = class {
       held,
       spec,
       observed2,
-      PLAIN2,
       (key, targets) => this.acquire(key, targets, onInvalidate, observed2)
     );
   }
-  followed(held, spec, observed2, namespace, acquire) {
+  followed(held, spec, observed2, acquire) {
     const followed = followWatch(held, spec, acquire);
     if (followed.move === "kept") {
-      this.sighted(
-        this.slots.get(slotId(namespace, followed.watch.key))?.polled ?? [],
-        observed2
-      );
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed2);
       followed.watch.handle.observed(observed2);
     }
     return followed;
@@ -79753,15 +79651,8 @@ var WatcherRegistry = class {
         record2.entry = UNSEEN;
   }
   opened(key, targets, window2, observed2) {
-    const id2 = slotId(window2.namespace, key);
     const slot = {
-      id: id2,
       key,
-      unit: {
-        kind: "watch delivery",
-        key: id2,
-        about: `watch on ${[...targets.dirs.map((dir) => dir.path), ...targets.polled].join(", ")}`
-      },
       targets: targets.dirs,
       listeners: /* @__PURE__ */ new Map(),
       polled: [],
@@ -79775,7 +79666,7 @@ var WatcherRegistry = class {
       slot.polled.push(record2);
     }
     this.armSweep();
-    this.slots.set(id2, slot);
+    this.slots.set(key, slot);
     if (this.counters) {
       if ([...slot.listeners.values()].every(
         (l) => l.dir.state.kind === "listening"
@@ -79983,23 +79874,13 @@ var WatcherRegistry = class {
           () => {
             window2.pending = null;
             for (const [changed, gathered2] of changes2) {
-              if (this.slots.get(changed.id) !== changed) continue;
+              if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered2);
-              this.delivered(
-                changed.unit,
-                [...changed.holders].map(
-                  (holder) => () => holder.onInvalidate(heard)
-                ),
-                () => this.slots.get(changed.id) === changed
-              );
+              for (const holder of changed.holders)
+                this.notify(changed.key, () => holder.onInvalidate(heard));
             }
-            const { completed } = window2;
-            if (completed !== void 0)
-              this.delivered(
-                completed.unit,
-                [completed.run],
-                () => this.rides(window2)
-              );
+            if (window2.completed !== void 0)
+              this.notify(null, window2.completed);
           },
           { unref: true }
         )
@@ -80012,26 +79893,19 @@ var WatcherRegistry = class {
       gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
     );
   }
-  // [LAW:no-silent-failure] The boundary of one delivery: every recipient
-  // hears it, and the first throw among them stands as the delivery's defect
-  // until a delivery runs clean. A delivery whose watch closed while it ran
-  // ends with it, after its throw was logged.
-  delivered(unit, recipients, live) {
-    const failures = recipients.flatMap((hear) => {
-      try {
-        hear();
-        return [];
-      } catch (thrown2) {
-        return [failureOf(thrown2)];
-      }
-    });
-    this.defects.settle(unit, failures[0] ?? null);
-    if (!live()) this.defects.settle(unit, null);
-  }
-  rides(window2) {
-    for (const slot of this.slots.values())
-      if (slot.window === window2) return true;
-    return false;
+  // [LAW:no-silent-failure] Each recipient is its own boundary, so the others
+  // still hear the delivery. A throw is a defect of the daemon, so it is
+  // logged as an error, which every bar shows.
+  notify(key, take) {
+    try {
+      take();
+    } catch (thrown2) {
+      const about = key === null ? "batch" : `key=${valueOf(key)}`;
+      this.logger(
+        "error",
+        `watcher invalidate threw ${about}: ${failureOf(thrown2).message}`
+      );
+    }
   }
   makeHandle(slot, holder) {
     return {
@@ -80052,8 +79926,9 @@ var WatcherRegistry = class {
       },
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.id) !== slot) return;
+        if (this.slots.get(slot.key) !== slot) return;
         this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
       }
     };
   }
@@ -80070,14 +79945,9 @@ var WatcherRegistry = class {
   }
   // A directory watch closes, and a polled path is forgotten, with the last
   // slot on it: a slot that names the path again starts from what is there at
-  // its own acquire. Its delivery ends with it, and its window's with the
-  // last slot that rides it.
+  // its own acquire.
   closeSlot(slot, cause) {
-    this.slots.delete(slot.id);
-    this.defects.settle(slot.unit, null);
     const { window: window2 } = slot;
-    if (window2.completed !== void 0 && !this.rides(window2))
-      this.defects.settle(window2.completed.unit, null);
     const { pending: pending2 } = window2;
     if (pending2 !== null && pending2.changes.delete(slot) && pending2.changes.size === 0) {
       pending2.cancel();
@@ -80160,7 +80030,8 @@ var WatcherRegistry = class {
   closeAll() {
     this.closed = true;
     this.disarmSweep();
-    for (const slot of [...this.slots.values()]) this.closeSlot(slot, "close");
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
   }
 };
 
@@ -80775,11 +80646,11 @@ var HoldReturn = class {
   }
 };
 function attempt2(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
+  const threw = (e) => failed(`read threw: ${String(e)}`, "read");
   try {
-    return read2().catch(threw2);
+    return read2().catch(threw);
   } catch (e) {
-    return Promise.resolve(threw2(e));
+    return Promise.resolve(threw(e));
   }
 }
 
@@ -82390,7 +82261,7 @@ function closingResponse(parts, rawKind, accepted) {
       failure2,
       elapsedMs(parts.clock, accepted.at)
     );
-    parts.log(event.level, event.line);
+    parts.requests(event.level, event.line);
   }
   return failedWith(failure2.message);
 }
@@ -82591,7 +82462,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       const took = elapsedMs(clock, t0);
       stats.recordTook(took);
       const { level, line } = requestEvent("render", facts, outcome, took);
-      parts.log(level, line);
+      parts.requests(level, line);
       return reply;
     };
     const failedDraw = (error) => {
@@ -82768,7 +82639,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
     outcome,
     elapsedMs(clock, t0)
   );
-  parts.log(level, line);
+  parts.requests(level, line);
   return clickReply(outcome);
 }
 async function clickOutcome(parts, req, facts, click2) {
@@ -83099,12 +82970,6 @@ function composed({ value, pr }) {
   return ok({ ...info.value, pullRequest: currentOf(pr) });
 }
 var CLOSED = failed("git cache closed", "read");
-function threw(label2) {
-  return (e) => failed(`${label2} threw: ${String(e)}`, "read");
-}
-function passOf(root) {
-  return { kind: "git refresh", key: root, about: `git at ${root}` };
-}
 var GitDataProvider = class {
   repos = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
@@ -83128,7 +82993,6 @@ var GitDataProvider = class {
   watchers;
   ownsWatchers;
   logger;
-  defects;
   clock;
   constructor(opts) {
     this.inner = opts.inner;
@@ -83137,7 +83001,6 @@ var GitDataProvider = class {
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
-    this.defects = opts.defects ?? new Defects(this.logger);
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
       name: "git",
@@ -83317,19 +83180,20 @@ var GitDataProvider = class {
     state.asked.add(reason);
     state.refresh.run(PASS, () => this.refreshPass(state));
   }
-  // The loop's work, and the boundary of one pass. Nobody awaits it — a
-  // watch fire or a tick starts it — so [LAW:no-silent-failure] a throw is
-  // the repo's defect, standing on every bar until a pass returns, never an
-  // unhandled rejection. A repo dropped while its pass ran ends with it.
-  // [LAW:no-ambient-temporal-coupling] The period lands when the pass ENDS,
-  // after its every await, so a tick that shares a running pass is always
-  // followed by the landing that schedules the next one.
+  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
+  // [LAW:no-silent-failure] a throw is logged here as the error it is, which
+  // every bar shows, never an unhandled rejection; the repo keeps the value
+  // and PR it had. [LAW:no-ambient-temporal-coupling] The period lands
+  // when the pass ENDS, after its every await, so a tick that shares a running
+  // pass is always followed by the landing that schedules the next one.
   async refreshPass(state) {
-    const failure2 = await this.pass(state).then(() => null, failureOf);
-    this.defects.settle(passOf(state.root), failure2);
-    if (this.repos.get(state.root) !== state)
-      this.defects.settle(passOf(state.root), null);
-    state.period.landed(this.periodMs);
+    try {
+      await this.pass(state);
+    } catch (e) {
+      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+    } finally {
+      state.period.landed(this.periodMs);
+    }
   }
   // One hold of a home: the repo, its value and its PR. A value or a PR key a
   // change went by is read by the pass `ask` queues, while this reader takes
@@ -83459,7 +83323,11 @@ var GitDataProvider = class {
     const lookup2 = remote.kind === "ok" ? this.forgeLookups.run(() => {
       startedAt = this.clock.monotonic();
       return this.inner.resolvePullRequest(state.root, remote.value);
-    }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
+    }).catch((thrown2) => {
+      const why = `PR lookup threw: ${String(thrown2)}`;
+      this.logger("error", `${why} (${state.root})`);
+      return failed(why, "read");
+    }) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT2);
     const done = lookup2.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
@@ -83497,7 +83365,6 @@ var GitDataProvider = class {
     state.watch.handle.release();
     state.period.dispose();
     state.pr.period.dispose();
-    this.defects.settle(passOf(state.root), null);
   }
   // The LRU bounds the repos nothing holds; a held repo is never evicted, so
   // those are bounded by their holders (the render cache's budget).
@@ -85231,11 +85098,11 @@ var GitService = class {
   // cache + watcher on the *effective* git directory — the same directory the
   // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
   // alone is wrong when `projectDir` is set and is itself a git repo: the
-  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
+  // shell-runner picks `projectDir` (see `getGitInfo`'s gitDir resolution
   // below), but a workingDir-keyed cache would store that data under a
   // different key and wire invalidation to the wrong watcher. The contract:
   // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
-  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
+  // directory `getGitInfo` will use as `gitDir`. Both surfaces must agree.
   resolveEffectiveGitDir(workingDir, projectDir) {
     const working = gitEntryAt(workingDir);
     if (working.kind === "failed") return working;
@@ -85291,8 +85158,8 @@ var GitService = class {
   // invalidation surface — exactly the trap that kz8.3 collapses.
   //
   // [LAW:no-silent-failure] Every failure a read expects is an outcome, so a
-  // rejection is a defect, and it reaches the refresh pass that started the
-  // read, whose boundary records it.
+  // rejection is a defect, and it reaches the boundary of the work that
+  // started the read, which logs it as the error it is.
   async getGitInfo(workingDir, projectDir) {
     const found2 = this.resolveEffectiveGitDir(workingDir, projectDir);
     if (found2.kind !== "ok") return found2;
@@ -85494,7 +85361,7 @@ var GitService = class {
     return ok(entries ? entries.split("\n").length : 0);
   }
   // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
-  // `repoName` and `repoUrl` share a single call from `computeGitInfo`, so those
+  // `repoName` and `repoUrl` share a single call from `getGitInfo`, so those
   // two can never disagree about which remote is origin — that pair used to be
   // one `config --get remote.origin.url` each.
   //
@@ -86945,14 +86812,14 @@ var TranscriptLanes = class {
       autocompact: async () => owners.autoCompact.window(settings, by)
     };
     const lane = async (name) => {
-      let threw2 = null;
+      let threw = null;
       try {
         await reads[name]();
       } catch (e) {
         logger("error", `${name} lane threw: ${inspect(e)}`);
-        threw2 = `${name}: ${String(e)}`;
+        threw = `${name}: ${String(e)}`;
       }
-      owners.faults.refreshed(session, name, threw2);
+      owners.faults.refreshed(session, name, threw);
     };
     await Promise.all(REFRESH_LANES.map(lane));
     return ok(null);
@@ -88416,9 +88283,7 @@ var failedFeed = (refusal) => {
 function covers(prior, offered) {
   if (prior.json !== offered.json) return false;
   return offered.displayedEvents === void 0 || offered.displayedEvents.every(
-    ({ kind, event }) => prior.displayedEvents?.some(
-      (seen) => seen.kind === kind && sameOccurrence(seen.event, event)
-    ) ?? false
+    (notice) => prior.displayedEvents?.some((seen) => sameNotice(seen, notice)) ?? false
   );
 }
 function settleWrite(write, delivered) {
@@ -90435,11 +90300,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return { kind: "failed", reason: failureOf(thrown2).detail };
     }
   };
-  const notTaken = (what, failure2) => {
-    const text4 = `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`;
-    log("error", text4);
-    world.unheard(text4);
-  };
+  const notTaken = (what, failure2) => log(
+    "error",
+    `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`
+  );
   const recordTaken = (what, operation) => {
     try {
       return operation();
@@ -90563,13 +90427,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const input = stamped(made);
     const { received, turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why]], turn);
-    const threw2 = turn.kind === "threw" ? [
+    const threw = turn.kind === "threw" ? [
       {
         kind: THREW_AS[turn.failure.kind],
         reason: turn.failure.message
       }
     ] : [];
-    const outcomes = settled3.then((outcomes2) => [...threw2, ...outcomes2]);
+    const outcomes = settled3.then((outcomes2) => [...threw, ...outcomes2]);
     return turn.kind === "threw" && !received ? { kind: "unreceived", failure: turn.failure, settled: outcomes } : {
       kind: "received",
       failure: turn.kind === "threw" ? turn.failure : null,
@@ -90714,11 +90578,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver2 = recorded2("last");
-  const unawaited = (what, settling) => void settling.catch((thrown2) => {
-    const text4 = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown2).detail}`;
-    log("error", text4);
-    world.unheard(text4);
-  });
+  const unawaited = (what, settling) => void settling.catch(
+    (thrown2) => log(
+      "error",
+      `renderer ${name}'s ${what} did not settle: ${failureOf(thrown2).detail}`
+    )
+  );
   const command = async (event) => {
     const { turn } = await taken2(() => ({ kind: "event", event }));
     if (turn.kind === "threw") {
@@ -90875,6 +90740,56 @@ function moved(store, key, value) {
   if (value !== null) store.set(key, value);
 }
 
+// src/daemon/notices.ts
+init_globals();
+var BAR_LEVELS = { error: ["error"], warn: [], info: [] };
+var Notices = class {
+  constructor(now2) {
+    this.now = now2;
+  }
+  now;
+  held = [];
+  // Whether the notices moved.
+  notify({ level, about, text: text4, fromEnvironment }) {
+    const at = this.now();
+    const last2 = this.held.find((notice) => notice.about === about) ?? null;
+    const unanswered = last2?.answered === false ? last2 : null;
+    if (unanswered !== null && `
+${unanswered.text}
+`.includes(`
+${text4}
+`))
+      return false;
+    const joined = environmentOutput(
+      { ...joinedEvent(last2, text4, at), level, about },
+      fromEnvironment || unanswered !== null && isEnvironmentOutput(unanswered)
+    );
+    this.held = [
+      ...this.held.filter(
+        (notice) => notice.about !== about && eventHoldAt(notice, DAEMON_EVENT_HOLD_S, at, "request") !== "over"
+      ),
+      joined
+    ];
+    return true;
+  }
+  // [LAW:single-enforcer] The one write after a frame carried notices to its
+  // client: each it showed, unless a newer one about the same thing has
+  // replaced it since. Whether anything moved.
+  answered(shown) {
+    let moved2 = false;
+    this.held = this.held.map((notice) => {
+      if (notice.answered || !shown.some((each) => sameNotice(notice, each)))
+        return notice;
+      moved2 = true;
+      return { ...notice, answered: true };
+    });
+    return moved2;
+  }
+  list() {
+    return this.held;
+  }
+};
+
 // src/daemon/renderer-recording.ts
 init_globals();
 
@@ -90910,7 +90825,7 @@ var UNKNOWN_PROFILE = "saved renderer state contains values of unknown origin; r
 function worldProblem({ env: env2, runs, daemon: daemon2 }) {
   if (Object.values(env2).some((fact) => fact.kind === "ok"))
     return SESSION_ENVIRONMENT;
-  return Object.values(runs).some(isEnvironmentOutput) || daemon2.actFailed !== null && isEnvironmentOutput(daemon2.actFailed) ? ENVIRONMENT_OUTPUT : null;
+  return Object.values(runs).some(isEnvironmentOutput) || daemon2.notices.some(isEnvironmentOutput) ? ENVIRONMENT_OUTPUT : null;
 }
 function hookCarriesEnvironment(hook) {
   const remaining = [hook];
@@ -91741,8 +91656,7 @@ var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
-    this.defects = deps.defects ?? new Defects(deps.log);
-    this.watches = deps.watchers.batch("config discovery", () => {
+    this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
       this.heard(keys2, "config-watch", "observed");
@@ -91757,7 +91671,6 @@ var ConfigDiscovery = class {
   invalidated = /* @__PURE__ */ new Set();
   texts;
   closed = false;
-  defects;
   // [LAW:single-enforcer] Use the same holder to name demands, send a config
   // turn and resolve edits. A queued reload for a dropped origin cannot read
   // through another renderer's hold.
@@ -91823,31 +91736,28 @@ var ConfigDiscovery = class {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
-      const commits = fresh.map(
-        ([key, origin]) => [key, this.found(origin, shared)]
-      );
       const observed2 = [];
-      for (const [key, commit3] of commits) {
-        const now2 = commit3(null);
+      for (const [key, origin] of fresh) {
+        const found2 = this.discovered(origin, shared, null);
         this.followed.set(key, {
-          ...now2,
+          ...found2,
           renderers: /* @__PURE__ */ new Set([renderer]),
           selected: /* @__PURE__ */ new Map()
         });
-        observed2.push(now2);
+        observed2.push(found2);
       }
       this.reloaded(observed2);
     }
     let released = 0;
-    for (const [key, entry] of this.followed) {
-      const { renderers, selected } = entry;
+    for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
       selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
-      this.left(key, entry);
+      this.followed.delete(key);
+      watch2.handle.release();
       released++;
     }
     if (fresh.length + released === 0) return;
@@ -91920,7 +91830,8 @@ var ConfigDiscovery = class {
     if (this.closed) return;
     this.closed = true;
     this.invalidated.clear();
-    for (const [key, entry] of this.followed) this.left(key, entry);
+    for (const { watch: watch2 } of this.followed.values()) watch2.handle.release();
+    this.followed.clear();
     this.texts.clear();
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
@@ -91954,24 +91865,23 @@ var ConfigDiscovery = class {
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
-      let commit3;
       try {
-        commit3 = this.found(was.origin, shared);
+        const found2 = this.discovered(was.origin, shared, was.watch);
+        const now2 = {
+          ...found2,
+          snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+          renderers: was.renderers,
+          selected: was.selected
+        };
+        this.followed.set(key, now2);
+        observed2.push(now2);
+        if (now2.digest !== was.digest) moved2.push(now2);
       } catch (thrown2) {
-        this.defects.settle(unitOf(key, was.origin), failureOf(thrown2));
-        continue;
+        this.deps.log(
+          "error",
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
+        );
       }
-      this.defects.settle(unitOf(key, was.origin), null);
-      const found2 = commit3(was.watch);
-      const now2 = {
-        ...found2,
-        snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
-        renderers: was.renderers,
-        selected: was.selected
-      };
-      this.followed.set(key, now2);
-      observed2.push(now2);
-      if (now2.digest !== was.digest) moved2.push(now2);
     }
     this.deps.log(
       "info",
@@ -91979,13 +91889,6 @@ var ConfigDiscovery = class {
     );
     this.reloaded(recover === "observed" ? observed2 : moved2);
     return moved2;
-  }
-  // An origin no renderer follows: its watch released, and its rediscovery's
-  // defect ended with it.
-  left(key, { origin, watch: watch2 }) {
-    this.followed.delete(key);
-    watch2.handle.release();
-    this.defects.settle(unitOf(key, origin), null);
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -92020,11 +91923,10 @@ var ConfigDiscovery = class {
       landingPath: directoryEntries(facts.files.realpath)
     };
   }
-  // What discovery finds at `origin` now, and its commit: the watch
-  // following the targets that finding names, and what that watch cannot
-  // hear in the snapshot. Every step that can throw runs here, before the
-  // commit; the commit's follow and derivations answer.
-  found(origin, shared) {
+  // What discovery finds at `origin` now, with its watch following the
+  // targets that finding names, and what that watch cannot hear in the
+  // snapshot.
+  discovered(origin, shared, held) {
     const found2 = discover(
       {
         ...configQuery(origin.projectDir, origin.target),
@@ -92038,36 +91940,40 @@ var ConfigDiscovery = class {
       ...paths2,
       key: `config:${JSON.stringify(key)}:${paths2.key}`
     };
+    const { watch: watch2, move } = this.watches.follow(
+      held,
+      spec,
+      () => {
+        this.invalidated.add(key);
+      },
+      shared.observed
+    );
+    if (move === "rebound") this.bound(origin, paths2);
+    const snapshot = {
+      ...found2.snapshot,
+      watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
+    };
     const managedFolders = new Set(
-      pluginFiles(found2.snapshot).flatMap(
+      pluginFiles(snapshot).flatMap(
         ({ definition }) => definition.kind === "text" ? [definition.storage] : []
       )
     );
-    const landingPaths = new Set(
-      paths2.targets.polled.flatMap((file) => [file, shared.landingPath(file)])
-    );
-    return (held) => {
-      const { watch: watch2, move } = this.watches.follow(
-        held,
-        spec,
-        () => {
-          this.invalidated.add(key);
-        },
-        shared.observed
-      );
-      if (move === "rebound") this.bound(origin, paths2);
-      const snapshot = {
-        ...found2.snapshot,
-        watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
-      };
-      const observed2 = {
-        origin,
-        snapshot,
-        digest: digestOf(snapshot),
-        managedFolders
-      };
-      this.observations.set(snapshot, observed2);
-      return { ...observed2, watch: watch2, landingPaths };
+    const observed2 = {
+      origin,
+      snapshot,
+      digest: digestOf(snapshot),
+      managedFolders
+    };
+    this.observations.set(snapshot, observed2);
+    return {
+      ...observed2,
+      watch: watch2,
+      landingPaths: new Set(
+        paths2.targets.polled.flatMap((file) => [
+          file,
+          shared.landingPath(file)
+        ])
+      )
     };
   }
   // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
@@ -92103,13 +92009,6 @@ function pluginFiles(snapshot) {
     ...snapshot.plugins,
     ...snapshot.chain.flatMap((layer) => Object.values(layer.listed))
   ];
-}
-function unitOf(key, origin) {
-  return {
-    kind: "config discovery",
-    key,
-    about: `config at projectDir=${origin.projectDir} cwd=${origin.cwd}`
-  };
 }
 
 // src/daemon/checkout-observations.ts
@@ -92190,18 +92089,27 @@ function createDaemon(inputs) {
   const cancelling = () => phase.kind === "closing" || phase.kind === "closed";
   const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
-  const log = (level, msg) => inputs.daemonLog.log(
+  const notices = new Notices(instant);
+  const record2 = (level, msg) => inputs.daemonLog.log(
     level,
     phase.kind === "closed" ? `after close: ${msg}` : msg
   );
+  const log = (level, msg) => {
+    record2(level, msg);
+    for (const noticeLevel of BAR_LEVELS[level])
+      notify2({
+        level: noticeLevel,
+        about: "daemon",
+        text: msg,
+        fromEnvironment: false
+      });
+  };
   const stats = new RuntimeStats(clock);
   const recordings = inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
-  const defects = new Defects(log);
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
-    logger: log,
-    defects
+    logger: log
   });
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
@@ -92209,63 +92117,49 @@ function createDaemon(inputs) {
     clock
   });
   const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], notices: [] },
     { deep: false, equals: compareStructural }
   );
-  let rendererEnded = null;
-  let actFailed = null;
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
-        actFailed
+        notices: notices.list()
       })
     );
+  }
+  function notify2(notification) {
+    if (notices.notify(notification) && phase.kind !== "building")
+      restateFaults();
   }
   const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
     signal: cancelWork.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
-        );
+      if (change.kind === "launch-pipes") {
+        log("warn", change.text);
+        notify2({
+          level: "warning",
+          about: "launch pipes",
+          text: change.text,
+          fromEnvironment: false
+        });
+        return;
+      }
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+      );
       if (phase.kind !== "building") restateFaults();
     }
   });
   const acknowledgeDisplayed = (shown) => {
-    let changed = false;
-    for (const { kind, event } of shown) {
-      switch (kind) {
-        case "launch-pipes":
-          if (launcher.answeredPipeEvent(event)) changed = true;
-          break;
-        case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
-          break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
-            changed = true;
-          }
-          break;
-      }
-    }
-    if (changed) restateFaults();
+    if (notices.answered(shown)) restateFaults();
   };
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
@@ -92426,13 +92320,9 @@ function createDaemon(inputs) {
     exit: () => exit2(0),
     log
   });
-  const daemonFacts = computed(
-    () => ({ ...daemonFaults.get(), defects: defects.list() }),
-    { equals: compareStructural }
-  );
   const collector = new Collector({
     owners: payloadProviders,
-    daemon: () => daemonFacts.get(),
+    daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
     deliver: (event) => {
@@ -92453,7 +92343,6 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
-    defects,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders)
   });
@@ -92529,13 +92418,7 @@ function createDaemon(inputs) {
         }
         if (renderers.size > 1) frameFeeds.announce();
       },
-      ended: (event) => {
-        rendererEnded = {
-          ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1
-        };
-        restateFaults();
-      }
+      notify: notify2
     });
     const renderer = rendererHost(
       name,
@@ -92577,14 +92460,12 @@ function createDaemon(inputs) {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text4, fromEnvironment) => {
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text4, instant()),
-            fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
-          );
-          restateFaults();
-        }
+        unheard: (text4, fromEnvironment) => notify2({
+          level: "warning",
+          about: "act failed",
+          text: text4,
+          fromEnvironment: fromEnvironment === true
+        })
       }
     );
     return { reported, entry, stores, link, renderer };
@@ -92678,6 +92559,7 @@ function createDaemon(inputs) {
     home: host.home,
     launcher,
     log,
+    requests: record2,
     clock,
     checkoutLocation: checkouts.location,
     bundle: bundle.path,
