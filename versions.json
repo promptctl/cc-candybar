@@ -2,81 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-898",
-      "ref": "refs/pull/898/merge",
-      "sha": "fe87772ed37f5c15372e5e593ef9604fc8e62aed",
-      "timestamp": "2026-11-20T00:37:39.196Z",
-      "commits": [
-        {
-          "sha": "fe87772ed37f5c15372e5e593ef9604fc8e62aed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:36:27-07:00",
-          "message": "Merge bc1c22276a9b8d9288f1b5189c320248f6a16aae into b1015f376e43665468186c5857ea9bc85784e116\n"
-        },
-        {
-          "sha": "bc1c22276a9b8d9288f1b5189c320248f6a16aae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:36:25-07:00",
-          "message": "Merge branch 'main' into codex/reobserve-incomplete-config-writes"
-        },
-        {
-          "sha": "4488f95257aca36a622a6e5665acf1b455ef6d46",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:30:41-07:00",
-          "message": "Merge replay-enabled main into config rollback reconciliation\n"
-        },
-        {
-          "sha": "39532f7e50aed7462f6e699b54e37783e6a3a6b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:24:37-07:00",
-          "message": "fix(daemon): preserve file permissions on removal rollback\n"
-        },
-        {
-          "sha": "78fd44b4158962b6c789b3b74bc0d1868dc85ea1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:25:07-07:00",
-          "message": "fix(daemon): reconcile config writes by directory entry\n"
-        },
-        {
-          "sha": "fe5f39ee9b10b8a0539648bc8714eb2fd5226810",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:12:07-07:00",
-          "message": "Merge current main into config rollback reconciliation\n"
-        },
-        {
-          "sha": "7d0cd43eccda508e15b5b9f9ca05fb956c5b0708",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:49:26-07:00",
-          "message": "test(config): assert the reported outcome of a refused save\n"
-        },
-        {
-          "sha": "f9c1c445b2e6d75190a13ca6035a569286ff25b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:46-07:00",
-          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "b1015f376e43665468186c5857ea9bc85784e116",
-      "timestamp": "2026-11-20T00:36:42.485Z",
+      "sha": "95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd",
+      "timestamp": "2026-11-20T00:46:17.923Z",
       "commits": [
         {
-          "sha": "b1015f376e43665468186c5857ea9bc85784e116",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T00:35:28Z",
-          "message": "chore(release): set `package.json` to 1.236.0\n\n## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)\n\n### Features\n\n* **renderer:** record and replay live sessions through the shared host ([#913](https://github.com/promptctl/cc-candybar/issues/913)) ([2f98785](https://github.com/promptctl/cc-candybar/commit/2f98785f9d103f1d4991daf0555308a3b09aabe9))\n"
+          "sha": "95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:45:15-07:00",
+          "message": "fix(daemon): reobserve files after incomplete config rollback (#898)\n\n* fix(daemon): reobserve files after incomplete config rollback\n\n* test(config): assert the reported outcome of a refused save\n\n* fix(daemon): reconcile config writes by directory entry\n\n* fix(daemon): preserve file permissions on removal rollback"
         }
       ]
     },
