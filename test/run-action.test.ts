@@ -7,6 +7,7 @@
 // `sessionSource`.
 
 import { holdClickError } from "../src/daemon/foundations/click-error";
+import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -895,10 +896,12 @@ describe("the run owner", () => {
     const ended = o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect((await ended).outcome).toEqual({
+    const { outcome } = await ended;
+    expect(outcome).toMatchObject({
       kind: "failed",
       reason: "exited with code 3: it broke",
     });
+    expect(isEnvironmentOutput(outcome)).toBe(true);
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,

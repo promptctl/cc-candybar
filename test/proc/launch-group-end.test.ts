@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { systemLauncher } from "../../src/proc/system-launcher";
+import { systemSpawner } from "../../src/proc/spawner";
 import {
+  createLauncher,
   MAX_CAPTURED_BYTES,
   type TestableLauncher,
 } from "../../src/proc/launch";
@@ -137,23 +139,30 @@ describe("a launch whose child ends with a descendant outside its group", () => 
     expect(r).toMatchObject({ ok: true, exitCode: 0 });
   });
 
-  it("reports an abort once the child has ended, whatever the group did", async () => {
+  it("reports an abort received after the process group exits and before its result settles", async () => {
     const abort = new AbortController();
-    const running = launcher.launch({
+    const shell = "/bin/sh";
+    const observed = createLauncher(
+      { inherited: process.env, signal: ending.signal },
+      systemTimekeeper,
+      {
+        ...systemSpawner,
+        spawn(bin, args, options) {
+          const child = systemSpawner.spawn(bin, args, options);
+          // The shell is its group's only member. Its exit gives the caller
+          // the precise instant after reaping and before the launch settles.
+          if (bin === shell) child.once("exit", () => abort.abort());
+          return child;
+        },
+      },
+    );
+    const result = await observed.launch({
       category: "user-shell",
-      bin: "sh",
-      args: [
-        "-c",
-        'sleep 0.9 & python3 -c "$1"; exit 0',
-        "sh",
-        `${SET}${FORK_HOLDER}`,
-      ],
+      bin: shell,
+      args: ["-c", "exit 0"],
       signal: abort.signal,
     });
-    // After the member ends, before the next sample of the group.
-    await new Promise((end) => setTimeout(end, 1300));
-    abort.abort();
-    expect(await running).toMatchObject({ ok: false, reason: "aborted" });
+    expect(result).toMatchObject({ ok: false, reason: "aborted", exitCode: 0 });
   });
 
   it("reports a non-zero exit as one", async () => {
