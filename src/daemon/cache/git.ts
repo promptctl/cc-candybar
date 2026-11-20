@@ -38,6 +38,8 @@ import {
 } from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
 import type { GitCacheStats } from "../foundations/stats-snapshot";
+import { Defects, type DefectUnit } from "../foundations/defects";
+import { failureOf } from "../foundations/verb-error";
 
 // Logger callable for cache refresh / eviction events.
 // Daemon passes its log so these land in daemon.log at the right level for
@@ -287,6 +289,11 @@ function threw(label: string): (e: unknown) => Outcome<never> {
   return (e) => failed(`${label} threw: ${String(e)}`, "read");
 }
 
+// A repo's refresh pass, as a defect names it.
+function passOf(root: string): DefectUnit {
+  return { kind: "git refresh", key: root, about: `git at ${root}` };
+}
+
 export class GitDataProvider {
   private readonly repos = new Map<string, RepoState>();
   // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
@@ -310,6 +317,7 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
+  private readonly defects: Defects;
   private readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
 
   constructor(opts: {
@@ -327,6 +335,9 @@ export class GitDataProvider {
     // unless CC_CANDYBAR_DEBUG is set).
     logger?: GitProviderLogger;
     ledger?: RefreshLedger;
+    // Where a pass that throws stands: the daemon's ledger, or one of the
+    // provider's own beside its logger.
+    defects?: Defects;
   }) {
     this.inner = opts.inner;
     this.clock = opts.clock;
@@ -334,6 +345,7 @@ export class GitDataProvider {
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
+    this.defects = opts.defects ?? new Defects(this.logger);
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
       name: "git",
@@ -560,19 +572,19 @@ export class GitDataProvider {
     state.refresh.run(PASS, () => this.refreshPass(state));
   }
 
-  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
-  // when the pass ENDS, after its every await, so a tick that shares a running
-  // pass is always followed by the landing that schedules the next one.
+  // The loop's work, and the boundary of one pass. Nobody awaits it — a
+  // watch fire or a tick starts it — so [LAW:no-silent-failure] a throw is
+  // the repo's defect, standing on every bar until a pass returns, never an
+  // unhandled rejection. A repo dropped while its pass ran ends with it.
+  // [LAW:no-ambient-temporal-coupling] The period lands when the pass ENDS,
+  // after its every await, so a tick that shares a running pass is always
+  // followed by the landing that schedules the next one.
   private async refreshPass(state: RepoState): Promise<void> {
-    try {
-      await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
-    } finally {
-      state.period.landed(this.periodMs);
-    }
+    const failure = await this.pass(state).then(() => null, failureOf);
+    this.defects.settle(passOf(state.root), failure);
+    if (this.repos.get(state.root) !== state)
+      this.defects.settle(passOf(state.root), null);
+    state.period.landed(this.periodMs);
   }
 
   // One hold of a home: the repo, its value and its PR. A value or a PR key a
@@ -644,7 +656,7 @@ export class GitDataProvider {
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
     const [outcome, remote] = await Promise.all([
-      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
+      this.inner.getGitInfo(state.root),
       this.remoteOf(state),
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
@@ -679,7 +691,7 @@ export class GitDataProvider {
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
   // PR's failure; only `absent` (no remote configured) means "no forge PR".
   private remoteOf(state: RepoState): Promise<Outcome<string>> {
-    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
+    return this.inner.getRepoRemoteUrl(state.root);
   }
 
   // [LAW:one-source-of-truth] The PR's key is every input its value depends on
@@ -783,6 +795,7 @@ export class GitDataProvider {
     state.watch.handle.release();
     state.period.dispose();
     state.pr.period.dispose();
+    this.defects.settle(passOf(state.root), null);
   }
 
   // The LRU bounds the repos nothing holds; a held repo is never evicted, so

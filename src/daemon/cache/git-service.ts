@@ -199,25 +199,10 @@ export class GitService {
   // a per-process cache on top of an already-cached call would double the
   // invalidation surface — exactly the trap that kz8.3 collapses.
   //
-  // [LAW:no-silent-failure] Never rejects: helpers return outcomes by
-  // construction, and an unexpected throw (a bug) is surfaced as a `failed`
-  // outcome whose reason reaches the consuming boundary's log — not a blank
-  // bar, not a swallowed branch.
+  // [LAW:no-silent-failure] Every failure a read expects is an outcome, so a
+  // rejection is a defect, and it reaches the refresh pass that started the
+  // read, whose boundary records it.
   async getGitInfo(
-    workingDir: string,
-    projectDir?: string,
-  ): Promise<Outcome<GitRead>> {
-    try {
-      return await this.computeGitInfo(workingDir, projectDir);
-    } catch (e) {
-      return failed(
-        `git: ${e instanceof Error ? e.message : String(e)}`,
-        "read",
-      );
-    }
-  }
-
-  private async computeGitInfo(
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<GitRead>> {

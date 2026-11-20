@@ -39,6 +39,7 @@ import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
 import { failureOf } from "../foundations/verb-error.js";
+import { Defects, type DefectUnit } from "../foundations/defects.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -95,6 +96,9 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
+  // Where an origin whose rediscovery threw stands: the daemon's ledger, or
+  // one of its own beside the log.
+  readonly defects?: Defects;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
   readonly moved: (
@@ -112,14 +116,16 @@ export class ConfigDiscovery {
   private readonly invalidated = new Set<string>();
   private readonly texts: ConfigText;
   private closed = false;
+  private readonly defects: Defects;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
     this.texts = new ConfigText(deps.openText);
+    this.defects = deps.defects ?? new Defects(deps.log);
     // [LAW:one-source-of-truth] Every origin follows the files it consulted.
     // The shared registry polls each path once across their subscriptions.
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
-    this.watches = deps.watchers.batch(() => {
+    this.watches = deps.watchers.batch("config discovery", () => {
       const keys = [...this.invalidated];
       this.invalidated.clear();
       this.heard(keys, "config-watch", "observed");
@@ -208,29 +214,35 @@ export class ConfigDiscovery {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
+      // [LAW:no-ambient-temporal-coupling] Every new origin is found before
+      // any is committed, so a throw finding one adds none and the follow
+      // fails as a whole.
       const shared = this.batch();
+      const commits = fresh.map(
+        ([key, origin]) => [key, this.found(origin, shared)] as const,
+      );
       const observed: ObservedConfig[] = [];
-      for (const [key, origin] of fresh) {
-        const found = this.discovered(origin, shared, null);
+      for (const [key, commit] of commits) {
+        const now = commit(null);
         this.followed.set(key, {
-          ...found,
+          ...now,
           renderers: new Set([renderer]),
           selected: new Map(),
         });
-        observed.push(found);
+        observed.push(now);
       }
       this.reloaded(observed);
     }
     let released = 0;
-    for (const [key, { renderers, selected, watch }] of this.followed) {
+    for (const [key, entry] of this.followed) {
+      const { renderers, selected } = entry;
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
       selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
-      this.followed.delete(key);
-      watch.handle.release();
+      this.left(key, entry);
       released++;
     }
     if (fresh.length + released === 0) return;
@@ -330,8 +342,7 @@ export class ConfigDiscovery {
     if (this.closed) return;
     this.closed = true;
     this.invalidated.clear();
-    for (const { watch } of this.followed.values()) watch.handle.release();
-    this.followed.clear();
+    for (const [key, entry] of this.followed) this.left(key, entry);
     this.texts.clear();
   }
 
@@ -379,26 +390,28 @@ export class ConfigDiscovery {
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
-      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
-      // last snapshot for a retry. Its failure cannot suppress a sibling's
-      // already-observed change or reverse a successful write.
+      // [LAW:no-silent-failure] The boundary of one origin's rediscovery: a
+      // throw finding it is a defect, and the origin keeps its last snapshot
+      // and watch for a retry, untouched. Its failure cannot suppress a
+      // sibling's change or reverse a successful write.
+      let commit: (held: HeldWatch | null) => ObservedOrigin;
       try {
-        const found = this.discovered(was.origin, shared, was.watch);
-        const now = {
-          ...found,
-          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
-          renderers: was.renderers,
-          selected: was.selected,
-        };
-        this.followed.set(key, now);
-        observed.push(now);
-        if (now.digest !== was.digest) moved.push(now);
+        commit = this.found(was.origin, shared);
       } catch (thrown) {
-        this.deps.log(
-          "error",
-          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
-        );
+        this.defects.settle(unitOf(key, was.origin), failureOf(thrown));
+        continue;
       }
+      this.defects.settle(unitOf(key, was.origin), null);
+      const found = commit(was.watch);
+      const now = {
+        ...found,
+        snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
+        renderers: was.renderers,
+        selected: was.selected,
+      };
+      this.followed.set(key, now);
+      observed.push(now);
+      if (now.digest !== was.digest) moved.push(now);
     }
     this.deps.log(
       "info",
@@ -408,6 +421,14 @@ export class ConfigDiscovery {
     // A broad catch-up already has its own storage recovery trigger.
     this.reloaded(recover === "observed" ? observed : moved);
     return moved;
+  }
+
+  // An origin no renderer follows: its watch released, and its rediscovery's
+  // defect ended with it.
+  private left(key: string, { origin, watch }: Followed): void {
+    this.followed.delete(key);
+    watch.handle.release();
+    this.defects.settle(unitOf(key, origin), null);
   }
 
   private reloaded(observed: readonly ObservedConfig[]): void {
@@ -447,14 +468,14 @@ export class ConfigDiscovery {
     };
   }
 
-  // What discovery finds at `origin` now, with its watch following the
-  // targets that finding names, and what that watch cannot hear in the
-  // snapshot.
-  private discovered(
+  // What discovery finds at `origin` now, and its commit: the watch
+  // following the targets that finding names, and what that watch cannot
+  // hear in the snapshot. Every step that can throw runs here, before the
+  // commit; the commit's follow and derivations answer.
+  private found(
     origin: RenderOrigin,
     shared: DiscoveryBatch,
-    held: HeldWatch | null,
-  ): ObservedOrigin {
+  ): (held: HeldWatch | null) => ObservedOrigin {
     const found = discover(
       {
         ...configQuery(origin.projectDir, origin.target),
@@ -471,44 +492,40 @@ export class ConfigDiscovery {
       ...paths,
       key: `config:${JSON.stringify(key)}:${paths.key}`,
     };
-    // [LAW:single-enforcer] Any change an origin's watch hears re-resolves its
-    // whole chain, so a higher-precedence file appearing supersedes a lower
-    // one; which path changed does not filter it, as the origin already
-    // scopes the watch set.
-    const { watch, move } = this.watches.follow(
-      held,
-      spec,
-      () => {
-        this.invalidated.add(key);
-      },
-      shared.observed,
-    );
-    if (move === "rebound") this.bound(origin, paths);
-    const snapshot: ConfigSnapshot = {
-      ...found.snapshot,
-      watch: watchFault("config watch", { derived: spec, held: watch }, null),
-    };
     const managedFolders = new Set(
-      pluginFiles(snapshot).flatMap(({ definition }) =>
+      pluginFiles(found.snapshot).flatMap(({ definition }) =>
         definition.kind === "text" ? [definition.storage] : [],
       ),
     );
-    const observed = {
-      origin,
-      snapshot,
-      digest: digestOf(snapshot),
-      managedFolders,
-    };
-    this.observations.set(snapshot, observed);
-    return {
-      ...observed,
-      watch,
-      landingPaths: new Set(
-        paths.targets.polled.flatMap((file) => [
-          file,
-          shared.landingPath(file),
-        ]),
-      ),
+    const landingPaths = new Set(
+      paths.targets.polled.flatMap((file) => [file, shared.landingPath(file)]),
+    );
+    return (held) => {
+      // [LAW:single-enforcer] Any change an origin's watch hears re-resolves
+      // its whole chain, so a higher-precedence file appearing supersedes a
+      // lower one; which path changed does not filter it, as the origin
+      // already scopes the watch set.
+      const { watch, move } = this.watches.follow(
+        held,
+        spec,
+        () => {
+          this.invalidated.add(key);
+        },
+        shared.observed,
+      );
+      if (move === "rebound") this.bound(origin, paths);
+      const snapshot: ConfigSnapshot = {
+        ...found.snapshot,
+        watch: watchFault("config watch", { derived: spec, held: watch }, null),
+      };
+      const observed = {
+        origin,
+        snapshot,
+        digest: digestOf(snapshot),
+        managedFolders,
+      };
+      this.observations.set(snapshot, observed);
+      return { ...observed, watch, landingPaths };
     };
   }
 
@@ -554,4 +571,13 @@ function pluginFiles(snapshot: ConfigSnapshot) {
     ...snapshot.plugins,
     ...snapshot.chain.flatMap((layer) => Object.values(layer.listed)),
   ];
+}
+
+// An origin's rediscovery, as a defect names it.
+function unitOf(key: string, origin: RenderOrigin): DefectUnit {
+  return {
+    kind: "config discovery",
+    key,
+    about: `config at projectDir=${origin.projectDir} cwd=${origin.cwd}`,
+  };
 }

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CHECKOUT_FRESH_MS } from "../../../src/daemon/checkout-observations";
+import { DEBOUNCE_MS, POLL_MS } from "../../../src/daemon/cache/watchers";
 import { textOf } from "../../../src/render/frame";
 import { checkoutFiles, type CheckoutFiles } from "../../../src/utils/git-root";
 import {
@@ -320,4 +321,34 @@ test("fresh config proof cannot borrow a cached worktree's repository approval",
   const result = await draw();
   expect(result).toContain(`${linked}||`);
   expect(result).not.toContain("APPROVED PROJECT");
+});
+
+// [LAW:no-silent-failure] A throw while a watch's edit is rediscovered is
+// the daemon's defect: every bar shows it until a rediscovery runs clean.
+test("a rediscovery that throws is an error on the bar until one runs clean", async () => {
+  const plain = directory("plain");
+  let throwing = false;
+  const running = start({
+    ...checkoutFiles,
+    stat(file) {
+      if (throwing) throw new Error("stat bug");
+      return checkoutFiles.stat(file);
+    },
+  });
+  // The bar's list follows the frames, so the second draw shows it.
+  const shown = async (): Promise<string> => {
+    await label(running, "s", plain);
+    return label(running, "s", plain);
+  };
+  expect(await shown()).not.toContain("⚠");
+
+  throwing = true;
+  writeConfig(["location", "location"]);
+  await clock.settle(POLL_MS + DEBOUNCE_MS);
+  throwing = false;
+  expect(await shown()).toContain("⚠ 1");
+
+  writeConfig(["location"]);
+  await clock.settle(POLL_MS + DEBOUNCE_MS);
+  expect(await shown()).not.toContain("⚠");
 });

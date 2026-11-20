@@ -15,6 +15,7 @@ import {
   DaemonClosing,
 } from "./foundations/verb-error.js";
 import { failedWith } from "./foundations/render-answers.js";
+import { Defects } from "./foundations/defects.js";
 import {
   handleRequest,
   refuseClosingInbound,
@@ -89,7 +90,7 @@ import {
   type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { compareStructural, observable, runInAction } from "mobx";
+import { compareStructural, computed, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
@@ -269,10 +270,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
   // default debug-routed loggers and never write to daemon log files.
+  // [LAW:single-enforcer] The daemon's one record of what threw between the
+  // disk and the bar, settled by each unit of work's own boundary.
+  const defects = new Defects(log);
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
     logger: log,
+    defects,
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -285,9 +290,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // world state carries them: whether file events are heard, and what the
   // launcher stands behind. Restated whenever either may have moved, and
   // compared whole, so a restatement that moved nothing moves no document.
+  // The defects are read from their ledger, which is observable itself.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<DaemonFacts>(
+  const daemonFaults = observable.box<Omit<DaemonFacts, "defects">>(
     { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural },
   );
@@ -570,9 +576,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // it hands in alone goes through the host's one path to the renderer, which
   // the parts below hold; a delivery is first asked for by an owner landing
   // after a request, so the parts exist by then.
+  const daemonFacts = computed(
+    (): DaemonFacts => ({ ...daemonFaults.get(), defects: defects.list() }),
+    { equals: compareStructural },
+  );
   const collector = new Collector<CheckedRenderRequest>({
     owners: payloadProviders,
-    daemon: () => daemonFaults.get(),
+    daemon: () => daemonFacts.get(),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
     deliver: (event) => {
@@ -597,6 +607,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    defects,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });

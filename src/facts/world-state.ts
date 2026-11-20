@@ -9,6 +9,7 @@ import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LauncherFact } from "../proc/launcher";
+import type { Defect } from "../daemon/foundations/defects";
 import type { HeldEvent } from "../utils/event-hold";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
@@ -66,8 +67,8 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself: whether file events are heard,
-// and what the launcher stands behind (whether what it launches dies with it,
+// daemon itself: whether file events are heard, the work between the disk
+// and the bar whose last run threw, and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
 // and for whom it draws, src/utils/event-hold.ts), how the last renderer
 // process ended, and the acts that failed with no session's bar to hold them
@@ -75,6 +76,7 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // same way: null while none has.
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
+  readonly defects: readonly Defect[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;

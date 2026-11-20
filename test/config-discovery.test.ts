@@ -598,7 +598,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("one rediscovery that throws stands as that origin's defect, leaves the writer and another holder the successful change, and clears on a clean retry", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -608,6 +608,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
     discovery: writer,
     delivered,
     logged,
+    counters,
   } = discoveryRig({
     ...diskFiles,
     text(read) {
@@ -623,24 +624,54 @@ test("one failed rediscovery leaves the writer and another holder the successful
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
   refuse = true;
+  const closed = counters.watchersClosed;
   expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  // The faulted origin keeps the watch it held.
+  expect(counters.watchersClosed).toBe(closed);
   expect(logged).toEqual(
     expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
+      expect.stringMatching(
+        /^defect kind="config discovery" about=.*failed-once.* failed="rediscovery failed"/,
+      ),
     ]),
   );
 
   refuse = false;
   service.again("events-resumed");
+  expect(logged).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/^defect cleared kind="config discovery" .*failed-once/),
+    ]),
+  );
   expect(delivered).toEqual([
     [name, originKey(a.origin)],
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+});
+
+test("an origin's rediscovery defect leaves with the last renderer that follows it", () => {
+  const b = named("faulted");
+  let refuse = false;
+  const { discovery, logged } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (refuse && read === b.file) throw new Error("rediscovery failed");
+      return diskFiles.text(read);
+    },
+  });
+  discovery.follow([b.origin]);
+  refuse = true;
+  discovery.landed([b.file]);
+  discovery.follow([]);
+  expect(logged.filter((l) => l.startsWith("defect"))).toEqual([
+    expect.stringMatching(/^defect kind="config discovery" .*faulted/),
+    expect.stringMatching(/^defect cleared kind="config discovery" .*faulted/),
+  ]);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {

@@ -13,6 +13,7 @@ export const daemonFactsOf = (
   fileEvents: DaemonFacts["fileEvents"] = [],
 ): DaemonFacts => ({
   fileEvents,
+  defects: [],
   launcher: [],
   rendererEnded: null,
   actFailed: null,

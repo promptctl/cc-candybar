@@ -28,6 +28,7 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
+import { Defects } from "../src/daemon/foundations/defects";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -1268,6 +1269,115 @@ async function hearsRefOnlyMove(
     svc.close();
   }
 }
+
+// [LAW:no-silent-failure] A delivery whose recipient throws stands as one
+// defect in the daemon's ledger, named by its watch, until a delivery runs
+// clean or the watch closes.
+describe("WatcherRegistry delivery defects", () => {
+  let dir: string;
+  let file: string;
+  let clock: HeldClock;
+  let logs: string[];
+  let defects: Defects;
+  let reg: WatcherRegistry;
+  beforeEach(() => {
+    dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-defects-")),
+    );
+    file = path.join(dir, "config");
+    fs.writeFileSync(file, "0");
+    clock = heldClock(new Date(0));
+    logs = [];
+    defects = new Defects((_level, line) => logs.push(line));
+    reg = new WatcherRegistry({ clock, logger: () => {}, defects });
+  });
+  afterEach(() => {
+    reg.closeAll();
+    rmrf(dir);
+  });
+  // The file changes, and one sweep and its debounce window deliver it.
+  let edits = 0;
+  const edited = (): void => {
+    fs.writeFileSync(file, `edit ${++edits}`);
+    clock.advance(POLL_MS + DEBOUNCE_MS);
+  };
+  const targets = () => ({ dirs: [], polled: [file] });
+  const messages = (): string[] => defects.list().map((d) => d.message);
+
+  test("a holder's throw stands, named by its watch, until a delivery runs clean", () => {
+    let fails = true;
+    reg.acquire("k", targets(), () => {
+      if (fails) throw new Error("consumer bug");
+    });
+    edited();
+    expect(defects.list()).toEqual([
+      expect.objectContaining({
+        kind: "watch delivery",
+        about: `watch on ${file}`,
+        message: "consumer bug",
+      }),
+    ]);
+    edited();
+    expect(logs.filter((l) => l.startsWith("defect kind="))).toHaveLength(1);
+    fails = false;
+    edited();
+    expect(messages()).toEqual([]);
+    expect(logs.filter((l) => l.startsWith("defect cleared "))).toHaveLength(1);
+  });
+
+  test("a throwing watch's defect leaves with its last release", () => {
+    const handle = reg.acquire("k", targets(), () => {
+      throw new Error("consumer bug");
+    });
+    edited();
+    expect(messages()).toEqual(["consumer bug"]);
+    handle.release();
+    expect(messages()).toEqual([]);
+  });
+
+  test("a recipient that ends its own watch and then throws is logged, and stands nothing", () => {
+    const handle = reg.acquire("k", targets(), () => {
+      handle.release();
+      throw new Error("left and threw");
+    });
+    edited();
+    expect(messages()).toEqual([]);
+    expect(logs).toEqual([
+      expect.stringMatching(/^defect kind=.* failed="left and threw"/),
+      expect.stringMatching(/^defect cleared /),
+    ]);
+  });
+
+  test("a batch's completion that throws stands under the batch's name until its last watch closes", () => {
+    const batch = reg.batch("config discovery", () => {
+      throw new Error("completion bug");
+    });
+    const handle = batch.acquire("k", targets(), () => {});
+    edited();
+    expect(defects.list()).toEqual([
+      expect.objectContaining({
+        about: "config discovery",
+        message: "completion bug",
+      }),
+    ]);
+    handle.release();
+    expect(messages()).toEqual([]);
+  });
+
+  test("one key acquired in a batch and outside it is two watches, each hearing its own", () => {
+    const plain: Invalidation[] = [];
+    const batched: Invalidation[] = [];
+    let completions = 0;
+    reg.acquire("k", targets(), (inv) => plain.push(inv));
+    reg
+      .batch("batch", () => completions++)
+      .acquire("k", targets(), (inv) => batched.push(inv));
+    edited();
+    expect(plain).toEqual([{ kind: "changed", paths: [file] }]);
+    expect(batched).toEqual([{ kind: "changed", paths: [file] }]);
+    expect(completions).toBe(1);
+  });
+});
 
 describe("watchTargetsOf", () => {
   let dir: string;

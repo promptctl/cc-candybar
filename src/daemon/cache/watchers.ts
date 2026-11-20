@@ -21,6 +21,8 @@ import {
   type Deafness,
 } from "../foundations/watch-targets";
 import { followWatch } from "../foundations/watch-targets";
+import { Defects, type DefectUnit } from "../foundations/defects";
+import { failureOf } from "../foundations/verb-error";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -113,8 +115,13 @@ interface Holder {
   readonly observed: Map<string, string>;
 }
 
+// [LAW:one-source-of-truth] A window's keys live in its namespace: a batch's
+// are its own, and every plain acquire shares one. So a key acquired in one
+// window is another slot in any other, and never belongs to two.
 interface InvalidationWindow {
-  readonly completed?: () => void;
+  readonly namespace: string;
+  // What the consumer that shares the window runs once its holders heard.
+  readonly completed?: { readonly unit: DefectUnit; readonly run: () => void };
   pending: {
     readonly changes: Map<WatcherSlot, Gathering>;
     readonly cancel: () => void;
@@ -122,7 +129,11 @@ interface InvalidationWindow {
 }
 
 interface WatcherSlot {
+  // The slot's place in the registry: the key in its window's namespace.
+  readonly id: string;
   readonly key: string;
+  // Its delivery, as a defect names it.
+  readonly unit: DefectUnit;
   // The directories it was acquired for, and the watch it holds on each
   // directory they name now, by the watch's id.
   readonly targets: readonly DirTarget[];
@@ -234,6 +245,12 @@ function dirsBelow(
     });
 }
 
+// The namespace every plain acquire shares.
+const PLAIN = "";
+
+const slotId = (namespace: string, key: string): string =>
+  `${namespace}\0${key}`;
+
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly dirs = new Map<string, DirWatch>();
@@ -242,6 +259,8 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
+  private readonly defects: Defects;
+  private batches = 0;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
@@ -256,6 +275,9 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // Where a delivery that throws stands: the daemon's ledger, or one of
+    // the registry's own beside its logger.
+    defects?: Defects;
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
@@ -263,14 +285,26 @@ export class WatcherRegistry {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.defects = opts.defects ?? new Defects(this.logger);
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
   // [LAW:single-enforcer] A consumer that reloads several slots together can
-  // share their delivery window. Each slot still receives only its own paths.
-  // Keys acquired in this window belong to it until their last release.
-  batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
-    const window: InvalidationWindow = { pending: null, completed };
+  // share their delivery window, named by `about`. Each slot still receives
+  // only its own paths.
+  batch(
+    about: string,
+    completed: () => void,
+  ): Pick<WatcherRegistry, "acquire" | "follow"> {
+    const namespace = `batch ${++this.batches}`;
+    const window: InvalidationWindow = {
+      namespace,
+      pending: null,
+      completed: {
+        unit: { kind: "watch delivery", key: namespace, about },
+        run: completed,
+      },
+    };
     const acquire: WatcherRegistry["acquire"] = (
       key,
       targets,
@@ -280,7 +314,7 @@ export class WatcherRegistry {
     return {
       acquire,
       follow: (held, spec, onInvalidate, observed = NO_OBSERVATIONS) =>
-        this.followed(held, spec, observed, (key, targets) =>
+        this.followed(held, spec, observed, namespace, (key, targets) =>
           acquire(key, targets, onInvalidate, observed),
         ),
     };
@@ -325,16 +359,8 @@ export class WatcherRegistry {
         ridesStream: ridesStream(targets),
       };
     }
-    const shared = this.slots.get(key);
-    if (
-      shared !== undefined &&
-      (window === undefined
-        ? shared.window.completed !== undefined
-        : shared.window !== window)
-    )
-      throw new Error(
-        `watch ${valueOf(key)} belongs to another delivery window`,
-      );
+    const namespace = window?.namespace ?? PLAIN;
+    const shared = this.slots.get(slotId(namespace, key));
     // [LAW:single-enforcer] Every acquire names its directories as they are
     // now: joining a slot judges and reconciles its directories as opening
     // one does.
@@ -352,7 +378,12 @@ export class WatcherRegistry {
     );
     const slot =
       shared ??
-      this.opened(key, targets, window ?? { pending: null }, observed);
+      this.opened(
+        key,
+        targets,
+        window ?? { namespace, pending: null },
+        observed,
+      );
     const holder: Holder = { onInvalidate, observed: new Map() };
     slot.holders.add(holder);
     const handle = this.makeHandle(slot, holder);
@@ -367,7 +398,7 @@ export class WatcherRegistry {
     onInvalidate: (invalidation: Invalidation) => void,
     observed = NO_OBSERVATIONS,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    return this.followed(held, spec, observed, (key, targets) =>
+    return this.followed(held, spec, observed, PLAIN, (key, targets) =>
       this.acquire(key, targets, onInvalidate, observed),
     );
   }
@@ -376,13 +407,17 @@ export class WatcherRegistry {
     held: HeldWatch | null,
     spec: WatchSpec,
     observed: FileObservations,
+    namespace: string,
     acquire: Parameters<typeof followWatch>[2],
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const followed = followWatch(held, spec, acquire);
     // A rebound acquired, which sighted. A kept watch whose slot is gone (the
     // registry closed, or the holder released it) polls nothing to sight.
     if (followed.move === "kept") {
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed);
+      this.sighted(
+        this.slots.get(slotId(namespace, followed.watch.key))?.polled ?? [],
+        observed,
+      );
       followed.watch.handle.observed(observed);
     }
     return followed;
@@ -417,8 +452,15 @@ export class WatcherRegistry {
     window: InvalidationWindow,
     observed: FileObservations,
   ): WatcherSlot {
+    const id = slotId(window.namespace, key);
     const slot: WatcherSlot = {
+      id,
       key,
+      unit: {
+        kind: "watch delivery",
+        key: id,
+        about: `watch on ${[...targets.dirs.map((dir) => dir.path), ...targets.polled].join(", ")}`,
+      },
       targets: targets.dirs,
       listeners: new Map(),
       polled: [],
@@ -432,7 +474,7 @@ export class WatcherRegistry {
       slot.polled.push(record);
     }
     this.armSweep();
-    this.slots.set(key, slot);
+    this.slots.set(id, slot);
     if (this.counters) {
       if (
         [...slot.listeners.values()].every(
@@ -696,13 +738,21 @@ export class WatcherRegistry {
           () => {
             window.pending = null;
             for (const [changed, gathered] of changes) {
-              if (this.slots.get(changed.key) !== changed) continue;
+              if (this.slots.get(changed.id) !== changed) continue;
               const heard = heardOf(gathered);
-              for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+              this.delivered(
+                changed.unit,
+                [...changed.holders].map(
+                  (holder) => () => holder.onInvalidate(heard),
+                ),
+                () => this.slots.get(changed.id) === changed,
+              );
             }
-            if (window.completed !== undefined)
-              this.notify(null, window.completed);
+            const { completed } = window;
+            if (completed !== undefined)
+              this.delivered(completed.unit, [completed.run], () =>
+                this.rides(window),
+              );
           },
           { unref: true },
         ),
@@ -720,14 +770,31 @@ export class WatcherRegistry {
     );
   }
 
-  private notify(key: string | null, take: () => void): void {
-    try {
-      take();
-    } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
-    }
+  // [LAW:no-silent-failure] The boundary of one delivery: every recipient
+  // hears it, and the first throw among them stands as the delivery's defect
+  // until a delivery runs clean. A delivery whose watch closed while it ran
+  // ends with it, after its throw was logged.
+  private delivered(
+    unit: DefectUnit,
+    recipients: ReadonlyArray<() => void>,
+    live: () => boolean,
+  ): void {
+    const failures = recipients.flatMap((hear) => {
+      try {
+        hear();
+        return [];
+      } catch (thrown) {
+        return [failureOf(thrown)];
+      }
+    });
+    this.defects.settle(unit, failures[0] ?? null);
+    if (!live()) this.defects.settle(unit, null);
+  }
+
+  private rides(window: InvalidationWindow): boolean {
+    for (const slot of this.slots.values())
+      if (slot.window === window) return true;
+    return false;
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -749,9 +816,8 @@ export class WatcherRegistry {
       },
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
+        if (this.slots.get(slot.id) !== slot) return;
         this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
       },
     };
   }
@@ -769,9 +835,14 @@ export class WatcherRegistry {
 
   // A directory watch closes, and a polled path is forgotten, with the last
   // slot on it: a slot that names the path again starts from what is there at
-  // its own acquire.
+  // its own acquire. Its delivery ends with it, and its window's with the
+  // last slot that rides it.
   private closeSlot(slot: WatcherSlot, cause: string): void {
+    this.slots.delete(slot.id);
+    this.defects.settle(slot.unit, null);
     const { window } = slot;
+    if (window.completed !== undefined && !this.rides(window))
+      this.defects.settle(window.completed.unit, null);
     const { pending } = window;
     if (
       pending !== null &&
@@ -868,7 +939,6 @@ export class WatcherRegistry {
   closeAll(): void {
     this.closed = true;
     this.disarmSweep();
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
+    for (const slot of [...this.slots.values()]) this.closeSlot(slot, "close");
   }
 }

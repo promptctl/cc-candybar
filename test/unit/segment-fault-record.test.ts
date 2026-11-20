@@ -80,7 +80,10 @@ function contextOf(session: string): CheckedRenderRequest {
   return checked.req;
 }
 
-function worldStateOf(session: SessionId): WorldState {
+function worldStateOf(
+  session: SessionId,
+  daemon: WorldState["daemon"] = daemonFactsOf(),
+): WorldState {
   const absent = { ...ABSENT, at: AT };
   return {
     v: FACTS_VERSION,
@@ -104,7 +107,7 @@ function worldStateOf(session: SessionId): WorldState {
     sources: {},
     runs: {},
     env: {},
-    daemon: daemonFactsOf(),
+    daemon,
     diagnostics: [],
   };
 }
@@ -231,4 +234,46 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   expect(viewed).toContain("[1/1]");
   expect(viewed).not.toContain("⚠ broken:");
   expect(viewed).toContain(`⚠ segment "broken": ${MESSAGE}`);
+});
+
+test("a daemon defect draws as one error on the bar, named by the work that threw", async () => {
+  const r = rendererOf();
+  const context = contextOf("s1");
+  const session = context.hookData.session_id;
+  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+  answered(
+    await handIn(r, {
+      kind: "context",
+      context,
+      worldState: worldStateOf(session, {
+        ...daemonFactsOf(),
+        defects: [
+          {
+            kind: "git refresh",
+            key: "/repo",
+            about: "git at /repo",
+            message: "status bug",
+          },
+        ],
+      }),
+    }),
+  );
+  answered(
+    await handIn(r, {
+      kind: "config",
+      origin: context.requested,
+      config: snapshotOf("{ root: { h: [] } }"),
+    }),
+  );
+  const drawn = answered(
+    await handIn(r, { kind: "request", id: 1 as RequestId, context }),
+  );
+  expect(readFaults(noted(drawn, "faults"))).toEqual([
+    {
+      level: "error",
+      kind: "defect",
+      subject: "git at /repo",
+      message: "git at /repo: git refresh threw status bug",
+    },
+  ]);
 });

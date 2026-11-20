@@ -15,6 +15,7 @@ import {
   type PullRequest,
 } from "../src/segments/git";
 import { GitService } from "../src/daemon/cache/git-service";
+import { Defects } from "../src/daemon/foundations/defects";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
@@ -122,6 +123,8 @@ class StubGitService extends GitService {
 
   // A repo `git status` could not read: the fetch outcome is `failed`.
   public infoFailure: string | null = null;
+  // A read that throws: a defect, not a failure the read expects.
+  public infoThrows: string | null = null;
   // Holds every read open until resolved, so a test can land a change while a
   // read is out. The read answers with what the repo held as it BEGAN.
   public infoGate: { promise: Promise<void>; resolve: () => void } | null =
@@ -134,6 +137,7 @@ class StubGitService extends GitService {
     if (!(workingDir in this.repoRootByDir)) return ABSENT;
     if (this.repoRootByDir[workingDir] === null) return ABSENT;
     this.computeCalls.push({ workingDir, projectDir });
+    if (this.infoThrows !== null) throw new Error(this.infoThrows);
     const failure = this.infoFailure;
     const info = this.stubInfo;
     if (this.infoGate) await this.infoGate.promise;
@@ -164,22 +168,25 @@ function makeCache(
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
+  const logger = (_level: string, message: string): void => {
+    if (throwOn !== undefined && message.includes(throwOn)) {
+      throwOn = undefined;
+      throw new Error("logger bug");
+    }
+    logs.push(message);
+  };
+  const defects = new Defects(logger);
   const svc = new GitDataProvider({
     clock: systemTimekeeper,
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
     maxPrLookups: opts.maxPrLookups,
     inner,
-    logger: (_level, message) => {
-      if (throwOn !== undefined && message.includes(throwOn)) {
-        throwOn = undefined;
-        throw new Error("logger bug");
-      }
-      logs.push(message);
-    },
+    logger,
+    defects,
   });
   built.push(svc);
-  return { svc, inner, logs, holds: new Holds() };
+  return { svc, inner, logs, defects, holds: new Holds() };
 }
 
 // The git passes' refresh events, without the PR lookups' between them.
@@ -1168,9 +1175,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws stands as the repo's defect, and the repo keeps its period", async () => {
     jest.useFakeTimers();
-    const { svc, inner, logs, holds } = makeCache({
+    const { svc, inner, logs, defects, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
     });
@@ -1179,13 +1186,43 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
 
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+    expect(defects.list()).toEqual([
+      {
+        kind: "git refresh",
+        key: "/repo",
+        about: "git at /repo",
+        message: "logger bug",
+      },
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
+    expect(defects.list()).toEqual([]);
+  });
+
+  test("a pass whose read throws keeps the repo's value until a clean pass clears its defect", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, defects, holds } = makeCache({ periodMs: 1_000 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const first = gitOf(svc, holds, "/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect((await first).kind).toBe("ok");
+
+    inner.infoThrows = "status bug";
+    inner.stubInfo = { ...inner.stubInfo, branch: "elsewhere" };
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(defects.list().map((d) => d.message)).toEqual(["status bug"]);
+    const kept = await gitOf(svc, holds, "/repo");
+    expect(kept.kind === "ok" && kept.value.branch).toBe("main");
+    expect(logs.filter((l) => l.startsWith("defect "))).toHaveLength(1);
+
+    inner.infoThrows = null;
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(defects.list()).toEqual([]);
+    const read = await gitOf(svc, holds, "/repo");
+    expect(read.kind === "ok" && read.value.branch).toBe("elsewhere");
+    expect(logs.filter((l) => l.startsWith("defect cleared "))).toHaveLength(1);
   });
 });
 

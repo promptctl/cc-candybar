@@ -462,11 +462,13 @@ export function drawRender(
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.snapshot.repo, sessionId);
-  // What a load or a request could not honour: each its own message, named by
-  // what it is about. A load's error is about the session's config, and a
-  // drop about the file that wrote it, so their text may change under an open
-  // viewer (an issue fixed) without becoming another message; a request's
-  // refusal, its hints' and a click's are about exactly what their text says.
+  // What a load or a request could not honour, and the daemon's work that
+  // threw: each its own message, named by what it is about. A load's error
+  // is about the session's config, a drop about the file that wrote it, and
+  // a defect about the work that threw, so their text may change under an
+  // open viewer (an issue fixed) without becoming another message; a
+  // request's refusal, its hints' and a click's are about exactly what their
+  // text says.
   // Each copies its own text, but a drop copies the prompt that fixes it.
   const sourced = (
     kind: DrawError["kind"],
@@ -482,6 +484,18 @@ export function drawRender(
       "load",
       "load",
       configAccess.kind === "unavailable" ? configAccess.error : null,
+    ),
+    // [LAW:no-silent-failure] Work between the disk and the bar that threw
+    // may have left any bar behind, so every bar says so.
+    ...document.daemon.defects.map(
+      ({ kind, key, about, message }): MaybeError => ({
+        ...sourced(
+          "defect",
+          `defect\0${kind}\0${key}`,
+          `${about}: ${kind} threw ${message}`,
+        ),
+        subject: about,
+      }),
     ),
     ...state.dropped.map(
       (e): MaybeError => ({
@@ -788,9 +802,15 @@ export function drawRender(
 }
 
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
-// the kind its fault is noted by, and the file a dropped write names.
+// the kind its fault is noted by, and what a dropped write or a defect names.
 interface DrawError extends SourcedText {
-  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "defect"
+    | "dropped"
+    | "click";
   readonly subject?: string;
 }
 
