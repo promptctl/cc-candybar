@@ -483,10 +483,10 @@ test("two named renderer processes draw separately and share config, transcript 
 // result are observable through the signed controls and bytes of the file.
 test("a conflicting save keeps the named renderer's draft undo and redo until cancel", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-named-edit");
-  const dir = fs.realpathSync(
-    fs.mkdtempSync(path.join(os.tmpdir(), "ccb-named-edit-fixture-")),
-  );
   try {
+    const dir = fs.realpathSync(
+      fs.mkdtempSync(path.join(daemon.stateDir, "edit-project-")),
+    );
     const config = path.join(dir, "config.json5");
     const alternate = path.join(dir, "worktree.mjs");
     worktreeBundle(alternate);
@@ -557,11 +557,11 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     let refused = "";
     // [LAW:no-ambient-temporal-coupling] A click that the daemon dropped
     // before it ran can be sent again. A taken click's outcome is final.
-    await until(async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
       const answer = await clickAnswer(daemon.sockPath, secondSave);
       refused = saidOf(answer);
-      return answer.kind !== "timed-out" || answer.outcome !== "abandoned";
-    }, () => `the second Save to take a turn (${refused})`);
+      if (answer.kind !== "timed-out" || answer.outcome !== "abandoned") break;
+    }
     expect(bytes()).toBe(winner);
     expect(refused).toMatch(
       /\broot\.h\b.*changed (while editing|since it was read)/,
@@ -575,6 +575,7 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     expect(link(undone, VERB_APPLY_LAYOUT_OP, remove("left"))).toBeDefined();
     expect(link(undone, VERB_APPLY_LAYOUT_OP, remove("right"))).toBeDefined();
     expect(textOf(undone)).toContain("✓ done");
+    expect(bytes()).toBe(winner);
     await hit(control(undone, VERB_REDO));
     const redone = await worktree();
     expectPreview(redone, "left", "right");
@@ -592,7 +593,6 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     expect(bytes()).toBe(winner);
   } finally {
     await daemon.cleanup();
-    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
