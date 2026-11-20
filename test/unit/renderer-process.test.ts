@@ -85,6 +85,7 @@ const RENDERER_BOOT = {
     dataHome: "/data",
     dataDirs: [],
   },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1,
   stored: EMPTY_STORED_STATE,
 } satisfies Extract<HostLine, { kind: "boot" }>["boot"];

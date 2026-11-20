@@ -5,6 +5,7 @@
 
 import { userInfo } from "node:os";
 import { SESSION_BOOK_FILE } from "./session-book.js";
+import { openRecordingFile } from "./recording-file.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
@@ -32,6 +33,7 @@ export function productionAdapters(
 ): DaemonAdapters {
   let accountHome: string | undefined;
   return {
+    openRecording: openRecordingFile,
     accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),

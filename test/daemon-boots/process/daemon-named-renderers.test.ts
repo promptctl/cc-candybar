@@ -10,6 +10,7 @@ import { textOf } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
 import {
   click,
   findUrl,
@@ -39,7 +40,24 @@ import {
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 
-const WORKTREE_MODEL = "Worktree renderer";
+const BUNDLE = path.resolve("dist/index.mjs");
+const builtDaemon = (env: NodeJS.ProcessEnv) => ({
+  bin: process.execPath,
+  args: daemonArgs(BUNDLE, env),
+});
+
+let worktreeDir: string;
+let worktreeBuilt: string;
+
+beforeAll(() => {
+  worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-alternate-renderer-"));
+  worktreeBuilt = path.join(worktreeDir, "index.mjs");
+  execFileSync(process.execPath, [path.resolve("test/helpers/build-named-renderer.mjs"), worktreeBuilt]);
+});
+
+afterAll(() => {
+  fs.rmSync(worktreeDir, { recursive: true, force: true });
+});
 
 function cacheEntry(id: string, timestamp: string): string {
   return (
@@ -53,26 +71,6 @@ function cacheEntry(id: string, timestamp: string): string {
         usage: { cache_read_input_tokens: 10 },
       },
     }) + "\n"
-  );
-}
-
-// The release bundle's own renderer, with one deliberately different piece
-// of display code. It still exercises the production process and boot wire,
-// config compiler, templates, and source subscriptions.
-function worktreeBundle(file: string): void {
-  const built = fs.readFileSync(
-    path.join(process.cwd(), "dist", "index.mjs"),
-    "utf8",
-  );
-  const declaration = /function composePayload\([^,]+,([^,]+),[^)]+\)\{/g;
-  const matches = [...built.matchAll(declaration)];
-  if (matches.length !== 1)
-    throw new Error("expected one bundled payload composer");
-  const [prefix, inputs] = matches[0]!;
-  const changed = `${inputs}={...${inputs},hookData:{...${inputs}.hookData,model:{...${inputs}.hookData.model,display_name:${JSON.stringify(WORKTREE_MODEL)}}}};`;
-  fs.writeFileSync(
-    file,
-    built.replace(prefix, () => prefix + changed),
   );
 }
 
@@ -134,7 +132,7 @@ test("two named renderer processes draw separately and share config, transcript 
         transcript,
         cacheEntry("initial", "2026-11-19T12:00:00.000Z"),
       );
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     const shared = [config, definition, source];
     readProbe(probe, reads, {
       [config]: ["openSync", "payload"],
@@ -153,10 +151,7 @@ test("two named renderer processes draw separately and share config, transcript 
           .filter(Boolean)
           .join(" "),
       },
-      (env) => ({
-        bin: process.execPath,
-        args: daemonArgs(path.join(process.cwd(), "dist", "index.mjs"), env),
-      }),
+      builtDaemon,
     );
 
     const args = ["cc-candybar", "--config", config];
@@ -499,9 +494,9 @@ test("one project approval from an earlier frame covers both renderers, a config
   let daemon: RunningDaemon | undefined;
   try {
     execFileSync("git", ["init", "-q", project]);
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     writeProject("PROJECT-APPROVED");
-    daemon = await spawnDaemonWithEnv(isolated.env);
+    daemon = await spawnDaemonWithEnv(isolated.env, builtDaemon);
     const before = await draw("main");
     expect(textOf(before)).not.toContain("PROJECT-APPROVED");
     expect(textOf(await draw("worktree"))).not.toContain("PROJECT-APPROVED");
@@ -545,7 +540,7 @@ test("one project approval from an earlier frame covers both renderers, a config
       answerFile,
       JSON.stringify({ [project + path.sep]: "approved" }),
     );
-    daemon = await spawnDaemonWithEnv(isolated.env);
+    daemon = await spawnDaemonWithEnv(isolated.env, builtDaemon);
     await bothSee(edited, true);
     const after = await readDiagnostics(
       isolated.sockPath,
@@ -568,7 +563,7 @@ test("one project approval from an earlier frame covers both renderers, a config
 }, 30_000);
 
 test("a delivered pane frame settles in the subprocess that drew it", async () => {
-  const daemon = await spawnIsolatedDaemon("ccb-pane-receipt");
+  const daemon = await spawnIsolatedDaemon("ccb-pane-receipt", builtDaemon);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pane-receipt-"));
   try {
     const session = "pane-receipt";
@@ -617,13 +612,13 @@ test("a delivered pane frame settles in the subprocess that drew it", async () =
 });
 
 test("the named renderer receives its pane control and earlier statusline run", async () => {
-  const daemon = await spawnIsolatedDaemon("ccb-named-clicks");
+  const daemon = await spawnIsolatedDaemon("ccb-named-clicks", builtDaemon);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-click-source-"));
   try {
     const config = path.join(dir, "config.json5");
     const alternate = path.join(dir, "worktree.mjs");
     const record = path.join(dir, "run.json");
-    worktreeBundle(alternate);
+    fs.copyFileSync(worktreeBuilt, alternate);
     fs.writeFileSync(
       config,
       JSON.stringify({

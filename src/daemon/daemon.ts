@@ -62,6 +62,12 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
+  environmentOutput,
+  isEnvironmentOutput,
+} from "./environment-output.js";
+import { RendererRecordings } from "./renderer-recording.js";
+import type { RecordingFile } from "./recording-file.js";
+import {
   rendererNameOf,
   type RendererName,
 } from "./foundations/renderer-name.js";
@@ -111,6 +117,8 @@ export interface RunningBundle {
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
 // its stats and its closing signal, is a factory over those.
 export interface DaemonAdapters {
+  // Available in the installed host. Each test or embedded host chooses its file edge.
+  readonly openRecording?: (file: string) => Promise<RecordingFile>;
   readonly accountHome: () => string;
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
@@ -150,6 +158,7 @@ export interface DaemonAdapters {
 // What a daemon takes from the process that runs it: where its files are, what
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
+  readonly region: RendererBoot["region"];
   // The composition root selects the renderer transport.
   readonly renderer: RendererPort;
   readonly bundle: RunningBundle;
@@ -254,6 +263,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
+  const recordings =
+    inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -640,12 +651,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const boot = (): RendererBoot => ({
       stored: stores.current(),
       locations: locs,
+      region: inputs.region,
       memoryLimitBytes,
     });
     const prepared = inputs.renderer({
       name,
       entry,
       boot,
+      recording: () => recordings?.generation(name),
       node: bundle.node,
     });
     return { name, reported, entry, stores, prepared };
@@ -739,8 +752,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text) => {
-          actFailed = joinedEvent(actFailed, text, instant());
+        unheard: (text, fromEnvironment) => {
+          // The unacknowledged text is included in the next warning.
+          const prior = actFailed;
+          actFailed = environmentOutput(
+            joinedEvent(prior, text, instant()),
+            fromEnvironment === true ||
+              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+          );
           restateFaults();
         },
       },
@@ -851,6 +870,18 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   };
 
   const parts: DaemonParts = {
+    recordRenderer: (command) => {
+      if (recordings === undefined)
+        throw new BadVerbArgs("recording is unavailable on this host");
+      return recordings.request(command, (name, operation) => {
+        const runtime = renderers.get(name);
+        return runtime === undefined
+          ? operation()
+          : runtime.renderer.recordingBoundary(() =>
+              operation(() => runtime.link.restart()),
+            );
+      });
+    },
     accountHome: inputs.accountHome,
     closing: cancelRenders.signal,
     home: host.home,
@@ -1059,6 +1090,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ],
       ),
       ["sessionBook close", () => sessionBook.close()],
+      ["renderer recordings close", () => recordings?.close()],
       ...attached.map(
         ({ renderer, link }): TeardownStep => [
           `${renderer.name} renderer close`,

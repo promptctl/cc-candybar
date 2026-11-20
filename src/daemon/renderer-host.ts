@@ -75,6 +75,7 @@ import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
+import { isEnvironmentOutput } from "./environment-output.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
@@ -144,11 +145,14 @@ export interface HostWorld {
   readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
-  readonly unheard: (text: string) => void;
+  readonly unheard: (text: string, fromEnvironment?: true) => void;
 }
 
 export interface RendererHost {
   readonly name: RendererName;
+  // [LAW:no-ambient-temporal-coupling] Begin or end a recording between
+  // complete turns. Replacing the worker here cannot interrupt a draw.
+  recordingBoundary<T>(operation: () => Promise<T>): Promise<T>;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event. `make` is called as the input's
   // slot comes up, and answers the input, or why there is none to send,
@@ -901,7 +905,11 @@ export function rendererHost(
       outcome.kind === "failed" || outcome.kind === "refused"
         ? outcome.reason
         : null;
-    if (failed !== null && effect.session === null) world.unheard(failed);
+    const unheard = (reason: string): void => {
+      if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
+      else world.unheard(reason);
+    };
+    if (failed !== null && effect.session === null) unheard(failed);
     const delivered = await deliver(
       () => doneOf(effect, outcome),
       [["effect", String(effect.id)]],
@@ -912,7 +920,7 @@ export function rendererHost(
       delivered.kind === "threw" &&
       delivered.failure.kind === "down"
     )
-      world.unheard(failed);
+      unheard(failed);
     return outcome;
   };
   // A change's or a refused present's, in the slot of the turn that
@@ -1145,6 +1153,11 @@ export function rendererHost(
   });
   return {
     name,
+    recordingBoundary: (operation) =>
+      inMailbox(async (_queued, holds) => {
+        holds("recording");
+        return operation();
+      }),
     answer,
     answerClick,
     deliver,

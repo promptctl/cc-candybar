@@ -53,6 +53,7 @@ const rendererOf = (): Renderer => {
         dataHome: "/nowhere/data",
         dataDirs: [],
       },
+      region: { locale: "en-US", timeZone: "UTC" },
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
   );
