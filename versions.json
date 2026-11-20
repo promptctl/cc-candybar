@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-920",
-      "ref": "refs/pull/920/merge",
-      "sha": "7e685f03b6094b905d91fdfdbe703faec7e8c538",
-      "timestamp": "2026-11-20T17:08:08.421Z",
+      "version": "pr-921",
+      "ref": "refs/pull/921/merge",
+      "sha": "56c55eb2e3e3605e2a27be491065804a7b87b3c0",
+      "timestamp": "2026-11-20T17:46:18.388Z",
       "commits": [
         {
-          "sha": "7e685f03b6094b905d91fdfdbe703faec7e8c538",
+          "sha": "56c55eb2e3e3605e2a27be491065804a7b87b3c0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T10:07:01-07:00",
-          "message": "Merge 0a9966109ab1c6d5afac991fa1ba3452e84f52f9 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T10:45:14-07:00",
+          "message": "Merge 5b6ec33695fc353da33f58907485438267575c22 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "0a9966109ab1c6d5afac991fa1ba3452e84f52f9",
+          "sha": "5b6ec33695fc353da33f58907485438267575c22",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T10:06:41-07:00",
-          "message": "fix(daemon): hold a throw between the disk and the bar where its work started\n\nEvery expected failure on these paths is already a value, so a throw is a\ndefect. Each is now caught at the boundary of its unit of work and stands as\nthat unit's fault on the bar, and each unit runs its fallible steps before\nits one commit, so a throw leaves nothing half-moved.\n\n- A git refresh pass derives its watch spec before it follows, and a pass\n  that throws settles as the repo's failed read through the usual drop check.\n- A watch delivery that throws stands on its holder or its window until a\n  clean delivery or its release, and reaches every bar as a red error through\n  the daemon's world state.\n- Config discovery finds every origin before committing any. A rediscovery\n  that throws keeps the origin's last snapshot and watch with the reason on\n  its bar; a first follow that throws leaves the renderer's origins as they\n  were.\n\nTicket: candybar-law-review-ibyq.09z\n"
+          "timestamp": "2026-11-20T10:40:51-07:00",
+          "message": "fix(daemon): a throw between the disk and the bar stands as one daemon defect\n\nEvery failure the git refresh, config rediscovery and watch delivery\npaths expect is already a value, so a throw there is a defect of the\ndaemon. It now stands in one observable ledger, keyed by the unit of\nwork that threw, set at the unit's boundary and cleared when the unit\nnext runs clean or its owner ends it. Every bar draws each defect as a\nred error.\n\n- The git pass no longer folds defects into failed reads; a pass that\n  throws keeps the repo's value and PR.\n- An origin whose rediscovery throws keeps its snapshot and watch; a\n  first follow finds every origin before committing any.\n- A delivery window's keys live in its own namespace, so following a\n  watch cannot throw mid-commit.\n\nTicket: candybar-law-review-ibyq.hck\n"
         }
       ]
     },
