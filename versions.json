@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-898",
+      "ref": "refs/pull/898/merge",
+      "sha": "f68ada0a3970ad676ffbeccfeb9da28903c3f970",
+      "timestamp": "2026-11-20T00:32:25.071Z",
+      "commits": [
+        {
+          "sha": "f68ada0a3970ad676ffbeccfeb9da28903c3f970",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T00:31:01Z",
+          "message": "Merge 4488f95257aca36a622a6e5665acf1b455ef6d46 into 2f98785f9d103f1d4991daf0555308a3b09aabe9\n"
+        },
+        {
+          "sha": "4488f95257aca36a622a6e5665acf1b455ef6d46",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:30:41-07:00",
+          "message": "Merge replay-enabled main into config rollback reconciliation\n"
+        },
+        {
+          "sha": "39532f7e50aed7462f6e699b54e37783e6a3a6b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:24:37-07:00",
+          "message": "fix(daemon): preserve file permissions on removal rollback\n"
+        },
+        {
+          "sha": "78fd44b4158962b6c789b3b74bc0d1868dc85ea1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:25:07-07:00",
+          "message": "fix(daemon): reconcile config writes by directory entry\n"
+        },
+        {
+          "sha": "fe5f39ee9b10b8a0539648bc8714eb2fd5226810",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:12:07-07:00",
+          "message": "Merge current main into config rollback reconciliation\n"
+        },
+        {
+          "sha": "7d0cd43eccda508e15b5b9f9ca05fb956c5b0708",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:49:26-07:00",
+          "message": "test(config): assert the reported outcome of a refused save\n"
+        },
+        {
+          "sha": "f9c1c445b2e6d75190a13ca6035a569286ff25b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:20:46-07:00",
+          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+        }
+      ]
+    },
+    {
       "version": "pr-904",
       "ref": "refs/pull/904/merge",
       "sha": "aa97a9ac671c05c53106b0fa803bf24f1d44404a",
@@ -120,56 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T17:29:33-07:00",
           "message": "feat(renderer): record and replay live sessions through the shared host (#913)\n\n* feat(renderer): replay recorded turns offline\n\n* fix(renderer): keep runtime stacks outside semantic answers\n\n* test(renderer): replay a captured failure and recovery exactly\n\n* feat(recording): refuse capture of direct environment values\n\n* feat(daemon): record a selected renderer at its generation boundary\n\n* feat(cli): record and replay a selected renderer\n\n* test(daemon): record and replay live renderer sessions\n\n* fix(recording): keep slow storage outside live renderer turns\n\n* fix(renderer): use one codec for histogram diagnostics\n\n* fix(renderer): draw with the locale and time zone supplied by the host\n\n* fix(cli): bound replay output and require a regular input\n\n* fix(renderer): keep transport warnings and retired views local\n\n* fix(renderer): project native errors within plain causes\n\n* docs(cli): explain recording worker state on replacement\n\n* test(recording): replay captured locale and time zone\n\n* fix(recording): preserve provenance of environment-derived process output\n\n* build: generate the histogram patch lock with the CI toolchain\n\n* test(recording): verify orderly shutdown publishes a sealed capture\n\n* fix(renderer): bind template dates to the host time zone\n\n* perf(renderer): keep legacy date zone detection linear\n\n* test(daemon): build the alternate renderer at its source seam\n\n* fix(renderer): preserve local parsing of legacy negative-zero years\n\n* test(host): observe actual action output and process exit"
-        }
-      ]
-    },
-    {
-      "version": "pr-898",
-      "ref": "refs/pull/898/merge",
-      "sha": "570ce180c2188af04232e6799a1f1aff27354eb2",
-      "timestamp": "2026-11-20T00:27:15.154Z",
-      "commits": [
-        {
-          "sha": "570ce180c2188af04232e6799a1f1aff27354eb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:26:08Z",
-          "message": "Merge 39532f7e50aed7462f6e699b54e37783e6a3a6b4 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
-        },
-        {
-          "sha": "39532f7e50aed7462f6e699b54e37783e6a3a6b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:24:37-07:00",
-          "message": "fix(daemon): preserve file permissions on removal rollback\n"
-        },
-        {
-          "sha": "78fd44b4158962b6c789b3b74bc0d1868dc85ea1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:25:07-07:00",
-          "message": "fix(daemon): reconcile config writes by directory entry\n"
-        },
-        {
-          "sha": "fe5f39ee9b10b8a0539648bc8714eb2fd5226810",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:12:07-07:00",
-          "message": "Merge current main into config rollback reconciliation\n"
-        },
-        {
-          "sha": "7d0cd43eccda508e15b5b9f9ca05fb956c5b0708",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:49:26-07:00",
-          "message": "test(config): assert the reported outcome of a refused save\n"
-        },
-        {
-          "sha": "f9c1c445b2e6d75190a13ca6035a569286ff25b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:46-07:00",
-          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
         }
       ]
     },

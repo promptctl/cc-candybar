@@ -2421,10 +2421,10 @@ var require_primordials = __commonJS({
       getOwnPropertyDescriptor: ReflectGetOwnPropertyDescriptor,
       ownKeys: ReflectOwnKeys
     } = Reflect;
-    var { apply, bind, call } = Function.prototype;
+    var { apply: apply2, bind, call } = Function.prototype;
     var uncurryThis = bind.bind(call);
     primordials.uncurryThis = uncurryThis;
-    var applyBind = bind.bind(apply);
+    var applyBind = bind.bind(apply2);
     primordials.applyBind = applyBind;
     var varargsMethods = [
       // 'ArrayPrototypeConcat' is omitted, because it performs the spread
@@ -3381,15 +3381,15 @@ var require_path_browserify = __commonJS({
       normalize: function normalize(path31) {
         assertPath(path31);
         if (path31.length === 0) return ".";
-        var isAbsolute4 = path31.charCodeAt(0) === 47;
+        var isAbsolute5 = path31.charCodeAt(0) === 47;
         var trailingSeparator = path31.charCodeAt(path31.length - 1) === 47;
-        path31 = normalizeStringPosix(path31, !isAbsolute4);
-        if (path31.length === 0 && !isAbsolute4) path31 = ".";
+        path31 = normalizeStringPosix(path31, !isAbsolute5);
+        if (path31.length === 0 && !isAbsolute5) path31 = ".";
         if (path31.length > 0 && trailingSeparator) path31 += "/";
-        if (isAbsolute4) return "/" + path31;
+        if (isAbsolute5) return "/" + path31;
         return path31;
       },
-      isAbsolute: function isAbsolute4(path31) {
+      isAbsolute: function isAbsolute5(path31) {
         assertPath(path31);
         return path31.length > 0 && path31.charCodeAt(0) === 47;
       },
@@ -3603,9 +3603,9 @@ var require_path_browserify = __commonJS({
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
         if (path31.length === 0) return ret;
         var code2 = path31.charCodeAt(0);
-        var isAbsolute4 = code2 === 47;
+        var isAbsolute5 = code2 === 47;
         var start;
-        if (isAbsolute4) {
+        if (isAbsolute5) {
           ret.root = "/";
           start = 1;
         } else {
@@ -3641,11 +3641,11 @@ var require_path_browserify = __commonJS({
         preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           if (end !== -1) {
-            if (startPart === 0 && isAbsolute4) ret.base = ret.name = path31.slice(1, end);
+            if (startPart === 0 && isAbsolute5) ret.base = ret.name = path31.slice(1, end);
             else ret.base = ret.name = path31.slice(startPart, end);
           }
         } else {
-          if (startPart === 0 && isAbsolute4) {
+          if (startPart === 0 && isAbsolute5) {
             ret.name = path31.slice(1, startDot);
             ret.base = path31.slice(1, end);
           } else {
@@ -3655,7 +3655,7 @@ var require_path_browserify = __commonJS({
           ret.ext = path31.slice(startDot, end);
         }
         if (startPart > 0) ret.dir = path31.slice(0, startPart - 1);
-        else if (isAbsolute4) ret.dir = "/";
+        else if (isAbsolute5) ret.dir = "/";
         return ret;
       },
       sep: "/",
@@ -9312,9 +9312,9 @@ var require_pako = __commonJS({
   }
 });
 
-// node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js
+// node_modules/.pnpm/hdr-histogram-js@3.0.1_patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js
 var require_hdrhistogram_umd = __commonJS({
-  "node_modules/.pnpm/hdr-histogram-js@3.0.1/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js"(exports, module) {
+  "node_modules/.pnpm/hdr-histogram-js@3.0.1_patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490/node_modules/hdr-histogram-js/dist/hdrhistogram.umd.js"(exports, module) {
     init_globals();
     !(function(t2, e) {
       "object" == typeof exports && "undefined" != typeof module ? e(exports, require_pako()) : "function" == typeof define && define.amd ? define(["exports", "pako"], e) : e((t2 = "undefined" != typeof globalThis ? globalThis : t2 || self).hdr = {}, t2.pako);
@@ -15487,7 +15487,7 @@ var require_glob = __commonJS({
     var glob_to_regex_js_1 = require_lib();
     var util_1 = require_util3();
     var Dirent_1 = require_Dirent();
-    var { basename, dirname: dirname2, isAbsolute: isAbsolute4, join: join4, relative, resolve: resolve2 } = path_1.posix;
+    var { basename, dirname: dirname2, isAbsolute: isAbsolute5, join: join4, relative, resolve: resolve2 } = path_1.posix;
     var internalAssertionError = () => (0, argErrors_1.withCode)(new Error("This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n"), "ERR_INTERNAL_ASSERTION");
     var validateStringArrayOrFunction = (value, name) => {
       if (Array.isArray(value)) {
@@ -15847,7 +15847,7 @@ var require_glob = __commonJS({
       result(path31) {
         if (!this.withFileTypes)
           return path31;
-        const full = isAbsolute4(path31) ? path31 : join4(this.root, path31);
+        const full = isAbsolute5(path31) ? path31 : join4(this.root, path31);
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
@@ -28252,6 +28252,15 @@ var require_lib8 = __commonJS({
 // site/transport.ts
 init_globals();
 
+// src/utils/region.ts
+init_globals();
+function systemRegion() {
+  return {
+    locale: new Intl.NumberFormat().resolvedOptions().locale,
+    timeZone: new Intl.DateTimeFormat().resolvedOptions().timeZone
+  };
+}
+
 // src/in-process-renderer.ts
 init_globals();
 
@@ -28309,13 +28318,71 @@ var CrossedFailure = class extends Error {
   }
   failure;
 };
-function failureOf(thrown2) {
+function classified(thrown2, detailOf2) {
   if (thrown2 instanceof CrossedFailure) return thrown2.failure;
+  const detail = detailOf2(thrown2);
   return {
     kind: KINDS.find(([as]) => thrown2 instanceof as)?.[1] ?? "threw",
-    message: thrown2 instanceof Error ? thrown2.message : inspect(thrown2),
-    detail: inspect(thrown2)
+    message: thrown2 instanceof Error ? thrown2.message : detail,
+    detail
   };
+}
+function failureOf(thrown2) {
+  return classified(thrown2, inspect);
+}
+function rendererFailureOf(thrown2) {
+  return classified(thrown2, (value) => rendererDetail(value, /* @__PURE__ */ new Set()));
+}
+function rendererDetail(value, path31) {
+  if (value instanceof CrossedFailure) return value.failure.detail;
+  if (!(value instanceof Error))
+    return inspect(rendererValue(value, path31, /* @__PURE__ */ new Map()), {
+      customInspect: false
+    });
+  const title2 = Error.prototype.toString.call(value);
+  if (path31.has(value)) return `[Circular: ${title2}]`;
+  path31.add(value);
+  const lines2 = [title2];
+  if (Object.hasOwn(value, "cause"))
+    lines2.push(`cause: ${rendererDetail(value.cause, path31)}`);
+  if (value instanceof AggregateError) {
+    const errors2 = value.errors;
+    for (const [index, error] of errors2.entries())
+      lines2.push(`errors[${index}]: ${rendererDetail(error, path31)}`);
+  }
+  for (const key of Object.keys(value)) {
+    if (key === "name" || key === "message" || key === "stack" || key === "cause")
+      continue;
+    if (key === "errors" && value instanceof AggregateError) continue;
+    const field = Object.getOwnPropertyDescriptor(value, key);
+    if (field !== void 0 && "value" in field)
+      lines2.push(`${key}: ${rendererDetail(field.value, path31)}`);
+  }
+  path31.delete(value);
+  return lines2.join("\n");
+}
+function rendererValue(value, errors2, seen) {
+  if (value instanceof Error) return rendererDetail(value, errors2);
+  if (typeof value !== "object" || value === null) return value;
+  const previous2 = seen.get(value);
+  if (previous2 !== void 0) return previous2;
+  let copy2;
+  if (Array.isArray(value)) {
+    copy2 = new Array(value.length);
+  } else {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype) return value;
+    copy2 = prototype === null ? /* @__PURE__ */ Object.create(null) : {};
+  }
+  seen.set(value, copy2);
+  for (const key of Reflect.ownKeys(value)) {
+    const field = Object.getOwnPropertyDescriptor(value, key);
+    if (!field?.enumerable) continue;
+    if ("value" in field)
+      field.value = rendererValue(field.value, errors2, seen);
+    Object.defineProperty(copy2, key, field);
+  }
+  return copy2;
 }
 function badRequest(...problems) {
   const message = problems.join("; ");
@@ -56239,11 +56306,11 @@ function checkMenuDecls(ctx, out) {
     }
   }
 }
-function identityIssue(apply) {
-  if (apply === "") {
+function identityIssue(apply2) {
+  if (apply2 === "") {
     return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
   }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+  if (menuMember(apply2) === DISCLOSURE_CLOSED) {
     return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
   }
   return void 0;
@@ -56276,11 +56343,11 @@ function synthesizePlacementMenus(config, issues) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
+        const { apply: apply2, options } = call;
+        const member = menuMember(apply2);
+        const stateKey = menuStateKey(id2, apply2, options.key);
         const pageKey2 = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply2}`;
         const clashKey = [stateKey, pageKey2].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
@@ -56300,7 +56367,7 @@ function synthesizePlacementMenus(config, issues) {
         if (prior !== void 0 && prior !== claimant) {
           issue3(
             node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply2}"`}.`
           );
           continue;
         }
@@ -56869,6 +56936,14 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
+  record start FILE [--renderer NAME]
+  record stop [--renderer NAME]
+                           Record one renderer on the running daemon.
+                           Stop publishes the recording to FILE. NAME
+                           defaults to CC_CANDYBAR_NAME or main.
+  replay FILE [--frames]   Verify a recording offline with its renderer
+                           build. --frames prints verified frames as JSON
+                           lines, up to 32 MiB.
   frames --lane LANE [--config PATH | --config-only PATH]
                            One session's bar as the daemon pushes it \u2014 up to
                            30 frames a second while it moves, at once on a
@@ -57873,9 +57948,9 @@ function insertTerm(ctx, anchor, relation) {
 }
 function insertGap(preset, anchor, relation) {
   const gap = `${relation}.${escapedIdent(anchor)}`;
-  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const apply2 = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
+  return { apply: apply2, host, stateKey: menuStateKey(host, apply2, void 0) };
 }
 function spliceContainer(node, ctx) {
   const children2 = [];
@@ -59367,8 +59442,8 @@ function abbreviatePath(path31) {
     return abbreviated ? abbreviated[0] : seg2;
   }).join("/");
 }
-function formatInteger(n) {
-  return n.toLocaleString();
+function formatInteger(n, formatter = new Intl.NumberFormat()) {
+  return formatter.format(n);
 }
 
 // src/template-engine/cascade.ts
@@ -59612,17 +59687,14 @@ var relativeTimeFuncs = (clock) => ({
     arity: { kind: "exact" }
   }
 });
-function formatterFuncs() {
+function formatterFuncs(locale) {
+  const numbers = new Intl.NumberFormat(locale);
   return {
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
-    // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
-    // (not migrated to a DSL helper). toLocaleString reads the host locale the
-    // daemon inherits, so grouping is locale-correct (en_US "50,000" /
-    // de_DE "50.000"). A regex helper would be a second, locale-blind producer
-    // of grouping policy — same parsing/formatting boundary that keeps
-    // formatModelName here.
+    // [LAW:one-source-of-truth] Group numbers using the host's locale. The
+    // engine shares its formatter between all the templates it evaluates.
     formatInteger: {
-      fn: (n) => formatInteger(n),
+      fn: (n) => formatInteger(n, numbers),
       // [LAW:types-are-the-program] Integer grouping is meaningful only for an
       // integer; `int` rejects a fractional/precision-losing carrier at the gate.
       argTypes: ["int"],
@@ -59657,6 +59729,164 @@ function formatterFuncs() {
       argTypes: ["string"],
       arity: { kind: "exact" }
     }
+  };
+}
+
+// src/template-engine/datetime.ts
+init_globals();
+var DATE_CLOCK_FUNCTIONS = ["now", "ago"];
+var SPRIG = sprigDatetime(() => {
+  throw new Error(
+    "a sprig date function other than now and ago read the clock"
+  );
+});
+var DAY_MS = 864e5;
+var DATE_LIMIT_MS = 864e13;
+var ISO = /^(?:\d{4}|(?!-000000)[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
+var NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
+function legacyDate(value) {
+  if (!value.includes("(")) return { tokens: value, end: value.length };
+  let depth = 0;
+  let start = 0;
+  let tokens = "";
+  for (let i2 = 0; i2 < value.length; i2++) {
+    const character = value.charAt(i2);
+    if (character === "(") {
+      if (depth === 0) {
+        start = i2;
+        tokens += " ";
+      }
+      depth++;
+    } else if (character === ")" && depth > 0) depth--;
+    else if (depth === 0) tokens += character;
+  }
+  return { tokens, end: depth === 0 ? value.length : start };
+}
+function hasLegacyZone(value) {
+  const firstNumber = value.search(/\d/);
+  if (firstNumber < 0) return false;
+  const timed2 = value.slice(firstNumber);
+  if (NAMED_ZONE.test(timed2)) return true;
+  const colon = timed2.search(/\d:/);
+  return colon !== -1 && /[+-]\d/.test(timed2.slice(colon + 2));
+}
+function wallTimeIn(timeZone) {
+  let offsets;
+  const offsetAt = (instant) => {
+    offsets ??= new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset"
+    });
+    const name = offsets.formatToParts(instant).find(({ type: type3 }) => type3 === "timeZoneName")?.value;
+    if (name === "GMT") return 0;
+    const offset = /^GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(name ?? "");
+    if (!offset) throw new Error(`could not determine offset for ${timeZone}`);
+    const [, sign, hours, minutes, seconds = "0"] = offset;
+    const magnitude = Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+    return (sign === "-" ? -magnitude : magnitude) * 1e3;
+  };
+  return (wall) => {
+    const before = offsetAt(Math.max(-DATE_LIMIT_MS, wall - DAY_MS));
+    const after = offsetAt(Math.min(DATE_LIMIT_MS, wall + DAY_MS));
+    if (before === after) return wall - before;
+    const earlier = wall - Math.max(before, after);
+    return Math.abs(earlier) <= DATE_LIMIT_MS && earlier + offsetAt(earlier) === wall ? earlier : wall - Math.min(before, after);
+  };
+}
+function dateInput(value, wallTime) {
+  if (typeof value !== "string") return value;
+  const iso2 = ISO.exec(value);
+  const { tokens, end } = iso2 === null ? legacyDate(value) : { tokens: value, end: value.length };
+  const absolute2 = iso2 === null ? hasLegacyZone(tokens) : iso2[1] === void 0 || iso2[2] !== void 0;
+  let instant = Date.parse(
+    absolute2 ? value : value.slice(0, end) + (iso2 === null ? " GMT" : "Z")
+  );
+  if (!absolute2 && Number.isFinite(instant)) instant = wallTime(instant);
+  const date2 = new Date(instant);
+  if (Number.isNaN(date2.getTime()))
+    throw new Error(`sprig: cannot parse date value ${JSON.stringify(value)}`);
+  return date2;
+}
+var DisplayDate = class extends Date {
+  #describe;
+  constructor(instant, describe3) {
+    super(instant);
+    this.#describe = describe3;
+  }
+  toString() {
+    return Number.isNaN(this.getTime()) ? "Invalid Date" : this.#describe(this);
+  }
+};
+function apply(spec, name, ...args) {
+  const func = spec[name];
+  if (func === void 0)
+    throw new Error(`Sprig date function unavailable: ${name}`);
+  return Reflect.apply(func.fn, void 0, args);
+}
+function dateFunctions(timeZone, clock) {
+  const wallTime = wallTimeIn(timeZone);
+  const input = (value) => dateInput(value, wallTime);
+  let longName;
+  const describe3 = (date2) => {
+    longName ??= new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "long"
+    });
+    const zone = longName.formatToParts(date2).find(({ type: type3 }) => type3 === "timeZoneName")?.value;
+    const local = apply(
+      SPRIG,
+      "dateInZone",
+      "Mon Jan 02 2006 15:04:05 GMT-0700",
+      date2,
+      timeZone
+    );
+    return `${String(local)} (${zone ?? timeZone})`;
+  };
+  const display = (value) => {
+    if (!(value instanceof Date))
+      throw new Error("Sprig date function did not return a Date");
+    return new DisplayDate(value.getTime(), describe3);
+  };
+  const timed2 = sprigDatetime(clock);
+  const bind = (name, fn) => {
+    const spec = SPRIG[name];
+    if (spec === void 0)
+      throw new Error(`Sprig date function unavailable: ${name}`);
+    return { ...spec, fn };
+  };
+  const [now2, ago2] = DATE_CLOCK_FUNCTIONS;
+  return {
+    ...SPRIG,
+    date: bind(
+      "date",
+      (layout, value) => apply(SPRIG, "dateInZone", layout, input(value), timeZone)
+    ),
+    dateInZone: bind(
+      "dateInZone",
+      (layout, value, zone) => apply(SPRIG, "dateInZone", layout, input(value), zone)
+    ),
+    htmlDate: bind(
+      "htmlDate",
+      (value) => apply(SPRIG, "htmlDateInZone", input(value), timeZone)
+    ),
+    htmlDateInZone: bind(
+      "htmlDateInZone",
+      (value, zone) => apply(SPRIG, "htmlDateInZone", input(value), zone)
+    ),
+    dateModify: bind(
+      "dateModify",
+      (duration2, value) => display(apply(SPRIG, "dateModify", duration2, input(value)))
+    ),
+    toDate: bind(
+      "toDate",
+      (layout, value) => display(apply(SPRIG, "toDate", layout, value))
+    ),
+    unixEpoch: bind(
+      "unixEpoch",
+      (value) => apply(SPRIG, "unixEpoch", input(value))
+    ),
+    [now2]: bind(now2, () => display(clock())),
+    [ago2]: bind(ago2, (value) => apply(timed2, ago2, input(value)))
   };
 }
 
@@ -59728,21 +59958,7 @@ function animationPair(frame2, timeline) {
   }
   return { frames, stepped: stepped2 };
 }
-var SPRIG_CLOCK_READERS = /* @__PURE__ */ new Set(["now", "ago"]);
-function sprigDatetimeWhere(clock, readsClock) {
-  return Object.fromEntries(
-    Object.entries(sprigDatetime(clock)).filter(
-      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock
-    )
-  );
-}
-var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS"
-  );
-}, false);
 var CLOCK_FACTORIES = [
-  (clock) => sprigDatetimeWhere(clock.now, true),
   (clock) => animationPair(clock.frame, clock.timeline),
   (clock) => Object.fromEntries(
     Object.entries(animationPair(clock.frame)).map(([name, func]) => [
@@ -59755,19 +59971,20 @@ var CLOCK_FACTORIES = [
 function clockFuncs(factories) {
   return Object.assign({}, ...factories.map((factory) => factory(CLOCK)));
 }
-var CLOCK_FUNCTIONS = new Set(
-  Object.keys(clockFuncs(CLOCK_FACTORIES))
-);
+var CLOCK_FUNCTIONS = /* @__PURE__ */ new Set([
+  ...DATE_CLOCK_FUNCTIONS,
+  ...Object.keys(clockFuncs(CLOCK_FACTORIES))
+]);
 function engineClockFunctions(extra) {
   return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
 }
 var DEPTH_BINDINGS = { readableOn: readableOnFunc };
 function createCcCandybarEngine(opts) {
-  const { drawnAt, extraFuncs } = opts;
+  const { drawnAt, extraFuncs, region = systemRegion() } = opts;
   const depth = () => ({ depth: drawnAt() });
   return createEngine({
     fromString: (s) => new RichText(s),
-    toString: (rt) => rt.plain,
+    toString: (rt) => rt instanceof Date ? rt.toString() : rt.plain,
     // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
     // prints as Go prints a map, instead of leaking the object into the
     // fragments as if it were text.
@@ -59790,7 +60007,7 @@ function createCcCandybarEngine(opts) {
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
-      ...SPRIG_DATE_FUNCS,
+      ...dateFunctions(region.timeZone, CLOCK.now),
       ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
@@ -59811,7 +60028,7 @@ function createCcCandybarEngine(opts) {
       // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
       // registered last so the domain meaning wins (revisited by the bdi
       // cleanup ticket).
-      ...formatterFuncs(),
+      ...formatterFuncs(region.locale),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
       // paths do not). Last so a feature can override on collision.
@@ -65294,10 +65511,12 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
+  constructor(store, defaultEmptyValue = "", sessionState, parent = null, region = systemRegion()) {
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
+    this.region = region;
+    this.engine = createCcCandybarEngine({ drawnAt: this.drawnAt, region });
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {
     }));
@@ -65307,6 +65526,7 @@ var SourceRegistry = class _SourceRegistry {
   store;
   defaultEmptyValue;
   parent;
+  region;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -65388,7 +65608,7 @@ var SourceRegistry = class _SourceRegistry {
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+  engine;
   // The names of this registry's own async sources (shell, file), whose
   // stored values `published` reads.
   sourceNames = observable.array([], { deep: false });
@@ -65438,7 +65658,8 @@ var SourceRegistry = class _SourceRegistry {
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
-      this
+      this,
+      this.region
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -67157,15 +67378,15 @@ function requireOptionKind(runtime, name, helper) {
   }
   return action2;
 }
-function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
+function renderPicker(applyName, apply2, page2, close, paged, runtime, itemPaint, closeStyle, steps2 = []) {
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = clickSession(runtime, "picker");
-  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply2 ? readVar(store, apply2.stateVar) : void 0;
   const optionFace = (i2, label2) => {
-    const option = apply.options[i2];
+    const option = apply2.options[i2];
     return itemPaint(
-      { index: i2, count: apply.options.length },
+      { index: i2, count: apply2.options.length },
       option,
       label2,
       option === current
@@ -67173,12 +67394,12 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
   const navReserve = (close.kind === "led" ? 0 : cellWidth2(DISCLOSURE_GLYPH_CLOSE) + 1) + steps2.reduce((cols, step4) => cols + cellWidth2(step4.glyph) + 1, 0);
-  const catalogue = apply.library && {
-    groups: apply.library.groups,
-    entries: apply.options.map(apply.library.entry)
+  const catalogue = apply2.library && {
+    groups: apply2.library.groups,
+    entries: apply2.options.map(apply2.library.entry)
   };
-  const labelOf = apply.labelOf ?? ((option) => option);
-  const gridFaces = catalogue === void 0 ? apply.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
+  const labelOf = apply2.labelOf ?? ((option) => option);
+  const gridFaces = catalogue === void 0 ? apply2.options.map((option, i2) => optionFace(i2, labelOf(option))) : [];
   const pages = catalogue !== void 0 ? libraryLayout(catalogue.entries, catalogue.groups, paged) : gridPages(
     gridFaces.map((face) => face.cellLength),
     available,
@@ -67192,7 +67413,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current === void 0 ? -1 : apply.options.indexOf(current)
+    current === void 0 ? -1 : apply2.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -67210,7 +67431,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     ...realize(declared, option, option, store, sessionId2).effects,
     ...closeEffects
   ]);
-  const optionCell = (face, i2) => linkOver(face, optionTarget(apply.options[i2]));
+  const optionCell = (face, i2) => linkOver(face, optionTarget(apply2.options[i2]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
@@ -67230,7 +67451,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
             args: [
               sessionId2,
               page2.key,
-              String(pageHolding(apply.options.indexOf(option)))
+              String(pageHolding(apply2.options.indexOf(option)))
             ]
           }
         ]),
@@ -67261,10 +67482,10 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
       lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
-      ...section.indices.map((i2) => cellWidth2(labelOf(apply.options[i2])))
+      ...section.indices.map((i2) => cellWidth2(labelOf(apply2.options[i2])))
     );
     for (const i2 of section.indices) {
-      const name = labelOf(apply.options[i2]);
+      const name = labelOf(apply2.options[i2]);
       const authored = catalogue.entries[i2].description;
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
@@ -67297,7 +67518,7 @@ function pickerFuncs(runtime, activeSegment) {
             `{{ picker "${applyName}" \u2026 }} sets both closeOnPick and inBody; a picker in a body is closed by the body's \u2715, so it has no close to fold into a pick`
           );
         }
-        const apply = requireOptionKind(runtime, applyName, "picker");
+        const apply2 = requireOptionKind(runtime, applyName, "picker");
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
@@ -67307,7 +67528,7 @@ function pickerFuncs(runtime, activeSegment) {
         const drawnAt = activeSegment.drawnAt();
         const draw2 = (ground) => renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           inBody === true ? { kind: "led" } : {
             kind: "own",
@@ -67323,14 +67544,14 @@ function pickerFuncs(runtime, activeSegment) {
             active2,
             placedBy(void 0),
             renderLook(runtime, "{{ picker }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             ground
           ),
           closeOn(active2.palette, ground, drawnAt)
         );
         const band = bandFor(active2.palette, active2.disclosure, drawnAt);
-        const [, ...rows] = apply.library === void 0 ? [] : draw2(band.plane);
+        const [, ...rows] = apply2.library === void 0 ? [] : draw2(band.plane);
         if (rows.length === 0) return draw2(active2.bg)[0];
         active2.drops.push(...rows);
         return draw2(band.state)[0];
@@ -67351,23 +67572,23 @@ function ringAround(options, current) {
   const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
-function renderCarousel(applyName, apply, openName, label2, runtime) {
-  if (!("stateVar" in apply)) {
+function renderCarousel(applyName, apply2, openName, label2, runtime) {
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on \u2014 a carousel needs a { set, from } or { persist, from } action`
     );
   }
   const store = renderBinding(runtime, "carousel").store;
-  if (!store.has(apply.stateVar)) {
+  if (!store.has(apply2.stateVar)) {
     throw new Error(
-      `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply.stateVar}" } among the variables`
+      `carousel references action "${applyName}", whose key "${apply2.stateVar}" no variable reads back, so there is no current value to centre on \u2014 declare { kind: "state", key: "${apply2.stateVar}" } among the variables`
     );
   }
   const declared = runtime.compiled.get(applyName);
   const sessionId2 = clickSession(runtime, "carousel");
-  const { options } = apply;
+  const { options } = apply2;
   if (options.length === 0) return assemble([]);
-  const indexAt = ringAround(options, readVar(store, apply.stateVar));
+  const indexAt = ringAround(options, readVar(store, apply2.stateVar));
   const ring = (offset) => options[indexAt(offset)];
   const step4 = (offset) => actionTarget(
     realize(declared, ring(offset), ring(offset), store, sessionId2).effects
@@ -67380,7 +67601,7 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
       // when the domain is colour-valued.
       labelPaint(
         renderLook(runtime, "{{ carousel }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         ring(0),
         label2
       ),
@@ -67437,18 +67658,18 @@ init_globals();
 init_globals();
 var SWATCHES_RANDOM = "?";
 function requireSwatchable(runtime, applyName, helper) {
-  const apply = requireOptionKind(runtime, applyName, helper);
-  if (!("stateVar" in apply)) {
+  const apply2 = requireOptionKind(runtime, applyName, helper);
+  if (!("stateVar" in apply2)) {
     throw new Error(
       `${helper} references action "${applyName}", which inserts a segment and holds no current value \u2014 a ${helper} needs a { set, from } or { persist, from } action`
     );
   }
-  if (apply.paletteOf === void 0) {
+  if (apply2.paletteOf === void 0) {
     throw new Error(
       `${helper} references action "${applyName}", whose options are not colour-valued \u2014 a swatch draws the palette an option puts in force, as the "themes", "placementThemes" and "styles" domains do`
     );
   }
-  return apply;
+  return apply2;
 }
 function randomOther(seed, count, centre) {
   let h = Math.imul(seed ^ seed >>> 16, 73244475);
@@ -67457,14 +67678,14 @@ function randomOther(seed, count, centre) {
   return (centre + 1 + (h >>> 0) % Math.max(count - 1, 1)) % count;
 }
 function optionPalette(runtime, applyName, helper, chosen) {
-  const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
-  if (!apply.options.includes(option)) {
+  const apply2 = requireSwatchable(runtime, applyName, helper);
+  const option = chosen ?? readVar(renderBinding(runtime, helper).store, apply2.stateVar);
+  if (!apply2.options.includes(option)) {
     throw new Error(
       `${helper} "${applyName}": "${option}" is not one of its options, so it has no palette to draw`
     );
   }
-  return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
+  return apply2.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 function swatchFuncs(runtime) {
   return {
@@ -67489,7 +67710,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
   return {
     swatches: {
       fn: (applyName, pageName) => {
-        const apply = requireSwatchable(runtime, applyName, "swatches");
+        const apply2 = requireSwatchable(runtime, applyName, "swatches");
         const page2 = requireKind(
           runtime,
           pageName,
@@ -67504,12 +67725,12 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const { options } = apply;
+        const { options } = apply2;
         const count = options.length;
         const steps2 = () => {
           const at = ringAround(
             options,
-            readVar(renderBinding(runtime, "swatches").store, apply.stateVar)
+            readVar(renderBinding(runtime, "swatches").store, apply2.stateVar)
           );
           return [
             { glyph: CAROUSEL_PREV, option: options[at(-1)] },
@@ -67522,7 +67743,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         };
         const [line] = renderPicker(
           applyName,
-          apply,
+          apply2,
           { key: page2.key, stateVar: page2.stateVar },
           { kind: "led" },
           true,
@@ -67530,7 +67751,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
           swatchPaint(
             active2,
             renderLook(runtime, "{{ swatches }}"),
-            apply.paletteOf,
+            apply2.paletteOf,
             drawnAt,
             active2.bg
           ),
@@ -67732,10 +67953,10 @@ function renderMenu(applyName, displays, options, runtime) {
       placement.disclosure,
       drawnAt
     ).plane;
-    const apply = requireOptionKind(action2, applyName, "menu");
+    const apply2 = requireOptionKind(action2, applyName, "menu");
     return renderPicker(
       applyName,
-      apply,
+      apply2,
       { key: pageKey2, stateVar: pageKey2 },
       {
         kind: "own",
@@ -67756,7 +67977,7 @@ function renderMenu(applyName, displays, options, runtime) {
         placement,
         options.distribution,
         renderLook(action2, "{{ menu }}"),
-        apply.paletteOf,
+        apply2.paletteOf,
         drawnAt,
         plane
       ),
@@ -69119,7 +69340,7 @@ function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
 }
 var compileAlone = (_key, input) => compileDslConfig(input);
 function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE) {
-  const input = compileInputOf(config);
+  const input = compileInputOf(config, registry.region);
   const key = compileKey(input);
   return {
     compiled: compile(key, input),
@@ -69127,7 +69348,7 @@ function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE)
     loadWarnings: declareDslVariables(config, registry, cwd2, scopes)
   };
 }
-function compileInputOf(config) {
+function compileInputOf(config, region = systemRegion()) {
   const { variables, ...rest2 } = config;
   const stateKeyToVar = /* @__PURE__ */ new Map();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
@@ -69137,6 +69358,7 @@ function compileInputOf(config) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
   return {
+    region,
     config: rest2,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => a < b ? -1 : 1),
     projections: [...projectionsOf(config)].sort(
@@ -69174,6 +69396,7 @@ var EVERY_SCOPE = /* @__PURE__ */ new Set([
   "view"
 ]);
 function compileDslConfig({
+  region,
   config,
   stateReads,
   projections
@@ -69195,6 +69418,7 @@ function compileDslConfig({
     (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now)
   ];
   const engine = createCcCandybarEngine({
+    region,
     extraFuncs: {
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),
@@ -70284,7 +70508,7 @@ function plugins(p2) {
     loaded: p2.loaded,
     dropped: p2.dropped,
     reached: [...p2.reached].sort(),
-    rendering: [...p2.rendering].sort(([a], [b]) => a.localeCompare(b))
+    rendering: [...p2.rendering].sort(([a], [b]) => a < b ? -1 : 1)
   };
 }
 function loadKey(inputs) {
@@ -70322,7 +70546,7 @@ function loadKey(inputs) {
       // above.
       placed: null
     },
-    sources: [...inputs.sources].sort(([a], [b]) => a.localeCompare(b)).map(([name, folder]) => [name, folder])
+    sources: [...inputs.sources].sort(([a], [b]) => a < b ? -1 : 1).map(([name, folder]) => [name, folder])
   });
 }
 function declaredSources(config) {
@@ -70364,7 +70588,8 @@ function buildRenderState(load, deps) {
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
-    null
+    null,
+    deps.region
   );
   let registration;
   try {
@@ -72363,7 +72588,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
       __callDispose(_stack, _error, _hasError);
     }
   } catch (error) {
-    const outcome = renderFailure(failureOf(error));
+    const outcome = renderFailure(rendererFailureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
     return {
       frame: { kind: "failed", message: outcome.message },
@@ -72964,7 +73189,7 @@ var distributionOf = (h) => {
 
 // src/renderer-interface/interface.ts
 init_globals();
-function timed(renderer, monotonic) {
+function timed(renderer, monotonic, warn) {
   return {
     answer: async (input) => {
       const from = monotonic();
@@ -72972,12 +73197,10 @@ function timed(renderer, monotonic) {
       try {
         return { ...output, turnMs: Math.round(monotonic() - from) };
       } catch (thrown2) {
-        const missed = {
-          level: "warn",
-          line: `renderer turn timing failed: ${failureOf(thrown2).detail}`
-        };
-        const diagnostics = output.diagnostics === void 0 ? [missed] : [...output.diagnostics, missed];
-        return { ...output, turnMs: null, diagnostics };
+        warn(
+          `renderer turn timing failed: ${rendererFailureOf(thrown2).detail}`
+        );
+        return { ...output, turnMs: null };
       }
     }
   };
@@ -76583,7 +76806,7 @@ function mainRenderer(parts, drains) {
       holdClickError(
         parts.sessionState,
         click2.session,
-        failureOf(thrown2).message,
+        rendererFailureOf(thrown2).message,
         time.at
       );
       throw thrown2;
@@ -76713,7 +76936,7 @@ function mainRenderer(parts, drains) {
           try {
             parts.renderCache.configure(event.origin, event.config);
           } catch (thrown2) {
-            const failure2 = failureOf(thrown2);
+            const failure2 = rendererFailureOf(thrown2);
             parts.renderCache.rejectConfig(event.origin, failure2);
             failClicks(ready, failure2);
             throw new CrossedFailure(failure2);
@@ -76913,14 +77136,14 @@ function mainRenderer(parts, drains) {
     try {
       outcome = { kind: "answered", value: run2() };
     } catch (thrown2) {
-      outcome = { kind: "threw", failure: failureOf(thrown2) };
+      outcome = { kind: "threw", failure: rendererFailureOf(thrown2) };
     }
     const stored = [];
     const collect = (stage, read2) => {
       try {
         read2();
       } catch (thrown2) {
-        const failure2 = failureOf(thrown2);
+        const failure2 = rendererFailureOf(thrown2);
         if (outcome.kind === "answered") outcome = { kind: "threw", failure: failure2 };
         else {
           const after = { stage, failure: failure2 };
@@ -76985,7 +77208,7 @@ function closeIdleMenus2(parts, effects, busy) {
         effects
       );
     } catch (thrown2) {
-      const failure2 = failureOf(thrown2);
+      const failure2 = rendererFailureOf(thrown2);
       parts.turnLog.add(
         failure2.kind === "closing" ? "info" : "error",
         `menu-idle: close failed (session=${session}): ${failure2.detail}`
@@ -76999,7 +77222,7 @@ function mainRendererOf(inputs) {
     try {
       return { kind: "built", renderer: build2(inputs, turnLog) };
     } catch (thrown2) {
-      return { kind: "refused", failure: failureOf(thrown2) };
+      return { kind: "refused", failure: rendererFailureOf(thrown2) };
     }
   });
 }
@@ -77028,6 +77251,7 @@ function build2(inputs, turnLog) {
     {
       clock: time.clock,
       locations: inputs.locations,
+      region: inputs.region,
       sessionState: edits.view,
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
@@ -77164,24 +77388,78 @@ function debugOf(cache2, what) {
   );
 }
 
+// src/utils/teardown.ts
+init_globals();
+async function runTeardown(steps2, log) {
+  const failed3 = [];
+  for (const [name, run2] of steps2) {
+    try {
+      const waiting = run2();
+      if (waiting !== void 0) await waiting;
+    } catch (e) {
+      log("warn", `${name} failed: ${inspect(e)}`);
+      failed3.push(name);
+    }
+  }
+  return failed3;
+}
+
 // src/in-process-renderer.ts
 function inProcessRenderer(decorate = (renderer) => renderer) {
-  return ({ name, boot }) => ({
-    start: ({ clock, log }) => localLink(
+  return ({ name, boot, recording }) => ({
+    start: ({ clock, log, start }) => localLink(
       name,
       () => {
-        const result = mainRendererOf(boot());
+        const input = boot();
+        const capture4 = recording?.();
+        const result = mainRendererOf(input);
+        if (capture4 !== void 0) {
+          if (result.kind === "refused") capture4.constructed(input, result);
+          else {
+            const { renderer: _core, ...constructed } = result;
+            capture4.constructed(input, constructed);
+          }
+        }
         if (result.diagnostics !== void 0)
           writeLogLines(log, result.diagnostics);
         if (result.kind === "refused")
           throw new CrossedFailure(result.failure);
-        return decorate(result.renderer);
+        const core = timed(
+          decorate(result.renderer),
+          () => clock.monotonic(),
+          (message) => log("warn", message)
+        );
+        if (capture4 === void 0) return core;
+        return {
+          answer: (event) => capture4.active ? capture4.turn(event, core.answer) : core.answer(event)
+        };
       },
-      clock
+      () => void start().catch(
+        (error) => log("error", `renderer ${name} restart: ${String(error)}`)
+      ),
+      async (previous2) => {
+        const steps2 = ["close-journal", "close-views"].map(
+          (kind) => [
+            `renderer ${name} ${kind}`,
+            async () => {
+              const output = await previous2.answer({
+                kind: "event",
+                ...readingsAt(clock),
+                event: { kind }
+              });
+              if (output.diagnostics !== void 0)
+                writeLogLines(log, output.diagnostics);
+              if (output.kind === "threw")
+                throw new CrossedFailure(output.failure);
+            }
+          ]
+        );
+        await runTeardown(steps2, log);
+      }
     )
   });
 }
-function localLink(name, build3, clock) {
+function localLink(name, build3, restore, retire) {
   let built = null;
   const live = () => {
     if (built === null)
@@ -77201,9 +77479,16 @@ function localLink(name, build3, clock) {
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's
     // clock, which the renderer's process is.
     serve: () => {
-      built ??= timed(build3(), () => clock.monotonic());
+      built ??= build3();
     },
     arm: () => {
+    },
+    restart: async () => {
+      const previous2 = built;
+      built = null;
+      if (previous2 !== null) await retire(previous2);
+      built = build3();
+      restore();
     },
     // Only a renderer already built by serve can take the close's steps.
     beginClose: () => built === null ? "closed" : "closing",
@@ -78773,6 +79058,18 @@ var SessionBook = class {
 // src/daemon/runs.ts
 init_globals();
 var import_node_path12 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/environment-output.ts
+init_globals();
+var FROM_ENVIRONMENT = /* @__PURE__ */ Symbol("output derived from a session environment");
+function environmentOutput(value, fromEnvironment) {
+  return fromEnvironment ? { ...value, [FROM_ENVIRONMENT]: true } : value;
+}
+function isEnvironmentOutput(value) {
+  return Object.hasOwn(value, FROM_ENVIRONMENT);
+}
+
+// src/daemon/runs.ts
 var RUN_TIMEOUT_MS = 1e4;
 function outcomeOf(result) {
   if (result.ok) return "ok";
@@ -78833,6 +79130,7 @@ var Runs = class {
     this.inFlight.add(abort);
     this.started++;
     const { program, args } = run2;
+    const inheritsEnvironment = Object.keys(environment.value).length + Object.keys(run2.env).length > 0;
     const startedAt = this.deps.clock.monotonic();
     return this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
@@ -78849,7 +79147,12 @@ var Runs = class {
       signal: abort.signal,
       category: "click.run"
     }).then(
-      (result) => this.ended(run2, result, elapsedMs(this.deps.clock, startedAt))
+      (result) => this.ended(
+        run2,
+        result,
+        elapsedMs(this.deps.clock, startedAt),
+        inheritsEnvironment
+      )
     ).finally(() => {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
@@ -78872,7 +79175,7 @@ var Runs = class {
   }
   // [LAW:single-enforcer] How the run ended, said on its act's line
   // (src/daemon/acts.ts), the one line an act's outcome has.
-  ended(run2, result, took) {
+  ended(run2, result, took, inheritsEnvironment) {
     const ended = outcomeOf(result);
     const said2 = `program=${valueOf(run2.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run2.refreshes.map((r) => r.name).join(",") || "-"}`;
     if (ended === "timeout") this.timedOut++;
@@ -78884,7 +79187,13 @@ var Runs = class {
       };
     if (ended !== "timeout") this.failed++;
     const reason = failureText(result);
-    return { outcome: { kind: "failed", reason }, said: `${said2} \u2014 ${reason}` };
+    return {
+      outcome: environmentOutput(
+        { kind: "failed", reason },
+        inheritsEnvironment && saidBy(result, result.stderr) !== ""
+      ),
+      said: `${said2} \u2014 ${reason}`
+    };
   }
 };
 
@@ -79045,6 +79354,7 @@ init_globals();
 // site/shims/fs-promises.ts
 init_globals();
 var p = fs.promises;
+var fs_promises_default = p;
 var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
 
 // src/daemon/source-files.ts
@@ -80682,11 +80992,14 @@ var SourceRuns = class {
     }
     const held = run2.value;
     const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
-    return {
-      digest: digest2,
-      current: () => lane.current(),
-      fault: () => this.faults.get(held.digest) ?? null
-    };
+    return environmentOutput(
+      {
+        digest: digest2,
+        current: () => lane.current(),
+        fault: () => this.faults.get(held.digest) ?? null
+      },
+      Object.keys(held.env).length > 0
+    );
   }
   stats() {
     return {
@@ -80881,10 +81194,16 @@ function readingsOf(inputs, lanes) {
       [...lanes.sources].map(([name, lane]) => [name, lane.current()])
     ),
     runs: new Map(
-      [...lanes.runs].map(([digest2, lane]) => [
-        digest2,
-        { reading: lane.current(), fault: lane.fault() }
-      ])
+      [...lanes.runs].map(([digest2, lane]) => {
+        const reading = lane.current();
+        return [
+          digest2,
+          environmentOutput(
+            { reading, fault: lane.fault() },
+            (reading.kind === "ok" || reading.kind === "failed") && isEnvironmentOutput(lane)
+          )
+        ];
+      })
     ),
     env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()]))
   };
@@ -81905,6 +82224,26 @@ function isDebugWhat(v) {
   return typeof v === "string" && DEBUG_WHATS.includes(v);
 }
 
+// src/daemon/foundations/recording-command.ts
+init_globals();
+var import_node_path17 = __toESM(require_path_browserify(), 1);
+function recordingCommandOf(value) {
+  if (!isPlainObject2(value) || typeof value.renderer !== "string")
+    throw new BadVerbArgs("recording needs a renderer name");
+  let name;
+  try {
+    name = rendererNameOf(value.renderer);
+  } catch (error) {
+    throw new BadVerbArgs(String(error));
+  }
+  if (value.action === "stop") return { action: "stop", renderer: name };
+  if (value.action === "start" && typeof value.file === "string" && (0, import_node_path17.isAbsolute)(value.file) && !value.file.includes("\0"))
+    return { action: "start", renderer: name, file: value.file };
+  throw new BadVerbArgs(
+    "recording needs stop, or start with an absolute output file"
+  );
+}
+
 // src/daemon/reply.ts
 function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
   const { sent, frame: frame2, unsent } = framedResponse(resp);
@@ -81950,6 +82289,7 @@ function refuseClosingInbound(parts, inbound, accepted) {
   } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
 var REPLY_KINDS = {
+  recording: true,
   render: true,
   [SESSION_RENDER_KIND]: true,
   "pane-session": true,
@@ -82033,6 +82373,20 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   } = parts;
   if (req.kind === "shutdown") {
     return replyOf({ ok: true, output: "" }, 0);
+  }
+  if (req.kind === "recording") {
+    try {
+      const command = recordingCommandOf(req.command);
+      return stay({ ok: true, output: await parts.recordRenderer(command) });
+    } catch (error) {
+      const failure2 = failureOf(error);
+      return stay({
+        ok: false,
+        code: failure2.kind === "bad-request" ? "BAD_REQUEST" : "RENDER_FAILED",
+        error: failure2.message,
+        daemonV: PROTOCOL_VERSION
+      });
+    }
   }
   if (req.kind === "pane-session") {
     const { socket, pane } = req;
@@ -82521,7 +82875,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -82601,8 +82955,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path17.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path17.default.join(gitDir, "HEAD"), import_node_path17.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path18.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path18.default.join(gitDir, "HEAD"), import_node_path18.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -83042,7 +83396,7 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/cache/pricing.ts
 init_globals();
@@ -83070,18 +83424,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path18.default.join(root, "usage");
+    return import_node_path19.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path18.default.join(root, "locks");
+    return import_node_path19.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -83114,7 +83468,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -83136,7 +83490,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path18.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path19.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -83165,7 +83519,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path18.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -83220,7 +83574,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path18.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path19.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -83619,7 +83973,7 @@ var PricingService = class {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -83693,19 +84047,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path19.join)(homeDir, ".config", "claude"), (0, import_node_path19.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path20.join)(homeDir, ".config", "claude"), (0, import_node_path20.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path19.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path20.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path19.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path20.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -83721,14 +84075,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path19.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path20.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path19.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path20.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -84342,7 +84696,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path20.join)(dir, "projects") + import_node_path20.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path21.join)(dir, "projects") + import_node_path21.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -84363,7 +84717,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path20.dirname)(transcriptPath),
+      (0, import_node_path21.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -84412,7 +84766,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path20.join)(dir, file);
+          const filePath2 = (0, import_node_path21.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -84506,20 +84860,24 @@ var SessionUsageStore = class {
 
 // src/daemon/cache/git-service.ts
 init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/utils/regular-text.ts
 init_globals();
+var READ_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;
+function regular(stats) {
+  if (!stats.isFile()) throw new Error("not a file");
+  return stats;
+}
 function withRegularTextFile(path31, use) {
-  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  const fd = openSync(path31, READ_FLAGS);
   try {
     const stat3 = () => fstatSync(fd, { bigint: true });
-    const observed2 = stat3();
-    if (!observed2.isFile()) throw new Error("not a file");
+    const observed2 = regular(stat3());
     return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
   } finally {
     try {
@@ -84545,18 +84903,18 @@ function readTextIfPresent(path31, read2 = readRegularTextSync) {
 
 // src/utils/git-root.ts
 function checkoutAt(start, files) {
-  let dir = import_node_path21.default.resolve(start);
+  let dir = import_node_path22.default.resolve(start);
   for (; ; ) {
     const found2 = gitEntryAt(dir, files);
     if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
     if (found2.kind === "failed") return found2;
-    const parent = import_node_path21.default.dirname(dir);
+    const parent = import_node_path22.default.dirname(dir);
     if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
 function gitEntryAt(dir, files = checkoutFiles) {
-  return files.stat(import_node_path21.default.join(dir, ".git"));
+  return files.stat(import_node_path22.default.join(dir, ".git"));
 }
 function gitRootOf(start, files = checkoutFiles) {
   const found2 = checkoutAt(start, files);
@@ -84568,7 +84926,7 @@ function checkoutOf(cwd2, files = checkoutFiles) {
     case "ok":
       return ok({ root: root.value, git: true });
     case "absent":
-      return ok({ root: import_node_path21.default.resolve(cwd2), git: false });
+      return ok({ root: import_node_path22.default.resolve(cwd2), git: false });
     case "failed":
       return root;
   }
@@ -84592,29 +84950,29 @@ var checkoutFiles = {
   text: (file) => probe(file, () => readRegularTextSync(file))
 };
 function gitDirNamed(root, files = checkoutFiles) {
-  const text4 = files.text(import_node_path21.default.join(root, ".git"));
+  const text4 = files.text(import_node_path22.default.join(root, ".git"));
   if (text4.kind !== "ok") return text4;
   const named2 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path21.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path21.default.resolve(root, named2));
+  return named2 === void 0 ? failed(`${import_node_path22.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path22.default.resolve(root, named2));
 }
 function sharedExcludeOf(root) {
-  const dotGit = import_node_path21.default.join(root, ".git");
+  const dotGit = import_node_path22.default.join(root, ".git");
   const entry = gitEntryAt(root);
   if (entry.kind !== "ok") return entry;
   if (entry.value.isDirectory())
-    return ok(import_node_path21.default.join(dotGit, "info", "exclude"));
+    return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
   if (common.kind === "failed") return common;
   const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path21.default.join(shared, "info", "exclude"));
+  return ok(import_node_path22.default.join(shared, "info", "exclude"));
 }
 function commonDirOf(gitDir, files = checkoutFiles) {
-  const text4 = files.text(import_node_path21.default.join(gitDir, "commondir"));
+  const text4 = files.text(import_node_path22.default.join(gitDir, "commondir"));
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path21.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path21.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path22.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path22.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -84636,11 +84994,11 @@ function worktreeLink(dir, files = checkoutFiles) {
   const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path21.default.join(link.main, import_node_path21.default.relative(found2.value.root, dir))
+    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
-  const dotGit = import_node_path21.default.join(root, ".git");
+  const dotGit = import_node_path22.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
   if (direct.kind !== "ok") return unverified(dotGit, direct);
@@ -84652,22 +85010,22 @@ function worktreeLinkAt({ root, entry }, files) {
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed")
-    return unverified(import_node_path21.default.join(gitDir.value, "commondir"), common);
+    return unverified(import_node_path22.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
   if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
-  if (import_node_path21.default.dirname(gitDir.value) !== import_node_path21.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path22.default.dirname(gitDir.value) !== import_node_path22.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path21.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path22.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
   if (back2.kind !== "ok") return unverified(backFile, back2);
-  const pointer = import_node_path21.default.resolve(gitDir.value, back2.value.trim());
-  if (import_node_path21.default.basename(pointer) !== ".git") {
+  const pointer = import_node_path22.default.resolve(gitDir.value, back2.value.trim());
+  if (import_node_path22.default.basename(pointer) !== ".git") {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const parent = import_node_path21.default.dirname(pointer);
+  const parent = import_node_path22.default.dirname(pointer);
   const pointerDir = files.realpath(parent);
   if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
   if (pointerDir.value !== root) {
@@ -84675,23 +85033,23 @@ function worktreeLinkAt({ root, entry }, files) {
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path21.default.basename(realCommon.value) === ".git" ? import_node_path21.default.dirname(realCommon.value) : realCommon.value;
+  const main = import_node_path22.default.basename(realCommon.value) === ".git" ? import_node_path22.default.dirname(realCommon.value) : realCommon.value;
   return { kind: "linked", main };
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
   if (real.kind === "failed") return real;
-  const at = real.kind === "ok" ? real.value : import_node_path21.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path22.default.resolve(dir);
   const found2 = checkoutAt(at, files);
   if (found2.kind !== "ok") return found2;
   const { root } = found2.value;
-  const sub2 = import_node_path21.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path21.default.sep).join("/")}`;
+  const sub2 = import_node_path22.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path22.default.sep).join("/")}`;
   const link = worktreeLinkAt(found2.value, files);
   if (link.kind === "unreadable") return failed(link.reason, "read");
   return link.kind === "linked" ? ok({
     main: link.main,
-    worktree: import_node_path21.default.basename(root),
+    worktree: import_node_path22.default.basename(root),
     subpath,
     noRepo: false
   }) : ok({ main: root, worktree: "", subpath, noRepo: false });
@@ -84866,17 +85224,17 @@ var GitService = class {
   // A `.git` that names nothing readable (a directory, an unreadable or
   // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path22.default.join(workingDir, ".git"));
+    return orElse(gitDirNamed(workingDir), import_node_path23.default.join(workingDir, ".git"));
   }
   getOngoingOperation(workingDir) {
     try {
       const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path22.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path22.default.join(gitDir, "CHERRY_PICK_HEAD")))
+      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "CHERRY_PICK_HEAD")))
         return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path22.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path22.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path22.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path22.default.join(gitDir, "rebase-apply")))
+      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path23.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path23.default.join(gitDir, "rebase-apply")))
         return ok("REBASE");
       return ABSENT2;
     } catch (e) {
@@ -85003,7 +85361,7 @@ var GitService = class {
   // unrepresentable. Sync, because reading one small file is not worth a
   // microtask: its former `Promise.all` partner is the only spawn left.
   getStashCount(workingDir) {
-    const reflog = import_node_path22.default.join(
+    const reflog = import_node_path23.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
@@ -85070,7 +85428,7 @@ var GitService = class {
   // yields no stamp and therefore no memo, so an unreadable config re-reads rather
   // than freezing an answer.
   async getRemotesAsync(workingDir) {
-    const configPath = import_node_path22.default.join(
+    const configPath = import_node_path23.default.join(
       this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config"
     );
@@ -85119,7 +85477,7 @@ var GitService = class {
   // remotes read stays failed at the call site instead of borrowing this rule.
   repoNameFrom(remotes, workingDir) {
     const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path22.default.basename(workingDir);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path23.default.basename(workingDir);
   }
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote; a
@@ -85933,7 +86291,7 @@ var RefreshFaults = class {
 
 // src/daemon/cache/managed-storage.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 
 // src/var-system/parse.ts
 init_globals();
@@ -85956,12 +86314,12 @@ var jsonParser = (text4) => {
 var jsonDocumentParser = (text4) => text4.trim() === "" ? ABSENT2 : jsonParser(text4);
 
 // src/daemon/cache/managed-storage.ts
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
-var STORAGE_SWEEP_EVERY_MS = DAY_MS;
+var DAY_MS2 = 24 * 60 * 60 * 1e3;
+var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS2;
+var STORAGE_SWEEP_EVERY_MS = DAY_MS2;
 var MAX_ENTRIES3 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path23.default.join(f.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path24.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
   try {
@@ -86285,7 +86643,7 @@ var ManagedStorage = class {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f) => f.folder === folder;
-    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path23.default.join(folder, import_node_path23.default.basename(folder)))) {
+    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path24.default.join(folder, import_node_path24.default.basename(folder)))) {
       const paths2 = new Set(invalidation.paths);
       this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
       return;
@@ -86378,7 +86736,7 @@ var ManagedStorage = class {
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path23.default.join(key.folder, entry.name);
+        const file = import_node_path24.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
@@ -86551,22 +86909,6 @@ function createPayloadProviders(opts) {
       ["managedStorage close", () => owners.managedStorage.close()]
     ]
   };
-}
-
-// src/utils/teardown.ts
-init_globals();
-async function runTeardown(steps2, log) {
-  const failed3 = [];
-  for (const [name, run2] of steps2) {
-    try {
-      const waiting = run2();
-      if (waiting !== void 0) await waiting;
-    } catch (e) {
-      log("warn", `${name} failed: ${inspect(e)}`);
-      failed3.push(name);
-    }
-  }
-  return failed3;
 }
 
 // src/daemon/stats.ts
@@ -86921,7 +87263,7 @@ var RuntimeStats = class _RuntimeStats {
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -87071,7 +87413,7 @@ function readCharge(probed, previous2) {
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path24.default.join(dir, `${prefix}${identity2}${suffix}`);
+  return import_node_path25.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -87239,12 +87581,12 @@ function breachArtifacts(dir) {
     if (e.code === "ENOENT") return [];
     throw e;
   }
-  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path24.default.join(dir, f));
+  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path25.default.join(dir, f));
 }
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path24.default.basename(file);
+    const base = import_node_path25.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -87410,12 +87752,14 @@ function assembleFacts(prior, session, readings, daemon2, at) {
     ])
   );
   const runs = Object.fromEntries(
-    [...lanes.runs].map(([digest2, { reading, fault }]) => {
+    [...lanes.runs].map(([digest2, observation]) => {
+      const { reading, fault } = observation;
       const held2 = prior?.runs[digest2];
       const fact = stamp2(held2?.reading, reading);
+      const privateOutput = isEnvironmentOutput(observation);
       return [
         digest2,
-        held2 !== void 0 && held2.reading === fact && held2.fault === fault ? held2 : { reading: fact, fault }
+        held2 !== void 0 && held2.reading === fact && held2.fault === fault && isEnvironmentOutput(held2) === privateOutput ? held2 : environmentOutput({ reading: fact, fault }, privateOutput)
       ];
     })
   );
@@ -87457,7 +87801,7 @@ function failedStamp(prior, reason, daemon2) {
 
 // src/daemon/foundations/judge-run.ts
 init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run2) {
   const parser = parserOf(run2.identity.parse);
@@ -87482,7 +87826,7 @@ function refusalOf2({ identity: { read: read2, refresh } }) {
   return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
 function absolute(where, path31) {
-  return (0, import_node_path25.isAbsolute)(path31) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path31)}`;
+  return (0, import_node_path26.isAbsolute)(path31) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path31)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -89189,7 +89533,7 @@ function writeRevisions(rewrites, retire, write = writeConfigFile) {
 
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
+var import_node_path28 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -89203,7 +89547,7 @@ function presence(path31) {
 
 // src/daemon/state-file.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+var import_node_path27 = __toESM(require_path_browserify(), 1);
 var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
 `;
 function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
@@ -89263,9 +89607,9 @@ function previousName(file, previous2, source) {
   if (!old?.isFile() && !old?.isSymbolicLink()) return null;
   const entry = (at) => {
     try {
-      return import_node_path26.default.join(
-        fs_default.realpathSync.native(import_node_path26.default.dirname(at)),
-        import_node_path26.default.basename(at)
+      return import_node_path27.default.join(
+        fs_default.realpathSync.native(import_node_path27.default.dirname(at)),
+        import_node_path27.default.basename(at)
       );
     } catch (cause) {
       if (cause.code === "ENOENT") return null;
@@ -89293,17 +89637,17 @@ function documentAt(file, text4, parse3) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path27.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path28.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path27.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path28.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 function storedDirectory(written2) {
-  const dir = import_node_path27.default.sep === "\\" ? written2.replaceAll("/", import_node_path27.default.sep) : written2;
-  if (!import_node_path27.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path27.default.sep).includes("..")) {
+  const dir = import_node_path28.default.sep === "\\" ? written2.replaceAll("/", import_node_path28.default.sep) : written2;
+  if (!import_node_path28.default.isAbsolute(dir) || dir.includes("\0") || dir.split(import_node_path28.default.sep).includes("..")) {
     return null;
   }
-  return import_node_path27.default.format(import_node_path27.default.parse(import_node_path27.default.normalize(dir)));
+  return import_node_path28.default.format(import_node_path28.default.parse(import_node_path28.default.normalize(dir)));
 }
 function parseRepoConfigBook(doc) {
   if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
@@ -89338,7 +89682,7 @@ function parseRepoConfigBook(doc) {
   return ok(Object.fromEntries(book));
 }
 var repoConfigs = (dir, readText) => stateFile(
-  [repoConfigsPath(dir), import_node_path27.default.join(dir, REPO_CONFIGS_FILE)],
+  [repoConfigsPath(dir), import_node_path28.default.join(dir, REPO_CONFIGS_FILE)],
   {},
   parseRepoConfigBook,
   readText
@@ -89380,11 +89724,11 @@ function answeredBook(stateDir2, answers, readText) {
 }
 
 // src/daemon/effect-interpreter.ts
-var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_node_path30 = __toESM(require_path_browserify(), 1);
 
 // src/utils/directory-entry.ts
 init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
+var import_node_path29 = __toESM(require_path_browserify(), 1);
 
 // src/utils/once-per-path.ts
 init_globals();
@@ -89404,10 +89748,10 @@ function directoryEntries(realpath2 = canonicalDirectory) {
   const directory = oncePerPath((at) => {
     const actual = realpath2(at);
     if (typeof actual === "string") return actual;
-    const parent = import_node_path28.default.dirname(at);
-    return at === parent ? at : import_node_path28.default.join(directory(parent), import_node_path28.default.basename(at));
+    const parent = import_node_path29.default.dirname(at);
+    return at === parent ? at : import_node_path29.default.join(directory(parent), import_node_path29.default.basename(at));
   });
-  return (file) => import_node_path28.default.join(directory(import_node_path28.default.dirname(file)), import_node_path28.default.basename(file));
+  return (file) => import_node_path29.default.join(directory(import_node_path29.default.dirname(file)), import_node_path29.default.basename(file));
 }
 
 // src/daemon/effect-interpreter.ts
@@ -89533,7 +89877,7 @@ function performChanges(changes, book, files, write) {
   return landed;
 }
 function excludeRewrite(file, rewrites, readText, entryOf4) {
-  const checkout = gitRootOf(import_node_path29.default.dirname(file));
+  const checkout = gitRootOf(import_node_path30.default.dirname(file));
   if (checkout.kind !== "ok") return checkout;
   const root = checkout.value;
   const at = sharedExcludeOf(root);
@@ -89542,7 +89886,7 @@ function excludeRewrite(file, rewrites, readText, entryOf4) {
   const prior = rewrites.get(entryOf4(exclude));
   const was = prior === void 0 ? readText(exclude) : prior.was;
   const text4 = prior === void 0 ? was ?? "" : prior.will ?? "";
-  const entry = `/${import_node_path29.default.relative(root, file).split(import_node_path29.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
+  const entry = `/${import_node_path30.default.relative(root, file).split(import_node_path30.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text4.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
   const lead = text4 === "" || text4.endsWith("\n") ? "" : "\n";
   return ok({
@@ -90146,13 +90490,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const settle3 = async (effect, outcome) => {
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
-    if (failed3 !== null && effect.session === null) world.unheard(failed3);
+    const unheard = (reason) => {
+      if (isEnvironmentOutput(outcome)) world.unheard(reason, true);
+      else world.unheard(reason);
+    };
+    if (failed3 !== null && effect.session === null) unheard(failed3);
     const delivered = await deliver2(
       () => doneOf(effect, outcome),
       [["effect", String(effect.id)]]
     );
     if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
-      world.unheard(failed3);
+      unheard(failed3);
     return outcome;
   };
   const settleInSlot = async (effect, outcome) => {
@@ -90316,6 +90664,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   return {
     name,
+    recordingBoundary: (operation) => inMailbox(async (_queued, holds2) => {
+      holds2("recording");
+      return operation();
+    }),
     answer: answer2,
     answerClick,
     deliver: deliver2,
@@ -90410,32 +90762,458 @@ function moved(store, key, value) {
   if (value !== null) store.set(key, value);
 }
 
+// src/daemon/renderer-recording.ts
+init_globals();
+
+// src/renderer-interface/recording.ts
+init_globals();
+var RECORDING_VERSION = 1;
+
+// src/renderer-interface/wire.ts
+init_globals();
+
+// src/renderer-interface/stored-state.ts
+init_globals();
+function parseSessionPicks(value) {
+  if (!isPlainObject2(value))
+    return { kind: "failed", reason: "is not an object" };
+  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
+  return bad === void 0 ? { kind: "ok", value } : {
+    kind: "failed",
+    reason: `has a ${JSON.stringify(bad)} that is not a string`
+  };
+}
+
+// src/renderer-interface/wire.ts
+var RENDERER_WIRE_VERSION = 13;
+
+// src/daemon/recording-privacy.ts
+init_globals();
+var SESSION_ENVIRONMENT = "a declared environment source supplied a value; record with that variable unset";
+var ENVIRONMENT_OUTPUT = "a command returned data after receiving a session environment; record without that command output";
+var ACTION_ENVIRONMENT = "a run action supplies environment values; record without its environment overlay";
+var UNKNOWN_CONFIG = "config or plugin text could not be inspected for action environments; fix its syntax before recording";
+var UNKNOWN_PROFILE = "saved renderer state contains values of unknown origin; record from a fresh renderer profile";
+function worldProblem({ env: env2, runs, daemon: daemon2 }) {
+  if (Object.values(env2).some((fact) => fact.kind === "ok"))
+    return SESSION_ENVIRONMENT;
+  return Object.values(runs).some(isEnvironmentOutput) || daemon2.actFailed !== null && isEnvironmentOutput(daemon2.actFailed) ? ENVIRONMENT_OUTPUT : null;
+}
+function hookCarriesEnvironment(hook) {
+  const remaining = [hook];
+  while (remaining.length > 0) {
+    const value = remaining.pop();
+    if (Array.isArray(value)) {
+      for (const item of value) remaining.push(item);
+    } else if (isPlainObject2(value)) {
+      for (const [key, field] of Object.entries(value)) {
+        if (key === "env" || key === "environment") return true;
+        remaining.push(field);
+      }
+    }
+  }
+  return false;
+}
+function contextProblem(request2) {
+  const { location: _location, ...hook } = request2.hookData;
+  if (validateHookData(hook).report.unknownTopLevelFields.length > 0 || hookCarriesEnvironment(hook))
+    return "the client hook contains unrecognized data; record with a supported hook payload";
+  return refusedHints(request2, request2.hints).length > 0 ? "the client supplied unparsed hints; record with a supported statusline client" : null;
+}
+function configTextProblem(text4) {
+  try {
+    const actions = entryOf2(parseDocument(text4), "actions")?.value;
+    if (actions?.kind !== "object") return null;
+    for (const { value } of actions.entries) {
+      if (entryOf2(value, "run") === void 0) continue;
+      const env2 = entryOf2(value, "env")?.value;
+      if (env2 !== void 0 && env2.kind !== "null" && (env2.kind !== "object" || env2.entries.length > 0))
+        return ACTION_ENVIRONMENT;
+    }
+    return null;
+  } catch {
+    return UNKNOWN_CONFIG;
+  }
+}
+function configProblem({ chain: chain2, plugins: plugins2 }) {
+  for (const { content, listed } of chain2) {
+    if (content.kind === "text") {
+      const problem = configTextProblem(content.text);
+      if (problem !== null) return problem;
+    }
+    for (const { definition } of Object.values(listed)) {
+      if (definition.kind !== "text") continue;
+      const problem = configTextProblem(definition.text);
+      if (problem !== null) return problem;
+    }
+  }
+  for (const { definition } of plugins2) {
+    if (definition.kind !== "text") continue;
+    const problem = configTextProblem(definition.text);
+    if (problem !== null) return problem;
+  }
+  return null;
+}
+function recordingInputProblem({ event }) {
+  switch (event.kind) {
+    case "start":
+      for (const { context, worldState } of event.sessions) {
+        const problem = worldProblem(worldState) ?? contextProblem(context);
+        if (problem !== null) return problem;
+      }
+      for (const { config, retained } of event.configs) {
+        const problem = configProblem(config) ?? (typeof retained === "object" ? configProblem(retained) : null);
+        if (problem !== null) return problem;
+      }
+      return null;
+    case "context":
+      return worldProblem(event.worldState) ?? contextProblem(event.context);
+    case "world-state":
+      return worldProblem(event.worldState);
+    case "effect-done":
+      return isEnvironmentOutput(event.outcome) ? ENVIRONMENT_OUTPUT : null;
+    case "config":
+      return configProblem(event.config);
+    case "request":
+      return contextProblem(event.context);
+    case "click": {
+      const live = event.context?.live;
+      return live == null ? null : contextProblem(live);
+    }
+    case "stats":
+    case "debug":
+    case "close-journal":
+    case "close-views":
+    case "due":
+    case "viewers":
+    case "retire":
+      return null;
+  }
+}
+function frameHasActionEnvironment({ rows }) {
+  return rows.some(
+    ({ runs }) => runs.some(
+      ({ link }) => typeof link === "object" && link.kind === "action" && link.effects.some(
+        (effect) => "kind" in effect && Object.keys(effect.evaluated.env).length > 0
+      )
+    )
+  );
+}
+function recordingOutputProblem(output) {
+  return output.effects.some(
+    (effect) => effect.kind === "present" && frameHasActionEnvironment(effect.frame)
+  ) || output.frames.some(
+    ({ frame: frame2 }) => frame2.kind === "drawn" && (frameHasActionEnvironment(frame2.bar) || frame2.handoff !== null && frameHasActionEnvironment(frame2.handoff))
+  ) ? ACTION_ENVIRONMENT : null;
+}
+function knownPick(key, value) {
+  if (isReservedName(key)) {
+    return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
+  }
+  const setting = SESSION_KEY_TO_SETTING.get(key);
+  if (setting === void 0) return false;
+  const field = GLOBAL_FIELDS[SETTINGS[setting].configKey];
+  if (field.kind === "session") return field.parse(value) !== null;
+  const { domain } = field;
+  if (typeof domain !== "object") return false;
+  if ("themes" in domain) return listResolvablePaletteNames().includes(value);
+  return "from" in domain && Array.isArray(domain.from) && domain.from.includes(value);
+}
+function recordingBootProblem({ stored }) {
+  for (const picks of Object.values(stored.sessions)) {
+    if (!Object.entries(picks).every(([key, value]) => knownPick(key, value)))
+      return UNKNOWN_PROFILE;
+  }
+  for (const { past, future } of Object.values(stored.history)) {
+    for (const steps2 of [past, future]) {
+      for (const step4 of steps2) {
+        for (const change of step4) {
+          for (const value of [change.before, change.after]) {
+            if (value === null) continue;
+            if (change.kind === "session") {
+              if (!knownPick(change.key, value)) return UNKNOWN_PROFILE;
+            } else {
+              const problem = configTextProblem(value);
+              if (problem !== null)
+                return `${problem} or use a fresh renderer profile`;
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// src/daemon/renderer-recording.ts
+var MAX_QUEUED_BYTES = 8 * 1024 * 1024;
+var RendererRecording = class {
+  constructor(renderer, file, destination, log) {
+    this.renderer = renderer;
+    this.file = file;
+    this.destination = destination;
+    this.log = log;
+  }
+  renderer;
+  file;
+  destination;
+  log;
+  state = { kind: "armed" };
+  pending = Promise.resolve();
+  waitingBytes = 0;
+  turns = 0;
+  claim() {
+    if (this.state.kind !== "armed") return void 0;
+    this.state = { kind: "booting" };
+    return this;
+  }
+  get active() {
+    return this.state.kind === "built";
+  }
+  // The host can continue to own the live object while the worker answers.
+  // Retain the plain data as it crossed the pipe, including JSON's nulls.
+  snapshot(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+  constructed(input, result) {
+    if (this.state.kind !== "booting") return;
+    this.admit(
+      () => recordingBootProblem(input),
+      () => {
+        this.state = { kind: result.kind };
+        return this.append({
+          kind: "boot",
+          version: RECORDING_VERSION,
+          wireVersion: RENDERER_WIRE_VERSION,
+          input,
+          result
+        });
+      }
+    );
+  }
+  async turn(input, answer2) {
+    const captured2 = this.admit(
+      () => recordingInputProblem(input),
+      () => this.snapshot(input)
+    );
+    let timed2;
+    try {
+      timed2 = await answer2(input);
+    } catch (error) {
+      this.fail("renderer transport returned no semantic answer to an input");
+      throw error;
+    }
+    if (captured2 === void 0 || !this.active) return timed2;
+    const { turnMs: _transportTiming, ...output } = timed2;
+    this.admit(
+      () => recordingOutputProblem(output),
+      () => {
+        this.turns++;
+        return this.append({ kind: "turn", input: captured2, output });
+      }
+    );
+    return timed2;
+  }
+  // A rejected export must leave the actual renderer and its turn intact.
+  admit(problemOf, take) {
+    try {
+      const reason = problemOf();
+      if (reason === null) return take();
+      this.fail(reason);
+    } catch {
+      this.fail("renderer data could not be admitted for recording");
+    }
+    return void 0;
+  }
+  append(entry) {
+    let line;
+    try {
+      line = JSON.stringify(entry) + "\n";
+    } catch {
+      this.fail("renderer data could not be encoded");
+      return;
+    }
+    const bytes = import_buffer.Buffer.byteLength(line);
+    if (this.waitingBytes > 0 && this.waitingBytes + bytes > MAX_QUEUED_BYTES) {
+      this.fail("recording storage could not keep up with the renderer");
+      return;
+    }
+    this.waitingBytes += bytes;
+    this.pending = this.pending.then(async () => {
+      try {
+        if (this.state.kind !== "failed") await this.destination.append(line);
+      } catch (error) {
+        this.fail(`writing recording: ${String(error)}`);
+      } finally {
+        this.waitingBytes -= bytes;
+      }
+    });
+  }
+  fail(reason) {
+    if (this.state.kind === "failed" || this.state.kind === "finished") return;
+    this.state = { kind: "failed", reason };
+    this.pending = this.pending.then(() => this.destination.discard()).catch((error) => {
+      this.report("cleanup-failed", String(error));
+    });
+    this.report("failed", reason);
+  }
+  interrupted() {
+    if (this.state.kind === "booting" || this.active)
+      this.fail("the renderer ended before the recording was stopped");
+  }
+  report(outcome, reason) {
+    this.log(
+      reason === void 0 ? "info" : "warn",
+      eventLine("recording", [
+        ["renderer", this.renderer],
+        ["turns", String(this.turns)],
+        ["outcome", outcome],
+        ...reason === void 0 ? [] : [["reason", reason]]
+      ])
+    );
+  }
+  // [LAW:no-ambient-temporal-coupling] Seal inside the selected renderer's
+  // mailbox. Draining and publishing happen after that mailbox is free.
+  seal() {
+    if (this.state.kind === "armed" || this.state.kind === "booting")
+      this.fail(
+        "the selected renderer did not finish booting during this recording"
+      );
+    if (this.state.kind === "built" || this.state.kind === "refused") {
+      this.state = { kind: "sealed" };
+      this.append({ kind: "end", turns: this.turns });
+    }
+  }
+  async finish() {
+    this.seal();
+    await this.checkedWrites();
+    let cleanup;
+    try {
+      cleanup = await this.destination.publish();
+    } catch (error) {
+      this.fail(`publishing recording: ${String(error)}`);
+      await this.pending;
+      throw error;
+    }
+    this.state = { kind: "finished" };
+    this.report("saved", cleanup ?? void 0);
+    return `Saved ${this.turns} renderer turns to ${this.file}
+${cleanup === null ? "" : cleanup + "\n"}`;
+  }
+  async checkedWrites() {
+    await this.pending;
+    if (this.state.kind === "failed") {
+      await this.pending;
+      throw new Error(this.state.reason);
+    }
+  }
+};
+var RendererRecordings = class {
+  constructor(open2, log) {
+    this.open = open2;
+    this.log = log;
+  }
+  open;
+  log;
+  selected = /* @__PURE__ */ new Map();
+  control = new KeyedSerialQueue();
+  requests = /* @__PURE__ */ new Set();
+  closing = false;
+  generation(name) {
+    return this.selected.get(name)?.claim();
+  }
+  request(command, atBoundary2) {
+    const name = command.renderer;
+    if (this.closing) return Promise.reject(new Error("daemon is closing"));
+    const result = this.control.run(name, async () => {
+      if (this.closing) throw new Error("daemon is closing");
+      const current = this.selected.get(name);
+      if (command.action === "stop") {
+        if (current === void 0)
+          throw new Error(`no recording for renderer ${name}`);
+        await atBoundary2(name, async () => {
+          this.selected.delete(name);
+          current.seal();
+        });
+        return current.finish();
+      }
+      if (current !== void 0) {
+        if (current.file === command.file)
+          return `Recording already requested for renderer ${name}
+`;
+        throw new Error(
+          `renderer ${name} already has a recording; stop it first`
+        );
+      }
+      const capture4 = new RendererRecording(
+        name,
+        command.file,
+        await this.open(command.file),
+        this.log
+      );
+      try {
+        return await atBoundary2(name, async (restart) => {
+          if (this.closing) throw new Error("daemon is closing");
+          this.selected.set(name, capture4);
+          await restart?.();
+          this.log(
+            "info",
+            eventLine("recording", [
+              ["renderer", name],
+              ["outcome", restart === void 0 ? "armed" : "started"]
+            ])
+          );
+          return restart === void 0 ? `Recording armed for the next start of renderer ${name}
+` : `Recording a fresh generation of renderer ${name}
+`;
+        });
+      } catch (error) {
+        this.selected.delete(name);
+        capture4.fail("could not start a fresh renderer generation");
+        throw error;
+      }
+    });
+    this.requests.add(result);
+    return result.finally(() => this.requests.delete(result));
+  }
+  async close() {
+    this.closing = true;
+    await Promise.allSettled(this.requests);
+    const finishing = Array.from(
+      this.selected.values(),
+      (capture4) => capture4.finish()
+    );
+    this.selected.clear();
+    await Promise.allSettled(finishing);
+  }
+};
+
 // src/daemon/config-discovery/config-discovery.ts
 init_globals();
 
 // src/daemon/config-discovery/discover.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/config-search.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 function installedPluginDirs(locs) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path30.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path31.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
-  return import_node_path30.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path31.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins");
-var repoPluginDir = (project) => import_node_path30.default.join(project, REPO_PLUGIN_DIR);
+var REPO_PLUGIN_DIR = import_node_path31.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path31.default.join(project, REPO_PLUGIN_DIR);
 function listedRepoRoot(approved, entries) {
   if (entries === null) return null;
   if ("error" in entries)
@@ -90459,7 +91237,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path30.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path31.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -90467,7 +91245,7 @@ function isDirectoryLink(root, e) {
 
 // src/daemon/config-discovery/discovery-files.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 function textFrom(read2) {
   return (file) => {
     try {
@@ -90496,7 +91274,7 @@ var diskFiles = {
   checkout: checkoutOf
 };
 function readNamedText(files, directory, name) {
-  const entry = import_node_path31.default.join(directory, import_node_path31.default.basename(name));
+  const entry = import_node_path32.default.join(directory, import_node_path32.default.basename(name));
   const resolved = files.realpath(entry);
   const physical = typeof resolved === "string" ? resolved : entry;
   const read2 = files.text(physical);
@@ -90530,7 +91308,7 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
         unchecked.push(observed2);
         continue;
       }
-      const dir = files.realpath(import_node_path32.default.dirname(candidate.file));
+      const dir = files.realpath(import_node_path33.default.dirname(candidate.file));
       if (typeof dir !== "string") {
         unchecked.push({ path: candidate.file, error: dir.error });
         continue;
@@ -90662,7 +91440,7 @@ function readDefinition(file, scope, files = diskFiles) {
       path: file,
       definition: { kind: "unreadable", error: badPath }
     };
-  const dir = files.realpath(import_node_path33.default.dirname(file));
+  const dir = files.realpath(import_node_path34.default.dirname(file));
   if (typeof dir !== "string")
     return {
       scope,
@@ -90673,7 +91451,7 @@ function readDefinition(file, scope, files = diskFiles) {
   return {
     scope,
     path: file,
-    definition: read2.kind === "text" ? { ...read2, dir, storage: import_node_path33.default.join(dir, STORAGE_FOLDER) } : read2
+    definition: read2.kind === "text" ? { ...read2, dir, storage: import_node_path34.default.join(dir, STORAGE_FOLDER) } : read2
   };
 }
 function sessionPlugins(roots, checkout, files = discoveryFiles()) {
@@ -90690,10 +91468,10 @@ function sessionPlugins(roots, checkout, files = discoveryFiles()) {
     for (const name of listed.folders) {
       const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, { scope, path: import_node_path33.default.join(root, name, DEFINITION_FILE) });
+      byNs.set(key, { scope, path: import_node_path34.default.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
-      strays.push({ path: import_node_path33.default.join(root, name), scope });
+      strays.push({ path: import_node_path34.default.join(root, name), scope });
   }
   if (checkout.kind === "failed")
     notices.push(`Checkout could not be read: ${checkout.reason}`);
@@ -91288,6 +92066,7 @@ function createDaemon(inputs) {
     phase.kind === "closed" ? `after close: ${msg}` : msg
   );
   const stats = new RuntimeStats(clock);
+  const recordings = inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
@@ -91568,12 +92347,14 @@ function createDaemon(inputs) {
     const boot = () => ({
       stored: stores.current(),
       locations: locs,
+      region: inputs.region,
       memoryLimitBytes: memoryLimitBytes2
     });
     const prepared = inputs.renderer({
       name,
       entry,
       boot,
+      recording: () => recordings?.generation(name),
       node: bundle.node
     });
     return { name, reported, entry, stores, prepared };
@@ -91660,8 +92441,12 @@ function createDaemon(inputs) {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text4) => {
-          actFailed = joinedEvent(actFailed, text4, instant());
+        unheard: (text4, fromEnvironment) => {
+          const prior = actFailed;
+          actFailed = environmentOutput(
+            joinedEvent(prior, text4, instant()),
+            fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
+          );
           restateFaults();
         }
       }
@@ -91742,6 +92527,16 @@ function createDaemon(inputs) {
     return target.renderer;
   };
   const parts = {
+    recordRenderer: (command) => {
+      if (recordings === void 0)
+        throw new BadVerbArgs("recording is unavailable on this host");
+      return recordings.request(command, (name, operation) => {
+        const runtime = renderers.get(name);
+        return runtime === void 0 ? operation() : runtime.renderer.recordingBoundary(
+          () => operation(() => runtime.link.restart())
+        );
+      });
+    },
     accountHome: inputs.accountHome,
     closing: cancelRenders.signal,
     home: host.home,
@@ -91924,6 +92719,7 @@ function createDaemon(inputs) {
         ]
       ),
       ["sessionBook close", () => sessionBook.close()],
+      ["renderer recordings close", () => recordings?.close()],
       ...attached.map(
         ({ renderer, link }) => [
           `${renderer.name} renderer close`,
@@ -91940,7 +92736,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES3 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -92091,7 +92887,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path34.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path35.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve2, reject2) => fs_default.open(
         this.filePath,
@@ -92208,7 +93004,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path34.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path35.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -92227,23 +93023,42 @@ var DaemonLog = class {
 init_globals();
 init_os();
 
-// src/daemon/session-state-file.ts
+// src/daemon/recording-file.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
-
-// src/renderer-interface/stored-state.ts
-init_globals();
-function parseSessionPicks(value) {
-  if (!isPlainObject2(value))
-    return { kind: "failed", reason: "is not an object" };
-  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
-  return bad === void 0 ? { kind: "ok", value } : {
-    kind: "failed",
-    reason: `has a ${JSON.stringify(bad)} that is not a string`
+async function openRecordingFile(file) {
+  try {
+    await fs_promises_default.lstat(file);
+    throw new Error("recording destination already exists");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const staged = stagedName(file);
+  const handle = await fs_promises_default.open(staged, "wx", 384);
+  return {
+    append: (line) => handle.writeFile(line, "utf8"),
+    publish: async () => {
+      await handle.close();
+      await fs_promises_default.link(staged, file);
+      try {
+        await fs_promises_default.unlink(staged);
+        return null;
+      } catch (error) {
+        return `could not remove staged recording ${staged}: ${String(error)}`;
+      }
+    },
+    discard: async () => {
+      try {
+        await handle.close();
+      } finally {
+        await fs_promises_default.rm(staged, { force: true });
+      }
+    }
   };
 }
 
 // src/daemon/session-state-file.ts
+init_globals();
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 var ephemeralSessionFile = () => ({
   load: () => /* @__PURE__ */ new Map(),
   save: () => {
@@ -92394,7 +93209,7 @@ var SessionFile = class {
     try {
       body = this.body(snapshot);
       heldMs = elapsedMs(this.clock, started2);
-      await fs_default.promises.mkdir(import_node_path35.default.dirname(this.filePath), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path36.default.dirname(this.filePath), { recursive: true });
       await publishByRenameAsync(this.filePath, body, 384);
     } catch (e) {
       const error = asError(e);
@@ -92498,7 +93313,7 @@ init_globals();
 
 // src/daemon/history-file.ts
 init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path37 = __toESM(require_path_browserify(), 1);
 function withoutRetiredKeys(history) {
   const retired2 = /* @__PURE__ */ new Set();
   const keep = (change) => {
@@ -92542,7 +93357,7 @@ function fileHistoryStorage(file, logger) {
     },
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path36.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path37.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
@@ -92612,9 +93427,9 @@ function productionBarPaneEdge(launcher) {
 
 // src/daemon/link-key.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path38 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
-  return import_node_path37.default.join(dir, "link.key");
+  return import_node_path38.default.join(dir, "link.key");
 }
 function linkKeyFromFile(file, log = quietLogger) {
   let key;
@@ -92644,7 +93459,7 @@ function readOrCreate(file, log) {
   return key;
 }
 function create(file, log) {
-  fs_default.mkdirSync(import_node_path37.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path38.default.dirname(file), { recursive: true });
   const { leftover } = publishByLink(file, randomBytes(LINK_KEY_BYTES), 384);
   if (leftover !== null) log("warn", `link key: ${leftover}`);
 }
@@ -92653,6 +93468,7 @@ function create(file, log) {
 function productionAdapters(paths2, daemonLog, machine) {
   let accountHome;
   return {
+    openRecording: openRecordingFile,
     accountHome: () => accountHome ??= userInfo().homedir,
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
@@ -93004,6 +93820,7 @@ var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 var pageDaemon = createDaemon({
+  region: systemRegion(),
   ...adapters,
   renderer: inProcessRenderer(),
   paths,
