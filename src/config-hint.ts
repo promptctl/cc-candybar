@@ -1,5 +1,6 @@
 import type { Host } from "./host-facts";
 import { explicitConfigPath, type UserHome } from "./utils/user-path";
+import { eventLine, type Field } from "./utils/logfmt";
 
 // What a hint reads of the machine.
 type HostPaths = Pick<Host, "env"> & { readonly home: UserHome };
@@ -102,6 +103,23 @@ export function originKey({ projectDir, cwd, target }: RenderOrigin): string {
   const scope = target.source === "argument-only" ? "\0only" : "";
   return `${projectDir}\0${cwd}\0${target.path ?? ""}${scope}`;
 }
+
+// [LAW:one-source-of-truth] How an origin reads on a log line or in a
+// reason: every part of the identity `originKey` keys, and what named the
+// config. A search has no path, so it spells `-`.
+export const originFields = ({
+  projectDir,
+  cwd,
+  target,
+}: RenderOrigin): readonly Field[] => [
+  ["projectDir", projectDir],
+  ["cwd", cwd],
+  ["configFile", target.path ?? "-"],
+  ["configSource", target.source],
+];
+
+export const originText = (origin: RenderOrigin): string =>
+  eventLine("origin", originFields(origin));
 
 // The origin a request names: what a session records. A record read back may
 // name a path whose source this build cannot read, so a session's origin is

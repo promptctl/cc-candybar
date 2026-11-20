@@ -38,6 +38,12 @@ import {
   readShared,
 } from "../../src/daemon/config-discovery/discover";
 
+// Discovery's `unheard` for a rig whose reads all succeed: any discovery
+// failure fails the test.
+export function unexpectedDiscoveryFailure(text: string): never {
+  throw new Error(`unexpected config discovery failure: ${text}`);
+}
+
 // The origin a context names: its project, its working directory, and the
 // file `--config` names, or the search where none is named.
 export function originOf(
@@ -86,9 +92,7 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
-    unheard: (text) => {
-      throw new Error(`unexpected config discovery failure: ${text}`);
-    },
+    unheard: unexpectedDiscoveryFailure,
     reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
   });

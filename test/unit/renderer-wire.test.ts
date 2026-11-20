@@ -120,7 +120,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
   } as const;
   const displayedEvents: readonly DisplayedEvent[] = [
     {
-      kind: "act-failed",
+      kind: "daemon-failed",
       event: joinedEvent(null, "a daemon failure", 7 as Instant),
     },
   ];

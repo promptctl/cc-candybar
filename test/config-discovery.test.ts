@@ -12,11 +12,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
-import { fieldsOf } from "../src/utils/logfmt";
+import { fieldsRecord } from "./helpers/daemon-log";
 import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
-import { originOf } from "./helpers/config-host";
+import { originOf, unexpectedDiscoveryFailure } from "./helpers/config-host";
 import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
 import { discover, readShared } from "../src/daemon/config-discovery/discover";
 import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
@@ -53,14 +53,9 @@ import type { ConfigChange, EffectId } from "../src/renderer-interface/interface
 let root: string;
 let cleanups: Array<() => void>;
 
-// A logged line's fields, as the logfmt reader reads them.
-const fields = (line: string | undefined): Record<string, string> =>
-  Object.fromEntries(fieldsOf(line ?? ""));
-
-// A rig that expects every read to succeed fails on any discovery failure.
-const unexpected = (text: string): never => {
-  throw new Error(`unexpected config discovery failure: ${text}`);
-};
+// The discovery record a call wrote last.
+const lastRecord = (logged: readonly string[]): Record<string, string> =>
+  fieldsRecord(logged.at(-1)!);
 beforeEach(() => {
   root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-discovery-")),
@@ -150,21 +145,24 @@ test("follows exactly the origins named: each discovered once as it is first nam
   const { discovery, counters, logged } = discoveryRig();
   const { origin: a } = named("a");
   const { origin: b } = named("b");
-  const follows = () => logged.filter((l) => l.includes("why=follow"));
+  const follows = () =>
+    logged.filter((l) => l.includes("why=follow")).map(fieldsRecord);
+  const follow = (followed: number, observed: number, released: number) => ({
+    why: "follow",
+    followed: String(followed),
+    observed: String(observed),
+    released: String(released),
+  });
   discovery.follow([a]);
   discovery.follow([a, b]);
   discovery.follow([a, b]);
-  expect(follows()).toEqual([
-    "config discovery why=follow followed=1 discovered=1 released=0",
-    "config discovery why=follow followed=2 discovered=1 released=0",
-  ]);
+  // A follow that changed nothing is still recorded, as zero.
+  expect(follows()).toEqual([follow(1, 1, 0), follow(2, 1, 0), follow(2, 0, 0)]);
   expect(discovery.snapshotOf(a)).not.toBeNull();
   const opened = counters.watchersOpened;
   const closedBefore = counters.watchersClosed;
   discovery.follow([b]);
-  expect(follows().at(-1)).toBe(
-    "config discovery why=follow followed=1 discovered=0 released=1",
-  );
+  expect(follows().at(-1)).toEqual(follow(1, 0, 1));
   expect(discovery.snapshotOf(a)).toBeNull();
   expect(counters.watchersOpened).toBe(opened);
   expect(counters.watchersClosed).toBeGreaterThan(closedBefore);
@@ -178,7 +176,7 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(fields(logged.at(-1))).toEqual({
+  expect(lastRecord(logged)).toEqual({
     why: "landed",
     followed: "2",
     observed: "1",
@@ -653,17 +651,20 @@ test("a rediscovery that throws keeps its config and watch, says so on every bar
   for (const holder of [writer, second])
     expect(holder.snapshotOf(b.origin)).toBe(before);
   expect(counters.watchersClosed).toBe(closedBefore);
-  expect(unheard).toHaveLength(1);
-  expect(unheard[0]).toContain(`config discovery failed for ${b.origin.projectDir} `);
-  expect(unheard[0]).toMatch(/rediscovery failed$/);
-  const failure = logged.map(fields).find((f) => "error" in f);
-  expect(failure).toMatchObject({
-    why: "landed",
+  // The warning and the log line name the origin by its whole identity.
+  const identity = {
     projectDir: b.origin.projectDir,
-    config: b.file,
-  });
+    cwd: b.origin.cwd,
+    configFile: b.file,
+    configSource: b.origin.target.source,
+  };
+  expect(unheard).toHaveLength(1);
+  expect(unheard[0]).toMatch(/^config discovery failed for origin .*rediscovery failed$/);
+  expect(fieldsRecord(unheard[0]!)).toMatchObject(identity);
+  const failure = logged.map(fieldsRecord).find((f) => "error" in f);
+  expect(failure).toMatchObject({ why: "landed", ...identity });
   expect(failure?.error).toContain("rediscovery failed");
-  expect(fields(logged.at(-1))).toEqual({
+  expect(lastRecord(logged)).toEqual({
     why: "landed",
     followed: "2",
     observed: "1",
@@ -680,6 +681,24 @@ test("a rediscovery that throws keeps its config and watch, says so on every bar
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
   expect(unheard).toHaveLength(1);
+});
+
+test("a first follow whose discovery throws applies none of its new origins", () => {
+  const a = named("first");
+  const b = named("throws");
+  const { discovery, counters } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (read === b.file) throw new Error("first discovery failed");
+      return diskFiles.text(read);
+    },
+  });
+  expect(() => discovery.follow([a.origin, b.origin])).toThrow(
+    "first discovery failed",
+  );
+  // Nothing is held, so nothing listens: no origin, and no watch.
+  expect(discovery.snapshotOf(a.origin)).toBeNull();
+  expect(counters.watchersOpened).toBe(0);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -886,7 +905,7 @@ function physicalDiscovery(
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
-    unheard: unexpected,
+    unheard: unexpectedDiscoveryFailure,
     moved: () => {},
     reloaded,
   });
@@ -1136,7 +1155,7 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged.map(fields)).toContainEqual({
+  expect(logged.map(fieldsRecord)).toContainEqual({
     why: "landed",
     followed: "4",
     observed: "2",
@@ -1414,7 +1433,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
       return result;
     },
     log: () => {},
-    unheard: unexpected,
+    unheard: unexpectedDiscoveryFailure,
     moved: (_renderer, origins) => moved.push(...origins),
   });
   cleanups.push(

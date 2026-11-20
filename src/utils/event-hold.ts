@@ -32,7 +32,7 @@ export interface HeldEvent {
 // [LAW:types-are-the-program] A frame names the daemon's occurrence and its
 // owner. Session click errors never leave the renderer's delivery record.
 export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+  readonly kind: "launch-pipes" | "renderer-ended" | "daemon-failed";
   readonly event: HeldEvent;
 }
 
@@ -68,6 +68,10 @@ export function heldEventText(text: string): string {
 
 function appendText(previous: string | null, text: string): string {
   if (previous === null) return heldEventText(text);
+  // [LAW:one-source-of-truth] A failure said again while it is still owed is
+  // the same failure: one copy, so a repeating fault cannot spend the budget
+  // and push a different one out.
+  if (`\n${previous}\n`.includes(`\n${text}\n`)) return previous;
   const room = TEXT_LIMIT - text.length;
   if (previous.length + 1 <= room) return `${previous}\n${text}`;
   if (room < OMITTED.length) return heldEventText(text);

@@ -288,21 +288,21 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, daemonFailed: null },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
+  // daemon's failures that no session's bar holds, each held for the bar
+  // until an answer has carried it.
   let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
+  let daemonFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
-        actFailed,
+        daemonFailed,
       }),
     );
   }
@@ -350,9 +350,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             changed = true;
           }
           break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
+        case "daemon-failed":
+          if (daemonFailed !== null && answeredBy(daemonFailed, event)) {
+            daemonFailed = { ...daemonFailed, answered: true };
             changed = true;
           }
           break;
@@ -595,8 +595,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // a renderer host's failed act or take, and a config discovery that broke
   // its read contract. The unacknowledged text is included in the next warning.
   const unheard = (text: string, fromEnvironment?: true): void => {
-    const prior = actFailed;
-    actFailed = environmentOutput(
+    const prior = daemonFailed;
+    daemonFailed = environmentOutput(
       joinedEvent(prior, text, instant()),
       fromEnvironment === true ||
         (prior !== null && !prior.answered && isEnvironmentOutput(prior)),

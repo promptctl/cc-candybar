@@ -70,6 +70,7 @@ import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
+import { fieldOf } from "../src/utils/logfmt";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -538,11 +539,14 @@ describe("RenderCache", () => {
     // The bind events for `dir`'s entry: one per target set the entry has
     // heard through, each naming the directories it hears.
     const bound = (lines: readonly string[], dir: string): string[] =>
-      lines.filter((l) =>
-        l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
+      lines.filter(
+        (l) =>
+          l.startsWith("config watch bound ") &&
+          fieldOf(l, "projectDir") === dir &&
+          fieldOf(l, "cwd") === dir,
       );
     const polls = (line: string, at: string): boolean =>
-      / polled=(\S*)/.exec(line)![1]!.split(",").includes(at);
+      fieldOf(line, "polled").split(",").includes(at);
 
     test("a write-then-rename of the link's target reloads, every time", async () => {
       const { dir, cleanup } = mkConfigDir();
@@ -676,13 +680,13 @@ describe("RenderCache", () => {
         symlinkSync(`${link}.other`, link);
         symlinkSync(link, `${link}.other`);
         cache.getOrCreate(originAt(dir, dir, undefined));
-        expect(
-          lines.filter((l) =>
-            l.startsWith(
-              `warn config watch unresolved projectDir=${dir} path=${link} reason=`,
-            ),
-          ),
-        ).toHaveLength(1);
+        const unresolved = lines.filter((l) =>
+          l.startsWith("warn config watch unresolved "),
+        );
+        expect(unresolved).toHaveLength(1);
+        expect(fieldOf(unresolved[0]!, "projectDir")).toBe(dir);
+        expect(fieldOf(unresolved[0]!, "path")).toBe(link);
+        expect(fieldOf(unresolved[0]!, "reason")).not.toBe("");
       } finally {
         for (const fn of cleanups) fn();
         cleanup();

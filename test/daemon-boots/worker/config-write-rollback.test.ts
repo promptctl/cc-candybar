@@ -3,14 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { linksOf } from "../../../src/click/read";
 import { writeConfigFile } from "../../../src/daemon/file-rewrites";
-import { fieldsOf } from "../../../src/utils/logfmt";
 import { textOf } from "../../../src/render/frame";
 import {
   frameRequest,
   refusedClick,
   renderBody,
 } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
+import { fieldsRecord, logLines } from "../../helpers/daemon-log";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { heldClock } from "../../helpers/held-clock";
 import {
@@ -143,7 +142,7 @@ test.each(["restored", "unrestored"] as const)(
       daemon = undefined;
       const landings = logLines(env)
         .filter((line) => line.includes("config discovery why=landed"))
-        .map((line) => Object.fromEntries(fieldsOf(line)));
+        .map(fieldsRecord);
       expect(landings).toEqual(
         restore === "unrestored"
           ? [

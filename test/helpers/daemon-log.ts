@@ -45,6 +45,10 @@ export async function loggedLines(
   return picked;
 }
 
+// A logged line's fields as one record, for comparing a whole event.
+export const fieldsRecord = (line: string): Record<string, string> =>
+  Object.fromEntries(fieldsOf(line));
+
 // A session's render events, every attempt in log order.
 export const renderEventsOf = (
   lines: readonly string[],

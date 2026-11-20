@@ -15,7 +15,7 @@ import {
   type ApproveRepo,
   type ConfigWriteFiles,
 } from "../src/daemon/effect-interpreter.js";
-import type { RenderOrigin } from "../src/config-hint.js";
+import { originText, type RenderOrigin } from "../src/config-hint.js";
 import type { LayerRole } from "../src/config/layer-role.js";
 import {
   repoConfigs,
@@ -187,7 +187,7 @@ describe("performChanges", () => {
     chains.delete(user);
     expect(perform([set], null)).toEqual({
       kind: "refused",
-      reason: `a change names an origin config discovery does not follow (projectDir=${user} cwd=${user} configFile=-) — nothing was written`,
+      reason: `a change names an origin config discovery does not follow (${originText(originAt(user))}) — nothing was written`,
     });
     expect(read(user)).toBe(USER);
   });
@@ -200,7 +200,7 @@ describe("performChanges", () => {
     };
     expect(perform([inUser, unplaced], null)).toEqual({
       kind: "refused",
-      reason: `a change names the local layer, and its origin's chain holds none (projectDir=${project} cwd=${project} configFile=-) — nothing was written`,
+      reason: `a change names the local layer, and its origin's chain holds none (${originText(originAt(project))}) — nothing was written`,
     });
     expect(read(user)).toBe(USER);
     expect(read(project)).toBe(PROJECT);

@@ -22,7 +22,7 @@ import type {
   ConfigChange,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
-import type { RenderOrigin } from "../config-hint.js";
+import { originText } from "../config-hint.js";
 import { answeredBook } from "./config-discovery/repo-configs.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
@@ -101,9 +101,6 @@ function landsIn(
     };
   return { kind: "at", file };
 }
-
-const originText = (origin: RenderOrigin): string =>
-  `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
 
 // [LAW:no-silent-failure] Every way the turn's changes did not land is their
 // one outcome, naming the file, and the setting when one moved.

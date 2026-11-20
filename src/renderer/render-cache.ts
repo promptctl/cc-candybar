@@ -1,5 +1,10 @@
 import { type RegionalSettings } from "../utils/region.js";
-import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
+import {
+  chainName,
+  originKey,
+  originText,
+  type RenderOrigin,
+} from "../config-hint.js";
 import {
   compareShallow,
   makeObservable,
@@ -1830,7 +1835,7 @@ export class RenderCache<
     if (held.kind === "failed") throw new CrossedFailure(held.failure);
     if (held.kind === "pending")
       throw new Error(
-        `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
+        `no config is held for ${originText(origin)}: an event that needs it was not parked for its config`,
       );
     return held;
   }

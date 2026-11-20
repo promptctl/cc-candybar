@@ -62,6 +62,14 @@ test("an event while the last is still owed joins it; once an answer carried the
   });
 });
 
+test("a failure said again while still owed is held once, and an earlier owed failure stays", () => {
+  let last = joinedEvent(null, "launch failed", at(200));
+  for (let i = 1; i <= 40; ++i)
+    last = joinedEvent(last, `discovery failed ${"z".repeat(100)}`, at(200 + i));
+  expect(last.text).toBe(`launch failed\ndiscovery failed ${"z".repeat(100)}`);
+  expect(last).toMatchObject({ at: at(240), revision: 41, answered: false });
+});
+
 test("only the most recent unanswered diagnostics are kept once the text budget fills", () => {
   let last = joinedEvent(null, `early ${"x".repeat(400)} tail`, at(200));
   for (let i = 1; i <= 20; ++i)

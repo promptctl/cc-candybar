@@ -749,12 +749,12 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      actFailed: event,
+      daemonFailed: event,
     }));
     const { effects, record } = answered(await request(t));
-    expect(new Map(record).get("warn")).toBe("act-failed");
+    expect(new Map(record).get("warn")).toBe("daemon-failed");
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "act-failed", event },
+      { kind: "daemon-failed", event },
     ]);
   });
 
@@ -866,7 +866,7 @@ describe("a feed's frame", () => {
       };
       const t = renderer(undefined, () => ({
         ...daemonFactsOf(),
-        actFailed: event,
+        daemonFailed: event,
       }));
       await configure(t, checked("%1"));
       answered(
@@ -883,7 +883,7 @@ describe("a feed's frame", () => {
       );
       const frame = await dueFrame(t.r);
       expect(frame.displayedEvents).toEqual(
-        shown ? undefined : [{ kind: "act-failed", event }],
+        shown ? undefined : [{ kind: "daemon-failed", event }],
       );
       const confirmed = answered(
         await done(t.r, { session: SESSION, id: frame.receipt }, true),

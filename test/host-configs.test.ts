@@ -39,7 +39,7 @@ import type {
 import { systemTimekeeper, type Monotonic } from "../src/time";
 import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
-import { originOf } from "./helpers/config-host";
+import { originOf, unexpectedDiscoveryFailure } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
 
 const S = sessionIdOf("s");
@@ -346,9 +346,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
     stateDir: path.join(dir, "state"),
     watchers: watches,
     log: () => {},
-    unheard: (text) => {
-      throw new Error(`unexpected config discovery failure: ${text}`);
-    },
+    unheard: unexpectedDiscoveryFailure,
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });
   try {
