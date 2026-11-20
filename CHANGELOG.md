@@ -1,3 +1,9 @@
+## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)
+
+### Features
+
+* **renderer:** record and replay live sessions through the shared host ([#913](https://github.com/promptctl/cc-candybar/issues/913)) ([2f98785](https://github.com/promptctl/cc-candybar/commit/2f98785f9d103f1d4991daf0555308a3b09aabe9))
+
 ## [1.235.15](https://github.com/promptctl/cc-candybar/compare/v1.235.14...v1.235.15) (2026-11-19)
 
 ### Bug Fixes
