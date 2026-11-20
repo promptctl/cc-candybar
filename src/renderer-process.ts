@@ -12,7 +12,7 @@ import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { Monotonic } from "./time.js";
-import { failureOf } from "./daemon/foundations/verb-error.js";
+import { rendererFailureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
   timed,
@@ -71,7 +71,7 @@ export function runRenderer(monotonic: () => Monotonic): void {
       const boot = rendererBootFrom(JSON.parse(text));
       result = mainRendererOf(boot);
     } catch (thrown) {
-      result = { kind: "refused", failure: failureOf(thrown) };
+      result = { kind: "refused", failure: rendererFailureOf(thrown) };
     }
     if (result.kind === "refused") {
       send({ ...result, wireVersion: RENDERER_WIRE_VERSION });
@@ -81,7 +81,9 @@ export function runRenderer(monotonic: () => Monotonic): void {
     const { renderer, diagnostics } = result;
     served = serveRenderer({
       // [LAW:single-enforcer] Each turn is timed in its own process.
-      renderer: timed(renderer, monotonic),
+      renderer: timed(renderer, monotonic, (message) => {
+        process.stderr.write(`${message}\n`);
+      }),
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();

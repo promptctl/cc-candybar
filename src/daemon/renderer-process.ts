@@ -10,6 +10,7 @@
 // live → down → starting …`, and every input asks the state where it goes.
 
 import { streamedToFile } from "./streamed-file.js";
+import type { RendererRecording } from "./renderer-recording.js";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
@@ -43,6 +44,7 @@ import {
   DaemonClosing,
   RendererDown,
   failureOf,
+  failureKindOf,
 } from "./foundations/verb-error.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
@@ -54,6 +56,9 @@ export interface RendererLink {
   serve(): void;
   // Starts the renderer's process: nothing in process.
   arm(): void;
+  // The owner invokes this between turns. The fresh worker sends its usual
+  // start before it takes another session input.
+  restart(): Promise<void>;
   // [LAW:types-are-the-program] The transition stops restarts and says
   // whether this link retains a live renderer for the host's drain.
   beginClose(): "closing" | "closed";
@@ -83,6 +88,7 @@ export type RendererPort = (prepared: {
   readonly name: RendererName;
   // Read for each spawn so a replacement receives the current profile.
   readonly boot: () => RendererBoot;
+  readonly recording?: () => RendererRecording | undefined;
   // The executable entry and the Node invocation which loads it.
   readonly entry: string;
   readonly node: readonly string[];
@@ -92,9 +98,9 @@ export type RendererPort = (prepared: {
 export function processPort(
   run: Pick<ProcessOwner, "launcher" | "cwd" | "heapCapMb">,
 ): RendererPort {
-  return ({ name, boot, node, entry }) => ({
+  return ({ name, boot, node, entry, recording }) => ({
     start: (own) =>
-      processRenderer({ ...own, ...run, name, node, entry, boot }),
+      processRenderer({ ...own, ...run, name, node, entry, boot, recording }),
   });
 }
 
@@ -127,6 +133,7 @@ export interface ProcessOwner extends LinkOwner {
   readonly cwd: string;
   readonly heapCapMb: number;
   readonly boot: () => RendererBoot;
+  readonly recording?: () => RendererRecording | undefined;
   readonly name: RendererName;
 }
 
@@ -186,6 +193,9 @@ interface Link {
   failure: string | null;
   // Each host receipt is meaningful only to the worker that issued it.
   readonly receipts: Map<EffectId, EffectId>;
+  // Boot data is held only until the recording's construction result arrives.
+  recordingBoot?: RendererBoot;
+  readonly recording?: RendererRecording;
   usage: MemorySizes | null;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
@@ -193,6 +203,11 @@ interface Link {
 
 type Phase =
   | { readonly kind: "idle" }
+  | {
+      readonly kind: "replacing";
+      readonly link: Link;
+      readonly ended: Promise<void>;
+    }
   | {
       readonly kind: "starting";
       readonly link: Link;
@@ -237,7 +252,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       ? phase.link
       : null;
   const unavailable = (
-    at: Extract<Phase, { kind: "idle" | "down" | "closed" }>,
+    at: Extract<Phase, { kind: "idle" | "down" | "closed" | "replacing" }>,
   ): DaemonClosing | RendererDown => {
     switch (at.kind) {
       case "closed":
@@ -246,6 +261,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         return new RendererDown(`renderer ${name} is down: ${at.why}`);
       case "idle":
         return new RendererDown(`renderer ${name} has not started`);
+      case "replacing":
+        return new RendererDown(
+          `renderer ${name} is starting a fresh generation`,
+        );
     }
   };
 
@@ -277,6 +296,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   const spawn = (): void => {
     const generationOf = ++generation;
+    const boot = own.boot();
     const kill = new AbortController();
     // A channel's output arrives on a later turn, so the link its lines reach
     // is set before the child can have said anything.
@@ -297,7 +317,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       signal: kill.signal,
       heard: { stdout: stdout.push, stderr: stderr.push },
     });
+    const recording = own.recording?.();
     const link: Link = {
+      recording,
+      recordingBoot: recording?.snapshot(boot),
       generation: generationOf,
       channel,
       kill,
@@ -310,15 +333,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
-        fault: (message) =>
-          log("error", `renderer ${name}[${generationOf}]: ${message}`),
+        fault: (message) => {
+          recording?.fail(
+            "renderer wire output could not be decoded faithfully",
+          );
+          log("error", `renderer ${name}[${generationOf}]: ${message}`);
+        },
       }),
     };
     phase = { kind: "starting", link, queued: [] };
     write(channel, {
       kind: "boot",
       wireVersion: RENDERER_WIRE_VERSION,
-      boot: own.boot(),
+      boot,
     });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
@@ -404,13 +431,44 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     const diagnostics = rendererDiagnosticsFrom(
       raw.wireVersion === RENDERER_WIRE_VERSION ? raw.diagnostics : undefined,
-      () =>
+      () => {
+        link.recording?.fail(
+          "renderer construction diagnostics could not be decoded faithfully",
+        );
         log(
           "warn",
           `renderer ${name}[${link.generation}] boot has invalid diagnostics`,
-        ),
+        );
+      },
     );
     if (diagnostics !== undefined) writeLogLines(log, diagnostics);
+    if (link.recordingBoot !== undefined) {
+      const input = link.recordingBoot;
+      delete link.recordingBoot;
+      // The live admission above checks versions and diagnostic shapes.
+      // A refused construction still has a replayable semantic answer.
+      if (raw.wireVersion !== RENDERER_WIRE_VERSION)
+        link.recording?.fail(
+          "renderer wire version differs from the recording format",
+        );
+      else if (raw.kind === "started")
+        link.recording?.constructed(input, {
+          kind: "built",
+          ...(diagnostics && { diagnostics }),
+        });
+      else {
+        const kind = isPlainObject(raw.failure)
+          ? failureKindOf(raw.failure.kind)
+          : undefined;
+        if (kind !== undefined && refusal !== null)
+          link.recording?.constructed(input, {
+            kind: "refused",
+            failure: { kind, ...refusal },
+            ...(diagnostics && { diagnostics }),
+          });
+        else link.recording?.fail("invalid renderer construction failure");
+      }
+    }
     if (refusal !== null) {
       refusedBoot(link, refusal.message, refusal.detail);
       return;
@@ -467,6 +525,15 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:nothing-unseen] Said all the same, and as a warning unless the
     // close had ended it and it exited: one the close had not yet ended went
     // before its close steps ran, and one that did not exit went mid-flush.
+    if (phase.kind === "replacing" && phase.link === link) {
+      log(
+        "info",
+        `renderer ${name}[${link.generation}] ended for a requested recording`,
+      );
+      return;
+    }
+    if (phase.kind !== "closing" && phase.kind !== "closed")
+      link.recording?.interrupted();
     const level =
       phase.kind === "closing" || how !== "exited" ? "warn" : "info";
     if (phase.kind === "closing")
@@ -558,6 +625,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // runs or starts.
   const beginClose = (): Begun => {
     switch (phase.kind) {
+      case "replacing":
+        return (phase = { kind: "closed", ended: phase.ended });
       case "live":
         return (phase = { kind: "closing", link: phase.link });
       // A boot holds nothing to flush, and the close's steps would wait on it:
@@ -623,7 +692,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         link.receipts.delete(e.of);
         toSend = { ...input, event: { ...e, of: effect } };
       }
-      const output = await link.lines.renderer.answer(toSend);
+      const output = link.recording?.active
+        ? await link.recording.turn(toSend, link.lines.renderer.answer)
+        : await link.lines.renderer.answer(toSend);
       // Inspection and teardown have no presentation or action to settle.
       // Leave any malformed fields for the host to report.
       if (
@@ -660,6 +731,37 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
   return {
     renderer: { answer },
+    restart: async () => {
+      switch (phase.kind) {
+        case "idle":
+          return; // arm will start the first generation.
+        case "down":
+          phase.cancelRetry();
+          spawn();
+          return;
+        case "starting":
+          // A start that still holds the mailbox completes before a recording
+          // control slot. A retry can have started in the meantime.
+          for (const send of phase.queued.splice(0))
+            send(new RendererDown(`renderer ${name} is being replaced`));
+          break;
+        case "live":
+          break;
+        default:
+          throw new DaemonClosing(`renderer ${name} replacement`);
+      }
+      const link = phase.link;
+      const retiring = {
+        kind: "replacing",
+        link,
+        ended: ending(link),
+      } as const;
+      phase = retiring;
+      await retiring.ended;
+      if (phase !== retiring)
+        throw new DaemonClosing(`renderer ${name} replacement`);
+      spawn();
+    },
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;

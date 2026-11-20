@@ -11,6 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
+import { systemRegion, type RegionalSettings } from "../utils/region.js";
 import { createHash } from "node:crypto";
 import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
@@ -499,7 +500,7 @@ export function registerCompiled(
   compile: CompileProvider,
   scopes: ReadonlySet<VarScope> = EVERY_SCOPE,
 ): Registration {
-  const input = compileInputOf(config);
+  const input = compileInputOf(config, registry.region);
   const key = compileKey(input);
   return {
     compiled: compile(key, input),
@@ -528,6 +529,7 @@ export interface RegisteredConfig extends CompiledConfig {
 // never a Map, which JSON.stringify writes as `{}` — so its serialization is
 // the identity of every compile it can produce (brandon-unfiled-3248.8yp).
 export interface CompileInput {
+  readonly region: RegionalSettings;
   readonly config: Omit<ValidatedConfig, "variables">;
   readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
   // [LAW:one-source-of-truth] What the compile tells its own templates' reads
@@ -538,7 +540,10 @@ export interface CompileInput {
   readonly projections: ReadonlyArray<readonly [variable: string, why: string]>;
 }
 
-export function compileInputOf(config: ValidatedConfig): CompileInput {
+export function compileInputOf(
+  config: ValidatedConfig,
+  region: RegionalSettings = systemRegion(),
+): CompileInput {
   const { variables, ...rest } = config;
   // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
   // on it reads back, so an option picker marks its current selection by
@@ -565,6 +570,7 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
   return {
+    region,
     config: rest,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
     projections: [...projectionsOf(config)].sort(([a], [b]) =>
@@ -626,6 +632,7 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 // template functions read the store and clocks of the render in progress
 // (ActionRuntime.bound), so the compile holds no store of its own.
 export function compileDslConfig({
+  region,
   config,
   stateReads,
   projections,
@@ -681,6 +688,7 @@ export function compileDslConfig({
     (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now),
   ];
   const engine = createCcCandybarEngine({
+    region,
     extraFuncs: {
       ...actionFuncs(actionRuntime),
       ...swatchFuncs(actionRuntime),

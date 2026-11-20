@@ -9,6 +9,7 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
+import { systemRegion, type RegionalSettings } from "../utils/region.js";
 import {
   compareStructural,
   computed,
@@ -410,7 +411,7 @@ export class SourceRegistry {
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+  private readonly engine: ReturnType<typeof createCcCandybarEngine>;
 
   // The names of this registry's own async sources (shell, file), whose
   // stored values `published` reads.
@@ -461,7 +462,9 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
+    readonly region: RegionalSettings = systemRegion(),
   ) {
+    this.engine = createCcCandybarEngine({ drawnAt: this.drawnAt, region });
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {}));
     this.cleanups.push(observe(this.envNow, () => {}));
@@ -481,6 +484,7 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
+      this.region,
     );
   }
 

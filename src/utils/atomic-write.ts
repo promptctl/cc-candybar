@@ -106,7 +106,7 @@ function taken(link: () => void): Linked["outcome"] {
 
 // Beside the file, so the publish stays on one filesystem. A pid alone is
 // shared by two writes in one process and repeats across pid namespaces.
-function stagedName(file: string): string {
+export function stagedName(file: string): string {
   return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
 }
 

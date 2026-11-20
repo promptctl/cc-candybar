@@ -91,9 +91,11 @@ export function abbreviatePath(path: string): string {
 // pattern inline, and the DSL formatter (template-engine/funcs.ts)
 // delegates here so the two producers agree by construction.
 //
-// No locale argument: the default-locale behaviour is exactly what the
-// legacy renderer did (`n.toLocaleString()`), so byte-parity holds with
-// whatever locale the host process picks at startup.
-export function formatInteger(n: number): string {
-  return n.toLocaleString();
+// A renderer passes its host's locale. A standalone caller can format in
+// its own process's locale by omitting it.
+export function formatInteger(
+  n: number,
+  formatter = new Intl.NumberFormat(),
+): string {
+  return formatter.format(n);
 }

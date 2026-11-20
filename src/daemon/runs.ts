@@ -7,6 +7,7 @@
 import path from "node:path";
 import {
   failureText,
+  saidBy,
   type LaunchResult,
   type Launcher,
 } from "../proc/launcher.js";
@@ -18,6 +19,7 @@ import { valueOf } from "../utils/logfmt.js";
 import type { RunStats } from "./foundations/stats-snapshot";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
 import type { RunAct } from "./foundations/run-authorization.js";
+import { environmentOutput } from "./environment-output.js";
 export type { RunAct } from "./foundations/run-authorization.js";
 
 // How a run ended: its outcome, and its facts for its act's line.
@@ -123,6 +125,8 @@ export class Runs {
     this.inFlight.add(abort);
     this.started++;
     const { program, args } = run;
+    const inheritsEnvironment =
+      Object.keys(environment.value).length + Object.keys(run.env).length > 0;
     const startedAt = this.deps.clock.monotonic();
     return this.deps
       .launch({
@@ -141,7 +145,12 @@ export class Runs {
         category: "click.run",
       })
       .then((result) =>
-        this.ended(run, result, elapsedMs(this.deps.clock, startedAt)),
+        this.ended(
+          run,
+          result,
+          elapsedMs(this.deps.clock, startedAt),
+          inheritsEnvironment,
+        ),
       )
       .finally(() => {
         this.inFlight.delete(abort);
@@ -170,7 +179,12 @@ export class Runs {
 
   // [LAW:single-enforcer] How the run ended, said on its act's line
   // (src/daemon/acts.ts), the one line an act's outcome has.
-  private ended(run: RunAct, result: LaunchResult, took: number): RunEnd {
+  private ended(
+    run: RunAct,
+    result: LaunchResult,
+    took: number,
+    inheritsEnvironment: boolean,
+  ): RunEnd {
     const ended = outcomeOf(result);
     const said = `program=${valueOf(run.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`;
     if (ended === "timeout") this.timedOut++;
@@ -183,6 +197,13 @@ export class Runs {
       };
     if (ended !== "timeout") this.failed++;
     const reason = failureText(result);
-    return { outcome: { kind: "failed", reason }, said: `${said} — ${reason}` };
+    // A failure can return free-form child stderr to its session's bar.
+    return {
+      outcome: environmentOutput(
+        { kind: "failed", reason },
+        inheritsEnvironment && saidBy(result, result.stderr) !== "",
+      ),
+      said: `${said} — ${reason}`,
+    };
   }
 }

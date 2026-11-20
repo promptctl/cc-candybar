@@ -4,6 +4,7 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
+import { systemRegion } from "../../src/utils/region";
 import { inProcessRenderer } from "../../src/in-process-renderer";
 import { HOST } from "./host";
 import fs from "node:fs";
@@ -102,6 +103,7 @@ export function prepareDaemon(
     overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
   try {
     const daemon = createDaemon({
+      region: systemRegion(),
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
       renderer: inProcessRenderer(),
       bundle: bundleAt(path.join(paths.state, "checkout")),

@@ -1,0 +1,33 @@
+diff --git a/dist/JsHistogram.encoding.js b/dist/JsHistogram.encoding.js
+index 3c7f56b2d50bcebd1294d75f568b3163b2a8f527..75cf0b02e4c721c3b651ded382586b00dceb4e1b 100644
+--- a/dist/JsHistogram.encoding.js
++++ b/dist/JsHistogram.encoding.js
+@@ -117,24 +117,10 @@ function getWordSizeInBytesFromCookie(cookie) {
+     const sizeByte = (cookie & 0xf0) >> 4;
+     return sizeByte & 0xe;
+ }
+-function findDeflateFunction() {
+-    try {
+-        return eval('require("zlib").deflateSync');
+-    }
+-    catch (error) {
+-        return !!pako ? pako.deflate : () => { throw new Error('pako library is mandatory for encoding/deconding on the browser side'); };
+-    }
+-}
+-function findInflateFunction() {
+-    try {
+-        return eval('require("zlib").inflateSync');
+-    }
+-    catch (error) {
+-        return !!pako ? pako.inflate : () => { throw new Error('pako library is mandatory for encoding/deconding on the browser side'); };
+-    }
+-}
+-exports.deflate = findDeflateFunction();
+-exports.inflate = findInflateFunction();
++// Renderer diagnostics include these bytes. Select the same codec in the
++// source tree and in the standalone bundle so recordings replay exactly.
++exports.deflate = pako.deflate;
++exports.inflate = pako.inflate;
+ function decompress(data) {
+     const buffer = new ByteBuffer_1.default(data);
+     const initialTargetPosition = buffer.position;

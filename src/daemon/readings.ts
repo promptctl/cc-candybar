@@ -2,6 +2,10 @@
 // collector declares and reads, over the providers that own each source.
 
 import { inspect } from "node:util";
+import {
+  environmentOutput,
+  isEnvironmentOutput,
+} from "./environment-output.js";
 import type { ClientHints } from "./foundations/protocol.js";
 import type { TranscriptLanes } from "./cache/transcript-lanes.js";
 import type { GitInfo } from "../segments/git.js";
@@ -408,10 +412,17 @@ export function readingsOf(
       [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
     ),
     runs: new Map(
-      [...lanes.runs].map(([digest, lane]) => [
-        digest,
-        { reading: lane.current(), fault: lane.fault() },
-      ]),
+      [...lanes.runs].map(([digest, lane]) => {
+        const reading = lane.current();
+        return [
+          digest,
+          environmentOutput(
+            { reading, fault: lane.fault() },
+            (reading.kind === "ok" || reading.kind === "failed") &&
+              isEnvironmentOutput(lane),
+          ),
+        ];
+      }),
     ),
     env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()])),
   };
