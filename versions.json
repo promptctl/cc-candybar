@@ -2,32 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
-      "timestamp": "2026-11-20T11:11:09.957Z",
-      "commits": [
-        {
-          "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:10:02-07:00",
-          "message": "test(daemon): verify competing named renderer edit drafts (#904)\n\n* test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n\n* test(daemon): wait for the contested Save to take a turn\n\n* test(edit): check durable config at every draft step\n\n* test(daemon): use the shared built renderer for the edit proof"
-        }
-      ]
-    },
-    {
       "version": "pr-897",
       "ref": "refs/pull/897/merge",
-      "sha": "b4ba3e520f9ba6480bfe03bf935004b4e858f65e",
-      "timestamp": "2026-11-20T00:31:45.105Z",
+      "sha": "b2f13f7422bbf8b3450f7bfba9f12fedeb502691",
+      "timestamp": "2026-11-20T11:12:16.189Z",
       "commits": [
         {
-          "sha": "b4ba3e520f9ba6480bfe03bf935004b4e858f65e",
+          "sha": "b2f13f7422bbf8b3450f7bfba9f12fedeb502691",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:30:44Z",
-          "message": "Merge 85ca740b57f42a5a08aa868eb7d0647ad11749cb into 2f98785f9d103f1d4991daf0555308a3b09aabe9\n"
+          "timestamp": "2026-11-20T11:11:03Z",
+          "message": "Merge a2387e74d371dde039f5eadc681bc38d229a8c11 into e0fb86a050d4b6a420d8de916d4add0b0ef0ec89\n"
+        },
+        {
+          "sha": "a2387e74d371dde039f5eadc681bc38d229a8c11",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:10:19-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/input-reading-fallbacks\n"
+        },
+        {
+          "sha": "d8e5cb822ed0eaf08109f2e87dc12b51b36c7f4b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:04:23-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/input-reading-fallbacks\n"
         },
         {
           "sha": "85ca740b57f42a5a08aa868eb7d0647ad11749cb",
@@ -63,6 +62,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:05:11-07:00",
           "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
+      "timestamp": "2026-11-20T11:11:09.957Z",
+      "commits": [
+        {
+          "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:10:02-07:00",
+          "message": "test(daemon): verify competing named renderer edit drafts (#904)\n\n* test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n\n* test(daemon): wait for the contested Save to take a turn\n\n* test(edit): check durable config at every draft step\n\n* test(daemon): use the shared built renderer for the edit proof"
         }
       ]
     },
