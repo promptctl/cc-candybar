@@ -33,6 +33,7 @@ import {
 } from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { resolvedTarget } from "../../utils/atomic-write.js";
+import { directoryEntries } from "../../utils/directory-entry.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
@@ -56,7 +57,7 @@ interface ObservedConfig {
 // where that can change.
 interface ObservedOrigin extends ObservedConfig {
   readonly watch: HeldWatch;
-  readonly filePaths: readonly string[];
+  readonly landingPaths: ReadonlySet<string>;
 }
 
 interface Followed extends ObservedOrigin {
@@ -69,6 +70,7 @@ interface Followed extends ObservedOrigin {
 interface DiscoveryBatch {
   readonly facts: SharedFacts;
   readonly observed: FileObservations;
+  readonly landingPath: (file: string) => string;
 }
 
 // The config facts available to one renderer and the demands it can replace.
@@ -305,10 +307,11 @@ export class ConfigDiscovery {
     writer: RendererName,
     files: readonly string[],
   ): readonly RenderOrigin[] {
-    const changed = new Set(files);
+    const landingPath = directoryEntries();
+    const changed = files.flatMap((file) => [file, landingPath(file)]);
     const touched = [...this.followed]
-      .filter(([, { filePaths }]) =>
-        filePaths.some((file) => changed.has(file)),
+      .filter(([, { landingPaths }]) =>
+        changed.some((file) => landingPaths.has(file)),
       )
       .map(([key]) => key);
     return this.publish(
@@ -437,7 +440,11 @@ export class ConfigDiscovery {
         return text;
       },
     });
-    return { facts, observed };
+    return {
+      facts,
+      observed,
+      landingPath: directoryEntries(facts.files.realpath),
+    };
   }
 
   // What discovery finds at `origin` now, with its watch following the
@@ -496,7 +503,12 @@ export class ConfigDiscovery {
     return {
       ...observed,
       watch,
-      filePaths: paths.targets.polled,
+      landingPaths: new Set(
+        paths.targets.polled.flatMap((file) => [
+          file,
+          shared.landingPath(file),
+        ]),
+      ),
     };
   }
 

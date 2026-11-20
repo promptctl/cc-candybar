@@ -29,6 +29,7 @@ import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
 import { asError, resolvedTarget } from "../utils/atomic-write.js";
+import { directoryEntries } from "../utils/directory-entry.js";
 
 const said = (read: Read | "object"): string =>
   read === "object"
@@ -112,6 +113,7 @@ export function performChanges(
   files: ConfigWriteFiles,
   write?: WriteConfigFile,
 ): ConfigLanding {
+  const entryOf = directoryEntries();
   const rewrites = new Map<string, FileRewrite>();
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
@@ -137,10 +139,11 @@ export function performChanges(
       // Keyed by the file a write lands in, so two paths to one file are one
       // rewrite of it.
       const file = resolvedTarget(named.file);
-      if (target.role === "local") local.add(file);
+      const entry = entryOf(file);
+      if (target.role === "local") local.add(entry);
       // A file an earlier change of the turn named, as that change left it,
       // an absent one included.
-      const prior = rewrites.get(file);
+      const prior = rewrites.get(entry);
       const was = prior === undefined ? files.readText(file) : prior.was;
       const applied = applyChanges(
         prior === undefined ? was : prior.will,
@@ -151,21 +154,25 @@ export function performChanges(
         return refused(
           `${addressText(applied.at)} in ${file} changed since it was read (it was ${said(applied.read)}, it is ${said(applied.found)})`,
         );
-      rewrites.set(file, { file, was, will: applied.text });
+      rewrites.set(entry, {
+        file: prior?.file ?? file,
+        was,
+        will: applied.text,
+      });
     }
     // [LAW:single-enforcer] A local layer a change creates is one person's,
     // so git never shows it: its repository's shared exclude names it, in the
     // same write as the file, or neither is written.
-    for (const { file, was, will } of [...rewrites.values()]) {
-      if (was !== null || will === null || !local.has(file)) continue;
-      const excluded = excludeRewrite(file, rewrites, files.readText);
+    for (const [entry, { file, was, will }] of [...rewrites]) {
+      if (was !== null || will === null || !local.has(entry)) continue;
+      const excluded = excludeRewrite(entry, rewrites, files.readText, entryOf);
       if (excluded.kind === "failed")
         return {
           kind: "failed",
           reason: `${file} could not be kept out of git: ${excluded.reason} — nothing was written`,
         };
       if (excluded.kind === "ok")
-        rewrites.set(excluded.value.file, excluded.value);
+        rewrites.set(entryOf(excluded.value.file), excluded.value);
     }
     if (book !== null && book.answers.length > 0) {
       const planned = answeredBook(book.stateDir, book.answers, files.readText);
@@ -179,7 +186,7 @@ export function performChanges(
       answered = planned.value.said;
       if (rewrite !== null) {
         const file = resolvedTarget(rewrite.file);
-        rewrites.set(file, { ...rewrite, file });
+        rewrites.set(entryOf(file), { ...rewrite, file });
       }
     }
   } catch (e) {
@@ -217,6 +224,7 @@ function excludeRewrite(
   file: string,
   rewrites: ReadonlyMap<string, FileRewrite>,
   readText: ConfigWriteFiles["readText"],
+  entryOf: (file: string) => string,
 ): Outcome<FileRewrite> {
   const checkout = gitRootOf(path.dirname(file));
   if (checkout.kind !== "ok") return checkout;
@@ -224,7 +232,7 @@ function excludeRewrite(
   const at = sharedExcludeOf(root);
   if (at.kind !== "ok") return at;
   const exclude = resolvedTarget(at.value);
-  const prior = rewrites.get(exclude);
+  const prior = rewrites.get(entryOf(exclude));
   const was = prior === undefined ? readText(exclude) : prior.was;
   const text = prior === undefined ? (was ?? "") : (prior.will ?? "");
   // The path as a gitignore pattern names it: glob characters in a directory
@@ -238,5 +246,9 @@ function excludeRewrite(
   // trailing spaces are not part of the pattern.
   if (text.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT;
   const lead = text === "" || text.endsWith("\n") ? "" : "\n";
-  return ok({ file: exclude, was, will: `${text}${lead}${entry}\n` });
+  return ok({
+    file: prior?.file ?? exclude,
+    was,
+    will: `${text}${lead}${entry}\n`,
+  });
 }
