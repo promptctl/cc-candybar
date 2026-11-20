@@ -2,81 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-904",
-      "ref": "refs/pull/904/merge",
-      "sha": "5615bd9a0e5aa5f5bf07108418172e56a01b3797",
-      "timestamp": "2026-11-20T11:04:57.114Z",
-      "commits": [
-        {
-          "sha": "5615bd9a0e5aa5f5bf07108418172e56a01b3797",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T11:03:59Z",
-          "message": "Merge e09a4ac6ad227d2be6e6e98a3f00badf645b8a34 into a3a568d69f6f3ad58a5cb426776392244be3a484\n"
-        },
-        {
-          "sha": "e09a4ac6ad227d2be6e6e98a3f00badf645b8a34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T04:03:04-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/named-edit-conflict-proof\n"
-        },
-        {
-          "sha": "cc41c02466f2c6a32dda5c391da299cf6dc94452",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:13:23-07:00",
-          "message": "test(daemon): use the shared built renderer for the edit proof\n"
-        },
-        {
-          "sha": "c82b1755211ffaa8edacf97707072b01cabebf89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:30:28-07:00",
-          "message": "Merge commit '2f98785f9d103f1d4991daf0555308a3b09aabe9' into codex/named-edit-conflict-integration\n"
-        },
-        {
-          "sha": "b48c99d3ea72a3337132bdbef26c74da0ae900e6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:20:18-07:00",
-          "message": "test(edit): check durable config at every draft step\n"
-        },
-        {
-          "sha": "c4e7f40deeb0eb65abd9ef37355c2472e149d710",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:14:08-07:00",
-          "message": "test(daemon): wait for the contested Save to take a turn\n"
-        },
-        {
-          "sha": "0a72afa9ce21e00ab5d38ec3dbc8553db9c856a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:10:35-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/named-edit-conflict-integration\n"
-        },
-        {
-          "sha": "b57c7524433b7f3a17ef3e3da0ee596411d48735",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:02:08-07:00",
-          "message": "test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
-      "timestamp": "2026-11-20T00:54:05.750Z",
+      "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
+      "timestamp": "2026-11-20T11:11:09.957Z",
       "commits": [
         {
-          "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T00:52:58Z",
-          "message": "chore(release): set `package.json` to 1.236.1\n\n## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)\n\n### Bug Fixes\n\n* **daemon:** reobserve files after incomplete config rollback ([#898](https://github.com/promptctl/cc-candybar/issues/898)) ([95143c6](https://github.com/promptctl/cc-candybar/commit/95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd))\n"
+          "sha": "e0fb86a050d4b6a420d8de916d4add0b0ef0ec89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:10:02-07:00",
+          "message": "test(daemon): verify competing named renderer edit drafts (#904)\n\n* test(daemon): verify competing named renderer edit drafts (ibyq.lcd)\n\n* test(daemon): wait for the contested Save to take a turn\n\n* test(edit): check durable config at every draft step\n\n* test(daemon): use the shared built renderer for the edit proof"
         }
       ]
     },
