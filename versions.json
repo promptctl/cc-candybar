@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b1015f376e43665468186c5857ea9bc85784e116",
-      "timestamp": "2026-11-20T00:36:42.485Z",
-      "commits": [
-        {
-          "sha": "b1015f376e43665468186c5857ea9bc85784e116",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T00:35:28Z",
-          "message": "chore(release): set `package.json` to 1.236.0\n\n## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)\n\n### Features\n\n* **renderer:** record and replay live sessions through the shared host ([#913](https://github.com/promptctl/cc-candybar/issues/913)) ([2f98785](https://github.com/promptctl/cc-candybar/commit/2f98785f9d103f1d4991daf0555308a3b09aabe9))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-898",
       "ref": "refs/pull/898/merge",
-      "sha": "f68ada0a3970ad676ffbeccfeb9da28903c3f970",
-      "timestamp": "2026-11-20T00:32:25.071Z",
+      "sha": "fe87772ed37f5c15372e5e593ef9604fc8e62aed",
+      "timestamp": "2026-11-20T00:37:39.196Z",
       "commits": [
         {
-          "sha": "f68ada0a3970ad676ffbeccfeb9da28903c3f970",
+          "sha": "fe87772ed37f5c15372e5e593ef9604fc8e62aed",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:31:01Z",
-          "message": "Merge 4488f95257aca36a622a6e5665acf1b455ef6d46 into 2f98785f9d103f1d4991daf0555308a3b09aabe9\n"
+          "timestamp": "2026-11-19T17:36:27-07:00",
+          "message": "Merge bc1c22276a9b8d9288f1b5189c320248f6a16aae into b1015f376e43665468186c5857ea9bc85784e116\n"
+        },
+        {
+          "sha": "bc1c22276a9b8d9288f1b5189c320248f6a16aae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:36:25-07:00",
+          "message": "Merge branch 'main' into codex/reobserve-incomplete-config-writes"
         },
         {
           "sha": "4488f95257aca36a622a6e5665acf1b455ef6d46",
@@ -70,6 +62,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b1015f376e43665468186c5857ea9bc85784e116",
+      "timestamp": "2026-11-20T00:36:42.485Z",
+      "commits": [
+        {
+          "sha": "b1015f376e43665468186c5857ea9bc85784e116",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T00:35:28Z",
+          "message": "chore(release): set `package.json` to 1.236.0\n\n## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)\n\n### Features\n\n* **renderer:** record and replay live sessions through the shared host ([#913](https://github.com/promptctl/cc-candybar/issues/913)) ([2f98785](https://github.com/promptctl/cc-candybar/commit/2f98785f9d103f1d4991daf0555308a3b09aabe9))\n"
         }
       ]
     },
