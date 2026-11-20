@@ -1,3 +1,9 @@
+## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)
+
+### Bug Fixes
+
+* **daemon:** reobserve files after incomplete config rollback ([#898](https://github.com/promptctl/cc-candybar/issues/898)) ([95143c6](https://github.com/promptctl/cc-candybar/commit/95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd))
+
 ## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)
 
 ### Features
