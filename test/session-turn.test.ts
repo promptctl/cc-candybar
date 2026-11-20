@@ -45,6 +45,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { exits, runsFor, shell } from "../src/proc/spawner-fake";
 import { systemTimekeeper } from "../src/time";
 import { originOf } from "./helpers/config-host";
+import { watchersFor } from "./helpers/background-faults.js";
 
 const SID = sessionIdOf(SESSION);
 
@@ -355,6 +356,7 @@ describe("a request's wait", () => {
     const runs = fakeLauncher(systemTimekeeper);
     runs.spawner.program(shell("echo hi"), runsFor(30, exits(0, "hi\n")));
     const sourceRuns = new SourceRuns({
+      watchers: watchersFor(systemTimekeeper),
       launcher: runs.launcher,
       clock: systemTimekeeper,
     });

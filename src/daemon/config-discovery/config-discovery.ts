@@ -38,7 +38,7 @@ import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
-import { failureOf } from "../foundations/verb-error.js";
+import type { ReportFault } from "../background-fault.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -95,6 +95,8 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
+  // [LAW:no-silent-failure] Where an origin's throw in rediscovery goes.
+  readonly report: ReportFault;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
   readonly moved: (
@@ -394,10 +396,7 @@ export class ConfigDiscovery {
         observed.push(now);
         if (now.digest !== was.digest) moved.push(now);
       } catch (thrown) {
-        this.deps.log(
-          "error",
-          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
-        );
+        this.deps.report({ work: "config discovery", subject: key, thrown });
       }
     }
     this.deps.log(

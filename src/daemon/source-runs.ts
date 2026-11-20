@@ -26,7 +26,7 @@ import { environmentOutput } from "./environment-output.js";
 import { observable, runInAction } from "mobx";
 import { failureText, type Launcher } from "../proc/launcher";
 import type { SourceRead, ReadMode } from "../facts/source-identity.js";
-import { WatcherRegistry } from "./cache/watchers.js";
+import type { WatcherRegistry } from "./cache/watchers.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -346,9 +346,9 @@ export interface SourceRunsDeps {
   // in; an owner outside the daemon keeps its own.
   readonly ledger?: RefreshLedger;
   // [LAW:single-enforcer] The daemon's one watcher registry, which holds every
-  // watch and polled path a `watch_file` run needs; an owner outside the daemon
-  // keeps its own.
-  readonly watchers?: WatcherRegistry;
+  // watch and polled path a `watch_file` run needs. A private registry would
+  // report its holders' throws nowhere.
+  readonly watchers: WatcherRegistry;
   // [LAW:one-source-of-truth] The daemon's one word on whether the OS is
   // delivering file events, which the watches ride. Only the daemon measures
   // delivery.
@@ -372,7 +372,7 @@ export class SourceRuns {
     const logger = deps.logger ?? quietLogger;
     const ledger = deps.ledger ?? new RefreshLedger(logger);
     this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.watchers,
       deps.fileEvents ?? NO_FILE_EVENTS,
     );
     // [LAW:nothing-unseen] One record per read kind (spec section 21's source

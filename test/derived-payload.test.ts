@@ -29,6 +29,7 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
+import { watchersFor } from "./helpers/background-faults.js";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -56,6 +57,7 @@ function viewOver(
   });
   const answer = observable.box(payload, { deep: false });
   const sourceRuns = new SourceRuns({
+    watchers: watchersFor(systemTimekeeper),
     launcher: processLauncher,
     clock: systemTimekeeper,
   });

@@ -38,6 +38,7 @@ import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { fakeLauncher } from "../../helpers/fake-launcher";
 import { until } from "../../helpers/until";
+import { checkoutFiles } from "../../../src/utils/git-root";
 
 jest.setTimeout(30_000);
 
@@ -276,6 +277,55 @@ describe("a connection to a daemon built in this worker", () => {
     expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
     insideHold.settled(true);
     expect(standingReads()).toBe(before + 1);
+  });
+
+  test("a throw in a config origin's rediscovery is an error on every bar, with its detail in daemon.log", async () => {
+    let seen: HeldEvent | null = null;
+    let throwing = false;
+    const inProcess = inProcessRenderer((real) =>
+      hearingEvents(real, ({ event }) => {
+        if (event.kind === "context" && event.worldState.session === "other")
+          seen = event.worldState.daemon.backgroundFault;
+      }),
+    );
+    // A checkout read that throws stands in for a bug in discovery: armed
+    // only across the one synchronous rediscovery, so no render meets it.
+    const thrownBy =
+      <A extends unknown[], R>(read: (...args: A) => R) =>
+      (...args: A): R => {
+        if (throwing) throw new Error("checkout read bug");
+        return read(...args);
+      };
+    const running = startDaemon(process.env, {
+      checkoutFiles: {
+        stat: thrownBy(checkoutFiles.stat),
+        lstat: thrownBy(checkoutFiles.lstat),
+        realpath: thrownBy(checkoutFiles.realpath),
+        text: thrownBy(checkoutFiles.text),
+      },
+      renderer: (prepared) => inProcess(prepared),
+    });
+    started = running;
+    expect(await rendered(running, "followed")).toContain("a drawn mark");
+
+    throwing = true;
+    running.daemon.rediscover();
+    throwing = false;
+
+    expect(await rendered(running, "other")).toMatch(/⚠\s+1/);
+    expect(seen).toMatchObject({
+      text: expect.stringMatching(
+        /^config discovery threw \(.+\): checkout read bug$/,
+      ),
+      answered: false,
+    });
+    const [line] = await loggedLines(
+      process.env,
+      (lines) => lines.filter((l) => l.includes("config discovery threw")),
+      (picked) => picked.length > 0,
+      "the rediscovery's throw in daemon.log",
+    );
+    expect(line).toContain("checkout read bug");
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

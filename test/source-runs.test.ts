@@ -16,6 +16,7 @@ import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { runOf, type SourceIdentity } from "../src/facts/source-identity";
 import { shellEnvOf } from "../src/config/shell-env";
 import type { Environment } from "../src/daemon/foundations/session-env";
+import { watchersFor } from "./helpers/background-faults.js";
 
 const TEXT: SourceParse = { kind: "text", default: undefined };
 // The variables a shell source here runs in: the base set a declaration
@@ -36,7 +37,7 @@ interface Held {
 function rig() {
   const clock = heldClock(new Date(0));
   const { launcher, spawner, started } = fakeLauncher(clock);
-  const runs = new SourceRuns({ launcher, clock });
+  const runs = new SourceRuns({ watchers: watchersFor(clock), launcher, clock });
   const opened: Held[] = [];
   // A session's registry, its programs run in `environment`.
   const registry = (environment: Environment = {}): Held => {

@@ -97,6 +97,7 @@ import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
+import { unexpectedFault, watchersFor } from "./helpers/background-faults.js";
 
 const S1 = sessionIdOf("s1");
 
@@ -206,6 +207,7 @@ function rig(): Rig {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     counters,
     logger: log,
@@ -216,6 +218,7 @@ function rig(): Rig {
   const fileEvents = handDelivery();
   const providers = withTranscriptLanes(
     createPayloadProviders({
+      report: unexpectedFault,
       clock: systemTimekeeper,
       launcher: world.launcher,
       host,
@@ -224,6 +227,7 @@ function rig(): Rig {
       logger: log,
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
+        watchers: watchersFor(systemTimekeeper),
         launcher: world.launcher,
         clock: systemTimekeeper,
       }),

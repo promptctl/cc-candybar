@@ -44,6 +44,7 @@ import {
   originOf,
 } from "./helpers/config-host";
 import { ReloadSignal } from "./helpers/reload-signal";
+import { unexpectedFault, watchersFor } from "./helpers/background-faults.js";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -943,6 +944,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const watchers = new WatcherRegistry({
+      report: unexpectedFault,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,
@@ -968,6 +970,7 @@ describe("an installed plugin", () => {
     );
     // The runs each view's sources name, held as the host holds a session's.
     const sourceRuns = new SourceRuns({
+      watchers: watchersFor(systemTimekeeper),
       launcher: processLauncher,
       clock: systemTimekeeper,
     });
@@ -1597,6 +1600,7 @@ describe("an installed plugin", () => {
   test("a failed first load still watches the repo's plugin root", async () => {
     const reloads = new ReloadSignal();
     const watchers = new WatcherRegistry({
+      report: unexpectedFault,
       clock: systemTimekeeper,
       counters: {
         watchersOpened: 0,

@@ -47,6 +47,7 @@ import { viewFacts } from "./view-facts";
 import { heardRequest } from "./click";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./config-host";
+import { unexpectedFault } from "./background-faults.js";
 
 export const SESSION = sessionIdOf("golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a");
 export const AT = instantOf(new Date(1_700_000_000_000));
@@ -158,6 +159,7 @@ export function sessionRig(
     cleanups,
   );
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     logger: () => {},
   });

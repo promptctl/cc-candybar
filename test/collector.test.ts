@@ -58,6 +58,7 @@ import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
+import { unexpectedFault, watchersFor } from "./helpers/background-faults.js";
 
 const SID = sessionIdOf("s1");
 
@@ -439,6 +440,7 @@ describe("the renderer's subscriptions", () => {
     const { collector, handedIn, logged } = collectorOver({
       ...owners,
       sourceRuns: new SourceRuns({
+        watchers: watchersFor(heldClock(new Date(0))),
         launcher: unscriptedLauncher,
         clock: heldClock(new Date(0)),
       }),
@@ -683,12 +685,18 @@ describe("over the real repository owner", () => {
 
   test("a held repo's PR is looked up with no draw, and the next request finds the repo's value stored", async () => {
     const inner = new OneRepo(unscriptedLauncher);
+    const watchers = watchersFor(systemTimekeeper);
     const git = new GitDataProvider({
+      watchers,
+      report: unexpectedFault,
       clock: systemTimekeeper,
       inner,
       logger: () => {},
     });
-    cleanups.push(() => git.close());
+    cleanups.push(() => {
+      git.close();
+      watchers.closeAll();
+    });
     const owners = {
       ...absentOwners(),
       gitProvider: git,

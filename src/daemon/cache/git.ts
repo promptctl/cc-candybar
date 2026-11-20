@@ -14,7 +14,8 @@ import {
   type RefreshTrigger,
   type Refreshes,
 } from "../../utils/refresh-ledger";
-import { WatcherRegistry } from "./watchers";
+import type { WatcherRegistry } from "./watchers";
+import type { BackgroundWork, ReportFault } from "../background-fault.js";
 import {
   specOf,
   type HeldWatch,
@@ -283,10 +284,6 @@ function composed({ value, pr }: RepoState): Current<GitInfo> {
 
 const CLOSED = failed("git cache closed", "read");
 
-function threw(label: string): (e: unknown) => Outcome<never> {
-  return (e) => failed(`${label} threw: ${String(e)}`, "read");
-}
-
 export class GitDataProvider {
   private readonly repos = new Map<string, RepoState>();
   // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
@@ -308,7 +305,7 @@ export class GitDataProvider {
   private readonly maxRepos: number;
   private readonly forgeLookups: Limiter;
   private readonly watchers: WatcherRegistry;
-  private readonly ownsWatchers: boolean;
+  private readonly report: ReportFault;
   private readonly logger: GitProviderLogger;
   private readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
 
@@ -321,7 +318,11 @@ export class GitDataProvider {
     // How many forge lookups may be out at once, across every repo.
     maxPrLookups?: number;
     inner: GitService;
-    watchers?: WatcherRegistry;
+    // [LAW:single-enforcer] The daemon's one registry: a provider holding a
+    // private one would report its watch throws nowhere.
+    watchers: WatcherRegistry;
+    // [LAW:no-silent-failure] Where a throw in a pass or a lookup goes.
+    report: ReportFault;
     // [LAW:single-enforcer] One injection point. Daemon passes its log;
     // non-daemon consumers leave the default (debug-routed, quiet
     // unless CC_CANDYBAR_DEBUG is set).
@@ -347,22 +348,21 @@ export class GitDataProvider {
       refresh: ["first", "period"],
       lines: ["first", "period"],
     });
-    if (opts.watchers) {
-      this.watchers = opts.watchers;
-      this.ownsWatchers = false;
-    } else {
-      // Auto-constructed registry shares the same logger, so cache and watcher
-      // events land together; with the default logger both stay quiet.
-      this.watchers = new WatcherRegistry({
-        clock: this.clock,
-        logger: this.logger,
-      });
-      this.ownsWatchers = true;
-    }
+    this.watchers = opts.watchers;
+    this.report = opts.report;
   }
 
-  getWatcherRegistry(): WatcherRegistry {
-    return this.watchers;
+  // [LAW:single-enforcer] A read that rejects is a bug: it is reported, and
+  // its repo's readers get it as the failed read it is.
+  private threw(
+    root: string,
+    work: BackgroundWork,
+    label: string,
+  ): (thrown: unknown) => Outcome<never> {
+    return (thrown) => {
+      this.report({ work, subject: root, thrown });
+      return failed(`${label} threw: ${String(thrown)}`, "read");
+    };
   }
 
   getStats(): GitCacheStats {
@@ -561,15 +561,16 @@ export class GitDataProvider {
   }
 
   // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
-  // when the pass ENDS, after its every await, so a tick that shares a running
-  // pass is always followed by the landing that schedules the next one.
+  // [LAW:no-silent-failure] a throw is reported here as the bug it is, never
+  // an unhandled rejection; the repo keeps what it held.
+  // [LAW:no-ambient-temporal-coupling] The period lands when the pass ENDS,
+  // after its every await, so a tick that shares a running pass is always
+  // followed by the landing that schedules the next one.
   private async refreshPass(state: RepoState): Promise<void> {
     try {
       await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+    } catch (thrown) {
+      this.report({ work: "git refresh", subject: state.root, thrown });
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -644,7 +645,9 @@ export class GitDataProvider {
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
     const [outcome, remote] = await Promise.all([
-      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
+      this.inner
+        .getGitInfo(state.root)
+        .catch(this.threw(state.root, "git refresh", "git fetch")),
       this.remoteOf(state),
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
@@ -679,7 +682,9 @@ export class GitDataProvider {
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
   // PR's failure; only `absent` (no remote configured) means "no forge PR".
   private remoteOf(state: RepoState): Promise<Outcome<string>> {
-    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
+    return this.inner
+      .getRepoRemoteUrl(state.root)
+      .catch(this.threw(state.root, "git refresh", "git remote"));
   }
 
   // [LAW:one-source-of-truth] The PR's key is every input its value depends on
@@ -739,7 +744,7 @@ export class GitDataProvider {
               startedAt = this.clock.monotonic();
               return this.inner.resolvePullRequest(state.root, remote.value);
             })
-            .catch(threw("PR lookup"))
+            .catch(this.threw(state.root, "PR lookup", "PR lookup"))
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
@@ -804,6 +809,5 @@ export class GitDataProvider {
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
     this.resolutions.clear();
-    if (this.ownsWatchers) this.watchers.closeAll();
   }
 }

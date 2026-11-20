@@ -37,6 +37,7 @@ import {
   discover,
   readShared,
 } from "../../src/daemon/config-discovery/discover";
+import { unexpectedFault } from "./background-faults.js";
 
 // The origin a context names: its project, its working directory, and the
 // file `--config` names, or the search where none is named.
@@ -82,6 +83,7 @@ export function configHost(
     cache.configure(origin, snapshot);
   };
   const discovery: ConfigDiscovery = new ConfigDiscovery({
+    report: unexpectedFault,
     locations: world.locations,
     stateDir: world.stateDir,
     watchers: world.watchers,

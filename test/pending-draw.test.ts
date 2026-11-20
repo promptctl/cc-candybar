@@ -37,6 +37,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { watchersFor } from "./helpers/background-faults.js";
 const S = sessionIdOf("s");
 
 const AT = 1_800_000_000 as Instant;
@@ -76,7 +77,11 @@ function renderer(cfg: ValidatedConfig) {
   const registry = new SourceRegistry(store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
-  const sourceRuns = new SourceRuns({ launcher, clock });
+  const sourceRuns = new SourceRuns({
+    watchers: watchersFor(clock),
+    launcher,
+    clock,
+  });
   const runs = collectedRuns(sourceRuns, registry, TEST_ENV);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

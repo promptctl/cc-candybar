@@ -37,6 +37,7 @@ import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { unexpectedFault, watchersFor } from "./helpers/background-faults.js";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
 
@@ -84,6 +85,7 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     counters: {
       watchersOpened: 0,
@@ -113,7 +115,11 @@ function makeCache(
     { budgetBytes: () => opts.budgetBytes ?? 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
-  const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
+  const sourceRuns = new SourceRuns({
+    watchers: watchersFor(systemTimekeeper),
+    launcher,
+    clock: systemTimekeeper,
+  });
   holding = { sourceRuns, held: new Map() };
   const held = holding.held;
   cleanups.push(() => {

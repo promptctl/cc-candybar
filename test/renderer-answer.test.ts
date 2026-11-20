@@ -80,7 +80,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import { joinedEvent } from "../src/utils/event-hold";
+import { DAEMON_EVENT_HOLD_S, joinedEvent } from "../src/utils/event-hold";
 import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { STORAGE_FOLDER } from "../src/config/loader/plugins";
@@ -207,6 +207,14 @@ const REQUEST = 7 as RequestId;
 
 // The readings every input here carries: the rig's instant, at the first tick.
 const READ = { at: AT, tick: 0 as Tick };
+
+// The kinds of the faults a draw's record noted, in its list's order.
+const faultKindsOf = (record: ReadonlyArray<readonly [string, string]>) =>
+  (
+    JSON.parse(new Map(record).get("faults") ?? "[]") as Array<{
+      readonly kind: string;
+    }>
+  ).map(({ kind }) => kind);
 
 // The session's context as the host delivers one ahead of a request: with the
 // world state its collector read at the request's keys.
@@ -756,6 +764,41 @@ describe("a statusline request", () => {
     expect(presentOf(effects).displayedEvents).toEqual([
       { kind: "act-failed", event },
     ]);
+  });
+
+  test("draws a throw in the daemon's background work as an error, and reports it drew it", async () => {
+    const event = joinedEvent(
+      null,
+      "git refresh threw (/repo): parser bug",
+      READ.at,
+    );
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      backgroundFault: event,
+    }));
+    const { effects, record } = answered(await request(t));
+    expect(faultKindsOf(record)).toContain("background-fault");
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "background-fault", event },
+    ]);
+  });
+
+  test("draws no background fault that an answer carried and its hold has passed", async () => {
+    const event = {
+      ...joinedEvent(
+        null,
+        "git refresh threw (/repo): parser bug",
+        (READ.at - DAEMON_EVENT_HOLD_S - 1) as Instant,
+      ),
+      answered: true,
+    };
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      backgroundFault: event,
+    }));
+    const { effects, record } = answered(await request(t));
+    expect(faultKindsOf(record)).not.toContain("background-fault");
+    expect(presentOf(effects).displayedEvents).toBeUndefined();
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {

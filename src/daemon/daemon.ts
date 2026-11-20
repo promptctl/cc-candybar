@@ -13,7 +13,9 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
 } from "./foundations/verb-error.js";
+import type { BackgroundFault } from "./background-fault.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -273,6 +275,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     counters: stats,
     logger: log,
+    report: reportFault,
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -288,14 +291,22 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+      backgroundFault: null,
+    },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
+  // [LAW:one-source-of-truth] How the last renderer process ended, the acts
+  // that failed with no session's bar to hold them, and the throws in the
+  // daemon's background work, each held for the bar until an answer has
+  // carried it.
   let rendererEnded: HeldEvent | null = null;
   let actFailed: HeldEvent | null = null;
+  let backgroundFault: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
@@ -303,8 +314,23 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         launcher: launcher.standing(),
         rendererEnded,
         actFailed,
+        backgroundFault,
       }),
     );
+  }
+  // [LAW:single-enforcer] Every background throw lands here: its detail in
+  // daemon.log, its message on every bar. Background work runs on timers and
+  // promises, never inside this synchronous build, so the launcher the
+  // restatement reads exists by the first report.
+  function reportFault({ work, subject, thrown }: BackgroundFault): void {
+    const failure = failureOf(thrown);
+    log("error", `${work} threw (${subject}): ${failure.detail}`);
+    backgroundFault = joinedEvent(
+      backgroundFault,
+      `${work} threw (${subject}): ${failure.message}`,
+      instant(),
+    );
+    restateFaults();
   }
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
@@ -353,6 +379,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         case "act-failed":
           if (actFailed !== null && answeredBy(actFailed, event)) {
             actFailed = { ...actFailed, answered: true };
+            changed = true;
+          }
+          break;
+        case "background-fault":
+          if (backgroundFault !== null && answeredBy(backgroundFault, event)) {
+            backgroundFault = { ...backgroundFault, answered: true };
             changed = true;
           }
           break;
@@ -426,6 +458,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     launcher,
     host,
     watchers: watcherRegistry,
+    report: reportFault,
     fileEvents,
     clock,
     logger: log,
@@ -597,6 +630,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    report: reportFault,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });

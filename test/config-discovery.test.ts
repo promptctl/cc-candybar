@@ -48,6 +48,8 @@ import { writeConfigFile } from "../src/daemon/file-rewrites";
 import { diffChanges } from "../src/config/config-changes";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { ConfigChange, EffectId } from "../src/renderer-interface/interface";
+import { heldFaults, unexpectedFault } from "./helpers/background-faults.js";
+import type { ReportFault } from "../src/daemon/background-fault.js";
 
 let root: string;
 let cleanups: Array<() => void>;
@@ -86,7 +88,12 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = stateDir(HOST)) {
+function discoveryRig(
+  files = diskFiles,
+  clock = systemTimekeeper,
+  state = stateDir(HOST),
+  report: ReportFault = unexpectedFault,
+) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -96,6 +103,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
+    report,
     clock,
     counters,
     logger: () => {},
@@ -104,6 +112,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   const logged: string[] = [];
   const delivered: Array<readonly [RendererName, string]> = [];
   const service = new ConfigDiscovery({
+    report,
     locations: locations(HOST),
     stateDir: state,
     watchers,
@@ -598,23 +607,28 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("one failed rediscovery is reported, and leaves the writer and another holder the successful change and can retry", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
   let refuse = false;
+  const { faults, report } = heldFaults();
   const {
     service,
     discovery: writer,
     delivered,
-    logged,
-  } = discoveryRig({
-    ...diskFiles,
-    text(read) {
-      if (refuse && read === b.file) throw new Error("rediscovery failed");
-      return diskFiles.text(read);
+  } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (refuse && read === b.file) throw new Error("rediscovery failed");
+        return diskFiles.text(read);
+      },
     },
-  });
+    systemTimekeeper,
+    stateDir(HOST),
+    report,
+  );
   const second = service.forRenderer(name);
   const origins = [a.origin, b.origin];
   writer.follow(origins);
@@ -627,11 +641,15 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
+  expect(
+    faults.map(({ work, subject, thrown }) => [work, subject, String(thrown)]),
+  ).toEqual([
+    [
+      "config discovery",
+      originKey(b.origin),
+      "Error: rediscovery failed",
+    ],
+  ]);
 
   refuse = false;
   service.again("events-resumed");
@@ -838,10 +856,12 @@ function physicalDiscovery(
   } = {},
 ) {
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock,
     logger: () => {},
   });
   const service = new ConfigDiscovery({
+    report: unexpectedFault,
     locations: { ...locations(HOST), dataHome, dataDirs },
     stateDir: state,
     watchers,
@@ -1350,11 +1370,16 @@ test("a deleted layer heard through its descriptor revision retires on the first
     target: requestedConfigTarget(file, undefined, "config-only"),
   };
   const clock = heldClock(new Date());
-  const watchers = new WatcherRegistry({ clock, logger: () => {} });
+  const watchers = new WatcherRegistry({
+    report: unexpectedFault,
+    clock,
+    logger: () => {},
+  });
   const reads: string[] = [];
   const moved: RenderOrigin[] = [];
   const observe = countingText(reads);
   const service = new ConfigDiscovery({
+    report: unexpectedFault,
     locations: {
       ...locations(HOST),
       dataHome: project("empty-data"),

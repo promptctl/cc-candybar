@@ -80,6 +80,7 @@ import {
   loadDiscovered,
   originOf,
 } from "./helpers/config-host";
+import { unexpectedFault, watchersFor } from "./helpers/background-faults.js";
 
 const S2 = sessionIdOf("s2");
 const S9 = sessionIdOf("s9");
@@ -214,10 +215,12 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     logger: log,
   });
   const providers = createPayloadProviders({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     launcher: processLauncher,
     host: HOST,
@@ -230,6 +233,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     logger: log,
     ledger: new RefreshLedger(log),
     sourceRuns: new SourceRuns({
+      watchers: watchersFor(systemTimekeeper),
       launcher: processLauncher,
       clock: systemTimekeeper,
     }),

@@ -13,6 +13,7 @@
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
+import type { ReportFault } from "./background-fault.js";
 import { GitService } from "./cache/git-service";
 import type { Host } from "../host";
 import type { Timekeeper } from "../time";
@@ -42,6 +43,8 @@ export function createPayloadProviders(opts: {
   // The machine the providers read: where transcripts and settings live.
   readonly host: Host;
   readonly watchers: WatcherRegistry;
+  // [LAW:no-silent-failure] Where a git pass's or a PR lookup's throw goes.
+  readonly report: ReportFault;
   // Whether the OS is delivering file events: the caller's one owner, which
   // only the daemon starts.
   readonly fileEvents: FileEvents;
@@ -76,6 +79,7 @@ export function createPayloadProviders(opts: {
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
       watchers: opts.watchers,
+      report: opts.report,
       clock,
       logger,
       ledger,

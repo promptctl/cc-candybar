@@ -28,6 +28,11 @@ import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
+import {
+  heldFaults,
+  unexpectedFault,
+  watchersFor,
+} from "./helpers/background-faults.js";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -56,7 +61,11 @@ describe("WatcherRegistry", () => {
         fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-polled-")),
       );
       clock = heldClock(new Date(0));
-      reg = new WatcherRegistry({ clock, logger: () => {} });
+      reg = new WatcherRegistry({
+        report: unexpectedFault,
+        clock,
+        logger: () => {},
+      });
     });
     afterEach(() => {
       reg.closeAll();
@@ -298,7 +307,10 @@ describe("WatcherRegistry", () => {
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+    });
     const h1 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     const h2 = reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
@@ -320,7 +332,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+      counters,
+    });
     const first = reg.follow(
       null,
       { key: "a", targets: { dirs: [], polled: [] }, unbound: false },
@@ -379,7 +395,11 @@ describe("WatcherRegistry", () => {
       dirWatchesOpened: 0,
       dirWatchesClosed: 0,
     };
-    const reg = new WatcherRegistry({ clock: systemTimekeeper, counters });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+      counters,
+    });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
       reg.acquire(`k${i}`, { dirs: [], polled: [] }, () => fired.push(`k${i}`)),
@@ -404,7 +424,10 @@ describe("WatcherRegistry", () => {
 
   test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) =>
       seen.push(inv),
@@ -432,7 +455,10 @@ describe("WatcherRegistry", () => {
 
   test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+    });
     const seen: Invalidation[] = [];
     reg.acquire(
       dir,
@@ -468,6 +494,7 @@ describe("WatcherRegistry", () => {
       dirWatchesClosed: 0,
     };
     const reg = new WatcherRegistry({
+      report: unexpectedFault,
       clock: systemTimekeeper,
       counters,
       logger: () => {},
@@ -513,6 +540,7 @@ describe("WatcherRegistry", () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
       fs.chmodSync(dir, 0o000);
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -553,6 +581,7 @@ describe("WatcherRegistry", () => {
         fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-")),
       );
       reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
         nodeWalksTrees: true,
@@ -691,6 +720,7 @@ describe("WatcherRegistry", () => {
 
     test("where the recursive watch is native, a tree is one watch", () => {
       const native = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
         nodeWalksTrees: false,
@@ -716,6 +746,7 @@ describe("WatcherRegistry", () => {
       const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
       const dir = path.join(parent, "later");
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -748,6 +779,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -834,6 +866,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -866,6 +899,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -890,6 +924,42 @@ describe("WatcherRegistry", () => {
     }
   });
 
+  test("every holder that throws is reported, and the holders after it still hear the window", async () => {
+    const fake = standIn();
+    try {
+      const { faults, report } = heldFaults();
+      const reg = new WatcherRegistry({
+        report,
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const heard: Invalidation[] = [];
+      const spec = { dirs: [{ path: "/w" }], polled: [] };
+      reg.acquire("k", spec, () => {
+        throw new Error("first holder bug");
+      });
+      reg.acquire("k", spec, () => {
+        throw new Error("second holder bug");
+      });
+      reg.acquire("k", spec, (inv) => heard.push(inv));
+      fake.opensOf("/w")[0]!.listener("rename", "a");
+      await until(() => heard.length === 1, "the third holder's window");
+      expect(
+        faults.map(({ work, subject, thrown }) => [
+          work,
+          subject,
+          String(thrown),
+        ]),
+      ).toEqual([
+        ["watch delivery", "key=k", "Error: first holder bug"],
+        ["watch delivery", "key=k", "Error: second holder bug"],
+      ]);
+      reg.closeAll();
+    } finally {
+      fake.restore();
+    }
+  });
+
   // On macOS every open or close of a directory watch rebuilds the daemon's
   // one FSEvents stream, so slots share one handle per directory.
   test("slots on one directory share one handle, which closes with the last of them", () => {
@@ -897,6 +967,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -940,6 +1011,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -973,6 +1045,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1023,6 +1096,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1091,6 +1165,7 @@ describe("WatcherRegistry", () => {
     try {
       const counters = zeroCounters();
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         counters,
         logger: () => {},
@@ -1125,6 +1200,7 @@ describe("WatcherRegistry", () => {
     const fake = standIn();
     try {
       const reg = new WatcherRegistry({
+        report: unexpectedFault,
         clock: systemTimekeeper,
         logger: () => {},
       });
@@ -1153,7 +1229,10 @@ describe("WatcherRegistry", () => {
 
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
+    const reg = new WatcherRegistry({
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+    });
     reg.acquire(repo, { dirs: [], polled: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
@@ -1208,7 +1287,10 @@ async function hearsRefOnlyMove(
   // The real reader: what it stores is what git reads off the repo, so the
   // test can ask whether the value is the ref's after a move.
   const inner = new GitService(processLauncher);
+  const watchers = watchersFor(systemTimekeeper);
   const svc = new GitDataProvider({
+    watchers,
+    report: unexpectedFault,
     clock: systemTimekeeper,
     inner,
     periodMs: 600_000,
@@ -1266,6 +1348,7 @@ async function hearsRefOnlyMove(
     );
   } finally {
     svc.close();
+    watchers.closeAll();
   }
 }
 
@@ -1418,8 +1501,14 @@ describe("GitDataProvider + watchers integration", () => {
 
   test("a HEAD change re-reads the repo with no read asking", async () => {
     const repo = makeRepo();
+    const watchers = watchersFor(systemTimekeeper);
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
+    const svc = new GitDataProvider({
+      watchers,
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+      inner,
+    });
     const holds = new Holds();
     try {
       await laneOutcome(svc.declare(holds, repo));
@@ -1445,14 +1534,18 @@ describe("GitDataProvider + watchers integration", () => {
       expect(svc.getStats()).toMatchObject({ hits: hits + 1, misses });
     } finally {
       svc.close();
+      watchers.closeAll();
       rmrf(repo);
     }
   });
 
   test("a held repo is re-read on its period, which a dropped watch event cannot stop", async () => {
+    const watchers = watchersFor(systemTimekeeper);
     const repo = makeRepo();
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({
+      watchers,
+      report: unexpectedFault,
       clock: systemTimekeeper,
       inner,
       periodMs: 150,
@@ -1470,17 +1563,25 @@ describe("GitDataProvider + watchers integration", () => {
     await new Promise((r) => setTimeout(r, 400));
     expect(inner.calls).toBe(after);
     svc.close();
+    watchers.closeAll();
     rmrf(repo);
   });
 
   test("close releases all watchers", async () => {
+    const watchers = watchersFor(systemTimekeeper);
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ clock: systemTimekeeper, inner });
+    const svc = new GitDataProvider({
+      watchers,
+      report: unexpectedFault,
+      clock: systemTimekeeper,
+      inner,
+    });
     await laneOutcome(svc.declare(new Holds(), repo));
     expect(svc.getStats().watchers).toBe(1);
     svc.close();
     expect(svc.getStats().watchers).toBe(0);
+    watchers.closeAll();
     rmrf(repo);
   });
 });

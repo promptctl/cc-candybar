@@ -20,6 +20,7 @@ import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
+import { heldFaults } from "./helpers/background-faults.js";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -144,12 +145,21 @@ class StubGitService extends GitService {
 // [LAW:no-ambient-temporal-coupling] Every provider a case built, closed as
 // the case ends, before the real timers return, so its timers are cleared on
 // the clock that armed them.
-const built: GitDataProvider[] = [];
+const built: Array<{ readonly close: () => void }> = [];
 
 afterEach(() => {
-  for (const svc of built.splice(0)) svc.close();
+  for (const owner of built.splice(0)) owner.close();
   jest.useRealTimers();
 });
+
+// A provider and the registry it watches through, closed in that order.
+function provided(
+  watchers: WatcherRegistry,
+  svc: GitDataProvider,
+): GitDataProvider {
+  built.push(svc, { close: () => watchers.closeAll() });
+  return svc;
+}
 
 function makeCache(
   opts: {
@@ -164,22 +174,33 @@ function makeCache(
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
-  const svc = new GitDataProvider({
+  const logger = (_level: string, message: string): void => {
+    if (throwOn !== undefined && message.includes(throwOn)) {
+      throwOn = undefined;
+      throw new Error("logger bug");
+    }
+    logs.push(message);
+  };
+  const { faults, report } = heldFaults();
+  const watchers = new WatcherRegistry({
     clock: systemTimekeeper,
-    periodMs: opts.periodMs,
-    maxRepos: opts.maxRepos,
-    maxPrLookups: opts.maxPrLookups,
-    inner,
-    logger: (_level, message) => {
-      if (throwOn !== undefined && message.includes(throwOn)) {
-        throwOn = undefined;
-        throw new Error("logger bug");
-      }
-      logs.push(message);
-    },
+    logger,
+    report,
   });
-  built.push(svc);
-  return { svc, inner, logs, holds: new Holds() };
+  const svc = provided(
+    watchers,
+    new GitDataProvider({
+      clock: systemTimekeeper,
+      periodMs: opts.periodMs,
+      maxRepos: opts.maxRepos,
+      maxPrLookups: opts.maxPrLookups,
+      inner,
+      watchers,
+      report,
+      logger,
+    }),
+  );
+  return { svc, inner, logs, faults, holds: new Holds() };
 }
 
 // The git passes' refresh events, without the PR lookups' between them.
@@ -1168,9 +1189,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws is reported, and the repo keeps its period", async () => {
     jest.useFakeTimers();
-    const { svc, inner, logs, holds } = makeCache({
+    const { svc, inner, logs, faults, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
     });
@@ -1179,13 +1200,49 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
 
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
-    ]);
+    expect(
+      faults.map(({ work, subject, thrown }) => [
+        work,
+        subject,
+        String(thrown),
+      ]),
+    ).toEqual([["git refresh", "/repo", "Error: logger bug"]]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
+  });
+
+  test("a read that rejects is reported and stored as the repo's failed read", async () => {
+    const { svc, inner, faults, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.getGitInfo = () => Promise.reject(new Error("parser bug"));
+
+    const outcome = await gitOf(svc, holds, "/repo");
+    expect(outcome).toMatchObject({
+      kind: "failed",
+      reason: "git fetch threw: Error: parser bug",
+    });
+    expect(faults.map(({ work, subject }) => [work, subject])).toEqual([
+      ["git refresh", "/repo"],
+    ]);
+  });
+
+  test("a PR lookup that rejects is reported, and its period still looks it up again", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, faults, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.resolvePullRequest = (workingDir, remoteUrl) => {
+      inner.prCalls.push({ workingDir, remoteUrl });
+      return Promise.reject(new Error("forge bug"));
+    };
+
+    void gitOf(svc, holds, "/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(faults.map(({ work, subject }) => [work, subject])).toEqual([
+      ["PR lookup", "/repo"],
+    ]);
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.failedMs);
+    expect(inner.prCalls.length).toBeGreaterThan(1);
   });
 });
 
@@ -1271,20 +1328,25 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
+    const { faults, report } = heldFaults();
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       counters,
       logger,
+      report,
     });
-    const svc = new GitDataProvider({
-      clock: systemTimekeeper,
-      ...opts,
-      inner,
+    const svc = provided(
       watchers,
-      logger,
-    });
-    built.push(svc);
-    return { svc, inner, counters, logs, watchers };
+      new GitDataProvider({
+        clock: systemTimekeeper,
+        ...opts,
+        inner,
+        watchers,
+        report,
+        logger,
+      }),
+    );
+    return { svc, inner, counters, logs, faults, watchers };
   }
 
   test("refreshes and changes never close or reopen the watch", async () => {
@@ -1508,19 +1570,21 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-eloop-"));
     const loop = path.join(repo, ".git");
     fs.symlinkSync(loop, loop);
-    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    const { svc, inner, counters, logs, faults } = counted({ periodMs: 100 });
     inner.repoRootByDir[repo] = repo;
     inner.gitDirByDir[repo] = loop;
     try {
       const outcome = await gitOf(svc, new Holds(), repo);
       expect(outcome.kind).toBe("ok");
       await until(() => passes(logs).length >= 2, "a period pass landed");
-      expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
+      expect(faults).toEqual([]);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
       // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(
+            l,
+          ),
         ),
       ).toBe(true);
       expect(counters).toEqual({

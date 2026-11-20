@@ -36,6 +36,7 @@ import { daemonFactsOf } from "./daemon-facts";
 import { absentOwners, withTranscriptLanes } from "./payload-owners";
 import { TEST_ENV } from "./session-environment";
 import { viewFacts } from "./view-facts";
+import { watchersFor } from "./background-faults.js";
 
 export interface CollectedRuns {
   // What a view's source reads of the runs: each run's and each variable's
@@ -144,7 +145,11 @@ export function heldRuns(
   launcher: Launcher,
   cleanups: Array<() => void>,
 ): HeldRuns {
-  const sourceRuns = new SourceRuns({ launcher, clock: systemTimekeeper });
+  const sourceRuns = new SourceRuns({
+    watchers: watchersFor(systemTimekeeper),
+    launcher,
+    clock: systemTimekeeper,
+  });
   const holders = observable.map<SessionId, CollectedRuns>(undefined, {
     deep: false,
   });

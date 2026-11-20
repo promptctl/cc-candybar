@@ -40,6 +40,7 @@ import { samplePayload } from "./sample-payload";
 import { drawPayload } from "./draw-payload";
 import { sessionOfPayload } from "./payload-session";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
+import { watchersFor } from "./background-faults.js";
 
 // How long a prepare waits for its sources' first runs.
 const SETTLE_MS = 5000;
@@ -110,6 +111,7 @@ export function prepareSnapshot(
   deriveActionGates(createGates(), config);
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
+    watchers: watchersFor(world.clock),
     launcher: world.launcher,
     clock: world.clock,
   });

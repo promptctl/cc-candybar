@@ -5,6 +5,7 @@ import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import type { Timekeeper } from "../../time";
+import type { ReportFault } from "../background-fault.js";
 import {
   readPolledEntry,
   type FileObservations,
@@ -242,6 +243,7 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
+  private readonly report: ReportFault;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
@@ -256,6 +258,9 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // [LAW:no-silent-failure] Where a holder's throw goes: the daemon tells
+    // every bar. Required, so no registry reports into nothing.
+    report: ReportFault;
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
@@ -263,6 +268,7 @@ export class WatcherRegistry {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.report = opts.report;
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
@@ -724,9 +730,13 @@ export class WatcherRegistry {
     try {
       take();
     } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      // [LAW:single-enforcer] Each holder's throw is reported, and the
+      // delivery goes on to the next holder.
+      this.report({
+        work: "watch delivery",
+        subject: key === null ? "batch" : `key=${valueOf(key)}`,
+        thrown,
+      });
     }
   }
 

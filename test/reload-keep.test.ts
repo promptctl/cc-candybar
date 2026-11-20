@@ -19,6 +19,7 @@ import { configHost } from "./helpers/config-host";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { unexpectedFault } from "./helpers/background-faults.js";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -61,6 +62,7 @@ function rig(
   const reloaded: string[] = [];
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     logger: () => {},
   });

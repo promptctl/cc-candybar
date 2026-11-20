@@ -41,6 +41,7 @@ import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
+import { unexpectedFault } from "./helpers/background-faults.js";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -339,9 +340,13 @@ test("a write through a config symlink reloads the remaining holder after the wr
   fs.symlinkSync(file, link);
   const origin = originOf(dir, dir, link);
   const secondary = rendererNameOf("secondary");
-  const watches = new WatcherRegistry({ clock: systemTimekeeper });
+  const watches = new WatcherRegistry({
+    report: unexpectedFault,
+    clock: systemTimekeeper,
+  });
   const hosts = new Map<RendererName, RendererHost>();
   const discovery = new ConfigDiscovery({
+    report: unexpectedFault,
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,

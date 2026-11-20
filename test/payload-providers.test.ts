@@ -10,14 +10,17 @@ import { systemTimekeeper } from "../src/time";
 import { runTeardown } from "../src/utils/teardown";
 import { HOST } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { unexpectedFault } from "./helpers/background-faults.js";
 
 function providers() {
   const log = () => {};
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     logger: log,
   });
   const built = createPayloadProviders({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     launcher: unscriptedLauncher,
     host: HOST,

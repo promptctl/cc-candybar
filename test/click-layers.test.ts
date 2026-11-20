@@ -34,6 +34,7 @@ import {
 } from "../src/renderer/render-cache";
 import type { RenderOrigin } from "../src/config-hint";
 import { systemTimekeeper } from "../src/time";
+import { unexpectedFault } from "./helpers/background-faults.js";
 
 const S1 = sessionIdOf("s1");
 const USER = `{
@@ -73,6 +74,7 @@ function session(): {
   readonly cache: DiscoveringCache;
 } {
   const watchers = new WatcherRegistry({
+    report: unexpectedFault,
     clock: systemTimekeeper,
     logger: () => {},
   });

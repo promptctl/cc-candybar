@@ -475,6 +475,14 @@ export function drawRender(
   ): MaybeError => ({ kind, about, text, copy: text });
   const said = (kind: DrawError["kind"], text: string | null | undefined) =>
     sourced(kind, text ?? "", text);
+  // [LAW:no-silent-failure] A throw in the daemon's background work is an
+  // error on every bar, by the daemon's event hold. Its throws join while
+  // unanswered, so it is about its kind alone: a viewer open on it stays open.
+  const backgroundFault = shownAt(
+    document.daemon.backgroundFault,
+    at,
+    drawing.by,
+  );
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
@@ -493,6 +501,7 @@ export function drawRender(
       }),
     ),
     said("click", clickShown?.text),
+    sourced("background-fault", "background-fault", backgroundFault?.text),
   ].flatMap(({ about, text, copy, ...named }) =>
     text != null && copy != null ? [{ ...named, about, text, copy }] : [],
   );
@@ -517,9 +526,13 @@ export function drawRender(
   ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
-  const eventsShown = [...launchEvents, ...held].flatMap(({ kind, event }) =>
-    event.answered ? [] : [{ kind, event }],
-  );
+  const eventsShown: readonly DisplayedEvent[] = [
+    ...launchEvents,
+    ...held,
+    ...(backgroundFault === null
+      ? []
+      : [{ kind: "background-fault" as const, event: backgroundFault }]),
+  ].flatMap(({ kind, event }) => (event.answered ? [] : [{ kind, event }]));
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
@@ -790,7 +803,13 @@ export function drawRender(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and the file a dropped write names.
 interface DrawError extends SourcedText {
-  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "dropped"
+    | "click"
+    | "background-fault";
   readonly subject?: string;
 }
 
@@ -844,16 +863,29 @@ interface DaemonEventWarning {
   readonly event: HeldEvent;
 }
 
+// [LAW:single-enforcer] A daemon event this draw shows: inside its hold, or
+// past it to a request no answer has served.
+function shownAt(
+  event: HeldEvent | null,
+  at: Instant,
+  render: Drawing["by"],
+): HeldEvent | null {
+  return event === null ||
+    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
+    ? null
+    : event;
+}
+
 function daemonEventAt(
   kind: DaemonEventWarning["kind"],
   event: HeldEvent | null,
   at: Instant,
   render: Drawing["by"],
 ): DaemonEventWarning | undefined {
-  return event === null ||
-    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
+  const shown = shownAt(event, at, render);
+  return shown === null
     ? undefined
-    : { kind, message: event.text, event };
+    : { kind, message: shown.text, event: shown };
 }
 
 // What stands before a draw, whatever the draw then meets.
