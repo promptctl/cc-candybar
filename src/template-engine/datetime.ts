@@ -17,7 +17,6 @@ const DATE_LIMIT_MS = 8.64e15;
 const ISO =
   /^(?:\d{4}|[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
 const NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
-const NUMERIC_ZONE = /\d:.*[+-]\d/s;
 
 function legacyDate(value: string): { tokens: string; end: number } {
   // Look for zones outside parenthesized comments. Retain the original text
@@ -45,7 +44,9 @@ function hasLegacyZone(value: string): boolean {
   const firstNumber = value.search(/\d/);
   if (firstNumber < 0) return false;
   const timed = value.slice(firstNumber);
-  return NAMED_ZONE.test(timed) || NUMERIC_ZONE.test(timed);
+  if (NAMED_ZONE.test(timed)) return true;
+  const colon = timed.search(/\d:/);
+  return colon !== -1 && /[+-]\d/.test(timed.slice(colon + 2));
 }
 
 // [LAW:effects-at-boundaries] Read offsets only at supplied instants in the
