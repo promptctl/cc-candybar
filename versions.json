@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-897",
+      "ref": "refs/pull/897/merge",
+      "sha": "b4ba3e520f9ba6480bfe03bf935004b4e858f65e",
+      "timestamp": "2026-11-20T00:31:45.105Z",
+      "commits": [
+        {
+          "sha": "b4ba3e520f9ba6480bfe03bf935004b4e858f65e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T00:30:44Z",
+          "message": "Merge 85ca740b57f42a5a08aa868eb7d0647ad11749cb into 2f98785f9d103f1d4991daf0555308a3b09aabe9\n"
+        },
+        {
+          "sha": "85ca740b57f42a5a08aa868eb7d0647ad11749cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:30:34-07:00",
+          "message": "Merge commit '2f98785f9d103f1d4991daf0555308a3b09aabe9' into codex/integrate-input-readings\n"
+        },
+        {
+          "sha": "a653be864c1455e52730260aa308d24f7ad5d0b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:23:25-07:00",
+          "message": "test(config): catch lost synthesized variable bindings\n"
+        },
+        {
+          "sha": "3ceaad6bc7a842304e76fae4f425112c5b0b2e16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:24:08-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/integrate-input-readings\n"
+        },
+        {
+          "sha": "371865487dc1c1472f70c79d42a02c374df921c6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:57:05-07:00",
+          "message": "fix(config): preserve unchanged variable declarations (ibyq.r86)\n"
+        },
+        {
+          "sha": "b26df12cfbfd18277d21e3facac992ffe777ae68",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:05:11-07:00",
+          "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2f98785f9d103f1d4991daf0555308a3b09aabe9",
@@ -63,49 +113,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-897",
-      "ref": "refs/pull/897/merge",
-      "sha": "57648cc8d09d288df1445087201c64a8d4c8c6d6",
-      "timestamp": "2026-11-20T00:25:31.079Z",
-      "commits": [
-        {
-          "sha": "57648cc8d09d288df1445087201c64a8d4c8c6d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T00:24:27Z",
-          "message": "Merge a653be864c1455e52730260aa308d24f7ad5d0b5 into 6611e97d364f8951f711c89a3c951456c0e94ca7\n"
-        },
-        {
-          "sha": "a653be864c1455e52730260aa308d24f7ad5d0b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:23:25-07:00",
-          "message": "test(config): catch lost synthesized variable bindings\n"
-        },
-        {
-          "sha": "3ceaad6bc7a842304e76fae4f425112c5b0b2e16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:24:08-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/integrate-input-readings\n"
-        },
-        {
-          "sha": "371865487dc1c1472f70c79d42a02c374df921c6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:57:05-07:00",
-          "message": "fix(config): preserve unchanged variable declarations (ibyq.r86)\n"
-        },
-        {
-          "sha": "b26df12cfbfd18277d21e3facac992ffe777ae68",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:05:11-07:00",
-          "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
         }
       ]
     },
