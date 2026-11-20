@@ -2,7 +2,12 @@
 // turn share a batch and its reverse-order restoration. Each rewrite carries
 // the bytes its plan observed.
 import fs from "node:fs";
-import { asError, resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
+import {
+  asError,
+  filePermissions,
+  resolvedTarget,
+  writeAtomic,
+} from "../utils/atomic-write.js";
 
 export interface FileRewrite {
   readonly file: string;
@@ -20,12 +25,16 @@ export interface FileRetirement {
 
 // [LAW:effects-at-boundaries] A publication replaces one file or leaves its
 // prior bytes in place. Restoration uses the same operation as publication.
-export type WriteConfigFile = (file: string, text: string | null) => void;
+export type WriteConfigFile = (
+  file: string,
+  text: string | null,
+  mode?: number,
+) => void;
 
-export const writeConfigFile: WriteConfigFile = (file, text) =>
+export const writeConfigFile: WriteConfigFile = (file, text, mode) =>
   text === null
     ? fs.rmSync(resolvedTarget(file), { force: true })
-    : writeAtomic(file, text);
+    : writeAtomic(file, text, mode);
 
 interface RestoreFailure {
   readonly file: string;
@@ -48,11 +57,20 @@ export function writeRevisions(
   retire: FileRetirement | null,
   write: WriteConfigFile = writeConfigFile,
 ): RevisionWrite {
-  const written: FileRewrite[] = [];
+  const written: Array<
+    FileRewrite & { readonly removedMode: number | undefined }
+  > = [];
   try {
     for (const rewrite of rewrites) {
+      // [LAW:effects-at-boundaries] A removed file loses its mode with its
+      // directory entry. Capture it before unlink so restoration can stage
+      // the original permissions before making the file visible again.
+      const removedMode =
+        rewrite.will === null && rewrite.was !== null
+          ? filePermissions(rewrite.file)
+          : undefined;
       write(rewrite.file, rewrite.will);
-      written.push(rewrite);
+      written.push({ ...rewrite, removedMode });
     }
     const files = written.map(({ file }) => file);
     if (retire !== null) {
@@ -66,9 +84,11 @@ export function writeRevisions(
     const error = asError(cause);
     // [LAW:no-silent-failure] Try every restore and name each failure.
     const failed: RestoreFailure[] = [];
-    for (const { file, was } of written.reverse()) {
+    for (const { file, was, will, removedMode } of written.reverse()) {
+      // Removing a file already absent leaves no previous entry to restore.
+      if (will === null && removedMode === undefined) continue;
       try {
-        write(file, was);
+        write(file, was, removedMode);
       } catch (rollback) {
         failed.push({ file, error: asError(rollback) });
       }
