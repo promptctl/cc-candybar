@@ -90,7 +90,13 @@ import {
   type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { compareStructural, computed, observable, runInAction } from "mobx";
+import {
+  compareStructural,
+  computed,
+  observable,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
@@ -266,13 +272,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const stats = new RuntimeStats(clock);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
-  // [LAW:one-source-of-truth] How the last renderer process ended, held for
-  // the bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  // [LAW:no-ambient-temporal-coupling] The work that failed with no
-  // session's bar to hold it, held the same way. Its own box, declared before
-  // anything that can throw, so a throw while the daemon is building reaches
-  // the bar with nothing else needing to exist yet.
+  // [LAW:one-source-of-truth] The events the daemon itself holds for the bar
+  // until an answer has carried them, each in its own box: how the last
+  // renderer process ended, and the work that failed with no session's bar
+  // to hold it.
+  // [LAW:no-ambient-temporal-coupling] Declared before anything that can
+  // throw, so a throw while the daemon is building reaches the bar with
+  // nothing else needing to exist yet.
+  const rendererEnded = observable.box<HeldEvent | null>(null, {
+    deep: false,
+  });
   const daemonFailed = observable.box<HeldEvent | null>(null, { deep: false });
   // The unacknowledged text is included in the next warning.
   const held = (text: string, fromEnvironment: boolean): void => {
@@ -287,9 +296,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ),
     );
   };
-  // [LAW:single-enforcer] The daemon's one writer of a throw from work it
-  // called that no caller answers for: one record, in daemon.log and on
-  // every bar.
+  // [LAW:no-silent-failure] A throw from work the daemon called that no
+  // caller answers for: one record, in daemon.log and on every bar.
   const threw: WorkThrew = (event, fields, thrown) => {
     const line = threwLine(event, fields, thrown);
     log("error", line);
@@ -312,14 +320,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     logger: log,
     clock,
   });
-  // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
+  // [LAW:one-source-of-truth] The faults other owners hold: whether file
+  // events are heard, and what the launcher stands behind. Restated whenever
+  // either may have moved, and compared whole, so a restatement that moved
+  // nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const restated = observable.box<Omit<DaemonFacts, "daemonFailed">>(
-    { fileEvents: [], launcher: [], rendererEnded: null },
+  const restated = observable.box<Pick<DaemonFacts, "fileEvents" | "launcher">>(
+    { fileEvents: [], launcher: [] },
     { deep: false, equals: compareStructural },
   );
   function restateFaults(): void {
@@ -327,13 +335,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       restated.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
       }),
     );
   }
+  // The daemon's own faults, as every session's world state carries them.
   const daemonFaults = computed(
     (): DaemonFacts => ({
       ...restated.get(),
+      rendererEnded: rendererEnded.get(),
       daemonFailed: daemonFailed.get(),
     }),
   );
@@ -366,6 +375,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       if (phase.kind !== "building") restateFaults();
     },
   });
+  // A held event a bar displayed is answered.
+  const answer = (
+    box: IObservableValue<HeldEvent | null>,
+    event: DisplayedEvent["event"],
+  ): void => {
+    const held = box.get();
+    if (held !== null && answeredBy(held, event))
+      runInAction(() => box.set({ ...held, answered: true }));
+  };
   // [LAW:single-enforcer] Both client writers acknowledge events at the
   // owner of the daemon's latest occurrences, independent of their renderer.
   const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
@@ -376,17 +394,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           if (launcher.answeredPipeEvent(event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
+          answer(rendererEnded, event);
           break;
-        case "daemon-failed": {
-          const failed = daemonFailed.get();
-          if (failed !== null && answeredBy(failed, event))
-            runInAction(() => daemonFailed.set({ ...failed, answered: true }));
+        case "daemon-failed":
+          answer(daemonFailed, event);
           break;
-        }
       }
     }
     // [LAW:dataflow-not-control-flow] Writers can confirm independently;
@@ -737,11 +749,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ended: (event) => {
         // [LAW:types-are-the-program] A later exit can have the same text and
         // instant as an earlier one, even as an old reply is still writing.
-        rendererEnded = {
-          ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1,
-        };
-        restateFaults();
+        const prior = rendererEnded.get();
+        runInAction(() =>
+          rendererEnded.set({
+            ...event,
+            revision: (prior?.revision ?? 0) + 1,
+          }),
+        );
       },
     });
     const renderer = rendererHost(
@@ -881,12 +895,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
               }),
               [["why", "renderer-moved"]],
             )
-            .catch((error: unknown) => {
-              log(
-                "error",
-                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
-              );
-            });
+            .catch((thrown: unknown) =>
+              threw(
+                "renderer retire threw",
+                [
+                  ["renderer", former.renderer.name],
+                  ["session", session],
+                ],
+                thrown,
+              ),
+            );
         frameFeeds.handedIn(null);
         frameFeeds.announce();
       }

@@ -362,7 +362,7 @@ export class GitDataProvider {
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
-        threw: loggedThrew(this.logger),
+        threw: this.threw,
       });
       this.ownsWatchers = true;
     }

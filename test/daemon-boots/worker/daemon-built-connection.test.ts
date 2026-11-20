@@ -260,22 +260,21 @@ describe("a connection to a daemon built in this worker", () => {
     }
   });
 
-  test("an already answered event stays visible without rereading daemon warnings", async () => {
-    const { reply, report, standingReads } = daemonWithWarning();
+  test("answering a held event stays visible and rereads no daemon warning", async () => {
+    const { reply, held, report, standingReads } = daemonWithWarning();
     report();
     const first = await reply();
     const concurrent = await reply();
     expect(drawn(first.resp)).toMatch(/⚠\s+1/);
     const before = standingReads();
     first.settled(true);
-    expect(standingReads()).toBe(before + 1);
     concurrent.settled(true);
-    expect(standingReads()).toBe(before + 1);
 
     const insideHold = await reply();
     expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
     insideHold.settled(true);
-    expect(standingReads()).toBe(before + 1);
+    expect(standingReads()).toBe(before);
+    expect(await held()).toMatchObject({ revision: 1, answered: true });
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

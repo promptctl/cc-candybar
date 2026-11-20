@@ -663,7 +663,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change, and the next batch lands it", () => {
+test("one failed rediscovery leaves the writer and another holder the successful change, reports once while it keeps failing, and the next batch lands it", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -703,6 +703,11 @@ test("one failed rediscovery leaves the writer and another holder the successful
   ]);
   expect(fieldsOf(logged.at(-1)!).get("owed")).toBe("1");
 
+  // The same failure again is the same fault: the bar already holds it.
+  expect(writer.landed([b.file])).toEqual([]);
+  expect(threw).toHaveLength(1);
+  expect(fieldsOf(logged.at(-1)!).get("owed")).toBe("1");
+
   // The failed origin is still owed: the next batch, a landing on the other
   // origin's file, discovers it again with no event of its own.
   refuse = false;
@@ -714,6 +719,9 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
   expect(fieldsOf(logged.at(-1)!).get("owed")).toBe("0");
   expect(threw).toHaveLength(1);
+  expect(
+    logged.filter((line) => line.startsWith("config discovery recovered ")),
+  ).toEqual([expect.stringContaining(`origin=${originKey(b.origin)}`)]);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {

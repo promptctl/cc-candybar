@@ -47,7 +47,7 @@ import {
   type Subscriptions,
   type TurnRecord,
 } from "../renderer-interface/interface.js";
-import { eventLine, type Field } from "../utils/logfmt.js";
+import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
@@ -151,9 +151,9 @@ export interface HostWorld {
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
-  // [LAW:single-enforcer] Work this host took or left settling that threw,
-  // with no caller to answer for it, goes to the daemon's one writer of such
-  // throws.
+  // [LAW:no-silent-failure] Work this host took or left settling that threw,
+  // with no caller to answer for it, is recorded in daemon.log and on every
+  // bar.
   readonly threw: WorkThrew;
 }
 
@@ -648,14 +648,12 @@ export function rendererHost(
     }
   };
 
-  // [LAW:one-source-of-truth] What names this host's work in a record of
-  // its throw.
-  const work = (what: string): readonly Field[] => [
-    ["renderer", name],
-    ["work", what],
-  ];
+  // [LAW:one-source-of-truth] Every throw this host reports, its own and its
+  // wake's, names the renderer it belongs to.
+  const threw: WorkThrew = (event, fields, thrown) =>
+    world.threw(event, [["renderer", name], ...fields], thrown);
   const notTaken = (what: string, thrown: unknown): void =>
-    world.threw("renderer work not taken", work(what), thrown);
+    threw("renderer work not taken", [["work", what]], thrown);
 
   const recordTaken = <Value>(
     what: string,
@@ -1086,7 +1084,7 @@ export function rendererHost(
   // is the daemon's, on every bar.
   const unawaited = (what: string, settling: Promise<unknown>): void =>
     void settling.catch((thrown: unknown) =>
-      world.threw("renderer turn unsettled", work(what), thrown),
+      threw("renderer turn unsettled", [["work", what]], thrown),
     );
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
@@ -1160,7 +1158,7 @@ export function rendererHost(
     // every bar.
     said: (text) => world.unheard(text),
     log: (text) => log("info", text),
-    threw: world.threw,
+    threw,
   });
   return {
     name,

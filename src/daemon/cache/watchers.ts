@@ -116,15 +116,16 @@ interface Holder {
 
 // [LAW:types-are-the-program] A delivery window: a batch's, shared by its
 // keys and completed once their holders have heard it, or one slot's own,
-// whose completion is nothing.
-interface InvalidationWindow {
-  readonly kind: "batch" | "direct";
-  readonly completed: () => void;
+// which has no completion.
+type InvalidationWindow = {
   pending: {
     readonly changes: Map<WatcherSlot, Gathering>;
     readonly cancel: () => void;
   } | null;
-}
+} & (
+  | { readonly kind: "batch"; readonly completed: () => void }
+  | { readonly kind: "direct" }
+);
 
 interface WatcherSlot {
   readonly key: string;
@@ -373,7 +374,7 @@ export class WatcherRegistry {
       this.opened(
         key,
         targets,
-        window ?? { kind: "direct", completed: () => {}, pending: null },
+        window ?? { kind: "direct", pending: null },
         observed,
       );
     const holder: Holder = { onInvalidate, observed: new Map() };
@@ -726,7 +727,7 @@ export class WatcherRegistry {
                   holder.onInvalidate(heard),
                 );
             }
-            window.completed();
+            if (window.kind === "batch") window.completed();
           },
           { unref: true },
         ),
