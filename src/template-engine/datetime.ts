@@ -15,7 +15,7 @@ const SPRIG = sprigDatetime(() => {
 const DAY_MS = 86_400_000;
 const DATE_LIMIT_MS = 8.64e15;
 const ISO =
-  /^(?:\d{4}|[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
+  /^(?:\d{4}|(?!-000000)[+-]\d{6})(?:-\d{2}(?:-\d{2})?)?(?:(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/i;
 const NAMED_ZONE = /(?:^|[^a-z])(?:ut|utc|gmt|[ecmp][sd]t|z)(?![a-z])/i;
 
 function legacyDate(value: string): { tokens: string; end: number } {
