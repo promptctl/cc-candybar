@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-924",
-      "ref": "refs/pull/924/merge",
-      "sha": "8864e947508732c555cc3b7bbae28b466efa7896",
-      "timestamp": "2026-11-20T21:25:38.116Z",
+      "version": "pr-925",
+      "ref": "refs/pull/925/merge",
+      "sha": "f1151498a5cdf90d9408fc7ee72cb725513c6593",
+      "timestamp": "2026-11-20T22:41:12.759Z",
       "commits": [
         {
-          "sha": "8864e947508732c555cc3b7bbae28b466efa7896",
+          "sha": "f1151498a5cdf90d9408fc7ee72cb725513c6593",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T14:24:30-07:00",
-          "message": "Merge 03c370c9e280836629385bd6d69aebcaedc9cd03 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T15:39:59-07:00",
+          "message": "Merge 1e71b2851f8bdf1abfd12c1691bb02091565b1a5 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "03c370c9e280836629385bd6d69aebcaedc9cd03",
+          "sha": "1e71b2851f8bdf1abfd12c1691bb02091565b1a5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T14:23:55-07:00",
-          "message": "fix(daemon): show a throw in any task the daemon schedules on every bar\n\nEvery timer, deferral and piece of work nobody awaits now runs as a named\ntask on the daemon's clock. The clock the daemon hands down reports what a\ntask throws or rejects with: it is logged with its stack, counted in the\nstats, and held as one `task-threw` event that every bar draws as an error\nnaming the task, until a bar shows it. Log-only catches in the git refresh,\nkeyed sources, pane visibility, the renderer wake, the binary check, watch\ndelivery, config rediscovery, url clicks and renderer settling are gone;\neach continuation that must run past a throw (a period landing, a re-arm,\na stored answer) sits in a `finally`.\n\nHeld daemon events become one keyed record with one answering rule, and a\nplacement table decides that a task throw is an error while act failures\nand renderer ends stay warnings. A typed lint rule rejects floating\npromises in the daemon, its utilities and the launcher.\n\nThe renderer wire version moves to 14, since the daemon facts it carries\nchanged shape. The recording-environment process test now redraws until a\nshell source's first answer shows, instead of racing one render's wait.\n"
+          "timestamp": "2026-11-20T15:39:40-07:00",
+          "message": "fix(daemon): every clock task's throw reaches the bar\n\nA clock is now built only over a reporter of what its tasks throw\n(`clockOver`), and only the process world builds one over the machine's\nbare timers, which lint fences to src/host.ts. Every task is named.\n\nThe daemon's reporter holds one error per task on every bar, logs its\nfull detail once, and counts every throw in stats. A held throw refuses\nrecordings, since its message may carry a command's output.\n\nFire-and-forget work across the daemon (git refresh, PR lookup, watch\ndelivery, retires, log flush, launches, config discovery, the binary\nwatch) runs as clock tasks instead of `void`/log-only catches, and typed\nlint refuses a floating promise in src. Continuations that must run\nwhatever a task throws sit in `finally`.\n"
         }
       ]
     },

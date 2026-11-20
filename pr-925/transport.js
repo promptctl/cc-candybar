@@ -28410,16 +28410,6 @@ init_globals();
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
-var HELD_KINDS = [
-  "renderer-ended",
-  "act-failed",
-  "task-threw"
-];
-var NO_HELD_EVENTS = {
-  "renderer-ended": null,
-  "act-failed": null,
-  "task-threw": null
-};
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
@@ -46853,7 +46843,7 @@ var ROW_HOST = {};
 function draw(renderable, options) {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
-  let told2 = Infinity;
+  let told = Infinity;
   const segments = [
     ...render(renderable, {
       maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
@@ -46869,13 +46859,13 @@ function draw(renderable, options) {
         throw error;
       },
       onHold: ({ nextChange }) => {
-        told2 = Math.min(told2, nextChange);
+        told = Math.min(told, nextChange);
       }
     })
   ];
   return {
     lines: runLines(segments, destination.colorSystem),
-    nextChange: Math.min(Segment.nextChange(segments), told2)
+    nextChange: Math.min(Segment.nextChange(segments), told)
   };
 }
 var DEFAULT_TERMINAL_WIDTH = 120;
@@ -65948,7 +65938,7 @@ var SourceRegistry = class _SourceRegistry {
       };
       if (torn2) {
         clearSettling = this.store.clock.after(
-          "torn write settle",
+          `torn write settle ${name}`,
           TORN_WRITE_SETTLE_MS,
           show2
         );
@@ -72754,14 +72744,12 @@ function drawRender(parts, setup, drawing2, feeds) {
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const questions = repoQuestions(entry.snapshot.repo, sessionId2);
-  const { daemon: daemon2 } = document;
-  const held = HELD_KINDS.flatMap((kind) => {
-    const shown = daemonEventAt(kind, daemon2.held[kind], at, drawing2.by);
-    return shown === void 0 ? [] : [shown];
-  });
-  const placed2 = (placement) => held.filter(({ kind }) => HELD_PLACEMENT[kind] === placement);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
+  const { daemon: daemon2 } = document;
+  const tasksThrew = daemon2.taskThrows.flatMap(
+    ({ task, event }) => eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, drawing2.by) === "over" ? [] : [{ kind: "task-threw", task, event }]
+  );
   const errors2 = [
     said2("refused-args", refusedArgsError(req.refusedArgs)),
     said2("hints", hintsError),
@@ -72780,9 +72768,15 @@ function drawRender(parts, setup, drawing2, feeds) {
       })
     ),
     said2("click", clickShown?.text),
-    // A held event is about its kind: its text grows as throws join it,
-    // under an open viewer, without becoming another message.
-    ...placed2("error").map(({ kind, message }) => sourced(kind, kind, message))
+    ...tasksThrew.map(
+      ({ task, event }) => ({
+        kind: "task-threw",
+        subject: task,
+        about: `task-threw\0${task}`,
+        text: event.text,
+        copy: event.text
+      })
+    )
   ].flatMap(
     ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
@@ -72791,13 +72785,20 @@ function drawRender(parts, setup, drawing2, feeds) {
   const launchEvents = launched.flatMap(
     (warning) => "event" in warning ? [warning] : []
   );
-  const eventsShown = [...launchEvents, ...held].flatMap(
-    ({ kind, event }) => event.answered ? [] : [{ kind, event }]
-  );
+  const held = [
+    daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
+    daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
+  ].flatMap((w) => w === void 0 ? [] : [w]);
+  const eventsShown = [
+    ...[...launchEvents, ...held].flatMap(
+      ({ kind, event }) => event.answered ? [] : [{ kind, event }]
+    ),
+    ...tasksThrew.filter(({ event }) => !event.answered)
+  ];
   const standing2 = [
     ...daemon2.fileEvents,
     ...launched,
-    ...placed2("warning"),
+    ...held,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarnings.map((message) => ({
       kind: "load",
@@ -72996,11 +72997,6 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
-var HELD_PLACEMENT = {
-  "renderer-ended": "warning",
-  "act-failed": "warning",
-  "task-threw": "error"
-};
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
@@ -73137,7 +73133,7 @@ var TurnTime = class {
   }
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
-  after(ms, run2) {
+  after(_task, ms, run2) {
     const deferral = { until: this.tick + ms / 1e3, run: run2 };
     this.held.add(deferral);
     return () => void this.held.delete(deferral);
@@ -73167,9 +73163,7 @@ var TurnTime = class {
   // epoch milliseconds, and its held work.
   clock = {
     now: () => this.at * 1e3,
-    // The renderer's held work throws into its turn (`runDue`), not to a
-    // reporting clock, so the task's name is not kept.
-    after: (_task, ms, run2) => this.after(ms, () => void run2())
+    after: (task, ms, run2) => this.after(task, ms, run2)
   };
 };
 
@@ -77480,9 +77474,7 @@ function inProcessRenderer(decorate = (renderer) => renderer) {
           answer: (event) => capture4.active ? capture4.turn(event, core.answer) : core.answer(event)
         };
       },
-      () => void start().catch(
-        (error) => log("error", `renderer ${name} restart: ${String(error)}`)
-      ),
+      () => clock.detach(`renderer ${name} restart`, start),
       async (previous2) => {
         const steps2 = ["close-journal", "close-views"].map(
           (kind) => [
@@ -77645,23 +77637,25 @@ var import_node_string_decoder = __toESM(require_string_decoder(), 1);
 // src/time.ts
 init_globals();
 init_timers();
-function reporting(clock, report2) {
-  const guarded = (task, fire) => () => {
+function clockOver(source, report2) {
+  const run2 = (task, fire) => () => {
+    let settled3;
     try {
-      void Promise.resolve(fire()).catch(
-        (thrown2) => report2(task, thrown2)
-      );
+      settled3 = fire();
     } catch (thrown2) {
-      report2(task, thrown2);
+      report2(task, thrown2, source.now());
+      return;
     }
+    if (settled3 instanceof Promise)
+      settled3.catch((thrown2) => report2(task, thrown2, source.now()));
   };
   return {
-    now: () => clock.now(),
-    monotonic: () => clock.monotonic(),
-    after: (task, ms, fire, options) => clock.after(task, ms, guarded(task, fire), options),
-    every: (task, ms, fire, options) => clock.every(task, ms, guarded(task, fire), options),
-    defer: (task, fire) => clock.defer(task, guarded(task, fire)),
-    detach: (task, fire) => guarded(task, fire)()
+    now: () => source.now(),
+    monotonic: () => source.monotonic(),
+    after: (task, ms, fire, options) => source.timer(ms, run2(task, fire), options),
+    every: (task, ms, fire, options) => source.interval(ms, run2(task, fire), options),
+    defer: (task, fire) => source.turn(run2(task, fire)),
+    detach: (task, fire) => run2(task, fire)()
   };
 }
 function spanMs(from, to) {
@@ -77670,39 +77664,29 @@ function spanMs(from, to) {
 function elapsedMs(clock, since) {
   return spanMs(since, clock.monotonic());
 }
-var systemTimekeeper = {
+var systemTimers = {
   now: () => Date.now(),
   monotonic: () => performance.now(),
-  // The name is for a clock that reports (`reporting`); this one runs the task
-  // bare, so a throw reaches the process's own handlers.
-  after: (_task, ms, fire, options) => {
+  timer: (ms, fire, options) => {
     const timer = setTimeout(fire, ms);
     if (options?.unref) {
       timer.unref();
     }
     return () => clearTimeout(timer);
   },
-  every: (_task, ms, fire, options) => {
+  interval: (ms, fire, options) => {
     const timer = setInterval(fire, ms);
     if (options?.unref) {
       timer.unref();
     }
     return () => clearInterval(timer);
   },
-  defer: (_task, fire) => {
+  turn: (fire) => {
     const turn = setImmediate(fire);
     return () => clearImmediate(turn);
-  },
-  detach: (_task, fire) => {
-    void fire();
   }
 };
-function told(clock, task, thrown2) {
-  clock.detach(task, () => {
-    throw thrown2;
-  });
-}
-function sleep(clock, ms, signal) {
+function sleep(clock, task, ms, signal) {
   return new Promise((resolve2, reject2) => {
     const aborted = () => Object.assign(new Error("The operation was aborted"), {
       name: "AbortError",
@@ -77717,7 +77701,7 @@ function sleep(clock, ms, signal) {
       cancel();
       reject2(aborted());
     };
-    const cancel = clock.after("sleep", ms, () => {
+    const cancel = clock.after(task, ms, () => {
       signal?.removeEventListener("abort", onAbort);
       resolve2();
     });
@@ -78305,10 +78289,10 @@ async function launchPiped(state, opts, pipes) {
         spawner.signalGroup(pid2, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
-        clock.detach(
-          "launch reap",
-          () => exited.then(() => state.unreaped.delete(child))
-        );
+        clock.detach(`${opts.category} reap`, async () => {
+          await exited;
+          state.unreaped.delete(child);
+        });
         settle3({
           ok: false,
           reason: "signal-refused",
@@ -78324,31 +78308,29 @@ async function launchPiped(state, opts, pipes) {
       const awaitGroupEnd = (delayMs) => {
         if (settled3) return;
         if (spawner.groupGone(group)) {
-          clock.defer("launch conclusion", concludeWithGroup);
+          clock.defer(`${opts.category} launch conclude`, concludeWithGroup);
           return;
         }
         groupEndTimer = clock.after(
-          "group end poll",
+          `${opts.category} group end poll`,
           delayMs,
           () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS))
         );
       };
-      clock.detach(
-        "group end poll",
-        () => exited.then(
-          () => clock.defer(
-            "group end poll",
-            () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
-          )
-        )
-      );
+      clock.detach(`${opts.category} group end poll`, async () => {
+        await exited;
+        clock.defer(
+          `${opts.category} group end poll`,
+          () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)
+        );
+      });
     }
     const terminate = (cause) => {
       if (terminated !== null) return;
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== void 0 && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
-        clock.defer("launch conclusion", concludeWithGroup);
+        clock.defer(`${opts.category} launch conclude`, concludeWithGroup);
         return;
       }
       terminated = cause;
@@ -78356,12 +78338,20 @@ async function launchPiped(state, opts, pipes) {
       unlisten();
       const pid2 = child.pid;
       if (pid2 !== void 0) {
-        killTimer = clock.after("kill grace", TIMEOUT_KILL_GRACE_MS, () => {
-          signal(pid2, "SIGKILL");
-          return exited.then(
-            () => clock.defer("launch conclusion", concludeWithGroup)
-          );
-        });
+        killTimer = clock.after(
+          `${opts.category} kill grace`,
+          TIMEOUT_KILL_GRACE_MS,
+          () => {
+            signal(pid2, "SIGKILL");
+            clock.detach(`${opts.category} launch conclude`, async () => {
+              await exited;
+              clock.defer(
+                `${opts.category} launch conclude`,
+                concludeWithGroup
+              );
+            });
+          }
+        );
         signal(pid2, "SIGTERM");
       }
     };
@@ -78406,7 +78396,7 @@ async function launchPiped(state, opts, pipes) {
     child.on("close", conclude);
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = clock.after(
-        "launch timeout",
+        `${opts.category} launch timeout`,
         opts.timeoutMs,
         () => terminate("timeout")
       );
@@ -78585,7 +78575,7 @@ function endJob(spawner, clock, pid2, status, end) {
     const signalled = spawner.signalJob(pid2, "SIGTERM");
     if (signalled) {
       clock.after(
-        "kill grace",
+        `job kill grace ${pid2}`,
         TIMEOUT_KILL_GRACE_MS,
         () => spawner.signalJob(pid2, "SIGKILL"),
         {
@@ -78813,19 +78803,36 @@ var systemLauncher = (owner, clock) => createLauncher(owner, clock, systemSpawne
 var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
 
 // src/host.ts
-function processWorld() {
+function processWorld(report2) {
   const host = {
     env: process.env,
     home: os_default.homedir(),
     tmp: os_default.tmpdir()
   };
-  const clock = systemTimekeeper;
+  const clock = clockOver(systemTimers, report2);
   return {
     host,
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock
   };
 }
+
+// src/daemon/task-throws.ts
+init_globals();
+var TaskThrowInbox = class {
+  waiting = observable.array([], { deep: false });
+  report = (task, thrown2, at) => {
+    runInAction(() => this.waiting.push({ task, thrown: thrown2, at }));
+  };
+  // How many wait: what the daemon observes to take them as they come.
+  waitingCount() {
+    return this.waiting.length;
+  }
+  // Every waiting throw, oldest first, and none left waiting.
+  take() {
+    return runInAction(() => this.waiting.splice(0));
+  }
+};
 
 // src/click/read.ts
 init_globals();
@@ -79412,10 +79419,10 @@ function answerPending(source, outcome) {
 function currentOf(source) {
   return source.reading.get();
 }
-function waitWithin(work, ms, late, after, closing) {
+function waitWithin(task, work, ms, late, after, closing) {
   const wait = new AbortController();
   const end = (why) => () => wait.abort(why);
-  const clear = after("statusline wait", Math.max(0, ms), end("deadline"));
+  const clear = after(task, Math.max(0, ms), end("deadline"));
   const ended = new Promise((resolve2, reject2) => {
     wait.signal.addEventListener(
       "abort",
@@ -79423,7 +79430,7 @@ function waitWithin(work, ms, late, after, closing) {
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    void work(wait.signal).then(
+    work(wait.signal).then(
       () => resolve2("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own
       // while it listens, its owner's after. Work that answered never
@@ -79985,14 +79992,16 @@ var WatcherRegistry = class {
           DEBOUNCE_MS,
           () => {
             window2.pending = null;
-            for (const [changed, gathered2] of changes2) {
-              if (this.slots.get(changed.key) !== changed) continue;
-              const heard = heardOf(gathered2);
-              for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
-            }
-            if (window2.completed !== void 0)
-              this.notify(null, window2.completed);
+            runEach([
+              ...[...changes2].flatMap(([changed, gathered2]) => {
+                if (this.slots.get(changed.key) !== changed) return [];
+                const heard = heardOf(gathered2);
+                return [...changed.holders].map(
+                  (holder) => () => holder.onInvalidate(heard)
+                );
+              }),
+              ...window2.completed === void 0 ? [] : [window2.completed]
+            ]);
           },
           { unref: true }
         )
@@ -80003,14 +80012,6 @@ var WatcherRegistry = class {
     changes.set(
       slot,
       gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
-    );
-  }
-  // [LAW:single-enforcer] Each holder's take is a task of its own: what one
-  // throws is reported, and the delivery goes on to the next holder.
-  notify(key, take) {
-    this.clock.detach(
-      key === null ? "watch delivery" : `watch delivery ${valueOf(key)}`,
-      take
     );
   }
   makeHandle(slot, holder) {
@@ -80090,7 +80091,7 @@ var WatcherRegistry = class {
   armSweep() {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(
-      "polled watch read",
+      "polled paths read",
       POLL_MS,
       () => this.readPolled(),
       {
@@ -80225,12 +80226,10 @@ var FileEventDelivery = class {
       throw new Error("file events: the owner was started twice");
     }
     const stopPeriod = this.clock.every(
-      "file event probe",
+      "file events probe",
       PROBE_EVERY_MS,
       () => this.tick(),
-      {
-        unref: true
-      }
+      { unref: true }
     );
     let identity2;
     try {
@@ -80272,7 +80271,7 @@ var FileEventDelivery = class {
       return;
     }
     this.move({ kind: "delivering", unreported: [], missedSince: null });
-    this.clock.detach("file event probe", () => this.tick());
+    this.clock.detach("file events probe", () => this.tick());
   }
   stats() {
     return {
@@ -80442,11 +80441,8 @@ var FileEventDelivery = class {
     }
     this.notify({ kind: "moved" });
   }
-  // [LAW:single-enforcer] Each listener is a task of its own: what one
-  // throws is reported, and the others still hear the notice.
   notify(notice) {
-    for (const listener of [...this.listeners])
-      this.clock.detach("file event notice", () => listener(notice));
+    for (const listener of [...this.listeners]) listener(notice);
   }
 };
 var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
@@ -80643,15 +80639,11 @@ var KeyedSource = class {
       flight: null,
       changed: false,
       superseding: 0,
-      revisit: revisitOf(
-        `${this.spec.name} refresh`,
-        this.spec.every(input),
-        this.spec.clock,
-        {
-          period: () => this.refresh(entry, "period"),
-          holdReturned: () => this.refresh(entry, "change")
-        }
-      ),
+      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
+        task: `${this.spec.name} period ${this.spec.fields(input, 0)}`,
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change")
+      }),
       unwatch: () => {
       }
     };
@@ -80674,26 +80666,31 @@ var KeyedSource = class {
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
     this.spec.clock.detach(
-      `${this.spec.name} refresh`,
-      () => attempt2(() => this.spec.read(entry.input, flight.signal, by)).then(
-        (outcome) => {
-          const recorded2 = () => ({
-            fields: this.spec.fields(entry.input, entry.holders),
-            ms: elapsedMs(this.spec.clock, startedAt)
-          });
-          if (flight.signal.aborted) {
-            const { fields: fields2, ms } = recorded2();
-            this.refreshes.abandoned(fields2, by, ms);
-            return;
-          }
-          try {
-            const { fields: fields2, ms } = recorded2();
-            this.refreshes.recorded(fields2, by, outcome, ms);
-          } finally {
-            this.store(entry, outcome);
-          }
+      `${this.spec.name} refresh ${this.spec.fields(entry.input, entry.holders)}`,
+      async () => {
+        const outcome = await attempt2(
+          () => this.spec.read(entry.input, flight.signal, by)
+        );
+        const ms = elapsedMs(this.spec.clock, startedAt);
+        if (flight.signal.aborted) {
+          this.refreshes.abandoned(
+            this.spec.fields(entry.input, entry.holders),
+            by,
+            ms
+          );
+          return;
         }
-      )
+        try {
+          this.refreshes.recorded(
+            this.spec.fields(entry.input, entry.holders),
+            by,
+            outcome,
+            ms
+          );
+        } finally {
+          this.store(entry, outcome);
+        }
+      }
     );
   }
   store(entry, outcome) {
@@ -80743,9 +80740,9 @@ var KeyedSource = class {
     flight?.abort(new Error(`${this.spec.name} read abandoned`));
   }
 };
-function revisitOf(task, every, clock, read2) {
+function revisitOf(every, clock, read2) {
   if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(task, read2.period, clock);
+  const period = new Period(read2.task, read2.period, clock);
   return {
     landed: (outcome) => period.landed(periodOf(every, outcome)),
     hold: (held) => period.hold(held),
@@ -81086,7 +81083,6 @@ var SourceRuns = class {
       // watch, so a key that moves every tick leaves no child behind.
       maxEntries: 0,
       lines: REFRESH_TRIGGERS,
-      logger,
       ledger,
       clock: deps.clock
     });
@@ -81446,6 +81442,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
       });
       const ended = await waitWithin(
+        `render wait ${session}`,
         (signal) => collector.settled(session, signal),
         budget,
         // [LAW:no-silent-failure] A late failure belongs to the session.
@@ -82629,8 +82626,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null)
-          parts.clock.detach(
-            "tmux status observe",
+          clock.detach(
+            `tmux status observe ${tmux3.socket}`,
             () => parts.retiredTmuxStatus.observe(tmux3.socket)
           );
         const { waitEndsAt, clientEndsAt } = renderDeadlines(
@@ -83021,15 +83018,21 @@ var TrailingEdge = class {
     return done;
   }
   async loop(key, work) {
+    const threw2 = [];
     try {
       do {
         this.again.delete(key);
-        await work();
+        try {
+          await work();
+        } catch (thrown2) {
+          threw2.push(thrown2);
+        }
       } while (this.again.has(key));
     } finally {
       this.running.delete(key);
       this.again.delete(key);
     }
+    throwAll(threw2);
   }
   // Drop every record of running and pending work — the teardown path of an
   // owner being disposed. In-flight passes cannot be cancelled from here (the
@@ -83309,18 +83312,23 @@ var GitDataProvider = class {
   }
   changedPass(state, reason) {
     state.asked.add(reason);
-    state.refresh.run(PASS, () => this.refreshPass(state));
+    this.runPass(state);
   }
-  // The loop's work. [LAW:no-silent-failure] A throw is the clock's to
-  // report, and the trailing edge's loop still takes the pass it queued.
+  // [LAW:no-silent-failure] A loop this starts is the clock's, which reports
+  // what its passes threw; a trigger the running loop takes has nothing to
+  // hand over.
+  runPass(state) {
+    const trigger = state.refresh.run(PASS, () => this.refreshPass(state));
+    if (trigger.kind === "started")
+      this.clock.detach(`git refresh ${state.root}`, () => trigger.done);
+  }
+  // The loop's work, whose throw reaches the clock that started it.
   // [LAW:no-ambient-temporal-coupling] The period lands when the pass ENDS,
-  // after its every await, so a tick that shares a running pass is always
-  // followed by the landing that schedules the next one.
+  // however it ends, after its every await, so a tick that shares a running
+  // pass is always followed by the landing that schedules the next one.
   async refreshPass(state) {
     try {
       await this.pass(state);
-    } catch (thrown2) {
-      told(this.clock, `git refresh ${state.root}`, thrown2);
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -83351,9 +83359,7 @@ var GitDataProvider = class {
   // include it, so it queues a pass rather than sharing one; a reason already
   // in `asked` means such a pass is queued, and it will see this one too.
   queue(state, before) {
-    if (state.asked.size > before) {
-      state.refresh.run(PASS, () => this.refreshPass(state));
-    }
+    if (state.asked.size > before) this.runPass(state);
   }
   held(state) {
     state.period.hold(state.holders > 0);
@@ -83460,12 +83466,7 @@ var GitDataProvider = class {
     const done = lookup2.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
-      this.prRefreshes.recorded(
-        `${state.root} key=${valueOf(key)}`,
-        by,
-        outcome,
-        elapsedMs(this.clock, startedAt)
-      );
+      const took = elapsedMs(this.clock, startedAt);
       const at = this.clock.monotonic();
       const answer2 = {
         outcome,
@@ -83478,12 +83479,16 @@ var GitDataProvider = class {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
-      if (pr.key !== key || pr.missed) return;
-      try {
+      if (pr.key === key && !pr.missed) {
         settle2(pr, outcome);
-      } finally {
         pr.period.landed(prPeriodOf(answer2), at);
       }
+      this.prRefreshes.recorded(
+        `${state.root} key=${valueOf(key)}`,
+        by,
+        outcome,
+        took
+      );
     });
     pr.inFlight = { key, done };
     return done;
@@ -83603,7 +83608,7 @@ var CacheManager = class {
         return true;
       } catch (error) {
         if (error.code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
+          await sleep(clock, `cache lock wait ${name}`, RETRY_DELAY_MS);
         } else {
           throw error;
         }
@@ -83648,7 +83653,7 @@ var CacheManager = class {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
+        await sleep(clock, `${cacheType} cache wait`, RETRY_DELAY_MS);
         continue;
       }
       try {
@@ -83673,7 +83678,7 @@ var CacheManager = class {
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
         );
-        await sleep(clock, RETRY_DELAY_MS);
+        await sleep(clock, `${cacheType} cache read retry`, RETRY_DELAY_MS);
       }
     }
     debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
@@ -84566,7 +84571,6 @@ var SessionUsageStore = class {
       watch: NO_WATCH,
       maxEntries: MAX_UNHELD_SCANS,
       lines: REFRESH_TRIGGERS,
-      logger: this.log,
       ledger: this.ledger,
       clock: this.clock
     });
@@ -86093,7 +86097,6 @@ var TmuxService = class {
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES2,
       lines: REFRESH_TRIGGERS,
-      logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),
       clock: opts.clock
     });
@@ -86561,7 +86564,6 @@ var ManagedStorage = class {
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES3,
       lines: REFRESH_TRIGGERS,
-      logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),
       clock: opts.clock
     });
@@ -86700,14 +86702,17 @@ var ManagedStorage = class {
         (invalidation) => this.invalidated(watching, invalidation)
       ),
       stopSweep: this.clock.every(
-        "storage sweep",
+        `plugin storage sweep ${key.folder}`,
         STORAGE_SWEEP_EVERY_MS,
         () => this.sweep(key),
         { unref: true }
       ),
       unread: null
     };
-    this.clock.detach("storage sweep", () => this.sweep(key));
+    this.clock.detach(
+      `plugin storage sweep ${key.folder}`,
+      () => this.sweep(key)
+    );
     return watching;
   }
   // [LAW:single-enforcer] Each state or fault change makes the folder dirty,
@@ -86909,7 +86914,6 @@ var TranscriptLanes = class {
       // its clean read over a quiet session says nothing: it counts in the
       // ledger and writes no line, while a write's read writes one.
       lines: ["first", "change", "supersede"],
-      logger: deps.logger,
       ledger: deps.ledger,
       clock: deps.clock
     });
@@ -87114,10 +87118,10 @@ var RuntimeStats = class _RuntimeStats {
   requestsTotal = 0;
   environmentMisses = 0;
   requestsErrored = 0;
-  // Throws the daemon's tasks reported, each also held for the bar.
-  tasksThrew = 0;
   requestsTimedOut = 0;
   inFlight = 0;
+  // Every throw the daemon's tasks reported, recurrences included.
+  tasksThrew = 0;
   unknownHookFields = /* @__PURE__ */ new Set();
   // [LAW:single-enforcer] Where a request is accepted: its id is the count
   // of requests of every kind accepted so far, so ids follow the order they
@@ -87662,15 +87666,15 @@ function makeLimits(deps) {
   }
   function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
     const tick = async () => {
+      let breached = false;
       try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${e.message}`);
+        breached = await check();
+      } finally {
+        if (!breached && !disarmed)
+          clearTimer = deps.clock.after("memory check", intervalMs, tick, {
+            unref: true
+          });
       }
-      if (disarmed) return;
-      clearTimer = deps.clock.after("memory check", intervalMs, tick, {
-        unref: true
-      });
     };
     deps.clock.detach("memory check", tick);
   }
@@ -88289,7 +88293,7 @@ var Collector = class {
         if (moved2 === stamped.from) return;
         if (this.stamp({ session, stamped }, moved2))
           this.deps.clock.detach(
-            "world state delivery",
+            `world state delivery ${session}`,
             () => this.deps.deliver({
               kind: "world-state",
               worldState: stamped.document
@@ -88408,14 +88412,15 @@ var Collector = class {
       "info",
       `session retired sid=${JSON.stringify(record2.session)}`
     );
-    this.deps.clock.detach(
-      "session retire",
-      () => this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
+    this.deps.clock.detach(`session retire ${record2.session}`, async () => {
+      try {
+        await this.deps.deliver({ kind: "retire", session: record2.session });
+      } finally {
         if (record2.phase === retiring && this.records.get(record2.session) === record2)
           runInAction(() => this.records.delete(record2.session));
         if (this.records.size === 0) this.disarmSweep();
-      })
-    );
+      }
+    });
   }
   armSweep() {
     if (this.stopSweep !== null) return;
@@ -90096,14 +90101,14 @@ var RendererWake = class {
       LONGEST_TIMER_MS,
       Math.max(0, (tick - tickAt(clock)) * 1e3)
     );
-    return clock.after("renderer wake", ms, () => {
+    return clock.after(this.deps.task, ms, () => {
       if (this.state.kind !== "armed" || this.state.tick !== tick) return;
       if (tickAt(clock) < tick) {
         this.state = { kind: "armed", tick, cancel: this.timer(tick) };
         return;
       }
       this.state = { kind: "queued" };
-      return this.deliverDue(tick);
+      clock.detach(this.deps.task, () => this.deliverDue(tick));
     });
   }
   async deliverDue(tick) {
@@ -90424,7 +90429,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         }
       );
       const settled4 = acted.then((outcome) => settle3(act, outcome));
-      if (outlives(act)) unawaited("act", settled4);
+      if (outlives(act)) unawaited("act", () => settled4);
       else {
         owed.push(settled4);
         before = acted;
@@ -90615,7 +90620,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const retired2 = "the renderer that drew the frame has ended";
     unawaited(
       "frame receipt",
-      deliver2(
+      () => deliver2(
         () => issuer === generation ? doneOf(
           effect,
           reason === null ? { kind: "ok" } : { kind: "failed", reason }
@@ -90737,7 +90742,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver2 = recorded2("last");
-  const unawaited = (what, settling) => clock.detach(`renderer ${name}'s ${what}`, () => settling);
+  const unawaited = (what, settling) => clock.detach(`renderer ${name} ${what}`, async () => {
+    await settling();
+  });
   const command = async (event) => {
     const { turn } = await taken2(() => ({ kind: "event", event }));
     if (turn.kind === "threw") {
@@ -90757,7 +90764,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     for (const origin of origins2)
       unawaited(
         "config",
-        deliver2(configMade(origin), [["why", "config-moved"]])
+        () => deliver2(configMade(origin), [["why", "config-moved"]])
       );
   };
   const stats = () => ({
@@ -90767,6 +90774,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   const wake = new RendererWake({
     clock,
+    task: `renderer ${name} wake`,
     due: async () => {
       const {
         event,
@@ -90785,7 +90793,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         },
         "scheduled"
       );
-      unawaited("due acts", settled3);
+      unawaited("due acts", () => settled3);
       record2(event, [], turn);
       return turn;
     },
@@ -90929,9 +90937,7 @@ var UNKNOWN_PROFILE = "saved renderer state contains values of unknown origin; r
 function worldProblem({ env: env2, runs, daemon: daemon2 }) {
   if (Object.values(env2).some((fact) => fact.kind === "ok"))
     return SESSION_ENVIRONMENT;
-  return Object.values(runs).some(isEnvironmentOutput) || Object.values(daemon2.held).some(
-    (event) => event !== null && isEnvironmentOutput(event)
-  ) ? ENVIRONMENT_OUTPUT : null;
+  return Object.values(runs).some(isEnvironmentOutput) || daemon2.actFailed !== null && isEnvironmentOutput(daemon2.actFailed) || daemon2.taskThrows.some(({ event }) => isEnvironmentOutput(event)) ? ENVIRONMENT_OUTPUT : null;
 }
 function hookCarriesEnvironment(hook) {
   const remaining = [hook];
@@ -91319,6 +91325,55 @@ var RendererRecordings = class {
     );
     this.selected.clear();
     await Promise.allSettled(finishing);
+  }
+};
+
+// src/daemon/held-slot.ts
+init_globals();
+var HeldSlot = class {
+  constructor(clock, task, left) {
+    this.clock = clock;
+    this.task = task;
+    this.left = left;
+  }
+  clock;
+  task;
+  left;
+  held = null;
+  cancelEnd = () => {
+  };
+  event() {
+    return this.held;
+  }
+  hold(event) {
+    this.cancelEnd();
+    this.held = event;
+    const ms = (event.at + DAEMON_EVENT_HOLD_S - instantAt(this.clock)) * 1e3;
+    this.cancelEnd = this.clock.after(this.task, Math.max(0, ms), () => {
+      if (this.leftWhenOver()) this.left();
+    });
+  }
+  // Whether `shown` marked the held event, which leaves too if it is past
+  // its hold.
+  answer(shown) {
+    if (this.held === null || !answeredBy(this.held, shown)) return false;
+    this.held = { ...this.held, answered: true };
+    if (this.leftWhenOver()) this.left();
+    return true;
+  }
+  dispose() {
+    this.cancelEnd();
+  }
+  leftWhenOver() {
+    if (this.held === null || eventHoldAt(
+      this.held,
+      DAEMON_EVENT_HOLD_S,
+      instantAt(this.clock),
+      "request"
+    ) !== "over")
+      return false;
+    this.held = null;
+    return true;
   }
 };
 
@@ -91971,8 +92026,7 @@ var ConfigDiscovery = class {
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
-      const task = `config discovery why=${why} origin=${JSON.stringify(key)}`;
-      this.deps.clock.detach(task, () => {
+      this.deps.clock.detach(`config discovery ${key}`, () => {
         const found2 = this.discovered(was.origin, shared, was.watch);
         const now2 = {
           ...found2,
@@ -92182,9 +92236,9 @@ function checkoutObservations(files, clock) {
 
 // src/daemon/daemon.ts
 function createDaemon(inputs) {
-  const { bundle, memoryLimitBytes: memoryLimitBytes2, exit: exit2, paths: paths2, host } = inputs;
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, clock, exit: exit2, paths: paths2, host } = inputs;
   const locs = locations(host);
-  const instant = () => instantAt(inputs.clock);
+  const instant = () => instantAt(clock);
   let phase = { kind: "building" };
   const currentPhase = () => phase;
   const serving = () => phase.kind === "serving" || phase.kind === "armed";
@@ -92195,23 +92249,7 @@ function createDaemon(inputs) {
     level,
     phase.kind === "closed" ? `after close: ${msg}` : msg
   );
-  const stats = new RuntimeStats(inputs.clock);
-  const held = observable.box(NO_HELD_EVENTS, { deep: false });
-  const hold2 = (kind, event) => runInAction(() => held.set({ ...held.get(), [kind]: event }));
-  const reportThrow = (task, thrown2) => {
-    const failure2 = failureOf(thrown2);
-    log("error", `${task} threw: ${failure2.detail}`);
-    stats.tasksThrew++;
-    const line = `${task} threw: ${failure2.message}`;
-    const prior = held.get()["task-threw"];
-    if (prior !== null && !prior.answered && prior.text.split("\n").includes(line))
-      return;
-    hold2(
-      "task-threw",
-      environmentOutput(joinedEvent(prior, line, instant()), true)
-    );
-  };
-  const clock = reporting(inputs.clock, reportThrow);
+  const stats = new RuntimeStats(clock);
   const recordings = inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   const watcherRegistry = new WatcherRegistry({
     clock,
@@ -92223,61 +92261,107 @@ function createDaemon(inputs) {
     logger: log,
     clock
   });
-  const standingFaults = observable.box(
-    { fileEvents: [], launcher: [] },
-    { deep: false }
+  const daemonFaults = observable.box(
+    {
+      fileEvents: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+      taskThrows: []
+    },
+    { deep: false, equals: compareStructural }
   );
+  const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
+  const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
+  const taskThrown = /* @__PURE__ */ new Map();
   function restateFaults() {
     runInAction(
-      () => standingFaults.set({
+      () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing()
+        launcher: launcher.standing(),
+        rendererEnded: rendererEnded.event(),
+        actFailed: actFailed.event(),
+        taskThrows: [...taskThrown].flatMap(([task, slot]) => {
+          const event = slot.event();
+          return event === null ? [] : [{ task, event }];
+        })
       })
     );
   }
-  const daemonFaults = computed(
-    () => ({ ...standingFaults.get(), held: held.get() }),
-    { equals: compareStructural }
-  );
-  const launcher = inputs.launcher(
-    {
-      inherited: host.env,
-      stats: stats.launchStats,
-      signal: cancelWork.signal,
-      // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-      // hold them against.
-      now: instant,
-      // [LAW:no-silent-failure] Each change in whether what the daemon launches
-      // dies with it, and each pipe event, is said in daemon.log, and every
-      // session's world state carries it, so its warning comes on frames too.
-      observeWarnings: (change) => {
-        if (change.kind === "launch-pipes") log("warn", change.text);
-        else
-          log(
-            change.fault === null ? "info" : "warn",
-            change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
-          );
-        if (phase.kind !== "building") restateFaults();
-      }
-    },
-    reportThrow
-  );
+  const launcher = inputs.launcher({
+    inherited: host.env,
+    stats: stats.launchStats,
+    signal: cancelWork.signal,
+    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+    // hold them against.
+    now: instant,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it, and each pipe event, is said in daemon.log, and every
+    // session's world state carries it, so its warning comes on frames too.
+    observeWarnings: (change) => {
+      if (change.kind === "launch-pipes") log("warn", change.text);
+      else
+        log(
+          change.fault === null ? "info" : "warn",
+          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+        );
+      if (phase.kind !== "building") restateFaults();
+    }
+  });
   const acknowledgeDisplayed = (shown) => {
     let changed = false;
-    for (const { kind, event } of shown) {
-      if (kind === "launch-pipes") {
-        if (launcher.answeredPipeEvent(event)) changed = true;
-        continue;
+    for (const shownEvent of shown) {
+      switch (shownEvent.kind) {
+        case "launch-pipes":
+          if (launcher.answeredPipeEvent(shownEvent.event)) changed = true;
+          break;
+        case "renderer-ended":
+          if (rendererEnded.answer(shownEvent.event)) changed = true;
+          break;
+        case "act-failed":
+          if (actFailed.answer(shownEvent.event)) changed = true;
+          break;
+        case "task-threw":
+          if (taskThrown.get(shownEvent.task)?.answer(shownEvent.event))
+            changed = true;
+          break;
       }
-      const last2 = held.get()[kind];
-      if (last2 !== null && answeredBy(last2, event))
-        hold2(kind, { ...last2, answered: true });
     }
     if (changed) restateFaults();
   };
+  const takeThrows = () => {
+    for (const { task, thrown: thrown2, at } of inputs.taskThrows.take()) {
+      stats.tasksThrew++;
+      if (taskThrown.has(task)) continue;
+      const failure2 = failureOf(thrown2);
+      log("error", `${task} threw: ${failure2.detail}`);
+      const slot = new HeldSlot(clock, `task throw hold ${task}`, () => {
+        taskThrown.delete(task);
+        restateFaults();
+      });
+      taskThrown.set(task, slot);
+      slot.hold(
+        environmentOutput(
+          {
+            text: heldEventText(`${task} threw: ${failure2.message}`),
+            at: instantOf(new Date(at)),
+            revision: 1,
+            answered: false
+          },
+          true
+        )
+      );
+    }
+    restateFaults();
+  };
+  const stopTakingThrows = reaction(
+    () => inputs.taskThrows.waitingCount(),
+    takeThrows,
+    { fireImmediately: true }
+  );
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const sessionBook = new SessionBook(inputs.sessionBook(log, reportThrow));
+  const sessionBook = new SessionBook(inputs.sessionBook(log));
   const primaryPrepared = prepareRenderer(
     inputs.rendererName,
     bundle.path,
@@ -92296,8 +92380,7 @@ function createDaemon(inputs) {
       startedAtMs: stats.startedAt.getTime(),
       exit: exit2,
       launcher,
-      log,
-      report: reportThrow
+      log
     }),
     limitBytes: memoryLimitBytes2,
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
@@ -92457,8 +92540,8 @@ function createDaemon(inputs) {
     stateDir: paths2.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
-    log,
     clock,
+    log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders)
   });
@@ -92484,7 +92567,7 @@ function createDaemon(inputs) {
     declaredBarPanes.declare(lanes);
   };
   function prepareRenderer(name, reported, entry) {
-    const stores = new HeldStores(inputs.profile(name, log, reportThrow));
+    const stores = new HeldStores(inputs.profile(name, log));
     const boot = () => ({
       stored: stores.current(),
       locations: locs,
@@ -92535,10 +92618,11 @@ function createDaemon(inputs) {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        hold2("renderer-ended", {
+        rendererEnded.hold({
           ...event,
-          revision: (held.get()["renderer-ended"]?.revision ?? 0) + 1
+          revision: (rendererEnded.event()?.revision ?? 0) + 1
         });
+        restateFaults();
       }
     });
     const renderer = rendererHost(
@@ -92582,14 +92666,14 @@ function createDaemon(inputs) {
         closing: cancelling,
         acknowledgeDisplayed,
         unheard: (text4, fromEnvironment) => {
-          const prior = held.get()["act-failed"];
-          hold2(
-            "act-failed",
+          const prior = actFailed.event();
+          actFailed.hold(
             environmentOutput(
               joinedEvent(prior, text4, instant()),
               fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
             )
           );
+          restateFaults();
         }
       }
     );
@@ -92651,7 +92735,7 @@ function createDaemon(inputs) {
         const former = renderers.get(route.name);
         if (former !== void 0)
           clock.detach(
-            `renderer ${former.renderer.name} retire`,
+            `renderer ${former.renderer.name} retire ${session}`,
             () => former.renderer.deliver(
               () => ({
                 kind: "event",
@@ -92860,6 +92944,16 @@ function createDaemon(inputs) {
       ),
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
+      // [LAW:no-ambient-temporal-coupling] A closed daemon takes no throws and
+      // ends no holds, so a later daemon over the same clock owns its own.
+      [
+        "held events close",
+        () => {
+          stopTakingThrows();
+          for (const slot of [rendererEnded, actFailed, ...taskThrown.values()])
+            slot.dispose();
+        }
+      ],
       ...attached.map(
         ({ renderer, link }) => [
           `${renderer.name} renderer close`,
@@ -92976,7 +93070,8 @@ var DaemonLog = class {
       this.dropped += cut;
     }
     if (this.exiting) this.writeWaitingSync(true, EXIT_WAIT_MS);
-    else if (!this.flushing) void this.flush();
+    else if (!this.flushing)
+      this.clock.detach("daemon log flush", () => this.flush());
   };
   // Resolves once every line logged so far is in the file (or reported
   // unwritable).
@@ -93296,11 +93391,11 @@ var SessionFile = class {
   schedule() {
     if (this.clearTimer !== null) return;
     this.clearTimer = this.clock.after(
-      "session state write",
+      `${this.kind.name} write`,
       this.debounceMs,
-      () => {
+      async () => {
         this.clearTimer = null;
-        return this.write();
+        await this.write();
       },
       { unref: true }
     );
@@ -93612,22 +93707,16 @@ function productionAdapters(paths2, daemonLog, machine) {
     openRecording: openRecordingFile,
     accountHome: () => accountHome ??= userInfo().homedir,
     daemonLog,
-    launcher: (own2, report2) => systemLauncher(own2, reporting(machine, report2)),
-    profile: (name, log, report2) => fileStorage(profilePaths(paths2, name), log, reporting(machine, report2)),
-    sessionBook: (log, report2) => new SessionFile(
-      SESSION_BOOK_FILE,
-      paths2.sessionBook,
-      reporting(machine, report2),
-      500,
-      log
-    ),
+    launcher: (own2) => systemLauncher(own2, machine),
+    profile: (name, log) => fileStorage(profilePaths(paths2, name), log, machine),
+    sessionBook: (log) => new SessionFile(SESSION_BOOK_FILE, paths2.sessionBook, machine, 500, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths2.state), daemonLog.log),
     claudeInput: productionClaudeInputEdge,
     barPaneEdge: productionBarPaneEdge,
-    limits: ({ startedAtMs, exit: exit2, launcher, log, report: report2 }) => realLimitsDeps(startedAtMs, exit2, {
+    limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,
-      clock: reporting(machine, report2),
+      clock: machine,
       snapshotDir: paths2.state,
       writeLogNow: () => daemonLog.writeNow()
     }),
@@ -93962,13 +94051,15 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-var WORLD = processWorld();
+var TASK_THROWS = new TaskThrowInbox();
+var WORLD = processWorld(TASK_THROWS.report);
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 var pageDaemon = createDaemon({
   region: systemRegion(),
   ...adapters,
+  taskThrows: TASK_THROWS,
   renderer: inProcessRenderer(),
   paths,
   host: HOST,
@@ -93980,8 +94071,8 @@ var pageDaemon = createDaemon({
   },
   rendererName: MAIN_RENDERER,
   // Its picks and history live only as long as the page.
-  profile: (name, log, report2) => ({
-    ...adapters.profile(name, log, report2),
+  profile: (name, log) => ({
+    ...adapters.profile(name, log),
     session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE
   }),
