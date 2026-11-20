@@ -35,6 +35,8 @@ import { nodeClientHint } from "./client-hint";
 import { runFrames } from "./frames-cli";
 import { runBarPane } from "./bar-pane";
 import { exitWith } from "./cli-plan";
+import { recordPlan, replayPlan } from "./recording-cli.js";
+import { replayRecording } from "./renderer/replay.js";
 
 // [LAW:one-source-of-truth] The bundle this process runs: the file this entry
 // was loaded from, which Node's loader resolved through every link (an npm
@@ -101,6 +103,12 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(commandWorld(), args));
+  },
+  record: async (args) => {
+    await exitWith(await recordPlan(commandWorld(), process.cwd(), args));
+  },
+  replay: async (args) => {
+    await exitWith(await replayPlan(args, replayRecording));
   },
   // The stream owns its own lifecycle.
   frames: async () => {

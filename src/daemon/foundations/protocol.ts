@@ -4,6 +4,7 @@ import type { Duplex } from "node:stream";
 import type { RenderHookData } from "../../utils/claude";
 import type { StatsSnapshot } from "./stats-snapshot";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
+import type { RecordingCommand } from "./recording-command.js";
 import type { TmuxHint } from "../../tmux-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../../terminal-hint";
 import {
@@ -445,6 +446,12 @@ export interface DebugRequest {
   what: DebugWhat;
 }
 
+export interface RecordingRequest {
+  v: number;
+  kind: "recording";
+  command: RecordingCommand;
+}
+
 // [LAW:one-type-per-behavior] A subscription's stream is a stream of
 // responses, each in its lane's own encoding: every frame the daemon draws
 // for the session whose bytes differ from the last one sent, until the
@@ -479,6 +486,7 @@ export type Request =
   | ShutdownRequest
   | StatsRequest
   | ClickRequest
+  | RecordingRequest
   | DebugRequest;
 
 export type Response =

@@ -13,12 +13,16 @@ import { systemTimekeeper } from "../../src/time";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { TEST_SIGNER } from "./link-signer";
 
+export function unexpectedTimingProblem(message: string): never {
+  throw new Error(message);
+}
+
 // `renderer` as the host holds it in process: each turn timed around its
 // answer, on `monotonic` — a unit test's own clock, which reads no time.
 export const hostHeld = (
   renderer: Renderer,
   monotonic: () => number = () => systemTimekeeper.monotonic(),
-): TimedRenderer => timed(renderer, monotonic);
+): TimedRenderer => timed(renderer, monotonic, unexpectedTimingProblem);
 
 // A collector as a host's turns reach it, in a rig no feed follows a session
 // in: the frames a turn drew go nowhere.

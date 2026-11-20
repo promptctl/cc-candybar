@@ -23,6 +23,7 @@ import {
 } from "../../src/daemon/foundations/session-id";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import type { WorldState } from "../../src/facts/world-state";
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import { parseFrame, textOf, type Frame } from "../../src/render/frame";
 import { timed } from "../../src/renderer-interface/interface";
 import type {
@@ -38,7 +39,12 @@ import type {
   RequestId,
 } from "../../src/renderer-interface/interface";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
+import {
+  RECORDING_VERSION,
+  type RecordingEntry,
+} from "../../src/renderer-interface/recording";
 import { mainRendererOf } from "../../src/renderer/main";
+import { replayRecording } from "../../src/renderer/replay";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import {
   lineSplitter,
@@ -51,10 +57,12 @@ import {
 } from "../../src/renderer-interface/wire";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, readingsAt, type Tick } from "../../src/utils/instant";
+import type { LogLine } from "../../src/utils/logger";
 import { ABSENT } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { heldClock } from "../helpers/held-clock";
+import { unexpectedTimingProblem } from "../helpers/renderers";
 import {
   oversizedRendererHistory,
   oversizedSession,
@@ -81,6 +89,7 @@ const bootOf = (stored = EMPTY_STORED_STATE): RendererBoot => ({
     dataHome: "/nowhere/data",
     dataDirs: [],
   },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1024 * 1024 * 1024,
 });
 
@@ -113,7 +122,7 @@ function rendererLines(send: (bytes: string) => void) {
       }
       const { renderer: core, ...outcome } = built;
       const receive = serveRenderer({
-        renderer: timed(core, () => 0),
+        renderer: timed(core, () => 0, unexpectedTimingProblem),
         send: (line) => send(lineBytes(line)),
         memory: () => {
           throw new Error("replay unexpectedly inspected process memory");
@@ -331,16 +340,71 @@ test("a session's bar draws from the layer text its origin's snapshot carries", 
   ]);
 });
 
+test("rotating an in-process renderer disposes its previous view before serving the successor", async () => {
+  const cores: Renderer[] = [];
+  const logged: LogLine[] = [];
+  const link = inProcessRenderer((core) => {
+    cores.push(core);
+    return core;
+  })({ name: MAIN_RENDERER, boot: bootOf, entry: "/nowhere/renderer", node: [] }).start({
+    clock: heldClock(new Date(AT * 1000)),
+    log: (level, line) => logged.push({ level, line }),
+    start: async () => {},
+    ended: () => {},
+  });
+  const open = async (session: string) => {
+    const context = contextOf(session);
+    const { requested: origin, hookData } = context;
+    answered(await handIn(link.renderer, { kind: "start", viewers: {}, sessions: [], configs: [] }));
+    answered(await handIn(link.renderer, {
+      kind: "context", context, worldState: worldStateOf(hookData.session_id),
+    }));
+    answered(await handIn(link.renderer, { kind: "config", origin, config: snapshotOf(CONFIG) }));
+    const output = answered(await handIn(link.renderer, { kind: "request", id: 1 as RequestId, context }));
+    expect(textOf(presentOf(output.effects).frame)).toContain(SAID);
+  };
+  const viewsOf = async (core: Renderer) => {
+    const { reply } = answered(await handIn(core, { kind: "stats" }));
+    if (reply?.kind !== "stats") throw new Error("renderer returned no stats");
+    return reply.stats.renderCache.views;
+  };
+  link.serve();
+  try {
+    await open("before-restart");
+    const previous = cores[0];
+    if (previous === undefined) throw new Error("the initial core did not build");
+    expect(await viewsOf(previous)).toBe(1);
+
+    await link.restart();
+    expect(await viewsOf(previous)).toBe(0);
+    expect(logged).toContainEqual({
+      level: "info", line: "render-cache closed entries=1 deferred=0",
+    });
+    await open("after-restart");
+    expect(await viewsOf(link.renderer)).toBe(1);
+    expect(await viewsOf(previous)).toBe(0);
+  } finally {
+    await handIn(link.renderer, { kind: "close-journal" });
+    await handIn(link.renderer, { kind: "close-views" });
+    await link.close();
+  }
+});
+
 test("a fresh renderer reproduces the captured production-wire replies", async () => {
   const session = sessionIdOf("replay");
   const context = contextOf(session);
   const origin = context.requested;
   const palette = [...listResolvablePaletteNames()][0]!;
   const profile = "captured at construction";
-  const live = await recordedRenderer(bootOf({
+  const boot = bootOf({
     ...oversizedRendererHistory(),
     sessions: { [session]: { remembered: profile } },
-  }));
+  });
+  const live = await recordedRenderer(boot);
+  const recording: RecordingEntry[] = [{
+    kind: "boot", version: RECORDING_VERSION, wireVersion: RENDERER_WIRE_VERSION,
+    input: boot, result: live.construction,
+  }];
   const bootDiagnostic = {
     level: "info",
     line: `settings-history: trimmed an old step for session ${oversizedSession}`,
@@ -362,13 +426,17 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     root: { h: ["said"] },
   });
   const clock = heldClock(new Date(1_700_000_000_000));
-  const turn = (event: Event, afterMs: number) => {
+  const turn = async (event: Event, afterMs: number) => {
     clock.advance(afterMs);
-    return live.renderer.answer({
-      kind: "event",
+    const input = {
+      kind: "event" as const,
       ...readingsAt(clock),
       event,
-    });
+    };
+    const answer = await live.renderer.answer(input);
+    const { turnMs: _transport, ...output } = answer;
+    recording.push({ kind: "turn", input, output });
+    return answer;
   };
   const started = answered(await turn(
     {
@@ -479,6 +547,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "threw",
     failure: { message: expect.stringContaining("missing-from-capture") },
   });
+  const failedEntryIndex = recording.length - 1;
   const reloaded = answered(await turn(
     {
       kind: "config",
@@ -494,6 +563,32 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   ));
   expect(textOf(presentOf(last.effects).frame)).toContain(
     "after replayed reload",
+  );
+
+  const recordedTurns = recording.length - 1;
+  const replayed: RendererOutput[] = [];
+  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
+  expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
+  expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
+  expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
+  expect(replayed[failedEntryIndex - 1]).toMatchObject({
+    kind: "threw",
+    failure: { message: expect.stringContaining("missing-from-capture") },
+  });
+  expect(textOf(presentOf(answered(replayed.at(-1)!).effects).frame)).toContain("after replayed reload");
+
+  const failureEntry = recording[failedEntryIndex];
+  if (failureEntry?.kind !== "turn" || failureEntry.output.kind !== "threw")
+    throw new Error("the recorded failure turn is missing");
+  const altered = lines.with(failedEntryIndex, JSON.stringify({
+    ...failureEntry,
+    output: {
+      ...failureEntry.output,
+      failure: { ...failureEntry.output.failure, detail: "altered failure detail" },
+    },
+  }));
+  await expect(replayRecording(altered)).rejects.toThrow(
+    `recording turn ${failedEntryIndex} differs at output.failure.detail`,
   );
 
   expect(await replayLines(live.inputs)).toEqual({

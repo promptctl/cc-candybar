@@ -26,6 +26,7 @@ import {
   CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
+import { unexpectedTimingProblem } from "../helpers/renderers";
 
 // A renderer that answers with a diagnostic. Its turns
 // take no time, so both ends time them alike.
@@ -54,6 +55,7 @@ function talkingRenderer(): TimedRenderer {
       },
     },
     () => 0,
+    unexpectedTimingProblem,
   );
 }
 
@@ -155,6 +157,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
   const renderer = timed(
     { answer: async () => output },
     () => 0,
+    unexpectedTimingProblem,
   );
   const heard: RendererLine[] = [];
   const transport = linesOver(undefined, { renderer, heard });
@@ -188,6 +191,7 @@ function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
       },
     },
     () => 0,
+    unexpectedTimingProblem,
   );
 }
 
@@ -303,6 +307,7 @@ describe("a renderer's boot line", () => {
   const boot = {
     locations,
     stored,
+    region: { locale: "en-US", timeZone: "UTC" },
     memoryLimitBytes: Number.MAX_SAFE_INTEGER * 1024 * 1024,
   };
   const read = (value: unknown) =>
@@ -327,6 +332,9 @@ describe("a renderer's boot line", () => {
       { ...boot, locations: { ...locations, dataDirs: [1] } },
       "invalid resolved locations",
     ],
+    [{ ...boot, region: null }, "locale and time zone"],
+    [{ ...boot, region: { locale: "not valid", timeZone: "UTC" } }, "unsupported locale or time zone"],
+    [{ ...boot, region: { locale: "en-US", timeZone: "invented" } }, "unsupported locale or time zone"],
     [{ ...boot, memoryLimitBytes: -1 }, "memoryLimitBytes"],
     [{ ...boot, stored: {} }, "stored.sessions"],
     [
@@ -404,9 +412,10 @@ describe("the renderer over lines", () => {
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);
-    expect(failureOf(thrownThere)).toMatchObject({
+    expect(failureOf(thrownThere)).toEqual({
       kind: thrownHere.kind,
       message: thrownHere.message,
+      detail: "Error: close refused",
     });
   });
 

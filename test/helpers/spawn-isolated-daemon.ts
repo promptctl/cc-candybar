@@ -348,12 +348,13 @@ export interface IsolatedDaemonHandle {
 
 export async function spawnIsolatedDaemon(
   tmpPrefix: string,
+  entry?: DaemonEntry,
 ): Promise<IsolatedDaemonHandle> {
   const { env, sockPath, stateDir, removeTmpDirs } =
     prepareIsolatedDaemonEnv(tmpPrefix);
   let daemon: RunningDaemon;
   try {
-    daemon = await spawnDaemonWithEnv(env);
+    daemon = await spawnDaemonWithEnv(env, entry);
   } catch (e) {
     removeTmpDirs();
     throw e;
