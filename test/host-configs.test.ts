@@ -63,7 +63,7 @@ const SNAPSHOT: ConfigSnapshot = {
   checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
-  discovery: null,
+  discoveryFault: null,
 };
 
 let dir: string;

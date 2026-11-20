@@ -2713,7 +2713,7 @@ describe("a snapshot's listed definitions", () => {
       checkout: { root: "/home/u", git: false },
       notices: [],
       watch: null,
-      discovery: null,
+      discoveryFault: null,
     };
     let caught: unknown;
     try {

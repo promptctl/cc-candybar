@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { Listeners } from "../../utils/listeners";
 import path from "node:path";
 import type { WatcherRegistry } from "./watchers";
 import type { Invalidation, WatcherHandle } from "../foundations/watch-targets";
@@ -83,7 +84,7 @@ const label = (d: Delivery): string =>
 export class FileEventDelivery {
   private current: Delivery;
   private instrument: Instrument = { kind: "idle" };
-  private readonly listeners = new Set<(notice: DeliveryNotice) => void>();
+  private readonly listeners = new Listeners<DeliveryNotice>();
   private stalls = 0;
   private catchUps = 0;
   private probes = 0;
@@ -120,8 +121,7 @@ export class FileEventDelivery {
   }
 
   subscribe(listener: (notice: DeliveryNotice) => void): Release {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
+    return this.listeners.subscribe(listener);
   }
 
   // Only the daemon starts the owner, once it has won its socket: it makes
@@ -356,7 +356,7 @@ export class FileEventDelivery {
   }
 
   private notify(notice: DeliveryNotice): void {
-    for (const listener of [...this.listeners]) listener(notice);
+    this.listeners.tell(notice);
   }
 }
 

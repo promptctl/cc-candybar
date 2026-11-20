@@ -25,7 +25,6 @@ import {
 } from "../src/daemon/config-discovery/discovery-files";
 import {
   ConfigDiscovery,
-  type ConfigDiscoveryDeps,
   type RendererConfigs,
 } from "../src/daemon/config-discovery/config-discovery";
 import {
@@ -630,9 +629,9 @@ test("a failed rediscovery hands its holders the last config with why, while a s
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
-  expect(second.snapshotOf(a.origin)?.discovery).toBeNull();
+  expect(second.snapshotOf(a.origin)?.discoveryFault).toBeNull();
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(second.snapshotOf(b.origin)?.discovery).toBe(
+  expect(second.snapshotOf(b.origin)?.discoveryFault).toBe(
     "config discovery threw: rediscovery failed",
   );
   expect(logged).toEqual(
@@ -656,35 +655,7 @@ test("a failed rediscovery hands its holders the last config with why, while a s
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
-  expect(second.snapshotOf(b.origin)?.discovery).toBeNull();
-});
-
-test("a managed-storage recheck that throws still hands the change to the other holders", () => {
-  const a = named("recheck", '{ plugins: ["widget/plugin.json5"] }');
-  const plugin = project("recheck/widget");
-  fs.writeFileSync(path.join(plugin, "plugin.json5"), "{ name: 'widget' }");
-  let broken = false;
-  const delivered: string[] = [];
-  const service = physicalDiscovery(project("empty-data"), [], {
-    reloaded: () => {
-      if (broken) throw new Error("recheck bug");
-    },
-    moved: (renderer, origins) => {
-      for (const origin of origins)
-        delivered.push(`${renderer} ${originKey(origin)}`);
-    },
-  });
-  const other = rendererNameOf("other");
-  const writer = service.forRenderer(MAIN_RENDERER);
-  writer.follow([a.origin]);
-  service.forRenderer(other).follow([a.origin]);
-  const next = '{ plugins: ["widget/plugin.json5"], globals: { padding: 1 } }';
-  fs.writeFileSync(a.file, next);
-
-  broken = true;
-  expect(() => writer.landed([a.file])).toThrow("recheck bug");
-  expect(delivered).toEqual([`${other} ${originKey(a.origin)}`]);
-  expect(textOfLayer(service.forRenderer(other), a.origin, a.file)).toBe(next);
+  expect(second.snapshotOf(b.origin)?.discoveryFault).toBeNull();
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -873,14 +844,12 @@ function physicalDiscovery(
     state = path.join(root, "state"),
     clock = heldClock(new Date()),
     reloaded,
-    moved = () => {},
   }: {
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
     clock?: ReturnType<typeof heldClock>;
     reloaded?: (folders: ReadonlySet<string>) => void;
-    moved?: ConfigDiscoveryDeps["moved"];
   } = {},
 ) {
   const watchers = new WatcherRegistry({
@@ -893,7 +862,7 @@ function physicalDiscovery(
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
-    moved,
+    moved: () => {},
     reloaded,
   });
   cleanups.push(

@@ -920,6 +920,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     rendererFor,
   };
 
+  // [LAW:one-source-of-truth] The registry holds each watch delivery's fault
+  // and says when one moved; the facts restate it from there.
+  // [LAW:no-ambient-temporal-coupling] Subscribed once the launcher the
+  // restatement reads exists.
+  watcherRegistry.subscribe(restateFaults);
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // found when they resume: every followed origin is discovered again, and
   // each one that moved gets its `config` turn. Every feed redraws when
@@ -928,7 +933,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // the disk on the one period the daemon keeps time by: a folder replaced
   // beneath a renamed ancestor reports nothing to the handle bound to the old
   // one, and a directory the OS refused is heard again only by a retry.
-  watcherRegistry.subscribe(restateFaults);
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
       case "period":

@@ -147,12 +147,14 @@ function prPeriodOf({ failures }: PrAnswer): number {
 // pass that read no branch to key it by.
 type PrMove = "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 
-// What a landed pass met, for its refresh event: a pass that threw moved its
-// watch by no step it can name.
+// What a landed pass met, for its refresh event: its watch's move, none for
+// a pass that threw before it could name one, and a throw's detail for the
+// log, null for a pass that ran clean of throws.
 interface PassLanded {
   readonly failures: ReadonlySet<string>;
   readonly pr: PrMove;
-  readonly watch: WatchMove | "threw";
+  readonly watch: WatchMove | null;
+  readonly thrown: string | null;
 }
 
 // What asked for a pass, beside the period: a watch fire, the repo's first
@@ -293,7 +295,7 @@ function composed({ value, pr }: RepoState): Current<GitInfo> {
 const CLOSED = failed("git cache closed", "read");
 
 function threw(label: string): (e: unknown) => Outcome<never> {
-  return (e) => failed(`${label} threw: ${String(e)}`, "read");
+  return (e) => failed(`${label} threw: ${failureOf(e).message}`, "read");
 }
 
 export class GitDataProvider {
@@ -579,7 +581,10 @@ export class GitDataProvider {
     try {
       await this.pass(state);
     } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+      this.logger(
+        "error",
+        `git refresh threw root=${logfmtValue(state.root)} detail=${logfmtValue(failureOf(e).detail)}`,
+      );
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -649,7 +654,7 @@ export class GitDataProvider {
     const asked = [...state.asked];
     state.asked.clear();
     const landed = await this.read(state).catch((thrown: unknown) =>
-      this.threw(state, thrown),
+      this.failedPass(state, thrown),
     );
     // Dropped or closed while the read was out: nothing of it is stored.
     if (landed === null) return;
@@ -657,7 +662,7 @@ export class GitDataProvider {
     // reason it met on the one event; a read of the stored value never logs
     // it again.
     this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} pr=${landed.pr} watch=${landed.watch}`,
+      `${state.root} asked=${asked.join(",") || "-"} pr=${landed.pr} watch=${landed.watch ?? "-"}${landed.thrown === null ? "" : ` detail=${logfmtValue(landed.thrown)}`}`,
       triggerOf(asked),
       landed.failures.size === 0
         ? ok(null)
@@ -668,21 +673,19 @@ export class GitDataProvider {
 
   // [LAW:one-source-of-truth] A pass that throws is a defect of this owner,
   // and its failure is the repo's read until a pass runs clean: the value
-  // every bar reading the repo draws, beside a PR key owed so a key the throw
-  // left half moved is set again by the next clean pass. Nothing else holds
-  // it, so nothing has to let it go.
-  private threw(state: RepoState, thrown: unknown): PassLanded {
+  // every bar reading the repo draws. Its PR is owed, so a key the throw left
+  // half moved is set again by the next clean pass, and answers the failure
+  // meanwhile, as a pass that read no branch does. Nothing else holds it, so
+  // nothing has to let it go.
+  private failedPass(state: RepoState, thrown: unknown): PassLanded {
     const failure = failureOf(thrown);
-    this.logger(
-      "error",
-      `git refresh threw root=${logfmtValue(state.root)} detail=${logfmtValue(failure.detail)}`,
-    );
-    const reason = `git refresh threw: ${failure.message}`;
+    const failures = new Set([`git refresh threw: ${failure.message}`]);
     state.value.missed = false;
-    settle(state.value, failed(reason, "read"));
+    settle(state.value, failed([...failures].join("; "), "read"));
     owe(state.pr);
+    const pr = unkeyedPr(state.pr, failures);
     this.held(state);
-    return { failures: new Set([reason]), pr: "owed", watch: "threw" };
+    return { failures, pr, watch: null, thrown: failure.detail };
   }
 
   // Read the repo and the remote beside the branch it read; store the
@@ -713,7 +716,7 @@ export class GitDataProvider {
         ? unkeyedPr(state.pr, failures)
         : this.movePr(state, branch, remote);
     this.held(state);
-    return { failures, pr: prMove, watch: followed.move };
+    return { failures, pr: prMove, watch: followed.move, thrown: null };
   }
 
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the

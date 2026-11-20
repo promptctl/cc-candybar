@@ -146,7 +146,7 @@ function snapshot(text: string): ConfigSnapshot {
     strays: [],
     notices: [],
     watch: null,
-    discovery: null,
+    discoveryFault: null,
   };
 }
 

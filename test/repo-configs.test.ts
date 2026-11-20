@@ -252,7 +252,7 @@ const NO_SNAPSHOT: ConfigSnapshot = {
   checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
-  discovery: null,
+  discoveryFault: null,
 };
 
 const loadedEntry: ReloadedEntry = {

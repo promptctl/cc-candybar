@@ -462,8 +462,10 @@ export function drawRender(
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.snapshot.repo, sessionId);
-  // What a load or a request could not honour: each its own message, named by
-  // what it is about. A load's error is about the session's config, and a
+  // What a load or a request could not honour, and what keeps this bar's
+  // config or any refresh from current (a discovery that threw, a watch
+  // delivery that keeps throwing): each its own message, named by what it is
+  // about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
   // viewer (an issue fixed) without becoming another message; a request's
   // refusal, its hints' and a click's are about exactly what their text says.
@@ -485,15 +487,12 @@ export function drawRender(
     ),
     // [LAW:no-silent-failure] The config drawn is the last one discovery
     // found, because its discovery threw since: an edit may not reach it.
-    sourced("discovery", "discovery", entry.snapshot.discovery),
+    sourced("discovery", "discovery", entry.snapshot.discoveryFault),
     // A watch delivery that keeps throwing may leave any bar unrefreshed.
     ...document.daemon.watchDelivery.map(
       ({ about, message }): MaybeError => ({
-        kind: "watch-delivery",
+        ...sourced("watch-delivery", `watch-delivery\0${about}`, message),
         subject: about,
-        about: `watch-delivery\0${about}`,
-        text: message,
-        copy: message,
       }),
     ),
     ...state.dropped.map(

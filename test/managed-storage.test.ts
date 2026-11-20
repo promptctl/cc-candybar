@@ -736,6 +736,44 @@ describe("ManagedStorage watches", () => {
     ]);
   });
 
+  test("an ask that throws is a standing fault of the folder's sources, never a throw at the trigger; the next ask makes it again", async () => {
+    const r = rig();
+    r.follow();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual(ABSENT);
+    // A defect in the ask itself: the registry's judge throws once.
+    jest
+      .spyOn(WatcherRegistry.prototype, "acquire")
+      .mockImplementationOnce(() => {
+        throw new Error("registry bug");
+      });
+    expect(() => r.recheck()).not.toThrow();
+    await until(() => lane.current().kind === "failed", "the fault's read");
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder} asking again threw: registry bug; retried at the next config load or file-event check`,
+    });
+    expect(
+      r.lines.filter((l) => l.startsWith("error plugin storage ask threw")),
+    ).toEqual([
+      expect.stringMatching(
+        /^error plugin storage ask threw folder=\S+ detail=.*registry bug/,
+      ),
+    ]);
+    expect(faultLines(r)).toEqual([started("error")]);
+    // Its generation ended with the throw.
+    expect(r.counters.watchersClosed).toBe(1);
+
+    jest.restoreAllMocks();
+    r.recheck();
+    expect(faultLines(r)).toEqual([started("error"), cleared("error")]);
+    expect(r.counters.watchersOpened).toBe(2);
+    r.write(A, '"a"');
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("a"));
+  });
+
   test("a config observation that cannot make a watched folder again ends its generation", async () => {
     const r = rig();
     r.follow();

@@ -1185,7 +1185,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
       "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+      expect.stringMatching(/^git refresh threw root=\/repo detail=".*logger bug/),
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
@@ -1204,9 +1204,13 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
       failed("git refresh threw: gitdir bug", "read"),
     );
     expect(failuresIn(logs)).toEqual(["git refresh threw: gitdir bug"]);
-    expect(
-      logs.filter((l) => l.startsWith("git refresh threw root=/repo detail=")),
-    ).toHaveLength(1);
+    // One line, the refresh's own: its PR answers the failure, owed for the
+    // next pass, and the throw's detail rides it.
+    expect(logs.filter((l) => l.includes("gitdir bug"))).toEqual([
+      expect.stringMatching(
+        /^git refresh \/repo asked=\S+ pr=unkeyed watch=- detail=.*gitdir bug.* outcome=failed /,
+      ),
+    ]);
 
     inner.gitDirThrows = false;
     svc.changed("/repo");

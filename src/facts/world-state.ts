@@ -67,8 +67,8 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself: whether file events are heard,
-// and what the launcher stands behind (whether what it launches dies with it,
+// daemon itself: whether file events are heard, which watch deliveries keep
+// throwing, and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
 // and for whom it draws, src/utils/event-hold.ts), how the last renderer
 // process ended, and the acts that failed with no session's bar to hold them

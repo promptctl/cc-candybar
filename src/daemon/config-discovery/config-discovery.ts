@@ -210,16 +210,23 @@ export class ConfigDiscovery {
     if (fresh.length > 0) {
       const shared = this.batch();
       const observed: ObservedConfig[] = [];
-      for (const [key, origin] of fresh) {
-        const found = this.discovered(origin, shared, null);
-        this.followed.set(key, {
-          ...found,
-          renderers: new Set([renderer]),
-          selected: new Map(),
-        });
-        observed.push(found);
+      // [LAW:no-silent-failure] A first discovery has no last snapshot to
+      // keep, so its throw fails the follow, loudly, to the renderer that
+      // asked; each origin followed before it still has its storage rechecked,
+      // and the retry finds it followed.
+      try {
+        for (const [key, origin] of fresh) {
+          const found = this.discovered(origin, shared, null);
+          this.followed.set(key, {
+            ...found,
+            renderers: new Set([renderer]),
+            selected: new Map(),
+          });
+          observed.push(found);
+        }
+      } finally {
+        this.reloaded(observed);
       }
-      this.reloaded(observed);
     }
     let released = 0;
     for (const [key, { renderers, selected, watch }] of this.followed) {
@@ -346,9 +353,8 @@ export class ConfigDiscovery {
   // [LAW:single-enforcer] Every rediscovery's one tail: discover `keys`
   // again, recheck the managed folders they name, and hand each moved
   // snapshot to its holders. The recheck goes first, because an idle holder's
-  // config turn runs inside the hand-off and reads that storage; a recheck
-  // that throws still hands the change on ([LAW:no-silent-failure]: the throw
-  // goes on to whoever called, and nothing it interrupted is lost).
+  // config turn runs inside the hand-off and reads that storage; it holds its
+  // own faults, so it answers rather than throws.
   private handed(
     keys: readonly string[],
     why: string,
@@ -356,16 +362,10 @@ export class ConfigDiscovery {
     writer: RendererName | null,
   ): readonly RenderOrigin[] {
     const { observed, moved } = this.rediscovered(keys, why);
-    let handed: readonly RenderOrigin[] = [];
-    try {
-      // A targeted watch or write can retry even if the snapshot is
-      // unchanged. A broad catch-up already has its own storage recovery
-      // trigger.
-      this.reloaded(recover === "observed" ? observed : moved);
-    } finally {
-      handed = this.publish(moved, writer);
-    }
-    return handed;
+    // A targeted watch or write can retry even if the snapshot is unchanged.
+    // A broad catch-up already has its own storage recovery trigger.
+    this.reloaded(recover === "observed" ? observed : moved);
+    return this.publish(moved, writer);
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients
@@ -395,20 +395,22 @@ export class ConfigDiscovery {
     why: string,
   ): { readonly observed: readonly Followed[]; readonly moved: Followed[] } {
     if (keys.length === 0) return { observed: [], moved: [] };
-    // Read once, inside each origin's own attempt: a shared read that throws
-    // is every origin's failure, not a batch lost before any of them.
-    let shared: DiscoveryBatch | undefined;
-    const sharedRead = (): DiscoveryBatch => (shared ??= this.batch());
+    // [LAW:one-source-of-truth] One read of what they share, its outcome
+    // kept: a shared read that throws is every origin's failure, read once.
+    const shared = sharedRead(() => this.batch());
     const moved: Followed[] = [];
     const observed: Followed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
+      // [LAW:no-silent-failure] An origin that cannot be observed keeps its
+      // last snapshot, saying why, for a retry. Its failure cannot suppress a
+      // sibling's already-observed change or reverse a successful write.
       let found: ObservedOrigin;
       try {
-        found = this.discovered(was.origin, sharedRead(), was.watch);
+        found = this.discovered(was.origin, shared(), was.watch);
       } catch (thrown) {
-        found = this.threw(was, why, thrown);
+        found = this.failedDiscovery(was, why, thrown);
       }
       const now = {
         ...found,
@@ -432,7 +434,11 @@ export class ConfigDiscovery {
   // held by the origin's own entry, handed to its holders as any move is, and
   // gone with the next snapshot discovery finds or with the origin itself.
   // Its watch is the one it held, so its next change tries again.
-  private threw(was: Followed, why: string, thrown: unknown): ObservedOrigin {
+  private failedDiscovery(
+    was: Followed,
+    why: string,
+    thrown: unknown,
+  ): ObservedOrigin {
     const failure = failureOf(thrown);
     this.deps.log(
       "error",
@@ -443,7 +449,7 @@ export class ConfigDiscovery {
         was.origin,
         {
           ...was.snapshot,
-          discovery: `config discovery threw: ${failure.message}`,
+          discoveryFault: `config discovery threw: ${failure.message}`,
         },
         was.managedFolders,
       ),
@@ -523,8 +529,10 @@ export class ConfigDiscovery {
     );
     const key = originKey(origin);
     const paths = watchTargetsFor(found);
-    // [LAW:no-ambient-temporal-coupling] Derived before the watch follows,
-    // so a step that throws leaves the origin holding the watch it had.
+    // [LAW:no-ambient-temporal-coupling] Everything read from the finding is
+    // derived before the watch follows, so a throw reading it leaves the
+    // origin holding the watch it had; past the follow, only the held
+    // handle's own reading and the digest remain.
     const managedFolders = new Set(
       pluginFiles(found.snapshot).flatMap(({ definition }) =>
         definition.kind === "text" ? [definition.storage] : [],
@@ -606,4 +614,19 @@ function pluginFiles(snapshot: ConfigSnapshot) {
     ...snapshot.plugins,
     ...snapshot.chain.flatMap((layer) => Object.values(layer.listed)),
   ];
+}
+
+// A read run once whose outcome is kept, a throw included: every caller
+// meets the one result, or the one throw again.
+function sharedRead<T>(read: () => T): () => T {
+  let outcome: { readonly value: T } | { readonly thrown: unknown };
+  try {
+    outcome = { value: read() };
+  } catch (thrown) {
+    outcome = { thrown };
+  }
+  return () => {
+    if ("thrown" in outcome) throw outcome.thrown;
+    return outcome.value;
+  };
 }

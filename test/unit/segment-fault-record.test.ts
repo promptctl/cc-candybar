@@ -124,7 +124,7 @@ const snapshotOf = (text: string): ConfigSnapshot => ({
   checkout: { root: PROJECT, git: false },
   notices: [],
   watch: null,
-  discovery: null,
+  discoveryFault: null,
 });
 
 const handIn = (r: Renderer, event: Event): Promise<RendererOutput> =>

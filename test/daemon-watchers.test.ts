@@ -154,17 +154,21 @@ describe("WatcherRegistry", () => {
       expect(steady).toHaveLength(5);
     });
 
-    test("a window whose completion throws stands while a slot rides it", () => {
+    test("a window whose completion throws stands while a slot rides it, and leaves with its last slot for good", () => {
       const file = path.join(dir, "batched");
       fs.writeFileSync(file, "1");
+      const logged: string[] = [];
+      reg = new WatcherRegistry({
+        clock,
+        logger: (level, line) => logged.push(`${level} ${line}`),
+      });
+      let moved = 0;
+      reg.subscribe(() => moved++);
       const window = reg.batch("config discovery", () => {
         throw new Error("window bug");
       });
-      const handle = window.acquire(
-        "batched",
-        { dirs: [], polled: [file] },
-        () => {},
-      );
+      const targets = { dirs: [], polled: [file] };
+      const handle = window.acquire("batched", targets, () => {});
       fs.writeFileSync(file, "22");
       swept();
       expect(reg.standing()).toEqual([
@@ -173,8 +177,19 @@ describe("WatcherRegistry", () => {
           message: "config discovery: delivery threw window bug",
         },
       ]);
+      expect(moved).toBe(1);
       handle.release();
       expect(reg.standing()).toEqual([]);
+      expect(moved).toBe(2);
+      expect(logged).toContain(
+        `info watch delivery fault left about=${valueOf("config discovery")}`,
+      );
+      // A slot that joins the window later meets no fault of a delivery it
+      // never had, and a release that took no fault tells nobody.
+      const rejoined = window.acquire("batched", targets, () => {});
+      expect(reg.standing()).toEqual([]);
+      rejoined.release();
+      expect(moved).toBe(2);
     });
 
     // The daemon makes the file between two sweeps and a holder reads it and

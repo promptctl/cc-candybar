@@ -45,7 +45,7 @@ function snapshot(standing: Standing): ConfigSnapshot {
     strays: [],
     notices: [],
     watch: null,
-    discovery: null,
+    discoveryFault: null,
   };
 }
 

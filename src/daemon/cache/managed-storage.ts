@@ -22,6 +22,7 @@ import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
 import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
+import { failureOf } from "../foundations/verb-error";
 import { jsonDocumentParser } from "../../var-system/parse";
 import { SourceFiles } from "../source-files";
 import { sessionFileName } from "../../config/loader/plugins";
@@ -94,9 +95,12 @@ function madeOnce(folder: string): void {
 // is gone or replaced, and its owner makes it again at the next trigger that
 // asks, never on the event that found it gone.
 // `watching`: a generation. A generation that ends leaves this state, so no
-// fault outlives the folder it was about.
+// fault outlives the folder it was about. `threw`: asking of it threw, a
+// defect of this owner, so its generation ended and the next trigger that
+// asks makes it again.
 type Folder =
   | { readonly kind: "unmade"; readonly reason: string }
+  | { readonly kind: "threw"; readonly reason: string }
   | { readonly kind: "unreadable"; readonly reason: string }
   | { readonly kind: "lost" }
   | Watching;
@@ -144,6 +148,11 @@ const faultsOf = (folder: Folder | undefined): Faults => {
         ...NO_FAULTS,
         make: { cause: "unusable", reason: folder.reason },
       };
+    case "threw":
+      return {
+        ...NO_FAULTS,
+        make: { cause: "error", reason: folder.reason },
+      };
     case "unreadable":
       return {
         ...NO_FAULTS,
@@ -181,6 +190,7 @@ const sameFolder = (a: Folder | undefined, b: Folder | undefined): boolean => {
     case "lost":
       return true;
     case "unmade":
+    case "threw":
     case "unreadable":
       return a.reason === (b as typeof a).reason;
   }
@@ -314,7 +324,27 @@ export class ManagedStorage {
   // triggers. A config observation reprovisions a missing or replaced folder
   // immediately. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
+  // [LAW:one-source-of-truth] An ask that throws is this owner's defect, and
+  // its fault is the folder's until an ask runs clean, held as every other
+  // fault of the folder is: the trigger that asked is answered, never thrown
+  // at, so a config hand-off that rechecks first still hands its change on.
   private asked(folder: string, trigger: Trigger): boolean {
+    try {
+      return this.askedAgain(folder, trigger);
+    } catch (thrown) {
+      const failure = failureOf(thrown);
+      this.logger(
+        "error",
+        `plugin storage ask threw folder=${valueOf(folder)} detail=${valueOf(failure.detail)}`,
+      );
+      return this.moved(folder, {
+        kind: "threw",
+        reason: `asking again threw: ${failure.message}`,
+      });
+    }
+  }
+
+  private askedAgain(folder: string, trigger: Trigger): boolean {
     const was = this.folders.get(folder);
     if (was?.kind === "watching") {
       const read = this.readAt(folder);

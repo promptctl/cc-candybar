@@ -1458,6 +1458,30 @@ describe("the session's config, ahead of its request", () => {
     expect(t.recorded).toEqual([]);
   });
 
+  test("a config whose discovery threw draws its reason as an error beside the request's own", async () => {
+    const bar = async (discoveryFault: string | null): Promise<string> => {
+      const t = renderer();
+      const { discovery } = t.rig.cache.configs;
+      const ask = productionAnswer(t, [], {
+        snapshotOf: (origin) => ({
+          ...discovery.snapshotOf(origin)!,
+          discoveryFault,
+        }),
+      });
+      const reply = await ask();
+      const { resp } = reply;
+      if (!resp.ok || !("frame" in resp))
+        throw new Error(`expected a frame: ${JSON.stringify(resp)}`);
+      const text = textOf(parseFrame(resp.frame));
+      reply.settled(true);
+      await ask.drain();
+      return text;
+    };
+    // The request's unknown flag is the one error a clean config leaves.
+    expect(await bar(null)).toContain("⚠ 1");
+    expect(await bar("config discovery threw: bug")).toContain("⚠ 2");
+  });
+
   test("a snapshot that never reached the renderer can be served at the next context", async () => {
     const t = renderer();
     const { discovery } = t.rig.cache.configs;
