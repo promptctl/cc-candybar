@@ -312,16 +312,16 @@ function schemaAccepts(source: string): boolean {
 // The full loader pipeline (parse → merge-with-default → cross-ref + cycles),
 // run on a source string without touching disk. loadConfig itself takes a path;
 // this mirrors its body so the corpus stays inline.
-function loaderAccepts(source: string): boolean {
+function loaderAccepts(source: string, file = "<test>"): boolean {
   try {
     const raw = parseDslConfig(
-      "<test>",
+      file,
       source,
       undefined,
       inheritableSegmentNames(DEFAULT_DSL_CONFIG),
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
-    validateConfig({ config: merged, raw, source }, "<test>");
+    validateConfig({ config: merged, raw, source }, file);
     return true;
   } catch (e) {
     if (e instanceof ConfigError) return false;
@@ -342,6 +342,35 @@ describe("config JSON Schema", () => {
       expect(schemaAccepts(source)).toBe(false);
       expect(loaderAccepts(source)).toBe(false);
     });
+  });
+
+  const ACTION_SHAPES: ReadonlyArray<readonly [string, object, boolean]> = [
+    ["an empty program", { run: [""] }, false],
+    ["an empty argument after the program", { run: ["echo", ""] }, true],
+    ["a null run environment", { run: ["echo"], env: null }, true],
+    ["a null run refresh list", { run: ["echo"], refreshes: null }, true],
+    ["a non-string run argument", { run: ["echo", 1] }, false],
+    ["a blank reset target", { reset: "", layer: "project" }, false],
+    ["a slash in a reset target", { reset: "section/key" }, false],
+    ["a blank set target", { set: "", to: "x" }, false],
+    ["a slash in a persist target", { persist: "section/key", to: "x" }, false],
+    ["a dotted set target", { set: "section.key", to: "x" }, true],
+    ["a slash in a copy template", { copy: "section/value" }, true],
+    ["a blank literal value", { set: "section", to: "" }, false],
+    ["a slash in a literal value", { persist: "padding", to: "4/5" }, false],
+    ["a slash in an inline domain", { persist: "padding", from: ["4/5"] }, false],
+    ["a slash in a cycle member", { set: "section", cycle: ["x", "y/z"] }, false],
+    ["a blank remove name", { persist: "layout", removeSegment: "" }, false],
+    ["a slash in a remove name", { persist: "layout", removeSegment: "one/two" }, false],
+    ["a colon in an insert name", { persist: "layout", insertSegment: "one:two", anchor: "directory", relation: "before" }, false],
+    ["a colon in an insert anchor", { persist: "layout", insertSegment: "directory", anchor: "one:two", relation: "after" }, false],
+    ["zero step size", { persist: "padding", min: 0, max: 4, by: 0 }, false],
+  ];
+
+  it.each(ACTION_SHAPES)("agrees with the loader about %s", (_name, action, accepted) => {
+    const source = JSON.stringify({ actions: { sample: action } });
+    expect(loaderAccepts(source, path.resolve("authored-config.json5"))).toBe(accepted);
+    expect(schemaAccepts(source)).toBe(accepted);
   });
 
   // [LAW:single-enforcer] The boundary: a dangling segment reference is a
