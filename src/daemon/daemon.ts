@@ -95,6 +95,7 @@ import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { checkoutObservations } from "./checkout-observations.js";
 import type { CheckoutFiles } from "../utils/git-root.js";
+import type { WriteConfigFile } from "./file-rewrites.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -151,6 +152,7 @@ export interface DaemonAdapters {
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
   readonly checkoutFiles: CheckoutFiles;
+  readonly writeConfigFile: WriteConfigFile;
 }
 
 // What a daemon takes from the process that runs it: where its files are, what
@@ -747,6 +749,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),
+        writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
         unheard: (text, fromEnvironment) => {
