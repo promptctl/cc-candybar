@@ -15,6 +15,7 @@ import { HOST } from "./helpers/host";
 import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
+import { fieldsRecord } from "./helpers/daemon-log";
 import { originOf } from "./helpers/config-host";
 import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
 import { discover, readShared } from "../src/daemon/config-discovery/discover";
@@ -95,10 +96,12 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
     dirWatchesOpened: 0,
     dirWatchesClosed: 0,
   };
+  const failures: string[] = [];
   const watchers = new WatcherRegistry({
     clock,
     counters,
     logger: () => {},
+    failed: (text) => failures.push(text),
   });
   const moved: string[] = [];
   const logged: string[] = [];
@@ -120,7 +123,16 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
   const discovery = service.forRenderer(MAIN_RENDERER);
-  return { service, discovery, watchers, counters, moved, logged, delivered };
+  return {
+    service,
+    discovery,
+    watchers,
+    counters,
+    moved,
+    logged,
+    delivered,
+    failures,
+  };
 }
 
 const textOfLayer = (
@@ -138,21 +150,24 @@ test("follows exactly the origins named: each discovered once as it is first nam
   const { discovery, counters, logged } = discoveryRig();
   const { origin: a } = named("a");
   const { origin: b } = named("b");
-  const follows = () => logged.filter((l) => l.includes("why=follow"));
+  const follows = () =>
+    logged.filter((l) => l.includes("why=follow")).map(fieldsRecord);
+  const follow = (followed: number, observed: number, released: number) => ({
+    why: "follow",
+    followed: String(followed),
+    observed: String(observed),
+    released: String(released),
+  });
   discovery.follow([a]);
   discovery.follow([a, b]);
   discovery.follow([a, b]);
-  expect(follows()).toEqual([
-    "config discovery why=follow followed=1 discovered=1 released=0",
-    "config discovery why=follow followed=2 discovered=1 released=0",
-  ]);
+  // A follow that changed nothing is recorded too, as zero.
+  expect(follows()).toEqual([follow(1, 1, 0), follow(2, 1, 0), follow(2, 0, 0)]);
   expect(discovery.snapshotOf(a)).not.toBeNull();
   const opened = counters.watchersOpened;
   const closedBefore = counters.watchersClosed;
   discovery.follow([b]);
-  expect(follows().at(-1)).toBe(
-    "config discovery why=follow followed=1 discovered=0 released=1",
-  );
+  expect(follows().at(-1)).toEqual(follow(1, 0, 1));
   expect(discovery.snapshotOf(a)).toBeNull();
   expect(counters.watchersOpened).toBe(opened);
   expect(counters.watchersClosed).toBeGreaterThan(closedBefore);
@@ -166,9 +181,18 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
-  // A landing that moved nothing answers none.
+  const landing = (observed: number, moved: number) => ({
+    why: "landed",
+    followed: "2",
+    observed: String(observed),
+    moved: String(moved),
+  });
+  expect(fieldsRecord(logged.at(-1)!)).toEqual(landing(1, 1));
+  // A landing that moved nothing answers none, and one that touched no
+  // origin still writes its record.
   expect(discovery.landed([file])).toEqual([]);
+  expect(discovery.landed([path.join(root, "unwatched")])).toEqual([]);
+  expect(fieldsRecord(logged.at(-1)!)).toEqual(landing(0, 0));
 });
 
 test("a landing on the resolved target refreshes every origin holding an alias", () => {
@@ -598,49 +622,71 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
-  const a = named("published");
-  const b = named("failed-once");
+test("a watch batch whose read throws writes nothing, says so, and the next window delivers every origin it heard", () => {
+  const a = named("first");
+  const b = named("throws");
   const name = rendererNameOf("next");
+  const clock = heldClock(new Date(0));
   let refuse = false;
-  const {
-    service,
-    discovery: writer,
-    delivered,
-    logged,
-  } = discoveryRig({
-    ...diskFiles,
-    text(read) {
-      if (refuse && read === b.file) throw new Error("rediscovery failed");
-      return diskFiles.text(read);
+  const { service, discovery, delivered, failures } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (refuse && read === b.file) throw new Error("the read broke");
+        return diskFiles.text(read);
+      },
     },
-  });
+    clock,
+  );
   const second = service.forRenderer(name);
   const origins = [a.origin, b.origin];
-  writer.follow(origins);
+  discovery.follow(origins);
   second.follow(origins);
   const next = "{ globals: { padding: 1 } }";
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
   refuse = true;
-  expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
-  expect(delivered).toEqual([[name, originKey(a.origin)]]);
-  expect(textOfLayer(second, a.origin, a.file)).toBe(next);
-  expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
-
-  refuse = false;
-  service.again("events-resumed");
-  expect(delivered).toEqual([
-    [name, originKey(a.origin)],
-    [MAIN_RENDERER, originKey(b.origin)],
-    [name, originKey(b.origin)],
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  // Nothing moved: no holder was sent anything, and both keep the config
+  // they had, the origin whose read succeeded included.
+  expect(delivered).toEqual([]);
+  for (const holder of [discovery, second])
+    for (const { origin, file } of [a, b])
+      expect(textOfLayer(holder, origin, file)).toBe("{}");
+  expect(failures).toEqual([
+    "watch delivery to config discovery threw: the read broke",
   ]);
-  expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+
+  // The next window, heard for an unrelated reason, still owes both.
+  refuse = false;
+  fs.writeFileSync(b.file, `${next} `);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(new Set(delivered.map(([r, key]) => `${r} ${key}`))).toEqual(
+    new Set(
+      [MAIN_RENDERER, name].flatMap((r) =>
+        [a, b].map(({ origin }) => `${r} ${originKey(origin)}`),
+      ),
+    ),
+  );
+  expect(textOfLayer(second, a.origin, a.file)).toBe(next);
+  expect(failures).toHaveLength(1);
+});
+
+test("a first follow whose read throws holds none of its new origins", () => {
+  const a = named("first");
+  const b = named("throws");
+  const { discovery, counters } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (read === b.file) throw new Error("the first read broke");
+      return diskFiles.text(read);
+    },
+  });
+  expect(() => discovery.follow([a.origin, b.origin])).toThrow(
+    "the first read broke",
+  );
+  expect(discovery.snapshotOf(a.origin)).toBeNull();
+  expect(counters.watchersOpened).toBe(0);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -1096,7 +1142,12 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+  expect(logged.map(fieldsRecord)).toContainEqual({
+    why: "landed",
+    followed: "4",
+    observed: "2",
+    moved: "2",
+  });
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {

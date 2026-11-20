@@ -9,7 +9,7 @@ import {
   refusedClick,
   renderBody,
 } from "../../helpers/daemon-e2e";
-import { logLines } from "../../helpers/daemon-log";
+import { fieldsRecord, logLines } from "../../helpers/daemon-log";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { heldClock } from "../../helpers/held-clock";
 import {
@@ -140,12 +140,20 @@ test.each(["restored", "unrestored"] as const)(
       // drained log so the complete-rollback case also checks for extra work.
       await running.stop();
       daemon = undefined;
-      const landings = logLines(env).filter((line) =>
-        line.includes("config discovery why=landed"),
-      );
+      // A landing that touched no origin still writes its zero record.
+      const landings = logLines(env)
+        .filter((line) => line.includes("config discovery why=landed"))
+        .map(fieldsRecord)
+        .filter(({ observed }) => observed !== "0");
       expect(landings).toEqual(
         restore === "unrestored"
-          ? [expect.stringContaining("followed=1 discovered=1 moved=1")]
+          ? [
+              expect.objectContaining({
+                followed: "1",
+                observed: "1",
+                moved: "1",
+              }),
+            ]
           : [],
       );
     } finally {

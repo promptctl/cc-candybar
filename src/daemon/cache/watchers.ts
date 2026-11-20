@@ -114,7 +114,8 @@ interface Holder {
 }
 
 interface InvalidationWindow {
-  readonly completed?: () => void;
+  // A shared window's consumer, named for what a failed completion says.
+  readonly completed?: { readonly by: string; readonly take: () => void };
   pending: {
     readonly changes: Map<WatcherSlot, Gathering>;
     readonly cancel: () => void;
@@ -242,6 +243,7 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
+  private readonly failed: (text: string) => void;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
@@ -256,6 +258,11 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // [LAW:no-silent-failure] Where a delivery that threw is said: a holder's
+    // callback or a window's completion broke its contract, and nothing else
+    // will ever hear of it. The daemon passes the warning every bar holds;
+    // other consumers keep the logger.
+    failed?: (text: string) => void;
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
@@ -263,14 +270,21 @@ export class WatcherRegistry {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.failed = opts.failed ?? ((text) => this.logger("error", text));
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
   // [LAW:single-enforcer] A consumer that reloads several slots together can
   // share their delivery window. Each slot still receives only its own paths.
   // Keys acquired in this window belong to it until their last release.
-  batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
-    const window: InvalidationWindow = { pending: null, completed };
+  batch(
+    by: string,
+    completed: () => void,
+  ): Pick<WatcherRegistry, "acquire" | "follow"> {
+    const window: InvalidationWindow = {
+      pending: null,
+      completed: { by, take: completed },
+    };
     const acquire: WatcherRegistry["acquire"] = (
       key,
       targets,
@@ -699,10 +713,12 @@ export class WatcherRegistry {
               if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered);
               for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+                this.notify(`key=${valueOf(changed.key)}`, () =>
+                  holder.onInvalidate(heard),
+                );
             }
             if (window.completed !== undefined)
-              this.notify(null, window.completed);
+              this.notify(window.completed.by, window.completed.take);
           },
           { unref: true },
         ),
@@ -720,13 +736,14 @@ export class WatcherRegistry {
     );
   }
 
-  private notify(key: string | null, take: () => void): void {
+  // [LAW:single-enforcer] The one catch around a delivery, for every
+  // consumer: `about` names the holder or the window's consumer.
+  private notify(about: string, take: () => void): void {
     try {
       take();
     } catch (thrown) {
       const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      this.failed(`watch delivery to ${about} threw: ${why}`);
     }
   }
 

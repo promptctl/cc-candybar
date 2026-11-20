@@ -101,6 +101,33 @@ describe("WatcherRegistry", () => {
       expect(fresh).toEqual([]);
     });
 
+    test("a delivery that throws, a holder's or a window's completion, is said once to the failure sink, naming it", () => {
+      const failures: string[] = [];
+      const said = new WatcherRegistry({
+        clock,
+        logger: () => {},
+        failed: (text) => failures.push(text),
+      });
+      const file = path.join(dir, "f");
+      fs.writeFileSync(file, "first");
+      const targets = { dirs: [], polled: [file] };
+      said.acquire("alone", targets, () => {
+        throw new Error("the holder broke");
+      });
+      said
+        .batch("a consumer", () => {
+          throw new Error("the completion broke");
+        })
+        .acquire("windowed", targets, () => {});
+      fs.writeFileSync(file, "second, longer");
+      swept();
+      said.closeAll();
+      expect([...failures].sort()).toEqual([
+        "watch delivery to a consumer threw: the completion broke",
+        "watch delivery to key=alone threw: the holder broke",
+      ]);
+    });
+
     // The daemon makes the file between two sweeps and a holder reads it and
     // follows: the sweep after must not take it for the state it last saw.
     test("made after a sweep and followed, then removed before the next, fires at the next sweep and not at the follow", () => {

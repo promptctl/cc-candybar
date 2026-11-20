@@ -273,6 +273,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     counters: stats,
     logger: log,
+    failed: (text) => {
+      log("error", text);
+      unheard(text);
+    },
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -288,21 +292,33 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, daemonFailed: null },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
+  // daemon's failures that no session's bar holds, each held for the bar
+  // until an answer has carried it.
   let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
+  let daemonFailed: HeldEvent | null = null;
+  // [LAW:single-enforcer] The one writer of a failure no session's bar holds:
+  // a renderer host's failed act or take, and a watch delivery that threw.
+  // The unacknowledged text is included in the next warning.
+  function unheard(text: string, fromEnvironment?: true): void {
+    const prior = daemonFailed;
+    daemonFailed = environmentOutput(
+      joinedEvent(prior, text, instant()),
+      fromEnvironment === true ||
+        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    );
+    restateFaults();
+  }
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
-        actFailed,
+        daemonFailed,
       }),
     );
   }
@@ -350,9 +366,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             changed = true;
           }
           break;
-        case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
+        case "daemon-failed":
+          if (daemonFailed !== null && answeredBy(daemonFailed, event)) {
+            daemonFailed = { ...daemonFailed, answered: true };
             changed = true;
           }
           break;
@@ -752,16 +768,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard,
       },
     );
     return { reported, entry, stores, link, renderer };

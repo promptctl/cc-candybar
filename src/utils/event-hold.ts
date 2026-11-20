@@ -32,7 +32,7 @@ export interface HeldEvent {
 // [LAW:types-are-the-program] A frame names the daemon's occurrence and its
 // owner. Session click errors never leave the renderer's delivery record.
 export interface DisplayedEvent {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+  readonly kind: "launch-pipes" | "renderer-ended" | "daemon-failed";
   readonly event: HeldEvent;
 }
 
