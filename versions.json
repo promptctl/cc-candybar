@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-922",
-      "ref": "refs/pull/922/merge",
-      "sha": "55099a2a8618090dac4ee7c5f065b1ab672a9609",
-      "timestamp": "2026-11-20T19:50:34.961Z",
+      "version": "pr-923",
+      "ref": "refs/pull/923/merge",
+      "sha": "a7267581fabe3ab779d6d3331ae181e87b10bee4",
+      "timestamp": "2026-11-20T20:27:12.782Z",
       "commits": [
         {
-          "sha": "55099a2a8618090dac4ee7c5f065b1ab672a9609",
+          "sha": "a7267581fabe3ab779d6d3331ae181e87b10bee4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T12:49:31-07:00",
-          "message": "Merge 2d6ada8709510622a9613ad3563d664252475967 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T13:26:04-07:00",
+          "message": "Merge a1eb2f1dc2d6d91da4fc887a50bef50ce7dada86 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "2d6ada8709510622a9613ad3563d664252475967",
+          "sha": "a1eb2f1dc2d6d91da4fc887a50bef50ce7dada86",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T12:45:18-07:00",
-          "message": "fix(daemon): tell every bar through one leveled notice channel\n\nThe daemon's renderer-ended, act-failed and launcher pipe events become\nnotices: one channel whose level is a value, joined by what each is about.\nEvery error the daemon logs is a notice too, so a throw in background work\n(git refresh, PR lookup, watcher delivery, a renderer's taken output)\nreaches every bar instead of only the log. A request's record goes to the\nlog alone, since its answer already carries its outcome. A rejected PR\nlookup is answered as failed, so its readers and period move on.\n"
+          "timestamp": "2026-11-20T13:25:20-07:00",
+          "message": "fix(daemon): show a throw in background work on every bar as an error\n\nA git refresh pass, a PR lookup, a config origin's rediscovery and a watch\ndelivery each hand a throw to one typed fault report, a required dependency\nof the owner, instead of a daemon.log line nobody sees. The daemon logs its\ndetail and holds its message as a daemon event every bar draws as an error.\nOwners keep their own isolation: a rejected git read is still the repo's\nfailed read, siblings in a rediscovery batch still land, and every holder of\na delivery still hears it.\n"
         }
       ]
     },
