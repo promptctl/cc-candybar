@@ -455,7 +455,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       root: 's',
     }`);
     expect(config.variables["session.id"]).toEqual(
-      PAYLOAD_INPUTS["session.id"],
+      expect.objectContaining(PAYLOAD_INPUTS["session.id"]),
     );
     expect(render()).toContain("calm");
   });

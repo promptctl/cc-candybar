@@ -303,6 +303,13 @@ the variable), never a zero:
 }
 ```
 
+An `input` with a present value that cannot be read as its declared type
+also shows a ⚠. Give the variable a `default` to display a fallback for
+that failure. An answered payload missing the input path still uses the
+empty-value policy, including `globals.default_empty_value` when it can be
+read as the input's type. An input waiting for its first answer draws as
+pending.
+
 ## Step 4 — the template
 
 The template is Go template text over the document's fields. Format numbers

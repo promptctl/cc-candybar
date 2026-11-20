@@ -57,7 +57,7 @@ import {
   validateGlobals,
   validateThemeDefaults,
 } from "./loader/globals.js";
-import { validateVariables } from "./loader/variables.js";
+import { resolveVariableTypes, validateVariables } from "./loader/variables.js";
 import {
   inheritableSegmentNames,
   validateSegments,
@@ -875,7 +875,11 @@ function judgeRenderable(
     ]),
   );
   return {
-    config: { ...withChrome, actions } as ValidatedConfig,
+    config: {
+      ...withChrome,
+      ...resolveVariableTypes(withChrome),
+      actions,
+    } as ValidatedConfig,
     dropped,
     placed: merged,
     warnings: notices,
