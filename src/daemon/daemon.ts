@@ -591,12 +591,25 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
 
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
+  // [LAW:single-enforcer] The one writer of a failure no session's bar holds:
+  // a renderer host's failed act or take, and a config discovery that broke
+  // its read contract. The unacknowledged text is included in the next warning.
+  const unheard = (text: string, fromEnvironment?: true): void => {
+    const prior = actFailed;
+    actFailed = environmentOutput(
+      joinedEvent(prior, text, instant()),
+      fromEnvironment === true ||
+        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    );
+    restateFaults();
+  };
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    unheard,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });
@@ -752,16 +765,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard,
       },
     );
     return { reported, entry, stores, link, renderer };

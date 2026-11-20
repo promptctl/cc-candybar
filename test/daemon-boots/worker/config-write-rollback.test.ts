@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { linksOf } from "../../../src/click/read";
 import { writeConfigFile } from "../../../src/daemon/file-rewrites";
+import { fieldsOf } from "../../../src/utils/logfmt";
 import { textOf } from "../../../src/render/frame";
 import {
   frameRequest,
@@ -140,12 +141,19 @@ test.each(["restored", "unrestored"] as const)(
       // drained log so the complete-rollback case also checks for extra work.
       await running.stop();
       daemon = undefined;
-      const landings = logLines(env).filter((line) =>
-        line.includes("config discovery why=landed"),
-      );
+      const landings = logLines(env)
+        .filter((line) => line.includes("config discovery why=landed"))
+        .map((line) => Object.fromEntries(fieldsOf(line)));
       expect(landings).toEqual(
         restore === "unrestored"
-          ? [expect.stringContaining("followed=1 discovered=1 moved=1")]
+          ? [
+              expect.objectContaining({
+                followed: "1",
+                observed: "1",
+                moved: "1",
+                failed: "0",
+              }),
+            ]
           : [],
       );
     } finally {

@@ -86,6 +86,9 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
+    unheard: (text) => {
+      throw new Error(`unexpected config discovery failure: ${text}`);
+    },
     reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
   });

@@ -346,6 +346,9 @@ test("a write through a config symlink reloads the remaining holder after the wr
     stateDir: path.join(dir, "state"),
     watchers: watches,
     log: () => {},
+    unheard: (text) => {
+      throw new Error(`unexpected config discovery failure: ${text}`);
+    },
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });
   try {

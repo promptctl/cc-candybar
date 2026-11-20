@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
+import { fieldsOf } from "../src/utils/logfmt";
 import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
@@ -51,6 +52,15 @@ import type { ConfigChange, EffectId } from "../src/renderer-interface/interface
 
 let root: string;
 let cleanups: Array<() => void>;
+
+// A logged line's fields, as the logfmt reader reads them.
+const fields = (line: string | undefined): Record<string, string> =>
+  Object.fromEntries(fieldsOf(line ?? ""));
+
+// A rig that expects every read to succeed fails on any discovery failure.
+const unexpected = (text: string): never => {
+  throw new Error(`unexpected config discovery failure: ${text}`);
+};
 beforeEach(() => {
   root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-discovery-")),
@@ -103,12 +113,14 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   const moved: string[] = [];
   const logged: string[] = [];
   const delivered: Array<readonly [RendererName, string]> = [];
+  const unheard: string[] = [];
   const service = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: state,
     watchers,
     files: () => files,
     log: (_level, line) => logged.push(line),
+    unheard: (text) => unheard.push(text),
     moved: (renderer, origins) => {
       for (const origin of origins) {
         const key = originKey(origin);
@@ -120,7 +132,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
   const discovery = service.forRenderer(MAIN_RENDERER);
-  return { service, discovery, watchers, counters, moved, logged, delivered };
+  return { service, discovery, watchers, counters, moved, logged, delivered, unheard };
 }
 
 const textOfLayer = (
@@ -166,7 +178,13 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
+  expect(fields(logged.at(-1))).toEqual({
+    why: "landed",
+    followed: "2",
+    observed: "1",
+    moved: "1",
+    failed: "0",
+  });
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -598,7 +616,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("a rediscovery that throws keeps its config and watch, says so on every bar, and leaves siblings their change", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -606,8 +624,10 @@ test("one failed rediscovery leaves the writer and another holder the successful
   const {
     service,
     discovery: writer,
+    counters,
     delivered,
     logged,
+    unheard,
   } = discoveryRig({
     ...diskFiles,
     text(read) {
@@ -619,6 +639,8 @@ test("one failed rediscovery leaves the writer and another holder the successful
   const origins = [a.origin, b.origin];
   writer.follow(origins);
   second.follow(origins);
+  const before = writer.snapshotOf(b.origin);
+  const closedBefore = counters.watchersClosed;
   const next = "{ globals: { padding: 1 } }";
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
@@ -626,12 +648,28 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
-  expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
+  // The failed origin publishes nothing: both holders keep the revision they
+  // were sent, and its watch was not rebound or released.
+  for (const holder of [writer, second])
+    expect(holder.snapshotOf(b.origin)).toBe(before);
+  expect(counters.watchersClosed).toBe(closedBefore);
+  expect(unheard).toHaveLength(1);
+  expect(unheard[0]).toContain(`config discovery failed for ${b.origin.projectDir} `);
+  expect(unheard[0]).toMatch(/rediscovery failed$/);
+  const failure = logged.map(fields).find((f) => "error" in f);
+  expect(failure).toMatchObject({
+    why: "landed",
+    projectDir: b.origin.projectDir,
+    config: b.file,
+  });
+  expect(failure?.error).toContain("rediscovery failed");
+  expect(fields(logged.at(-1))).toEqual({
+    why: "landed",
+    followed: "2",
+    observed: "1",
+    moved: "1",
+    failed: "1",
+  });
 
   refuse = false;
   service.again("events-resumed");
@@ -641,6 +679,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+  expect(unheard).toHaveLength(1);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -847,6 +886,7 @@ function physicalDiscovery(
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
+    unheard: unexpected,
     moved: () => {},
     reloaded,
   });
@@ -1096,7 +1136,13 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+  expect(logged.map(fields)).toContainEqual({
+    why: "landed",
+    followed: "4",
+    observed: "2",
+    moved: "2",
+    failed: "0",
+  });
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {
@@ -1368,6 +1414,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
       return result;
     },
     log: () => {},
+    unheard: unexpected,
     moved: (_renderer, origins) => moved.push(...origins),
   });
   cleanups.push(
