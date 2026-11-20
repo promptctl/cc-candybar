@@ -28425,11 +28425,6 @@ ${OMITTED}${text4.slice(-tail)}`.toWellFormed();
 }
 function appendText(previous2, text4) {
   if (previous2 === null) return heldEventText(text4);
-  if (`
-${previous2}
-`.includes(`
-${text4}
-`)) return previous2;
   const room = TEXT_LIMIT - text4.length;
   if (previous2.length + 1 <= room) return `${previous2}
 ${text4}`;
@@ -47224,12 +47219,6 @@ function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
 }
 
-// src/utils/logfmt.ts
-init_globals();
-var BARE = /^[^\s"=\\]+$/;
-var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
-var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
-
 // src/config-hint.ts
 var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 function detectConfigEnv({ env: env2, home }, cwd2) {
@@ -47255,17 +47244,6 @@ function originKey({ projectDir, cwd: cwd2, target }) {
   const scope = target.source === "argument-only" ? "\0only" : "";
   return `${projectDir}\0${cwd2}\0${target.path ?? ""}${scope}`;
 }
-var originFields = ({
-  projectDir,
-  cwd: cwd2,
-  target
-}) => [
-  ["projectDir", projectDir],
-  ["cwd", cwd2],
-  ["configFile", target.path ?? "-"],
-  ["configSource", target.source]
-];
-var originText = (origin) => eventLine("origin", originFields(origin));
 function chainName(paths2, none2 = "bundled default (no config file loaded)") {
   return paths2.join(" < ") || none2;
 }
@@ -70472,6 +70450,12 @@ function writeLogLines(log, lines2) {
 }
 var quietLogger = (_level, message) => debug(message);
 
+// src/utils/logfmt.ts
+init_globals();
+var BARE = /^[^\s"=\\]+$/;
+var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
+var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
+
 // src/renderer/render-cache.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -71370,7 +71354,7 @@ var RenderCache = class {
     if (held.kind === "failed") throw new CrossedFailure(held.failure);
     if (held.kind === "pending")
       throw new Error(
-        `no config is held for ${originText(origin)}: an event that needs it was not parked for its config`
+        `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
       );
     return held;
   }
@@ -79599,6 +79583,7 @@ var WatcherRegistry = class {
   sweep = null;
   counters;
   logger;
+  failed;
   clock;
   closed = false;
   nodeWalksTrees;
@@ -79606,13 +79591,17 @@ var WatcherRegistry = class {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.failed = opts.failed ?? ((text4) => this.logger("error", text4));
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
   // [LAW:single-enforcer] A consumer that reloads several slots together can
   // share their delivery window. Each slot still receives only its own paths.
   // Keys acquired in this window belong to it until their last release.
-  batch(completed) {
-    const window2 = { pending: null, completed };
+  batch(by, completed) {
+    const window2 = {
+      pending: null,
+      completed: { by, take: completed }
+    };
     const acquire = (key, targets, onInvalidate, observed2) => this.acquired(key, targets, onInvalidate, observed2, window2);
     return {
       acquire,
@@ -79930,10 +79919,13 @@ var WatcherRegistry = class {
               if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered2);
               for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+                this.notify(
+                  `key=${valueOf(changed.key)}`,
+                  () => holder.onInvalidate(heard)
+                );
             }
             if (window2.completed !== void 0)
-              this.notify(null, window2.completed);
+              this.notify(window2.completed.by, window2.completed.take);
           },
           { unref: true }
         )
@@ -79946,13 +79938,14 @@ var WatcherRegistry = class {
       gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
     );
   }
-  notify(key, take) {
+  // [LAW:single-enforcer] The one catch around a delivery, for every
+  // consumer: `about` names the holder or the window's consumer.
+  notify(about, take) {
     try {
       take();
     } catch (thrown2) {
       const why = thrown2 instanceof Error ? thrown2.message : String(thrown2);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      this.failed(`watch delivery to ${about} threw: ${why}`);
     }
   }
   makeHandle(slot, holder) {
@@ -89817,6 +89810,7 @@ function landsIn(target, files) {
     };
   return { kind: "at", file };
 }
+var originText = (origin) => `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
 function performChanges(changes, book, files, write) {
   const entryOf4 = directoryEntries();
   const rewrites = /* @__PURE__ */ new Map();
@@ -91664,10 +91658,10 @@ var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
-    this.watches = deps.watchers.batch(() => {
+    this.watches = deps.watchers.batch("config discovery", () => {
       const heard = [...this.followed].filter(([key]) => this.invalidated.has(key)).map(([, followed]) => followed);
-      this.invalidated.clear();
       this.heard(heard, "config-watch", "observed");
+      this.invalidated.clear();
     });
   }
   deps;
@@ -91742,23 +91736,25 @@ var ConfigDiscovery = class {
     if (this.closed) return;
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
-    const shared = this.lazyBatch();
-    const reads = fresh.map(([key, origin]) => ({
-      key,
-      origin,
-      read: readAt2(origin, shared())
-    }));
-    const observed2 = [];
-    for (const { key, origin, read: read2 } of reads) {
-      const found2 = this.observedAt(origin, read2, shared(), null);
-      this.followed.set(key, {
-        ...found2,
-        renderers: /* @__PURE__ */ new Set([renderer]),
-        selected: /* @__PURE__ */ new Map()
-      });
-      observed2.push(found2);
+    if (fresh.length > 0) {
+      const shared = this.batch();
+      const reads = fresh.map(([key, origin]) => ({
+        key,
+        origin,
+        read: readAt2(origin, shared)
+      }));
+      const observed2 = reads.map(({ key, origin, read: read2 }) => ({
+        key,
+        found: this.observedAt(origin, read2, shared, null)
+      }));
+      for (const { key, found: found2 } of observed2)
+        this.followed.set(key, {
+          ...found2,
+          renderers: /* @__PURE__ */ new Set([renderer]),
+          selected: /* @__PURE__ */ new Map()
+        });
+      this.reloaded(observed2.map(({ found: found2 }) => found2));
     }
-    this.reloaded(observed2);
     let released = 0;
     for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
       if (wanted.has(key)) {
@@ -91849,8 +91845,7 @@ var ConfigDiscovery = class {
     this.followed.clear();
     this.texts.clear();
   }
-  // A watch heard that `heard` may have changed: those whose snapshot moved
-  // go to the renderer.
+  // `heard` may have changed: those whose snapshot moved go to the renderer.
   heard(heard, why, recover) {
     if (this.closed) return;
     this.publish(this.rediscovered(heard, why, recover), null);
@@ -91872,27 +91867,34 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
+  //
+  // [LAW:no-silent-failure] Discovery's reads are total: what it cannot read
+  // is a value in the snapshot. So nothing here is caught per origin. Every
+  // origin is read before any watch or entry moves, and a throw is a broken
+  // contract that leaves the whole batch owed and reaches the bar through
+  // its caller.
   rediscovered(heard, why, recover) {
-    const shared = this.lazyBatch();
+    let opened;
+    const shared = () => opened ??= this.batch();
+    const reads = heard.map((was) => ({
+      was,
+      read: readAt2(was.origin, shared())
+    }));
+    const next2 = reads.map(({ was, read: read2 }) => {
+      const found2 = this.observedAt(was.origin, read2, shared(), was.watch);
+      return {
+        was,
+        now: {
+          ...found2,
+          snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+          renderers: was.renderers,
+          selected: was.selected
+        }
+      };
+    });
     const moved2 = [];
     const observed2 = [];
-    let failed3 = 0;
-    for (const was of heard) {
-      let read2;
-      try {
-        read2 = readAt2(was.origin, shared());
-      } catch (thrown2) {
-        failed3++;
-        this.failed(was.origin, why, failureOf(thrown2));
-        continue;
-      }
-      const found2 = this.observedAt(was.origin, read2, shared(), was.watch);
-      const now2 = {
-        ...found2,
-        snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
-        renderers: was.renderers,
-        selected: was.selected
-      };
+    for (const { was, now: now2 } of next2) {
       this.followed.set(originKey(was.origin), now2);
       observed2.push(now2);
       if (now2.digest !== was.digest) moved2.push(now2);
@@ -91903,8 +91905,7 @@ var ConfigDiscovery = class {
         ["why", why],
         ["followed", String(this.followed.size)],
         ["observed", String(observed2.length)],
-        ["moved", String(moved2.length)],
-        ["failed", String(failed3)]
+        ["moved", String(moved2.length)]
       ])
     );
     this.reloaded(recover === "observed" ? observed2 : moved2);
@@ -91942,25 +91943,6 @@ var ConfigDiscovery = class {
       observed: observed2,
       landingPath: directoryEntries(facts.files.realpath)
     };
-  }
-  // The batch, read on first use, so a batch that reads no origin opens
-  // nothing.
-  lazyBatch() {
-    let shared;
-    return () => shared ??= this.batch();
-  }
-  failed(origin, why, failure2) {
-    this.deps.log(
-      "error",
-      eventLine("config discovery failed", [
-        ["why", why],
-        ...originFields(origin),
-        ["error", failure2.detail]
-      ])
-    );
-    this.deps.unheard(
-      `config discovery failed for ${originText(origin)} \u2014 the last config read stays in use: ${failure2.message}`
-    );
   }
   // The origin's watch following the targets `read` names, and what that
   // watch cannot hear in the snapshot.
@@ -92001,22 +91983,15 @@ var ConfigDiscovery = class {
   // candidate appeared, a link was re-pointed), and which directories the
   // origin now hears: a change that fires nothing is read against this line.
   bound(origin, paths2) {
+    const { projectDir, cwd: cwd2 } = origin;
     this.deps.log(
       "info",
-      eventLine("config watch bound", [
-        ...originFields(origin),
-        ["dirs", paths2.targets.dirs.map((d) => d.path).join(",")],
-        ["polled", paths2.targets.polled.join(",")]
-      ])
+      `config watch bound projectDir=${projectDir} cwd=${cwd2} dirs=${paths2.targets.dirs.map((d) => d.path).join(",")} polled=${paths2.targets.polled.join(",")}`
     );
     for (const { path: p2, reason } of paths2.unresolved)
       this.deps.log(
         "warn",
-        eventLine("config watch unresolved", [
-          ...originFields(origin),
-          ["path", p2],
-          ["reason", reason]
-        ])
+        `config watch unresolved projectDir=${projectDir} path=${p2} reason=${reason}`
       );
   }
 };
@@ -92140,7 +92115,11 @@ function createDaemon(inputs) {
   const watcherRegistry = new WatcherRegistry({
     clock,
     counters: stats,
-    logger: log
+    logger: log,
+    failed: (text4) => {
+      log("error", text4);
+      unheard(text4);
+    }
   });
   const fileEvents = new FileEventDelivery({
     watchers: watcherRegistry,
@@ -92153,6 +92132,14 @@ function createDaemon(inputs) {
   );
   let rendererEnded = null;
   let daemonFailed = null;
+  function unheard(text4, fromEnvironment) {
+    const prior = daemonFailed;
+    daemonFailed = environmentOutput(
+      joinedEvent(prior, text4, instant()),
+      fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
+    );
+    restateFaults();
+  }
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
@@ -92382,21 +92369,12 @@ function createDaemon(inputs) {
     log
   });
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
-  const unheard = (text4, fromEnvironment) => {
-    const prior = daemonFailed;
-    daemonFailed = environmentOutput(
-      joinedEvent(prior, text4, instant()),
-      fromEnvironment === true || prior !== null && !prior.answered && isEnvironmentOutput(prior)
-    );
-    restateFaults();
-  };
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
-    unheard,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders)
   });
