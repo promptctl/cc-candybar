@@ -1,12 +1,12 @@
 import os from "node:os";
 
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
-import type { Holds } from "../utils/holds.js";
-import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
-import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { RefreshLedger, REFRESH_TRIGGERS } from "../utils/refresh-ledger.js";
-import type { Lane } from "../utils/reading.js";
-import type { Timekeeper } from "../time.js";
+import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome.js";
+import type { Holds } from "../../utils/holds.js";
+import { KeyedSource, NO_WATCH } from "../../utils/keyed-source.js";
+import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
+import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger.js";
+import type { Lane } from "../../utils/reading.js";
+import type { Timekeeper } from "../../time.js";
 
 // How often the host's name and user are asked again while a view reads
 // them: the name follows the network (DHCP, a VPN), so a daemon that lives

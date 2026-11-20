@@ -100,6 +100,14 @@ export interface ClaudeHookData {
   };
 }
 
+// [LAW:types-are-the-program] A render can omit the current directory. The
+// host supplies it from the client's cwd before handing it to a renderer.
+export type RenderHookData = Omit<ClaudeHookData, "workspace"> & {
+  readonly workspace: Omit<ClaudeHookData["workspace"], "current_dir"> & {
+    readonly current_dir?: string;
+  };
+};
+
 // The directories a session's Claude Code keeps its transcripts under:
 // the one its client detected (the `claudeConfigDir` hint), else the two
 // default locations that exist.
@@ -200,7 +208,7 @@ export async function findAgentTranscripts(
 
 // [LAW:types-are-the-program] exception: kept as type-aliases (not
 // interfaces) so they're structurally assignable to `Record<string,
-// unknown>` at the `extractModelId` boundary in segments/pricing.ts.
+// unknown>` at the `extractModelId` boundary in daemon/cache/pricing.ts.
 // Switching to `interface` removes the implicit index signature and
 // breaks typecheck. A proper fix tightens that boundary to take
 // `PrunedRaw` directly and is out of scope for the CI-fix branch.

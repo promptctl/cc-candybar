@@ -56,7 +56,8 @@ const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
+  wake: null,
   record: [],
   frames: [],
 });
@@ -129,6 +130,7 @@ function hostOver(
       readText: readTextIfPresent,
     },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard: (text) => void unheard.push(text),
     ...over,
   };

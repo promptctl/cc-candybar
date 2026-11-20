@@ -386,6 +386,7 @@ export function actingWorld(
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard,
   };
 }

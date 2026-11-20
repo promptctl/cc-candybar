@@ -5,6 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
+import { mayImport, mayLoadRendererModule, withoutExtension, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -141,12 +142,12 @@ const OWNED_IMPORTS = {
     owners: [],
     message: "A launcher over the machine is system-launcher's to build.",
   },
-  // The process's one real clock, built beside its host and launcher.
+  // A host receives the clock in its World. The renderer process receives
+  // only its monotonic reading from the CLI entry.
   systemTimekeeper: {
     group: ["**/time", "**/time.js"],
-    owners: ["src/host.ts"],
-    message:
-      "The process has its one clock (src/host.ts): take the one you are given.",
+    owners: ["src/host.ts", "src/index.ts"],
+    message: "The process entry supplies its clock. Take the reading you are given.",
   },
   // The real adapters a daemon is handed.
   productionClaudeInputEdge: {
@@ -269,67 +270,10 @@ const HOST_NAMED_IMPORTS = [
   },
 ];
 
-// [LAW:one-way-deps] Every module of src sits in a zone, and a zone may import
-// only the zones it lists. The renderer is the code a renderer's process is
-// built from, so it reaches the host only through the adapter in the shared
-// contract, and the host reaches it only through its start. Shared code loads
-// in both processes and imports neither side. The longest prefix wins, and an
-// unlisted file is rest, so a new module is the host's until it is placed.
-// The roots may import any zone: the entry, because it dispatches to every
-// command, and the renderer process's root, which builds the renderer. No
-// other host module may import a root, so none reaches the renderer through
-// one.
-const ZONE_ROWS = {
-  "src/renderer/": "renderer",
-  "src/renderer/main.ts": "start",
-  "src/renderer-interface/": "shared",
-  "src/daemon/foundations/": "shared",
-  "src/render/": "shared",
-  "src/var-system/": "shared",
-  "src/template-engine/": "shared",
-  "src/dsl/": "shared",
-  "src/themes/": "shared",
-  "src/config/": "shared",
-  "src/facts/": "shared",
-  "src/segments/": "shared",
-  "src/band/": "shared",
-  "src/utils/": "shared",
-  "src/time.ts": "shared",
-  "src/claude-settings.ts": "shared",
-  "src/repository-cli.ts": "shared",
-  "src/proc/launcher.ts": "shared",
-  "src/claude-resume.ts": "shared",
-  "src/claude-command-line.ts": "shared",
-  "src/shell-word.ts": "shared",
-  "src/client-hint.ts": "shared",
-  "src/config-hint.ts": "shared",
-  "src/host-facts.ts": "shared",
-  "src/terminal-hint.ts": "shared",
-  "src/tmux-hint.ts": "shared",
-  "src/click/wire.ts": "shared",
-  "src/click/link-signer.ts": "shared",
-  "src/cli-flags.ts": "shared",
-  "mod/": "shared",
-  "src/claude-input/slash-line.ts": "shared",
-  "src/claude-input/typing.ts": "shared",
-  "src/claude-input/prompt-screen.ts": "shared",
-  "src/help-text.ts": "shared",
-  "src/index.ts": "root",
-  // The renderer process's composition root, the counterpart of the daemon's.
-  "src/renderer-process.ts": "root",
-};
-const ZONE_IMPORTS = {
-  renderer: ["renderer", "start", "shared"],
-  start: ["renderer", "start", "shared"],
-  shared: ["shared"],
-  rest: ["rest", "start", "shared"],
-  root: ["renderer", "start", "shared", "rest", "root"],
-};
 const ZONE_MESSAGE = {
-  renderer:
-    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
-  start:
-    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
+  renderer: "Renderer code consumes the shared contract and owns its drawing state.",
+  start: "Renderer construction accepts the shared data contract.",
+  "renderer-process": "The renderer process starts the core from the shared contract.",
   shared: "Shared code loads in both processes and imports neither side.",
   rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
 };
@@ -339,18 +283,7 @@ const ZONE_MESSAGE = {
 // import (`../verbs`) is its index's. Relative to this file, not ESLint's cwd,
 // so an editor or runner started in a subdirectory keys the same modules.
 const REPO_ROOT = fs.realpathSync(import.meta.dirname);
-const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const moduleKey = (abs) => withoutExtension(path.relative(REPO_ROOT, abs));
-const ZONE_KEYS = Object.entries(ZONE_ROWS)
-  .map(([row, zone]) => ({
-    row: row.endsWith("/") ? row : withoutExtension(row),
-    zone,
-  }))
-  .sort((a, b) => b.row.length - a.row.length);
-const zoneOf = (key) =>
-  ZONE_KEYS.find(({ row }) =>
-    row.endsWith("/") ? `${key}/`.startsWith(row) : key === row,
-  )?.zone ?? "rest";
 // A directory's real path, through its nearest ancestor on disk, so an unsaved
 // buffer in a directory not yet made keys like its saved self.
 const realDir = (dir) =>
@@ -389,6 +322,7 @@ const importDirection = {
       };
     }
     const fromZone = zoneOf(from);
+    const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
     const check = (node, source) => {
       if (source === null) {
         context.report({
@@ -397,12 +331,18 @@ const importDirection = {
         });
         return;
       }
-      if (!source.startsWith(".")) {
+      if (!source.startsWith(".") && !path.isAbsolute(source)) {
+        if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+          context.report({
+            node,
+            message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
+          });
+        }
         return;
       }
       const to = moduleKey(path.resolve(dir, source));
       const toZone = outside(to) ? "outside the repo" : zoneOf(to);
-      if (!ZONE_IMPORTS[fromZone].includes(toZone)) {
+      if (!mayImport(fromZone, toZone)) {
         context.report({
           node,
           message: `${fromZone} ${from} imports ${toZone} ${to}. ${ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
@@ -411,7 +351,6 @@ const importDirection = {
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
       // timer: its time is the readings each input carries, and what it holds
       // for later waits for a `due`. It may name the clock's types.
-      const rendering = fromZone === "renderer" || fromZone === "start";
       if (rendering && to === CLOCK_KEY && !typeOnly(node)) {
         context.report({
           node,

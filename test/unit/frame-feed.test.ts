@@ -20,6 +20,10 @@ import { publishingFrames } from "../../src/daemon/foundations/frame-publication
 import { TEST_SIGNER } from "../helpers/link-signer";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
 import type { WireFrame } from "../../src/render/frame";
+import { effectsUrl, VERB_COPY } from "../../src/click/wire";
+import { actionTarget } from "../../src/render/drawn-link";
+import { Feeds } from "../../src/renderer/feeds";
+import type { Instant, Tick } from "../../src/utils/instant";
 import type {
   EffectId,
   PushedFrame,
@@ -31,6 +35,7 @@ import {
 } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
+import type { DisplayedEvent } from "../../src/utils/event-hold";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -54,9 +59,12 @@ function rig(
     reject: (thrown: Error) => void;
   }> = [];
   const logged: string[] = [];
+  const acknowledged: DisplayedEvent[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
     publishFrame,
+    acknowledgeDisplayed: (events) => void acknowledged.push(...events),
+    requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
       watching.started++;
@@ -98,6 +106,7 @@ function rig(
     handed,
     owed,
     logged,
+    acknowledged,
     watching,
     slot,
     rejected,
@@ -157,6 +166,7 @@ const frame = (
   bar = "r",
   handoff: string | null = "s",
   receipt = 1,
+  displayedEvents?: readonly DisplayedEvent[],
 ): PushedFrame => ({
   session,
   frame: {
@@ -164,8 +174,66 @@ const frame = (
     receipt: receipt as EffectId,
     bar: body(bar),
     handoff: handoff === null ? null : body(handoff),
+    displayedEvents,
   },
 });
+
+// Drive the real host and renderer feeds together, with the viewer mailbox
+// slot and each render tick released by the case.
+function linkedFeeds() {
+  const r = rig();
+  const renderer = rendererNameOf("worktree");
+  const effect = { verb: VERB_COPY, args: ["captured value"] } as const;
+  let receipt = 0;
+  const draws = new Feeds({
+    draw: () => ({
+      frame: {
+        kind: "drawn",
+        receipt: ++receipt as EffectId,
+        bar: {
+          ...body("copy"),
+          nextChange: Infinity,
+          rows: [
+            {
+              kind: "diagnostic",
+              runs: [{ text: "copy", link: actionTarget([effect]) }],
+            },
+          ],
+        },
+        handoff: null,
+      },
+      evaluated: 1,
+      cellBreaks: 0,
+      failure: null,
+    }),
+    pin: () => () => {},
+    log: () => {},
+    periods: { moving: 100, still: 1000 },
+  });
+  return {
+    ...r,
+    signed: TEST_SIGNER.signLink(effectsUrl([effect]), {
+      renderer,
+      session: S,
+    }),
+    async deliver(tick: number) {
+      await r.slot();
+      draws.view(r.handed.at(-1)!, tick as Tick);
+    },
+    due(tick: number) {
+      const frames: PushedFrame[] = [];
+      draws.drawDue(
+        { at: (1000 + tick) as Instant, tick: tick as Tick },
+        frames,
+        () => {
+          throw new Error("the feed fixture builds its own receipt");
+        },
+      );
+      r.took(frames, renderer);
+      return frames;
+    },
+  };
+}
 
 describe("a session's requests", () => {
   test("the latest is the one received last, however late an earlier one's render finishes", () => {
@@ -388,6 +456,117 @@ describe("a subscriber", () => {
 });
 
 describe("feed delivery", () => {
+  test("a hot viewer replacement receives the same signed bytes without another draw", async () => {
+    const r = linkedFeeds();
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    const staying = subscriber("statusline");
+    r.feeds.subscribe(S, staying.sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+    expect(old.sent).toHaveLength(1);
+    expect(old.sent[0]).toContain(r.signed);
+    expect(r.settled).toEqual([[first, true]]);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    expect(replacement.sent).toEqual(old.sent);
+    replacement.finish(true);
+    await r.deliver(0.1);
+    expect(r.due(0.1)).toEqual([]);
+    expect(staying.sent).toEqual(old.sent);
+    expect(r.settled).toEqual([[first, true]]);
+    expect(r.feeds.getStats()).toMatchObject({
+      feeds: 1,
+      subscribers: 2,
+      pushed: 3,
+    });
+  });
+
+  test("a sole viewer comes back to a new draw when the host has released its cached frame", async () => {
+    const r = linkedFeeds();
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+    expect(old.sent).toHaveLength(1);
+
+    leave();
+    expect(r.feeds.isWatched(S)).toBe(false);
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    expect(replacement.sent).toEqual([]);
+    // The renderer's single slot sees the old count again and needs a first
+    // frame despite never seeing an empty membership.
+    await r.deliver(0.1);
+    const [fresh] = r.due(0.1);
+    expect(fresh).toBeDefined();
+    expect(replacement.sent).toEqual(old.sent);
+    expect(r.settled).toEqual([[first, true]]);
+    replacement.finish(true);
+    expect(r.settled).toEqual([
+      [first, true],
+      [fresh, true],
+    ]);
+  });
+
+  test("a declined handover asks for a frame after an unchanged viewer delivery", async () => {
+    const r = linkedFeeds();
+    const leave = r.feeds.subscribe(S, subscriber("pane").sub);
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    await r.deliver(0.1);
+    expect(r.due(0.1)).toEqual([]);
+    replacement.finish(false);
+    await r.deliver(0.2);
+    const [fresh] = r.due(0.2);
+    expect(fresh).toBeDefined();
+    expect(replacement.sent).toHaveLength(2);
+    expect(replacement.sent[0]).toBe(replacement.sent[1]);
+    replacement.finish(true);
+    expect(r.settled).toEqual([
+      [first, true],
+      [fresh, true],
+    ]);
+  });
+
+  test("visibility and count changes wake a feed while a pending handover shares its next write", async () => {
+    const r = linkedFeeds();
+    r.hidden.add("%1");
+    r.feeds.note(S, { pane: "%1" }, 1);
+    const old = subscriber("pane");
+    const leave = r.feeds.subscribe(S, old.sub);
+    r.feeds.subscribe(S, subscriber("statusline").sub);
+    await r.deliver(0);
+    const [first] = r.due(0);
+
+    leave();
+    const replacement = deferredSubscriber("pane");
+    r.feeds.subscribe(S, replacement.sub);
+    r.hidden.delete("%1");
+    r.feeds.announce();
+    await r.deliver(0.1);
+    const [shown] = r.due(0.1);
+    expect(shown).toBeDefined();
+    expect(replacement.sent).toEqual(old.sent);
+    replacement.finish(true);
+    expect(r.owed).toHaveLength(0);
+    expect(r.settled).toEqual([
+      [first, true],
+      [shown, true],
+    ]);
+
+    r.feeds.subscribe(S, subscriber("pane").sub);
+    await r.deliver(0.2);
+    expect(r.due(0.2)).toHaveLength(1);
+  });
+
   test("the confirmed bytes are published for the renderer and session that drew them", () => {
     const publish = publishingFrames(TEST_SIGNER);
     const routes: Parameters<FeedDeps<Req>["publishFrame"]>[1][] = [];
@@ -642,4 +821,143 @@ describe("the daemon's close", () => {
       `info feed sid="${T}" dropped lane=pane daemon-closed`,
     );
   });
+});
+
+test("equal pane bytes with a different event require a new confirmed write", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const pane = deferredSubscriber("pane");
+  feeds.subscribe(S, pane.sub);
+  const event = { text: "an act failed", at: 7 as Instant, answered: false };
+  const first: DisplayedEvent = {
+    kind: "act-failed",
+    event: { ...event, revision: 1 },
+  };
+  const second: DisplayedEvent = {
+    kind: "act-failed",
+    event: { ...event, revision: 2 },
+  };
+  const older = frame(S, "warning", null, 1, [first]);
+  const newer = frame(S, "warning", null, 2, [second]);
+  const retry = frame(S, "warning", null, 3, [second]);
+  took([older, newer]);
+  expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
+  expect(settled).toEqual([]);
+  pane.finish(true);
+  pane.finish(false);
+  expect(acknowledged).toEqual([first]);
+  expect(settled).toEqual([
+    [older, true],
+    [newer, false],
+  ]);
+
+  took([retry]);
+  expect(acknowledged).toEqual([first]);
+  pane.finish(true);
+  expect(acknowledged).toEqual([first, second]);
+
+  const unchanged = frame(S, "warning", null, 4);
+  took([unchanged]);
+  expect(pane.sent).toHaveLength(3);
+  expect(settled.at(-1)).toEqual([unchanged, true]);
+  expect(acknowledged).toEqual([first, second]);
+});
+
+test.each([
+  ["pane", "warning"],
+  ["statusline", "handoff warning"],
+] as const)(
+  "a hot %s replay can acknowledge the event in its cached frame",
+  (lane, text) => {
+    const { feeds, took, settled, acknowledged } = rig();
+    const initial = deferredSubscriber(lane);
+    feeds.subscribe(S, initial.sub);
+    const shown: DisplayedEvent = {
+      kind: "renderer-ended",
+      event: { text: "the renderer ended", at: 7 as Instant, answered: false },
+    };
+    const offered = frame(S, "warning", "handoff warning", 1, [shown]);
+    took([offered]);
+    initial.finish(false);
+    expect(acknowledged).toEqual([]);
+
+    const fresh = deferredSubscriber(lane);
+    feeds.subscribe(S, fresh.sub);
+    expect(initial.sent).toEqual([ansiAnswer(text)]);
+    expect(fresh.sent).toEqual([ansiAnswer(text)]);
+    expect(acknowledged).toEqual([]);
+    fresh.finish(true);
+    expect(acknowledged).toEqual([shown]);
+    expect(settled).toEqual([[offered, false]]);
+  },
+);
+
+test("a slower pane confirmation reports its own event after another pane confirmed a later one", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const slower = deferredSubscriber("pane");
+  const faster = deferredSubscriber("pane");
+  feeds.subscribe(S, slower.sub);
+  feeds.subscribe(S, faster.sub);
+  const event = {
+    text: "the renderer ended",
+    at: 7 as Instant,
+    answered: false,
+  };
+  const first: DisplayedEvent = {
+    kind: "renderer-ended",
+    event: { ...event, revision: 1 },
+  };
+  const second: DisplayedEvent = {
+    kind: "renderer-ended",
+    event: { ...event, revision: 2 },
+  };
+  const older = frame(S, "old", null, 1, [first]);
+  const newer = frame(S, "new", null, 2, [second]);
+  took([older, newer]);
+  faster.finish(false);
+  faster.finish(true);
+  expect(settled).toEqual([[newer, true]]);
+  expect(acknowledged).toEqual([second]);
+  slower.finish(true);
+  expect(settled).toEqual([
+    [newer, true],
+    [older, true],
+  ]);
+  expect(acknowledged).toEqual([second, first]);
+});
+
+test("a pane write confirmed while its lane's refusal is flushing still answers its event", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const ended = jest.fn();
+  const writes: Array<() => void> = [];
+  const out = new Writable({
+    highWaterMark: 1,
+    write(_bytes: Buffer, _encoding, complete) {
+      writes.push(complete);
+    },
+  });
+  const push = newestWins(out);
+  feeds.subscribe(S, {
+    ...subscriber("pane").sub,
+    frame: (json, done) =>
+      push(json, (delivered) => {
+        ended(delivered);
+        done(delivered);
+      }),
+    refused: (resp) => out.end(JSON.stringify(resp)),
+  });
+  const shown: DisplayedEvent = {
+    kind: "act-failed",
+    event: { text: "an act failed", at: 7 as Instant, answered: false },
+  };
+  const offered = frame(S, "warning", null, 1, [shown]);
+  took([offered]);
+  feeds.switched({ [S]: { pane: false, statusline: true } });
+  expect(settled).toEqual([[offered, false]]);
+  expect(acknowledged).toEqual([]);
+
+  writes.shift()!();
+  expect(ended).toHaveBeenCalledWith(true);
+  expect(acknowledged).toEqual([shown]);
+  expect(settled).toEqual([[offered, false]]);
+  writes.shift()!();
 });

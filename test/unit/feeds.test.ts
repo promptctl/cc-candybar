@@ -13,6 +13,7 @@
 import {
   Feeds,
   noteSent,
+  WAKE_CAUSES,
   type FeedDraw,
   type FeedPeriods,
 } from "../../src/renderer/feeds";
@@ -69,7 +70,7 @@ function rig() {
     failure: null as FeedDraw["failure"],
     skew: 1000,
     // A session whose draw throws past the draw's own catch.
-    throwsFor: null as SessionId | null,
+    throwsFor: null as { session: SessionId; cause: Error } | null,
   };
   const draws: Array<{
     session: SessionId;
@@ -91,7 +92,7 @@ function rig() {
         following: [...following],
         feeds: laneFeeds,
       });
-      if (session === script.throwsFor) throw new Error(`${session} broke`);
+      if (session === script.throwsFor?.session) throw script.throwsFor.cause;
       if (!script.view) return null;
       return {
         frame:
@@ -109,7 +110,7 @@ function rig() {
       };
     },
     pin: (session) => {
-      if (session === script.throwsFor) throw new Error(`${session} broke`);
+      if (session === script.throwsFor?.session) throw script.throwsFor.cause;
       pins.push(`pin ${session}`);
       return () => void pins.push(`unpin ${session}`);
     },
@@ -121,8 +122,7 @@ function rig() {
     tick: tick(t),
   });
   // A turn at tick `t`: the frames due drawn.
-  const turn = (t: number) => {
-    const frames: PushedFrame[] = [];
+  const turn = (t: number, frames: PushedFrame[] = []) => {
     feeds.drawDue(readings(t), frames, prepare);
     return frames;
   };
@@ -164,7 +164,7 @@ describe("a feed's life", () => {
 
   test("a feed whose pin throws keeps no other feed from opening, and its throw is the view's", () => {
     const r = rig();
-    r.script.throwsFor = S;
+    r.script.throwsFor = { session: S, cause: new Error("s broke") };
     expect(() => view({ [S]: watched(), [T]: watched() })(r.feeds)).toThrow(
       "s broke",
     );
@@ -174,7 +174,7 @@ describe("a feed's life", () => {
   test("a feed whose draw throws keeps no other feed's frame from going out, and its throw is the turn's", () => {
     const r = rig();
     view({ [S]: watched(), [T]: watched() })(r.feeds);
-    r.script.throwsFor = S;
+    r.script.throwsFor = { session: S, cause: new Error("s broke") };
     const frames: PushedFrame[] = [];
     expect(() => r.feeds.drawDue(r.readings(0), frames, r.prepare)).toThrow(
       "s broke",
@@ -182,6 +182,71 @@ describe("a feed's life", () => {
     expect(frames.map((f) => f.session)).toEqual([T]);
     // The feed that threw is due again a still period on, never at once.
     expect(r.feeds.next()).toBe(PERIODS.still / 1000);
+  });
+
+  test("frequent wakes respect a thrown draw's retry while the healthy feed keeps drawing", () => {
+    const r = rig();
+    view({ [S]: watched(), [T]: watched() })(r.feeds);
+    expect(r.turn(0).map(({ session }) => session)).toEqual([S, T]);
+    const failure = new Error("draw escaped its presentation");
+    r.script.throwsFor = { session: S, cause: failure };
+
+    const thrown: unknown[] = [];
+    const wakeAndDraw = (at: number) => {
+      for (const cause of WAKE_CAUSES) r.feeds.wake(S, cause, tick(at));
+      r.feeds.wake(T, "data", tick(at));
+      const frames: PushedFrame[] = [];
+      try {
+        r.turn(at, frames);
+      } catch (cause) {
+        thrown.push(cause);
+      }
+      return frames;
+    };
+
+    const { moving, still } = PERIODS;
+    const retry = (moving + still) / 1000;
+    const recovery = (moving + 2 * still) / 1000;
+    expect(wakeAndDraw(moving / 1000).map(({ session }) => session)).toEqual([
+      T,
+    ]);
+
+    const interval = moving / 2;
+    const viewersChangedAt = (moving + interval) / 1000;
+    view({ [S]: watched(false), [T]: watched() }, viewersChangedAt)(r.feeds);
+    view({ [S]: watched(), [T]: watched() }, viewersChangedAt)(r.feeds);
+    view({ [S]: watched(true, ["pane", "statusline"]), [T]: watched() }, viewersChangedAt)(r.feeds);
+    const frames: PushedFrame[] = [];
+    for (let ms = moving + interval; ms < recovery * 1000; ms += interval)
+      frames.push(...wakeAndDraw(ms / 1000));
+    expect(
+      r.draws.filter(({ session }) => session === S).map(({ tick }) => tick),
+    ).toEqual([0, moving / 1000, retry]);
+    expect(thrown).toHaveLength(2);
+    for (const cause of thrown) expect(cause).toBe(failure);
+    expect(frames.length).toBeGreaterThan(still / moving);
+    expect(
+      frames.every(({ session, frame }) => session === T && frame.kind === "drawn"),
+    ).toBe(true);
+
+    r.script.throwsFor = null;
+    r.script.bar = "recovered";
+    expect(wakeAndDraw(recovery)).toContainEqual(
+      expect.objectContaining({
+        session: S,
+        frame: expect.objectContaining({ kind: "drawn", bar: draw("recovered") }),
+      }),
+    );
+    r.script.bar = "still responsive";
+    expect(wakeAndDraw(recovery + moving / 1000)).toContainEqual(
+      expect.objectContaining({
+        session: S,
+        frame: expect.objectContaining({
+          kind: "drawn",
+          bar: draw("still responsive"),
+        }),
+      }),
+    );
   });
 
   test("a frame is drawn with the lanes that follow the session and handed on with its structured presentations", () => {
@@ -375,6 +440,33 @@ describe("a feed whose session has no view", () => {
 });
 
 describe("a frame that failed", () => {
+  test("publishes a typed failure and can be replaced by a corrected view at the ordinary spacing", () => {
+    const r = rig();
+    r.script.failure = { level: "error", line: "render broke" };
+    view({ [S]: watched() })(r.feeds);
+    expect(r.turn(0)).toEqual([
+      { session: S, frame: { kind: "failed", message: "render broke" } },
+    ]);
+    expect(r.logged).toContain("error render broke");
+
+    r.script.failure = null;
+    r.script.bar = "corrected";
+    const moving = PERIODS.moving / 1000;
+    r.feeds.wake(S, "reload", tick(moving / 2));
+    expect(r.turn(moving / 2)).toEqual([]);
+    expect(r.turn(moving)).toEqual([
+      {
+        session: S,
+        frame: {
+          kind: "drawn",
+          receipt: 1,
+          bar: draw("corrected"),
+          handoff: draw("s"),
+        },
+      },
+    ]);
+  });
+
   test("is logged when its failure first shows, and counted every time", () => {
     const r = rig();
     r.script.failure = { level: "error", line: "render broke" };

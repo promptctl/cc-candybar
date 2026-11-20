@@ -81,7 +81,8 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs, wake: null },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
+  wake: null,
   record: [],
   frames: [],
 });
@@ -101,9 +102,13 @@ function hostOver(
 ) {
   const heard: string[] = [];
   const logged: string[] = [];
+  const follows: Array<readonly RenderOrigin[]> = [];
+  const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
+    ...NO_ACTS.configs,
     follow: (origins) => {
+      follows.push(origins);
       followed = origins;
     },
     snapshotOf: (origin) =>
@@ -132,7 +137,7 @@ function hostOver(
     ),
     (level, line) => logged.push(`${level} ${line}`),
     {
-      subscribed: () => {},
+      subscribed: (value) => void declarations.push(value),
       frames: () => {},
       holding: () => () => {},
       stored: () => {},
@@ -146,7 +151,7 @@ function hostOver(
       unheard: (text) => void logged.push(`unheard ${text}`),
     },
   );
-  return { host, heard, logged };
+  return { host, heard, logged, follows, declarations };
 }
 
 const due = { kind: "due" } as const;
@@ -157,6 +162,34 @@ test("an origin a turn newly names gets its config turn in that turn's slot, ahe
   const second = host.answer(() => ({ kind: "event", event: due }));
   await Promise.all([first, second]);
   expect(heard).toEqual(["due", "config", "due"]);
+});
+
+test("the host takes a declaration once, drops its origins on replacement, and takes the same first plan after restart", async () => {
+  const opened = output([], [ORIGIN]);
+  const empty = output([], []);
+  let current = opened;
+  const { host, heard, follows, declarations } = hostOver(() => current);
+  const dueTurn = () => host.answer(() => ({ kind: "event", event: due }));
+  await dueTurn();
+  await dueTurn();
+  expect(heard).toEqual(["due", "config", "due"]);
+  expect(follows).toEqual([[ORIGIN]]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  current = empty;
+  await dueTurn();
+  expect(follows).toEqual([[ORIGIN], []]);
+  expect(declarations).toEqual([opened.subscriptions, empty.subscriptions]);
+  await dueTurn();
+  await host.answer(() => ({
+    kind: "event",
+    event: { kind: "start", viewers: {}, sessions: [] },
+  }));
+  expect(follows).toEqual([[ORIGIN], []]);
+  expect(declarations).toEqual([
+    opened.subscriptions,
+    empty.subscriptions,
+    empty.subscriptions,
+  ]);
 });
 
 function themeChange(origin = ORIGIN): Extract<Effect, { kind: "change" }> {
@@ -349,20 +382,36 @@ test("a write through a config symlink reloads the remaining holder after the wr
   }
 });
 
-// [LAW:one-source-of-truth] A renderer sent its start holds no config, so
-// every origin it names after gets its config turn, though the start failed.
-test("a start the renderer did not answer still leaves every origin it names after new", async () => {
-  const { host, heard } = hostOver((event) => {
-    if (event.kind === "start") throw new Error("the renderer went down");
-    return output([], [ORIGIN]);
+// [LAW:one-source-of-truth] The accepted origin survives a failed replacement.
+// Its next successful replacement receives the held observation in START.
+test("an unanswered start keeps the previous declaration until the next successful start", async () => {
+  const opened = output([], [ORIGIN]);
+  let fail = true;
+  const { host, heard, declarations } = hostOver((event) => {
+    if (event.kind === "start") {
+      expect(event.configs).toEqual([{ origin: ORIGIN, config: SNAPSHOT }]);
+      if (fail) throw new Error("the renderer went down");
+    }
+    return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  await host.answer(() => ({
+  const start = () => host.answer(() => ({
     kind: "event",
     event: { kind: "start", viewers: {}, sessions: [] },
   }));
+  const refused = {
+    kind: "threw",
+    failure: { message: "the renderer went down" },
+  };
+  expect(await start()).toMatchObject(refused);
+  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(heard).toEqual(["due", "config", "start"]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  fail = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
   await host.answer(() => ({ kind: "event", event: due }));
-  expect(heard).toEqual(["due", "config", "start", "due", "config"]);
+  expect(heard).toEqual(["due", "config", "start", "start", "due"]);
+  expect(declarations).toEqual([opened.subscriptions, opened.subscriptions]);
 });
 
 test("an origin a watch moved that the renderer let go by its slot is abandoned, and no config is handed in", async () => {

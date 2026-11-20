@@ -1,21 +1,37 @@
 // The site and worker tests use this adapter to run the renderer on the same
 // event loop as its host. The installed daemon selects the subprocess adapter.
 import type { RendererLink, RendererPort } from "./daemon/renderer-process.js";
-import { RendererDown } from "./daemon/foundations/verb-error.js";
+import {
+  CrossedFailure,
+  RendererDown,
+} from "./daemon/foundations/verb-error.js";
 import type { RendererName } from "./daemon/foundations/renderer-name.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
-  rendererOf,
   timed,
   type Renderer,
   type TimedRenderer,
 } from "./renderer-interface/interface.js";
 import type { Timekeeper } from "./time.js";
+import { writeLogLines } from "./utils/logger.js";
 
-export function inProcessRenderer(build = mainRendererOf): RendererPort {
+export function inProcessRenderer(
+  decorate: (renderer: Renderer) => Renderer = (renderer) => renderer,
+): RendererPort {
   return ({ name, boot }) => ({
-    start: ({ reaches, clock }) =>
-      localLink(name, () => build(boot(), reaches), clock),
+    start: ({ clock, log }) =>
+      localLink(
+        name,
+        () => {
+          const result = mainRendererOf(boot());
+          if (result.diagnostics !== undefined)
+            writeLogLines(log, result.diagnostics);
+          if (result.kind === "refused")
+            throw new CrossedFailure(result.failure);
+          return decorate(result.renderer);
+        },
+        clock,
+      ),
   });
 }
 
@@ -38,16 +54,12 @@ function localLink(
   // runs both: a turn begun there would leave its views' reactions to run as
   // the host's action ends, after the turn, with no time to read.
   const crossed = async (): Promise<void> => {};
-  const renderer: TimedRenderer = rendererOf({
-    event: async (input) => {
+  const renderer: TimedRenderer = {
+    answer: async (input) => {
       await crossed();
       return live().answer(input);
     },
-    adapter: async (input) => {
-      await crossed();
-      return live().answer(input);
-    },
-  });
+  };
   return {
     renderer,
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's

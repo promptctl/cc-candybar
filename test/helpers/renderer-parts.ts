@@ -1,8 +1,6 @@
 import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // The main renderer's parts over a test's own render cache, session state,
-// world states and owners (src/renderer/draw-bar.ts RendererParts), with an
-// inert host (`AdapterToHost`, src/renderer-interface/adapter.ts) for what its
-// side reaches. No daemon is built.
+// world states and owners (src/renderer/draw-bar.ts RendererParts).
 
 import type { SessionState } from "../../src/renderer/session-state";
 import type {
@@ -10,9 +8,9 @@ import type {
   RendererVerbs,
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
-import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { EffectId } from "../../src/renderer-interface/interface";
 import { TurnTime } from "../../src/renderer/turn-time";
+import { TurnLog } from "../../src/renderer/turn-log";
 import { FEED_PERIODS, Feeds } from "../../src/renderer/feeds";
 
 // A renderer that acts no verb: every click names a verb it does not have,
@@ -44,22 +42,6 @@ export const minter = (): (() => EffectId) => {
   return () => ++minted as EffectId;
 };
 
-// [LAW:no-silent-failure] A reach this rig has no host part for throws by
-// name, so a test that starts to depend on one says so.
-const unhosted = (what: string) => (): never => {
-  throw new Error(`${what}: no host part in this rig`);
-};
-
-// The host a renderer test draws against: no update is offered, and file
-// events are heard.
-export function inertHost(): AdapterToHost {
-  return {
-    log: () => {},
-    eventAnswered: () => {},
-    storage: { hold: unhosted("storage"), release: unhosted("storage") },
-  };
-}
-
 export function rendererParts({
   cache,
   sessionState,
@@ -73,10 +55,12 @@ export function rendererParts({
 }): MainRendererParts {
   const renderCache = cache as MainRendererParts["renderCache"];
   return {
-    ...inertHost(),
     // The rig's own time: a test drawing outside a turn runs it in one
     // (`time.during`).
     time: new TurnTime(),
+    turnLog: new TurnLog(),
+    configWrites: { close: () => {} },
+    sessionStats: () => sessionState.stats(),
     // No feed follows a session, and nothing is idle.
     menuIdle: renderCache.presentations.menuIdle,
     feeds: noFeeds(),

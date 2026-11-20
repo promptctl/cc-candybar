@@ -52,7 +52,7 @@ import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
 import { renderDeadlines } from "./foundations/request-deadline.js";
-import type { RendererStats } from "../renderer-interface/adapter.js";
+import type { RendererStats } from "../renderer-interface/interface.js";
 import {
   noteFacts,
   requestEvent,
@@ -362,11 +362,11 @@ export async function replyTo(
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
     // [LAW:nothing-unseen] The mailbox as the request found it, before its
-    // own push joins it: the input holding it and everything ahead.
+    // own input joins it: the input holding it and everything ahead.
     const mailbox = parts.renderer.stats();
     const {
       stats: { framesDrawn, ...drawn },
-    } = await renderer.ask({ kind: "stats" });
+    } = await renderer.command({ kind: "stats" });
     return stay({
       ok: true,
       stats: stats.snapshot({
@@ -581,7 +581,10 @@ export async function replyTo(
         daemonV: PROTOCOL_VERSION,
       });
     }
-    const { snapshot } = await renderer.ask({ kind: "debug", what: req.what });
+    const { snapshot } = await renderer.command({
+      kind: "debug",
+      what: req.what,
+    });
     return stay({ ok: true, debug: snapshot });
   }
 

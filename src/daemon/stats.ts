@@ -8,14 +8,15 @@ import {
   recordMs,
   type Histogram,
 } from "./foundations/durations.js";
-import type {
-  Durations,
-  RunStats,
-  FeedStats,
-  FileEventsStats,
-  SourceRunsStats,
-  SourceSnapshots,
-  StatsSnapshot,
+import {
+  RENDERER_STATS_REFERENCE,
+  type Durations,
+  type RunStats,
+  type FeedStats,
+  type FileEventsStats,
+  type SourceRunsStats,
+  type SourceSnapshots,
+  type StatsSnapshot,
 } from "./foundations/stats-snapshot.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { RenderSighting } from "./foundations/sightings";
@@ -220,6 +221,7 @@ export class RuntimeStats {
   // one reads; comparing against the producer's own output, not a second
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
+    const { framesDrawn, ...rendererStats } = RENDERER_STATS_REFERENCE;
     return new RuntimeStats({
       now: () => 0,
       monotonic: () => 0 as Monotonic,
@@ -271,29 +273,14 @@ export class RuntimeStats {
         watches: 0,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 0,
-        held: 0,
-        retired: 0,
-        compiles: 0,
-        views: 0,
-        pinned: 0,
-        retiredViews: 0,
-        passages: 0,
-        accountedBytes: 0,
-        budgetBytes: 0,
-      },
+      ...rendererStats,
       collector: { sessions: 0, retiring: 0 },
-      effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0 },
-      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
-      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
         subscribers: 0,
-        drawn: 0,
+        drawn: framesDrawn,
         pushed: 0,
         refused: 0,
         lookups: 0,

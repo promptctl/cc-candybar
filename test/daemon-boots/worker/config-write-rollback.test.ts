@@ -9,6 +9,7 @@ import {
   refusedClick,
   renderBody,
 } from "../../helpers/daemon-e2e";
+import { logLines } from "../../helpers/daemon-log";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { heldClock } from "../../helpers/held-clock";
 import {
@@ -134,6 +135,19 @@ test.each(["restored", "unrestored"] as const)(
         .join("\n");
       expect(messages).toContain(projectFile);
       if (restore === "unrestored") expect(messages).toContain(userFile);
+
+      // The shared origin is observed just once for both holders. Read the
+      // drained log so the complete-rollback case also checks for extra work.
+      await running.stop();
+      daemon = undefined;
+      const landings = logLines(env).filter((line) =>
+        line.includes("config discovery why=landed"),
+      );
+      expect(landings).toEqual(
+        restore === "unrestored"
+          ? [expect.stringContaining("followed=1 discovered=1 moved=1")]
+          : [],
+      );
     } finally {
       await daemon?.stop();
       removeTmpDirs();

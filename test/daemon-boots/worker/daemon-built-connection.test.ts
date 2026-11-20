@@ -21,9 +21,10 @@ import {
 } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
-import { rendererOf } from "../../../src/renderer-interface/interface";
-import { mainRendererOf } from "../../../src/renderer/main";
+import type { LinkOwner } from "../../../src/daemon/renderer-process";
 import { textOf } from "../../../src/render/frame";
+import { instantAt } from "../../../src/utils/instant";
+import type { HeldEvent } from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
@@ -35,6 +36,7 @@ import {
 import { openedOn, type Opened } from "../../helpers/opened-connection";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
+import { fakeLauncher } from "../../helpers/fake-launcher";
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
@@ -150,6 +152,132 @@ describe("a connection to a daemon built in this worker", () => {
     feed.client.destroy();
   });
 
+  function daemonWithWarning() {
+    let owner: LinkOwner | undefined;
+    let observed: HeldEvent | null = null;
+    let standingReads = 0;
+    const inProcess = inProcessRenderer((real) =>
+      hearingEvents(real, ({ event }) => {
+        if (event.kind === "context" && event.worldState.session === "observe")
+          observed = event.worldState.daemon.rendererEnded;
+      }),
+    );
+    const running = startDaemon(process.env, {
+      launcher: (own) => {
+        const { launcher } = fakeLauncher(systemTimekeeper, own);
+        return {
+          ...launcher,
+          standing: () => {
+            standingReads++;
+            return launcher.standing();
+          },
+        };
+      },
+      renderer: (prepared) => ({
+        start: (link) => {
+          owner = link;
+          return inProcess(prepared).start(link);
+        },
+      }),
+    });
+    started = running;
+    const link = owner;
+    if (link === undefined)
+      throw new Error("the daemon did not attach a renderer");
+    const warning = {
+      text: "the renderer stopped",
+      at: instantAt(running.daemon.clock),
+      answered: false,
+    };
+    const reply = async (session = "warning-draw") => {
+      const result = await running.daemon.reply(
+        renderRequest(session, undefined),
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      expect(drawn(result.resp)).not.toBe("");
+      return result;
+    };
+    const held = async () => {
+      const check = await reply("observe");
+      check.settled(false);
+      return observed;
+    };
+    return {
+      running,
+      reply,
+      held,
+      report: () => link.ended(warning),
+      replace: () => link.start(),
+      standingReads: () => standingReads,
+    };
+  }
+
+  test("a confirmed ordinary reply answers its daemon event across replacement and only for that occurrence", async () => {
+    const { running, reply, held, report, replace } = daemonWithWarning();
+    report();
+    const first = await reply();
+    expect(drawn(first.resp)).toMatch(/⚠\s+1/);
+    await replace();
+    expect(await held()).toMatchObject({ revision: 1, answered: false });
+    first.settled(true);
+    expect(await held()).toMatchObject({ revision: 1, answered: true });
+
+    report();
+    const dropped = await reply();
+    dropped.settled(false);
+    expect(await held()).toMatchObject({ revision: 2, answered: false });
+    const older = await reply();
+    report();
+    older.settled(true);
+    expect(await held()).toMatchObject({ revision: 3, answered: false });
+
+    await rendered(running, "warning-draw");
+    expect(await held()).toMatchObject({ revision: 3, answered: true });
+  });
+
+  test("the pane connection acknowledges its own confirmed warning frame", async () => {
+    const { running, reply, held, report } = daemonWithWarning();
+    const initial = await reply("pane-warning");
+    initial.settled(true);
+    report();
+    expect(await held()).toMatchObject({ revision: 1, answered: false });
+
+    const feed = openedOn(running.connect());
+    try {
+      feed.send({
+        ...SUBSCRIBE,
+        sessionId: "pane-warning",
+        lane: "pane",
+      } as Request);
+      const pane = drawn(await answered(feed));
+      expect(pane).toContain("a drawn mark");
+      expect(pane).toMatch(/⚠\s+1/);
+      expect(await held()).toMatchObject({ revision: 1, answered: true });
+    } finally {
+      feed.client.destroy();
+    }
+  });
+
+  test("an already answered event stays visible without rereading daemon warnings", async () => {
+    const { reply, report, standingReads } = daemonWithWarning();
+    report();
+    const first = await reply();
+    const concurrent = await reply();
+    expect(drawn(first.resp)).toMatch(/⚠\s+1/);
+    const before = standingReads();
+    first.settled(true);
+    expect(standingReads()).toBe(before + 1);
+    concurrent.settled(true);
+    expect(standingReads()).toBe(before + 1);
+
+    const insideHold = await reply();
+    expect(drawn(insideHold.resp)).toMatch(/⚠\s+1/);
+    insideHold.settled(true);
+    expect(standingReads()).toBe(before + 1);
+  });
+
   test("a shutdown request reaches the exit the daemon was built with", async () => {
     const opened = openedOn(start().connect());
     opened.send({ v: PROTOCOL_VERSION, kind: "shutdown" });
@@ -190,8 +318,8 @@ describe("a connection to a daemon built in this worker", () => {
       entered = resolve;
     });
     let release = (): void => {};
-    const renderer = inProcessRenderer((boot, reaches) => {
-      const held = holdable(mainRendererOf(boot, reaches));
+    const renderer = inProcessRenderer((real) => {
+      const held = holdable(real);
       return hearingEvents(held.renderer, ({ event }) => {
         if (event.kind === "request") {
           release = held.hold();
@@ -233,8 +361,8 @@ describe("a connection to a daemon built in this worker", () => {
     const entered = Promise.withResolvers<void>();
     let draws = 0;
     let release = () => {};
-    const renderer = inProcessRenderer((boot, reaches) => {
-      const held = holdable(mainRendererOf(boot, reaches));
+    const renderer = inProcessRenderer((real) => {
+      const held = holdable(real);
       return hearingEvents(held.renderer, ({ event }) => {
         if (event.kind === "request") draws++;
         if (event.kind === "context") {
@@ -278,10 +406,9 @@ describe("a connection to a daemon built in this worker", () => {
       const contexts: string[] = [];
       let occupyNext = false;
       let occupiedTurn: ReturnType<typeof statsOf> | undefined;
-      const renderer = inProcessRenderer((boot, reaches) => {
-        const real = mainRendererOf(boot, reaches);
-        return rendererOf({
-          event: async (input) => {
+      const renderer = inProcessRenderer((real) => {
+        return {
+          answer: async (input) => {
             const { event } = input;
             if (event.kind === "context") {
               const session = event.context.hookData.session_id;
@@ -293,16 +420,13 @@ describe("a connection to a daemon built in this worker", () => {
             }
             if (event.kind === "request")
               draws.push(event.context.hookData.session_id);
-            return real.answer(input);
-          },
-          adapter: async (input) => {
-            if (input.push.kind === "stats" && occupiedTurn !== undefined) {
+            if (event.kind === "stats" && occupiedTurn !== undefined) {
               occupied.resolve();
               await release.promise;
             }
             return real.answer(input);
           },
-        });
+        };
       });
       const running = startDaemon(process.env, { clock, renderer });
       started = running;

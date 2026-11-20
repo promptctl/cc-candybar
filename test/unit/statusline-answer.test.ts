@@ -78,8 +78,9 @@ const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
 const NO_SUBSCRIPTIONS: Subscriptions = {
   sources: {},
   lanes: {},
+  managedFolders: [],
+  configSelections: [],
   configs: [],
-  wake: null,
 };
 // The request's deadline is a timer the case fires itself (`deadlines`).
 const deadlines = new Set<() => void>();
@@ -111,6 +112,7 @@ const output = (
   stored: [],
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
+  wake: null,
   record,
   frames: [],
 });
@@ -126,6 +128,7 @@ const threwWith = (
   failure: failureOf(new Error(message)),
   effects: [],
   subscriptions,
+  wake: null,
   record,
   frames: [],
 });
@@ -369,6 +372,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
     failure: failureOf(new BadVerbArgs("no such row")),
     effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
+    wake: null,
     frames: [],
     record: [],
   });
@@ -396,20 +400,90 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
       /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*the renderer went away/,
     ),
   ]);
-  expect(subscribed).toEqual([NO_SUBSCRIPTIONS, NO_SUBSCRIPTIONS]);
+  expect(subscribed).toEqual([NO_SUBSCRIPTIONS]);
 });
 
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
-    wake: null,
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(threwWith([], "the draw broke", left));
   await answer(renderer, [], subscribed);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
+});
+
+test("a config's managed folders can change while its session reads and lanes stay fixed", async () => {
+  const folders = { ...NO_SUBSCRIPTIONS, managedFolders: ["/plugin/session"] };
+  const subscribed: Subscriptions[] = [];
+  const { renderer } = scripted({ ...output([]), subscriptions: folders });
+  await answer(renderer, [], subscribed);
+  expect(subscribed).toEqual([NO_SUBSCRIPTIONS, folders]);
+});
+
+test("a new session context retries its failed config with the same declaration, while due does not", async () => {
+  const origin = CONTEXT.requested;
+  const declaration = { ...NO_SUBSCRIPTIONS, configs: [origin] };
+  const delivered: Event["kind"][] = [];
+  const unheard: string[] = [];
+  const follow = jest.fn(() => {
+    if (follow.mock.calls.length === 1)
+      throw new Error("discovery unavailable");
+  });
+  const host = rendererHost(
+    MAIN_RENDERER,
+    CLOCK,
+    hostHeld(
+      eventRenderer(async ({ event }) => {
+        delivered.push(event.kind);
+        return { ...output([]), subscriptions: declaration };
+      }),
+      CLOCK.monotonic,
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      unheard: (why) => void unheard.push(why),
+      configs: {
+        ...NO_ACTS.configs,
+        follow,
+        snapshotOf: () => ({
+          chain: [],
+          repo: null,
+          plugins: [],
+          strays: [],
+          notices: [],
+          watch: null,
+          checkout: { root: "/project", git: false },
+        }),
+      },
+    },
+  );
+  const context = () =>
+    host.answer(() => ({
+      kind: "event",
+      event: { kind: "context", context: CONTEXT, worldState: WORLD },
+    }));
+  expect(await context()).toMatchObject({
+    configFailure: { message: "discovery unavailable" },
+  });
+  await host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  expect(follow).toHaveBeenCalledTimes(1);
+  expect(await context()).not.toHaveProperty("configFailure");
+  expect(follow.mock.calls).toEqual([[[origin]], [[origin]]]);
+  expect(delivered).toEqual(["context", "due", "context", "config"]);
+  expect(unheard).toEqual([expect.stringContaining("discovery unavailable")]);
 });
 
 test("a failed effect-done turn is said on a turn line naming the renderer and the session", async () => {
@@ -433,14 +507,16 @@ test("the session's context reaches the renderer first, with the world state rea
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
-    wake: null,
   };
   const drawn: Subscriptions = {
     sources: {},
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
-    wake: null,
   };
   const subscribed: Subscriptions[] = [];
   const { renderer, contexts, requests } = scripted(
