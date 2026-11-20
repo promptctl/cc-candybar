@@ -93,6 +93,9 @@ export function abbreviatePath(path: string): string {
 //
 // A renderer passes its host's locale. A standalone caller can format in
 // its own process's locale by omitting it.
-export function formatInteger(n: number, formatter = new Intl.NumberFormat()): string {
+export function formatInteger(
+  n: number,
+  formatter = new Intl.NumberFormat(),
+): string {
   return formatter.format(n);
 }

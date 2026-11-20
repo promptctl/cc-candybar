@@ -153,9 +153,15 @@ test("the running host records two independent renderer sessions for offline rep
     expect(fs.existsSync(refusedCapture)).toBe(false);
     expect(textOf(await draw("recorded-private", privateConfig, "private"))).toContain(`private=${ENV_VALUE}`);
 
+    const shutdownCapture = path.join(dir, "shutdown.jsonl");
+    await command("record", "start", shutdownCapture);
+    expect(textOf(await draw(primarySession))).toContain("reloaded-source");
+    expect(fs.existsSync(shutdownCapture)).toBe(false);
+
     // The replay bundle runs from another directory, after the host and its
     // authored inputs are gone. It can only draw from the recorded turns.
-    await daemon.stop();
+    // The host handles SIGHUP and drains its workers through their mailboxes.
+    expect(await daemon.stop("SIGHUP")).toEqual({ code: 0, signal: null });
     daemon = undefined;
     fs.rmSync(project, { recursive: true });
     const replayEnv = { ...isolated.env, LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8", TZ: "UTC" };
@@ -165,6 +171,8 @@ test("the running host records two independent renderer sessions for offline rep
       timeout: 10_000,
     });
     const primaryReplay = await replay(mainCapture, alternate);
+    const shutdownReplay = await replay(shutdownCapture, alternate);
+    expect(replayedFrames(shutdownReplay.stdout).some(({ frame }) => textOf(frame).includes("reloaded-source"))).toBe(true);
     const primaryFrames = replayedFrames(primaryReplay.stdout);
     expect(new Set(primaryFrames.map(({ session }) => session))).toEqual(new Set([primarySession]));
     expect(primaryFrames.some(({ frame }) => textOf(frame).includes("recorded-source padding=1"))).toBe(true);

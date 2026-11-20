@@ -129,6 +129,7 @@ test("live turns and sealing a renderer never wait for the capture disk", async 
   expect(occupied).toBe(false);
   expect(capture.active).toBe(false);
   expect(file.publish).not.toHaveBeenCalled();
+  capture.interrupted(); // The worker no longer owns the sealed prefix.
   release();
   await expect(stopped).resolves.toContain("Saved 2");
 });
