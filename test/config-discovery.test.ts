@@ -6,6 +6,7 @@
 // hand edit an origin's watch hears moves that origin; and an answer to the
 // trust book moves every origin that consulted it.
 
+import { logFields } from "./helpers/log-fields";
 import { writeStatePlan } from "./helpers/state-file";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -143,15 +144,15 @@ test("follows exactly the origins named: each discovered once as it is first nam
   discovery.follow([a, b]);
   discovery.follow([a, b]);
   expect(follows()).toEqual([
-    "config discovery why=follow followed=1 discovered=1 released=0",
-    "config discovery why=follow followed=2 discovered=1 released=0",
+    "config discovery why=follow followed=1 added=1 released=0",
+    "config discovery why=follow followed=2 added=1 released=0",
   ]);
   expect(discovery.snapshotOf(a)).not.toBeNull();
   const opened = counters.watchersOpened;
   const closedBefore = counters.watchersClosed;
   discovery.follow([b]);
   expect(follows().at(-1)).toBe(
-    "config discovery why=follow followed=1 discovered=0 released=1",
+    "config discovery why=follow followed=1 added=0 released=1",
   );
   expect(discovery.snapshotOf(a)).toBeNull();
   expect(counters.watchersOpened).toBe(opened);
@@ -166,9 +167,13 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(
-    /why=landed followed=2 discovered=1 failed=0 moved=1$/,
-  );
+  expect(logFields(logged.at(-1) ?? "")).toMatchObject({
+    why: "landed",
+    followed: "2",
+    observed: "1",
+    moved: "1",
+    failed: "[]",
+  });
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -648,7 +653,7 @@ test("watch delivery reads only held origins after a pending demand is released"
   expect(delivered).toEqual([[name, originKey(b.origin)]]);
 });
 
-test("one failed rediscovery preserves its snapshot while two siblings refresh for both holders", () => {
+test("a failed rediscovery shows its failure on the last snapshot to both holders while two siblings refresh", () => {
   const a = named("published");
   const b = named("failed-once");
   const c = named("also-published");
@@ -671,47 +676,55 @@ test("one failed rediscovery preserves its snapshot while two siblings refresh f
   writer.follow(origins);
   second.follow(origins);
   const beforeFailure = writer.snapshotOf(b.origin);
-  expect(beforeFailure).not.toBeNull();
+  if (beforeFailure === null) throw new Error("b was not discovered");
   const next = "{ globals: { padding: 1 } }";
   for (const { file } of [a, b, c]) fs.writeFileSync(file, next);
 
   refuse = true;
-  expect(writer.landed([a.file, b.file, c.file])).toEqual([a.origin, c.origin]);
-  expect(delivered).toEqual([
-    [name, originKey(a.origin)],
-    [name, originKey(c.origin)],
-  ]);
+  expect(writer.landed([a.file, b.file, c.file])).toEqual(origins);
+  expect(delivered).toEqual(origins.map((origin) => [name, originKey(origin)]));
   for (const holder of [writer, second]) {
     expect(textOfLayer(holder, a.origin, a.file)).toBe(next);
     expect(textOfLayer(holder, c.origin, c.file)).toBe(next);
-    expect(holder.snapshotOf(b.origin)).toBe(beforeFailure);
+    // The last observed config, with the failure as what its watch cannot hear.
+    expect(holder.snapshotOf(b.origin)).toEqual({
+      ...beforeFailure,
+      watch: "config discovery failed: rediscovery failed",
+    });
   }
   expect(logged).toEqual(
     expect.arrayContaining([
       expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
     ]),
   );
-  expect(logged.at(-1)).toBe(
-    "config discovery why=landed followed=3 discovered=2 failed=1 moved=2",
-  );
+  expect(logFields(logged.at(-1) ?? "")).toMatchObject({
+    why: "landed",
+    followed: "3",
+    observed: "2",
+    moved: "3",
+    failed: JSON.stringify([originKey(b.origin)]),
+  });
 
   const healthy = [writer.snapshotOf(a.origin), writer.snapshotOf(c.origin)];
   refuse = false;
   service.again("events-resumed");
-  expect(delivered).toEqual([
-    [name, originKey(a.origin)],
-    [name, originKey(c.origin)],
+  expect(delivered.slice(3)).toEqual([
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
   for (const holder of [writer, second]) {
     expect(textOfLayer(holder, b.origin, b.file)).toBe(next);
+    expect(holder.snapshotOf(b.origin)?.watch).toBeNull();
     expect(holder.snapshotOf(a.origin)).toBe(healthy[0]);
     expect(holder.snapshotOf(c.origin)).toBe(healthy[1]);
   }
-  expect(logged.at(-1)).toBe(
-    "config discovery why=events-resumed followed=3 discovered=3 failed=0 moved=1",
-  );
+  expect(logFields(logged.at(-1) ?? "")).toMatchObject({
+    why: "events-resumed",
+    followed: "3",
+    observed: "3",
+    moved: "1",
+    failed: "[]",
+  });
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -1167,7 +1180,11 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 failed=0 moved=2");
+  expect(
+    logged.filter((line) => line.includes("why=landed")).map(logFields),
+  ).toContainEqual(
+    expect.objectContaining({ followed: "4", observed: "2", moved: "2", failed: "[]" }),
+  );
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {

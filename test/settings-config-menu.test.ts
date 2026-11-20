@@ -352,7 +352,7 @@ describe("the save action", () => {
         withActions(`{ s: { save: true, key: 'theme' } }`),
         ALLOWED,
       ),
-    ).toThrow(/Unknown key "key" on a save action/);
+    ).toThrow(/Unknown save action key "key"/);
   });
 
   test("the removed persistWhen dual names save as its replacement", () => {
@@ -1365,7 +1365,7 @@ describe("the preset action", () => {
     [{ preset: "delete" }, "actions.a.name must be a string"],
     [
       { preset: "save", name: "x" },
-      'Unknown key "name" on a preset action. Expected only: preset',
+      'Unknown preset action key "name". Expected one of: preset, layer',
     ],
   ])("%j is refused at load", (action, message) => {
     expect(() =>
@@ -1405,11 +1405,11 @@ describe("an action's layer", () => {
   test.each([
     [
       { copy: "x", layer: "user" },
-      "a copy action writes no config, so it names no layer",
+      'Unknown copy action key "layer". Expected one of: copy',
     ],
     [
       { set: "wrap", to: "true", layer: "user" },
-      "a set action writes no config, so it names no layer",
+      'Unknown set action key "layer". Expected one of: set, to',
     ],
     [
       { persist: "padding", to: "2", layer: "ask" },
@@ -1636,7 +1636,7 @@ describe("the themeDefault action", () => {
     [{ themeDefault: "load" }, 'themeDefault must be "save"'],
     [
       { themeDefault: "save", theme: "nord" },
-      'Unknown key "theme" on a themeDefault action. Expected only: themeDefault',
+      'Unknown themeDefault action key "theme". Expected one of: themeDefault, layer',
     ],
   ])("%j is refused at load", (action, message) => {
     expect(() =>

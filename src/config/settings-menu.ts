@@ -886,11 +886,12 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [BACK_STEP]: { back: true },
       [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
       [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save" },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
+      [PRESET_SAVE]: { preset: "save", layer: DEFAULT_WRITE_LAYER },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save", layer: DEFAULT_WRITE_LAYER },
       [PRESET_DELETE]: {
         preset: "delete",
         name: `{{ .${SETTINGS.preset.effectiveVar} }}`,
+        layer: DEFAULT_WRITE_LAYER,
       },
     },
     segments: {
@@ -1020,7 +1021,10 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
   for (const c of CONTROLS) {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
-    artifacts.actions[reset] = { reset: c.configKey };
+    artifacts.actions[reset] = {
+      reset: c.configKey,
+      layer: DEFAULT_WRITE_LAYER,
+    };
     // The ↺ shows only while its reset would change something — a draft, or
     // a value the file holds at a layer the reset clears (brandon-menu-ia-q30.nk8).
     artifacts.variables[controlResettable(c.name)] = {

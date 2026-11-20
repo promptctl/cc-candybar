@@ -597,8 +597,8 @@ export function lazy<A extends readonly unknown[], R>(
 }
 
 // [LAW:types-are-the-program] A cross-field refinement: a predicate over the
-// ASSEMBLED member that the field specs cannot express alone (min < max, by != 0
-// — invariants relating two fields), paired with the bespoke issue it yields when
+// ASSEMBLED member that the field specs cannot express alone (min < max
+// — an invariant relating two fields), paired with the bespoke issue it yields when
 // violated. `ok` and `issue` both read the value, so an interpolated message
 // ("min (0) must be less than max (-1)") is DATA derived from the value, not a
 // branch. `issue.field` names the sub-path the message points at ("" = the record

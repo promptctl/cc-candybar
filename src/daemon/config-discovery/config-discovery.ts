@@ -38,7 +38,7 @@ import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
-import { failureOf } from "../foundations/verb-error.js";
+import { failureOf, type Failure } from "../foundations/verb-error.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -120,10 +120,13 @@ export class ConfigDiscovery {
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
     this.watches = deps.watchers.batch(() => {
-      // Take only current holds before starting any filesystem observation.
-      const held = [...this.invalidated].flatMap(
-        (key) => this.followed.get(key) ?? [],
-      );
+      // [LAW:no-ambient-temporal-coupling] A released origin leaves
+      // `invalidated` with its hold, so every key heard is followed. The
+      // batch takes its entries before any filesystem observation, and the
+      // synchronous rediscovery releases nothing until it returns.
+      const held = [...this.followed]
+        .filter(([key]) => this.invalidated.has(key))
+        .map(([, followed]) => followed);
       this.invalidated.clear();
       this.heard(held, "config-watch", "observed");
     });
@@ -233,13 +236,14 @@ export class ConfigDiscovery {
       selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
+      this.invalidated.delete(key);
       watch.handle.release();
       released++;
     }
     if (fresh.length + released === 0) return;
     this.deps.log(
       "info",
-      `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`,
+      `config discovery why=follow followed=${this.followed.size} added=${fresh.length} released=${released}`,
     );
   }
 
@@ -373,45 +377,66 @@ export class ConfigDiscovery {
     why: string,
     recover: "observed" | "moved",
   ): readonly Followed[] {
-    if (held.length === 0) return [];
     const shared = this.batch();
-    const moved: Followed[] = [];
-    const observed: ObservedConfig[] = [];
-    let failed = 0;
-    for (const was of held) {
-      const key = originKey(was.origin);
-      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
-      // last snapshot for a retry. Its failure cannot suppress a sibling's
-      // already-observed change or reverse a successful write.
-      try {
-        const found = this.discovered(was.origin, shared, was.watch);
-        const now = {
-          ...found,
-          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
-          renderers: was.renderers,
-          selected: was.selected,
-        };
-        this.followed.set(key, now);
-        observed.push(now);
-        if (now.digest !== was.digest) moved.push(now);
-      } catch (thrown) {
-        failed++;
+    const outcomes = held.map((was) => ({
+      was,
+      ...this.observedAgain(was, shared),
+    }));
+    for (const { was, now, failure } of outcomes) {
+      this.followed.set(originKey(was.origin), now);
+      if (failure !== null)
         this.deps.log(
           "error",
-          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
+          `config discovery why=${why} origin=${JSON.stringify(originKey(was.origin))} failed: ${failure.detail}`,
         );
-      }
     }
-    // [LAW:nothing-unseen] Count completed observations, their failures and
-    // changed snapshots from the same batch that published them.
+    const moved = outcomes
+      .filter(({ was, now }) => now.digest !== was.digest)
+      .map(({ now }) => now);
+    const observed = outcomes
+      .filter(({ failure }) => failure === null)
+      .map(({ now }) => now);
+    const failed = outcomes
+      .filter(({ failure }) => failure !== null)
+      .map(({ was }) => originKey(was.origin));
+    // [LAW:nothing-unseen] One record per batch, an empty one included: the
+    // observations, the origins that failed and the snapshots that moved.
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${observed.length} failed=${failed} moved=${moved.length}`,
+      `config discovery why=${why} followed=${this.followed.size} observed=${observed.length} moved=${moved.length} failed=${JSON.stringify(failed)}`,
     );
     // A targeted watch or write can retry even if the snapshot is unchanged.
     // A broad catch-up already has its own storage recovery trigger.
     this.reloaded(recover === "observed" ? observed : moved);
     return moved;
+  }
+
+  // [LAW:no-silent-failure] An origin that cannot be observed keeps its last
+  // snapshot for a retry, published with the failure as what its watch cannot
+  // hear, so every renderer holding it shows the fault until a later batch
+  // observes it. Its failure cannot suppress a sibling's observed change or
+  // reverse a successful write.
+  private observedAgain(
+    was: Followed,
+    shared: DiscoveryBatch,
+  ): { readonly now: Followed; readonly failure: Failure | null } {
+    const held = { renderers: was.renderers, selected: was.selected };
+    try {
+      const found = this.discovered(was.origin, shared, was.watch);
+      const snapshot =
+        found.digest === was.digest ? was.snapshot : found.snapshot;
+      return { now: { ...found, snapshot, ...held }, failure: null };
+    } catch (thrown) {
+      const failure = failureOf(thrown);
+      const snapshot: ConfigSnapshot = {
+        ...was.snapshot,
+        watch: `config discovery failed: ${failure.message}`,
+      };
+      return {
+        now: { ...was, snapshot, digest: digestOf(snapshot), ...held },
+        failure,
+      };
+    }
   }
 
   private reloaded(observed: readonly ObservedConfig[]): void {

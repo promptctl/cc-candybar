@@ -31,7 +31,7 @@ import { buildScope } from "../template-engine/scope.js";
 import {
   actionBindsTemplateValue,
   runDeclaration,
-  type ResolvedActionDecl,
+  type ActionDecl,
 } from "../config/action.js";
 import {
   resolveOptionDomain,
@@ -443,7 +443,7 @@ export type PreviewRows = ReadonlyArray<readonly PreviewSegment[]>;
 // through one boundary. compileActions needs only the ability to parse a source.
 export function compileActions(
   parse: (src: string) => Template<RichText>,
-  actions: Readonly<Record<string, ResolvedActionDecl>>,
+  actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
   // This config's per-config option domains (currently just "styles" — the
   // config's merged style names) — resolveOptionDomain checks these before
@@ -487,7 +487,7 @@ export function compileActions(
 function compileAction(
   parse: (src: string) => Template<RichText>,
   name: string,
-  action: ResolvedActionDecl,
+  action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
   compiled: CompiledActions,

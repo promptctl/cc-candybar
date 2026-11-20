@@ -724,7 +724,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   test("an unknown key on a set action is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v', oops: 1 } }`),
-      /Unknown key "oops"/,
+      /Unknown set action key "oops"/,
     );
   });
 

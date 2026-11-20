@@ -12,6 +12,7 @@
 // CROSS-REFERENCE concerns (loader/cross-ref.ts), because both run on the
 // MERGED config — a preset may stage segments the bundled default provides.
 
+import { DISPLAYED_WIRE_VALUE } from "./wire-shape.js";
 import {
   describeType,
   isPlainObject,
@@ -97,10 +98,10 @@ export function validatePresets(
     // also an identifier used across other seams (the `presets` domain, the
     // `presets.<name>.root` wire key), so this belongs in its general
     // validity check, not a narrower escape-harder fix at the one splice site.
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+    if (!DISPLAYED_WIRE_VALUE.pattern.test(name)) {
       ctx.issues.push({
         path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free — a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        message: `preset name ${JSON.stringify(name)} must be ${DISPLAYED_WIRE_VALUE.rule} — a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
         line: findKeyLine(ctx.source, ["presets", name]),
       });
       continue;
@@ -115,5 +116,9 @@ export function validatePresets(
 // the validator interprets — a map of preset names to the closed two-section
 // fragment object.
 export function presetsJson(): JsonNode {
-  return { type: "object", additionalProperties: recordJson(PRESET_SCHEMA) };
+  return {
+    type: "object",
+    propertyNames: DISPLAYED_WIRE_VALUE.json,
+    additionalProperties: recordJson(PRESET_SCHEMA),
+  };
 }

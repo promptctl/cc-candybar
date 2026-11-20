@@ -363,6 +363,7 @@ describe("config JSON Schema", () => {
     ["a blank remove name", { persist: "layout", removeSegment: "" }, false],
     ["a slash in a remove name", { persist: "layout", removeSegment: "one/two" }, false],
     ["a colon in an insert name", { persist: "layout", insertSegment: "one:two", anchor: "directory", relation: "before" }, false],
+    ["a colon in an inline insert domain", { persist: "layout", insertSegmentFrom: ["one:two", "three"], anchor: "directory", relation: "before" }, false],
     ["a colon in an insert anchor", { persist: "layout", insertSegment: "directory", anchor: "one:two", relation: "after" }, false],
     ["zero step size", { persist: "padding", min: 0, max: 4, by: 0 }, false],
   ];

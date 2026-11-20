@@ -30,10 +30,9 @@ import {
 // numerically ahead of every other key, which would silently reorder a rows
 // map under the by-name spread. Shared with group names for the same reason
 // they share the constraint (both splice into addresses).
-export { IDENTIFIER as ROW_NAME_RE } from "./identifier.js";
 
 // [LAW:one-source-of-truth] The name a whole tree's i-th row lowers to. `#`
-// fails ROW_NAME_RE, so a positional row can never collide with — or be
+// fails IDENTIFIER, so a positional row can never collide with — or be
 // shadowed by — an authored one, and is never integer-like.
 export function positionalRowName(index: number): string {
   return `#${index + 1}`;

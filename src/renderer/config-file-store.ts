@@ -54,7 +54,8 @@ import {
   wireKindOf,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
-import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
+import { isRowsFragment, rootNode } from "../config/root.js";
+import { IDENTIFIER } from "../config/identifier.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
@@ -244,7 +245,7 @@ function inheritedDoc(value: unknown): Node {
 // own unit, never the whole tree. A root a tree beneath lowered to positional
 // rows has no row a file can name, so it is one layer: the whole tree.
 function inheritedRowLayers(under: DslConfig): readonly RootLayer[] {
-  if (!Object.keys(under.root.rows).every((name) => ROW_NAME_RE.test(name))) {
+  if (!Object.keys(under.root.rows).every((name) => IDENTIFIER.test(name))) {
     const authored = authoredLayout(rootNode(under.root));
     return [
       {
@@ -313,7 +314,7 @@ function presetLayer(
 // by name (a replaced row keeps its place, a new one appends), a whole tree
 // replaces the base outright. A tree is one block under an unauthorable key
 // — its positional rows can never be replaced individually (root.ts's
-// ROW_NAME_RE), so they are searched as the contiguous front they always
+// IDENTIFIER), so they are searched as the contiguous front they always
 // form, in the pre-order the bar renders. Each entry carries the exact
 // config-file address a structural edit to it lands at — the row's own
 // `rows.<name>` member, or the whole tree — stamped here, where the layer's

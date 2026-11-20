@@ -32,12 +32,7 @@
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
-import {
-  DEFAULT_WRITE_LAYER,
-  LAYER_ROLES,
-  type LayerChoice,
-  type LayerRole,
-} from "./layer-role.js";
+import type { LayerChoice, LayerRole } from "./layer-role.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -82,33 +77,6 @@ export const ACTION_KEYS = [
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
-
-type ActionLayerFor<Key extends ActionKey> = NonNullable<
-  Extract<ActionDecl, Record<Key, unknown>> extends infer Action
-    ? Action extends { readonly layer?: infer Layer }
-      ? Layer
-      : never
-    : never
->;
-
-type ActionLayerChoices = {
-  [Key in ActionKey as ActionLayerFor<Key> extends never
-    ? never
-    : Key]: ReadonlyArray<ActionLayerFor<Key>>;
-};
-
-// [LAW:one-source-of-truth] The layers each config-writing action may name:
-// a role of the session's chain, or, for save alone, `ask` — the one write
-// whose click binds no value of its own, so it can bind the layer. An action
-// absent here writes no config and names no layer.
-export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
-  {
-    persist: LAYER_ROLES,
-    reset: LAYER_ROLES,
-    preset: LAYER_ROLES,
-    themeDefault: LAYER_ROLES,
-    save: [...LAYER_ROLES, "ask"],
-  } satisfies ActionLayerChoices;
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
 // binds to. The top-level discriminator is which of `set`/`copy`/`open` is
@@ -210,9 +178,9 @@ export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
 // gated the same one-member-allow-list way a literal `to` already is.
 //
 // Every action that writes config names the layer of the session's chain it
-// writes; absent, the user's.
+// writes. An author may leave it out, and the loader writes the user's.
 interface Writes {
-  readonly layer?: LayerRole;
+  readonly layer: LayerRole;
 }
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
@@ -268,7 +236,7 @@ export type ActionDecl =
   | { readonly rewind: true }
   // Save writes the user layer by default, as every config write does;
   // `ask` has each link bind one of the session's writable layers.
-  | { readonly save: true; readonly layer?: LayerChoice }
+  | { readonly save: true; readonly layer: LayerChoice }
   // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
   // daemon names the preset and reads what it holds at click time — while
   // `delete` names its preset by a template, like `copy`'s text, so one
@@ -298,31 +266,6 @@ export type ActionDecl =
   // named together. The tuple type states the one structural fact — there is
   // always a head, the member whose display the region shows.
   | { readonly do: readonly [string, ...string[]] };
-
-// [LAW:types-are-the-program] Authored actions may omit a layer. Everything
-// from the validated configuration carries a layer on each durable action.
-type WithResolvedLayer<A> = A extends ActionDecl
-  ? "layer" extends keyof A
-    ? A & Required<Pick<A, "layer">>
-    : A
-  : never;
-
-export type ResolvedActionDecl = WithResolvedLayer<ActionDecl>;
-
-const defaultLayer = <Choice extends LayerChoice>(choice: Choice | undefined) =>
-  choice ?? DEFAULT_WRITE_LAYER;
-
-export function resolveActionLayer(action: ActionDecl): ResolvedActionDecl {
-  if ("save" in action) return { ...action, layer: defaultLayer(action.layer) };
-  if (
-    "persist" in action ||
-    "reset" in action ||
-    "preset" in action ||
-    "themeDefault" in action
-  )
-    return { ...action, layer: defaultLayer(action.layer) };
-  return action;
-}
 
 export interface RunAction {
   readonly run: readonly [string, ...string[]];

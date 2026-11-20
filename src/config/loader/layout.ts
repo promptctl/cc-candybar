@@ -19,6 +19,7 @@
 // recursion seam, so the child-list field is data that points back at the node
 // parser without a temporal-dead-zone crash at module load.
 
+import { WIRE_VALUE } from "./wire-shape.js";
 import {
   DIRECTIONS,
   type ContainerNode,
@@ -34,7 +35,7 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { placementIdSpec, placementSettingsSpec } from "./settings.js";
-import { ROW_NAME_RE } from "../root.js";
+import { IDENTIFIER } from "../identifier.js";
 import type { ActionDecl } from "../action.js";
 import {
   DISTRIBUTION_NAMES,
@@ -442,7 +443,7 @@ export const validateRoot = (
 // ─── Root fragment (`root:` — a whole tree or a `{ rows }` map) ──────────────
 
 // [LAW:types-are-the-program] The rows map: name → node, each name an
-// identifier (ROW_NAME_RE — never integer-like, so authoring order survives the
+// identifier (IDENTIFIER — never integer-like, so authoring order survives the
 // by-name spread) and each value any layout node. A bad name is a loud issue
 // and the row is dropped from the recovery value; parseDslConfig throws once
 // any issue exists, so the recovery never renders.
@@ -451,7 +452,7 @@ function rowsSpec(): FieldSpec<Root["rows"]> {
     required: true,
     json: {
       type: "object",
-      propertyNames: { pattern: ROW_NAME_RE.source },
+      propertyNames: { pattern: IDENTIFIER.source },
       additionalProperties: { $ref: LAYOUT_NODE_REF },
     },
     parse: (ctx, path, field, raw) => {
@@ -466,7 +467,7 @@ function rowsSpec(): FieldSpec<Root["rows"]> {
       }
       const rows: Record<string, LayoutNode> = {};
       for (const [name, node] of Object.entries(v)) {
-        if (!ROW_NAME_RE.test(name)) {
+        if (!IDENTIFIER.test(name)) {
           ctx.issues.push({
             path: `${path}.${field}.${name}`,
             message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) — it names the row in the config file and merges by name over the bundled default's rows`,
@@ -626,16 +627,16 @@ export function insertJson(): JsonNode {
 
 // [LAW:one-source-of-truth] A group name is spliced into the synthesized
 // `when` predicate and toggle template as `.groups.<name>`, so it shares
-// ROW_NAME_RE — the identifier constraint every spliced name carries.
+// IDENTIFIER — the identifier constraint every spliced name carries.
 function groupNameSpec(): FieldSpec<string> {
   return {
     required: true,
-    json: { type: "string", pattern: ROW_NAME_RE.source },
+    json: { type: "string", pattern: IDENTIFIER.source },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (
         typeof v !== "string" ||
-        !ROW_NAME_RE.test(v) ||
+        !IDENTIFIER.test(v) ||
         v === DISCLOSURE_CLOSED
       ) {
         ctx.issues.push({
@@ -650,20 +651,20 @@ function groupNameSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:single-enforcer] A group's optional shared `key` is a SessionState key —
-// the same non-empty/slash-free wire shape the action loader's `set` key
-// enforces, restated here because the group synthesizes that `set`.
+// [LAW:single-enforcer] A group's optional shared `key` is a SessionState key
+// in the wire shape the action loader's `set` key takes, because the group
+// synthesizes that `set`.
 function groupKeySpec(): FieldSpec<string> {
   return {
     required: false,
-    json: { type: "string", minLength: 1 },
+    json: WIRE_VALUE.json,
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
+      if (typeof v !== "string" || !WIRE_VALUE.pattern.test(v)) {
         ctx.issues.push({
           path: `${path}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          message: `a group "key" must be a ${WIRE_VALUE.rule} SessionState key, got ${describeValue(v)}`,
           line: findKeyLine(ctx.source, ["root"]),
         });
         return undefined;

@@ -173,7 +173,7 @@ describe("do: load errors", () => {
     ["a member listed twice", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`, '"a" is listed twice'],
     ["a template-bound follower", `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`, '"t" takes its value from the template'],
     ["a follower that asks for a save layer", `a: { set: 'panel', to: 'closed' }, keep: { save: true, layer: 'ask' }, d: { do: ['a', 'keep'] },`, '"keep" takes its value from the template'],
-    ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown key "to" on a do action'],
+    ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown do action key "to". Expected one of: do'],
   ])("%s", (_label, actions, message) => {
     expect(loadError(actions)).toContain(message);
   });

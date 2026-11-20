@@ -1,3 +1,4 @@
+import { logFields } from "../../helpers/log-fields";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -143,9 +144,16 @@ test.each(["restored", "unrestored"] as const)(
       const landings = logLines(env).filter((line) =>
         line.includes("config discovery why=landed"),
       );
-      expect(landings).toEqual(
+      expect(landings.map(logFields)).toEqual(
         restore === "unrestored"
-          ? [expect.stringContaining("followed=1 discovered=1 failed=0 moved=1")]
+          ? [
+              expect.objectContaining({
+                followed: "1",
+                observed: "1",
+                moved: "1",
+                failed: "[]",
+              }),
+            ]
           : [],
       );
     } finally {

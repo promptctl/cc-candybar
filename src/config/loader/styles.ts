@@ -12,6 +12,7 @@
 // field here — growing the vocabulary means growing rich-js, never adding color
 // math to cc-candybar.
 
+import { WIRE_VALUE } from "./wire-shape.js";
 import type { ThemeKey } from "@promptctl/rich-js";
 import { IDENTITY } from "@promptctl/rich-js";
 import {
@@ -83,10 +84,10 @@ export function validateStyles(
     // splits on "/". Rejecting the shape HERE surfaces the error on every
     // config load, not only once an action ranges the "styles" domain (the same
     // wire shape cycle members and `to` literals enforce in actions.ts).
-    if (name === "" || name.includes("/")) {
+    if (!WIRE_VALUE.pattern.test(name)) {
       ctx.issues.push({
         path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free — a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        message: `style name ${JSON.stringify(name)} must be ${WIRE_VALUE.rule} — a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
         line: findKeyLine(ctx.source, ["styles", name]),
       });
       continue;
@@ -115,5 +116,9 @@ export function validateStyles(
 // [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
 // the validator interprets — a map of style names to the closed four-axis object.
 export function stylesJson(): JsonNode {
-  return { type: "object", additionalProperties: recordJson(STYLE_SCHEMA) };
+  return {
+    type: "object",
+    propertyNames: WIRE_VALUE.json,
+    additionalProperties: recordJson(STYLE_SCHEMA),
+  };
 }

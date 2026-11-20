@@ -61,6 +61,7 @@ import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
 import { UNSAVED_VAR, USER_LAYER_WRITABLE } from "./settings-menu.js";
+import { DEFAULT_WRITE_LAYER } from "./layer-role.js";
 import {
   menuActionName,
   menuMember,
@@ -274,6 +275,7 @@ function removeTerm(ctx: SpliceCtx, id: string): string {
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id,
+    layer: DEFAULT_WRITE_LAYER,
   };
   const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
   return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
@@ -614,6 +616,7 @@ function insertTerm(
     insertSegmentFrom: ADDABLE_DOMAIN,
     anchor,
     relation,
+    layer: DEFAULT_WRITE_LAYER,
   };
 
   const member = menuMember(applyName);
@@ -812,7 +815,10 @@ function wrapWithPresetRows(
   // for every declared preset UNCONDITIONALLY, specifically so a preset
   // edited down to zero non-exempt segments (no removeTerm/insertTerm
   // persist actions left to register it) doesn't orphan this exact click.
-  artifacts.actions[actionName] = { reset: rootKey };
+  artifacts.actions[actionName] = {
+    reset: rootKey,
+    layer: DEFAULT_WRITE_LAYER,
+  };
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "↺ reset layout" }}`,
     when: CUSTOMIZED_BANNER_GATE,
@@ -992,7 +998,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   };
   // [LAW:one-type-per-behavior] The same save used in settings commits
   // and closes the draft. Staged layout edits already name their layers.
-  artifacts.actions[EDIT_DONE_SEG] = { save: true };
+  artifacts.actions[EDIT_DONE_SEG] = {
+    save: true,
+    layer: DEFAULT_WRITE_LAYER,
+  };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:
       `{{ if ${TO_KEEP} }}{{ if ${USER_LAYER_WRITABLE} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}{{ end }}` +

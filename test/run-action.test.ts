@@ -547,7 +547,7 @@ describe("a run's declaration", () => {
       "a key a run has no such thing as",
       `{ run: ["x"], cwd: "/" }`,
       "actions.mine.cwd",
-      "Expected only: run, env, refreshes",
+      "Expected one of: run, env, refreshes",
     ],
   ])(
     "%s is a load error naming the field",

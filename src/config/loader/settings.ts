@@ -6,6 +6,7 @@
 // config (a file may place a bundled segment), so cross-ref.ts asks it.
 // This file changes when the setting grammar does.
 
+import { DISPLAYED_WIRE_VALUE } from "./wire-shape.js";
 import {
   inSettingDomain,
   IMPLIED_SETTINGS,
@@ -15,7 +16,7 @@ import {
   type SettingDecl,
   type SettingValue,
 } from "../dsl-types.js";
-import { IDENTIFIER as SETTING_NAME } from "../identifier.js";
+import { IDENTIFIER } from "../identifier.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isReservedName, RESERVED_NAMESPACES } from "../reserved-names.js";
 import {
@@ -28,7 +29,7 @@ import {
 
 // A setting's name is read in a template as `.settings.<name>`, so it must be
 // a field name the template engine parses.
-const SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
+const SETTING_NAME_JSON = { pattern: IDENTIFIER.source };
 
 const SETTING_VALUE_JSON = {
   anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }],
@@ -45,7 +46,7 @@ const SETTING_DECL_JSON = {
         { const: "bool" },
         {
           type: "array",
-          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
+          items: DISPLAYED_WIRE_VALUE.json,
           minItems: 1,
           uniqueItems: true,
         },
@@ -108,13 +109,13 @@ function parseDomain(
     // string, which a newline would leave unterminated. The rule preset names
     // keep (presets.ts), for the same two reasons.
     const unwritable = words.filter(
-      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w),
+      (w) => !DISPLAYED_WIRE_VALUE.pattern.test(w),
     );
     if (unwritable.length > 0) {
       return issue(
         ctx,
         path,
-        `a list domain's words must be non-empty, slash-free, and newline-free — configure mode writes each on the set-state wire — got ${JSON.stringify(unwritable)}`,
+        `a list domain's words must be ${DISPLAYED_WIRE_VALUE.rule} — configure mode writes each on the set-state wire — got ${JSON.stringify(unwritable)}`,
       );
     }
     return words;
@@ -242,7 +243,7 @@ export function settingsDeclSpec(): FieldSpec<
       }
       const out = Object.create(null) as Record<string, SettingDecl>;
       for (const [name, decl] of Object.entries(v)) {
-        if (!SETTING_NAME.test(name)) {
+        if (!IDENTIFIER.test(name)) {
           issue(
             ctx,
             `${at}.${name}`,

@@ -259,7 +259,7 @@ describe("config-validators gate", () => {
         ...config,
         actions: {
           ...config.actions,
-          applyStyle: { persist: "style", to: "a/b" },
+          applyStyle: { persist: "style", to: "a/b", layer: "user" },
         },
       }),
     ).toThrow(/set-config wire/);

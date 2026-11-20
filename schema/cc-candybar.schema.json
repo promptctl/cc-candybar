@@ -835,16 +835,16 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
-              "to": {
-                "type": "string",
-                "pattern": "^[^/]+$"
-              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[^/]+$"
               }
             },
             "required": [
@@ -859,6 +859,13 @@
               "persist": {
                 "type": "string",
                 "pattern": "^[^/]+$"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               },
               "from": {
                 "anyOf": [
@@ -876,13 +883,6 @@
                     "uniqueItems": true
                   }
                 ]
-              },
-              "layer": {
-                "enum": [
-                  "user",
-                  "project",
-                  "local"
-                ]
               }
             },
             "required": [
@@ -898,6 +898,13 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
+              },
               "min": {
                 "type": "integer"
               },
@@ -909,13 +916,6 @@
                 "not": {
                   "const": 0
                 }
-              },
-              "layer": {
-                "enum": [
-                  "user",
-                  "project",
-                  "local"
-                ]
               }
             },
             "required": [
@@ -933,6 +933,13 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
+              },
               "cycle": {
                 "type": "array",
                 "items": {
@@ -941,13 +948,6 @@
                 },
                 "minItems": 2,
                 "uniqueItems": true
-              },
-              "layer": {
-                "enum": [
-                  "user",
-                  "project",
-                  "local"
-                ]
               }
             },
             "required": [
@@ -963,16 +963,16 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
-              "removeSegment": {
-                "type": "string",
-                "pattern": "^[^/:]+$"
-              },
               "layer": {
                 "enum": [
                   "user",
                   "project",
                   "local"
                 ]
+              },
+              "removeSegment": {
+                "type": "string",
+                "pattern": "^[^/:]+$"
               }
             },
             "required": [
@@ -988,6 +988,13 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
+              },
               "insertSegment": {
                 "type": "string",
                 "pattern": "^[^/:]+$"
@@ -1000,13 +1007,6 @@
                 "enum": [
                   "before",
                   "after"
-                ]
-              },
-              "layer": {
-                "enum": [
-                  "user",
-                  "project",
-                  "local"
                 ]
               }
             },
@@ -1025,6 +1025,13 @@
                 "type": "string",
                 "pattern": "^[^/]+$"
               },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
+              },
               "insertSegmentFrom": {
                 "anyOf": [
                   {
@@ -1035,7 +1042,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[^/]+$"
+                      "pattern": "^[^/:]+$"
                     },
                     "minItems": 1,
                     "uniqueItems": true
@@ -1050,13 +1057,6 @@
                 "enum": [
                   "before",
                   "after"
-                ]
-              },
-              "layer": {
-                "enum": [
-                  "user",
-                  "project",
-                  "local"
                 ]
               }
             },
@@ -1314,6 +1314,10 @@
     },
     "styles": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[^/]+$"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -1385,6 +1389,10 @@
     },
     "presets": {
       "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[^/\\n\\r]+$"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {
@@ -3038,7 +3046,7 @@
             },
             "key": {
               "type": "string",
-              "minLength": 1
+              "pattern": "^[^/]+$"
             },
             "bg": {
               "type": "string"
