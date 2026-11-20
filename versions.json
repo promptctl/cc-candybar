@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-917",
-      "ref": "refs/pull/917/merge",
-      "sha": "5b68673288ad1a09b7caa2e55bb87ca278f08658",
-      "timestamp": "2026-11-20T15:02:59.584Z",
+      "version": "pr-918",
+      "ref": "refs/pull/918/merge",
+      "sha": "8984aadfd45add50dd86bde7638a65e51a316587",
+      "timestamp": "2026-11-20T15:41:46.795Z",
       "commits": [
         {
-          "sha": "5b68673288ad1a09b7caa2e55bb87ca278f08658",
+          "sha": "8984aadfd45add50dd86bde7638a65e51a316587",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T15:01:59Z",
-          "message": "Merge 4667551a0f9f888087151268047b06d19052a029 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T08:40:31-07:00",
+          "message": "Merge 324f455cf855005882a62da8ecb7c7d20b48cc3a into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "4667551a0f9f888087151268047b06d19052a029",
+          "sha": "324f455cf855005882a62da8ecb7c7d20b48cc3a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T08:01:47-07:00",
-          "message": "fix(daemon): report a failing config origin once, recheck before hand-off, and hold each daemon fact in its own box\n\nRediscovery reports an owed origin's failure when its reason starts or\nchanges and logs its recovery, so a broken origin no longer re-reports on\nevery batch. Managed folders are rechecked before holders are handed their\norigins, because an idle holder's turn starts on hand-off. The renderer-ended\nand daemon-failed events each get an observable box; answering one rereads\nno restated fault. Git's own registry, the host's throw sink (scoped by\nrenderer) and the retire turn report through the daemon's threw.\n"
-        },
-        {
-          "sha": "b1f4cafedb4b752b158d2f2274c06aa704201783",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T07:41:16-07:00",
-          "message": "fix(daemon): own a rebound config watch in its entry and deliver moved configs by holder\n\nDiscovery writes each origin's entry in the step that moves its watch, with\nnothing fallible between. Each renderer hands discovery where its moved\norigins go, so no delivery resolves a name. Owed origins live on their\nentries, one batch trigger replaces three parameters, and git refresh and\nwake throws reach the daemon's one throw writer.\n"
-        },
-        {
-          "sha": "90fed947cedc0ea8711f36745ed26d64eac2e620",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T07:10:58-07:00",
-          "message": "fix(daemon): show every throw on the config-watch path on every bar\n\nA throw from a watch delivery, from a config rediscovery or from the\nrenderer host's failed takes and unsettled turns now goes through one\ndaemon writer. That writer logs one logfmt record per occurrence and\nholds the same line for every bar as the daemon's failure, renamed from\nact failures; the renderer wire version goes to 14.\n\nThe watcher registry now has to be given a failure sink, and a delivery\nwindow is named. Config discovery keeps an owed set of origins. An\norigin leaves it only once its entry is written, so an origin that\nfails is retried by the next batch instead of losing the change it\nheard. The entry takes over a rebound watch before anything that can\nthrow runs.\n\nTicket: candybar-law-review-ibyq.3zh\n"
+          "timestamp": "2026-11-20T08:38:16-07:00",
+          "message": "fix(daemon): hold a failure on the config watch path as a standing fault on every bar until it clears\n\nA watch delivery, an origin's rediscovery or a git refresh pass that throws\nraises a fault keyed by its source in one daemon store. Every session's daemon\nfacts carry the standing faults and the bar draws them as warnings. The log\nrecords a fault's start, a changed reason and its end, never each retry. Config\ndiscovery keeps origins owed until their batch completes and records the digest\nits holders were last handed, so a throw anywhere in a batch leaves its work to\nthe next one, which the daemon's period retries. A rediscovery runs every\nfallible step before following its watch. A renderer retire that does not\nsettle joins the held one-shot event.\n"
         }
       ]
     },
