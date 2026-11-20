@@ -1,3 +1,9 @@
+## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)
+
+### Bug Fixes
+
+* **sources:** distinguish invalid inputs from typed empty values ([#897](https://github.com/promptctl/cc-candybar/issues/897)) ([c957046](https://github.com/promptctl/cc-candybar/commit/c957046c1280833322d322ac37f7edd30d094ff7))
+
 ## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)
 
 ### Bug Fixes
