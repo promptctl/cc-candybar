@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b1015f376e43665468186c5857ea9bc85784e116",
+      "timestamp": "2026-11-20T00:36:42.485Z",
+      "commits": [
+        {
+          "sha": "b1015f376e43665468186c5857ea9bc85784e116",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T00:35:28Z",
+          "message": "chore(release): set `package.json` to 1.236.0\n\n## [1.236.0](https://github.com/promptctl/cc-candybar/compare/v1.235.15...v1.236.0) (2026-11-20)\n\n### Features\n\n* **renderer:** record and replay live sessions through the shared host ([#913](https://github.com/promptctl/cc-candybar/issues/913)) ([2f98785](https://github.com/promptctl/cc-candybar/commit/2f98785f9d103f1d4991daf0555308a3b09aabe9))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-898",
       "ref": "refs/pull/898/merge",
       "sha": "f68ada0a3970ad676ffbeccfeb9da28903c3f970",
@@ -162,21 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:05:11-07:00",
           "message": "fix(sources): distinguish invalid inputs from typed empty values (ibyq.r86)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2f98785f9d103f1d4991daf0555308a3b09aabe9",
-      "timestamp": "2026-11-20T00:30:51.992Z",
-      "commits": [
-        {
-          "sha": "2f98785f9d103f1d4991daf0555308a3b09aabe9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:29:33-07:00",
-          "message": "feat(renderer): record and replay live sessions through the shared host (#913)\n\n* feat(renderer): replay recorded turns offline\n\n* fix(renderer): keep runtime stacks outside semantic answers\n\n* test(renderer): replay a captured failure and recovery exactly\n\n* feat(recording): refuse capture of direct environment values\n\n* feat(daemon): record a selected renderer at its generation boundary\n\n* feat(cli): record and replay a selected renderer\n\n* test(daemon): record and replay live renderer sessions\n\n* fix(recording): keep slow storage outside live renderer turns\n\n* fix(renderer): use one codec for histogram diagnostics\n\n* fix(renderer): draw with the locale and time zone supplied by the host\n\n* fix(cli): bound replay output and require a regular input\n\n* fix(renderer): keep transport warnings and retired views local\n\n* fix(renderer): project native errors within plain causes\n\n* docs(cli): explain recording worker state on replacement\n\n* test(recording): replay captured locale and time zone\n\n* fix(recording): preserve provenance of environment-derived process output\n\n* build: generate the histogram patch lock with the CI toolchain\n\n* test(recording): verify orderly shutdown publishes a sealed capture\n\n* fix(renderer): bind template dates to the host time zone\n\n* perf(renderer): keep legacy date zone detection linear\n\n* test(daemon): build the alternate renderer at its source seam\n\n* fix(renderer): preserve local parsing of legacy negative-zero years\n\n* test(host): observe actual action output and process exit"
         }
       ]
     },
