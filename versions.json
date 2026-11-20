@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
-      "timestamp": "2026-11-20T11:26:16.157Z",
-      "commits": [
-        {
-          "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T11:25:02Z",
-          "message": "chore(release): set `package.json` to 1.236.2\n\n## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)\n\n### Bug Fixes\n\n* **sources:** distinguish invalid inputs from typed empty values ([#897](https://github.com/promptctl/cc-candybar/issues/897)) ([c957046](https://github.com/promptctl/cc-candybar/commit/c957046c1280833322d322ac37f7edd30d094ff7))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-907",
       "ref": "refs/pull/907/merge",
-      "sha": "aaae2613f93b88f02a847e86e995403df86da755",
-      "timestamp": "2026-11-20T11:21:10.578Z",
+      "sha": "1b442db162e7e1d79fde88b3571fe53bb13eaea4",
+      "timestamp": "2026-11-20T11:54:43.440Z",
       "commits": [
         {
-          "sha": "aaae2613f93b88f02a847e86e995403df86da755",
+          "sha": "1b442db162e7e1d79fde88b3571fe53bb13eaea4",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T11:20:05Z",
-          "message": "Merge 04e8295af35bcf1109d6e15acaa0726a9c9e6b83 into c957046c1280833322d322ac37f7edd30d094ff7\n"
+          "timestamp": "2026-11-20T11:53:33Z",
+          "message": "Merge 03ccbdf02ceec9c313d5fa62a0ead72c029a47e0 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "03ccbdf02ceec9c313d5fa62a0ead72c029a47e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T04:53:21-07:00",
+          "message": "fix(config): declare each action's keys once and show a failed rediscovery on the bar\n\nAction arms are closed records typed by their ActionDecl member, so a writing\naction carries its layer from the border and the loader, schema and messages\nshare one key list. Wire-value shapes declare their pattern, schema and rule\nonce. A rediscovery that throws keeps the last config and publishes the\nfailure as its watch fault; the batch log names failed origins.\n"
         },
         {
           "sha": "04e8295af35bcf1109d6e15acaa0726a9c9e6b83",
@@ -119,6 +111,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
+      "timestamp": "2026-11-20T11:26:16.157Z",
+      "commits": [
+        {
+          "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T11:25:02Z",
+          "message": "chore(release): set `package.json` to 1.236.2\n\n## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)\n\n### Bug Fixes\n\n* **sources:** distinguish invalid inputs from typed empty values ([#897](https://github.com/promptctl/cc-candybar/issues/897)) ([c957046](https://github.com/promptctl/cc-candybar/commit/c957046c1280833322d322ac37f7edd30d094ff7))\n"
         }
       ]
     },
