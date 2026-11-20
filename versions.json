@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-923",
-      "ref": "refs/pull/923/merge",
-      "sha": "a7267581fabe3ab779d6d3331ae181e87b10bee4",
-      "timestamp": "2026-11-20T20:27:12.782Z",
+      "version": "pr-924",
+      "ref": "refs/pull/924/merge",
+      "sha": "8864e947508732c555cc3b7bbae28b466efa7896",
+      "timestamp": "2026-11-20T21:25:38.116Z",
       "commits": [
         {
-          "sha": "a7267581fabe3ab779d6d3331ae181e87b10bee4",
+          "sha": "8864e947508732c555cc3b7bbae28b466efa7896",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T13:26:04-07:00",
-          "message": "Merge a1eb2f1dc2d6d91da4fc887a50bef50ce7dada86 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T14:24:30-07:00",
+          "message": "Merge 03c370c9e280836629385bd6d69aebcaedc9cd03 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "a1eb2f1dc2d6d91da4fc887a50bef50ce7dada86",
+          "sha": "03c370c9e280836629385bd6d69aebcaedc9cd03",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T13:25:20-07:00",
-          "message": "fix(daemon): show a throw in background work on every bar as an error\n\nA git refresh pass, a PR lookup, a config origin's rediscovery and a watch\ndelivery each hand a throw to one typed fault report, a required dependency\nof the owner, instead of a daemon.log line nobody sees. The daemon logs its\ndetail and holds its message as a daemon event every bar draws as an error.\nOwners keep their own isolation: a rejected git read is still the repo's\nfailed read, siblings in a rediscovery batch still land, and every holder of\na delivery still hears it.\n"
+          "timestamp": "2026-11-20T14:23:55-07:00",
+          "message": "fix(daemon): show a throw in any task the daemon schedules on every bar\n\nEvery timer, deferral and piece of work nobody awaits now runs as a named\ntask on the daemon's clock. The clock the daemon hands down reports what a\ntask throws or rejects with: it is logged with its stack, counted in the\nstats, and held as one `task-threw` event that every bar draws as an error\nnaming the task, until a bar shows it. Log-only catches in the git refresh,\nkeyed sources, pane visibility, the renderer wake, the binary check, watch\ndelivery, config rediscovery, url clicks and renderer settling are gone;\neach continuation that must run past a throw (a period landing, a re-arm,\na stored answer) sits in a `finally`.\n\nHeld daemon events become one keyed record with one answering rule, and a\nplacement table decides that a task throw is an error while act failures\nand renderer ends stay warnings. A typed lint rule rejects floating\npromises in the daemon, its utilities and the launcher.\n\nThe renderer wire version moves to 14, since the daemon facts it carries\nchanged shape. The recording-environment process test now redraws until a\nshell source's first answer shows, instead of racing one render's wait.\n"
         }
       ]
     },
