@@ -1,4 +1,8 @@
 import { compareStructural } from "mobx";
+import {
+  StandingFaults,
+  type FaultSource,
+} from "../foundations/standing-faults";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
@@ -111,6 +115,9 @@ interface PolledPath {
 interface Holder {
   readonly onInvalidate: (invalidation: Invalidation) => void;
   readonly observed: Map<string, string>;
+  // [LAW:types-are-the-program] Its own fault's source: holders of one key
+  // fail and leave apart.
+  readonly source: FaultSource;
 }
 
 interface InvalidationWindow {
@@ -245,6 +252,8 @@ export class WatcherRegistry {
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
+  private readonly faults: StandingFaults;
+  private holders = 0;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
@@ -256,6 +265,10 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // Where a holder's delivery that throws stands until it next returns.
+    // The daemon passes its one store, which every bar reads; a consumer
+    // with no bar keeps one over its logger.
+    faults?: StandingFaults;
     // Whether the runtime's recursive watch is Node's own walk, which stops
     // at the first entry it cannot watch and says nothing: Linux's.
     nodeWalksTrees?: boolean;
@@ -263,6 +276,7 @@ export class WatcherRegistry {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.faults = opts.faults ?? new StandingFaults(this.logger);
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
@@ -353,7 +367,17 @@ export class WatcherRegistry {
     const slot =
       shared ??
       this.opened(key, targets, window ?? { pending: null }, observed);
-    const holder: Holder = { onInvalidate, observed: new Map() };
+    const holder: Holder = {
+      onInvalidate,
+      observed: new Map(),
+      source: {
+        work: "watch delivery",
+        subject: [
+          ["watch", key],
+          ["holder", String(++this.holders)],
+        ],
+      },
+    };
     slot.holders.add(holder);
     const handle = this.makeHandle(slot, holder);
     handle.observed(observed);
@@ -699,10 +723,10 @@ export class WatcherRegistry {
               if (this.slots.get(changed.key) !== changed) continue;
               const heard = heardOf(gathered);
               for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
+                this.delivered(holder, heard);
             }
             if (window.completed !== undefined)
-              this.notify(null, window.completed);
+              this.completed(window.completed);
           },
           { unref: true },
         ),
@@ -720,13 +744,27 @@ export class WatcherRegistry {
     );
   }
 
-  private notify(key: string | null, take: () => void): void {
+  // [LAW:no-silent-failure] A holder whose delivery throws keeps a fault on
+  // every bar until a delivery to it returns or it lets go; the others still
+  // hear the window.
+  private delivered(holder: Holder, heard: Invalidation): void {
     try {
-      take();
+      holder.onInvalidate(heard);
+    } catch (thrown) {
+      this.faults.raise(holder.source, thrown);
+      return;
+    }
+    this.faults.clear(holder.source, "recovered");
+  }
+
+  // A window's consumer owns what its batch does, its faults included; what
+  // escapes it is logged here, so the timer outlives it.
+  private completed(completed: () => void): void {
+    try {
+      completed();
     } catch (thrown) {
       const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+      this.logger("warn", `watcher invalidate threw batch: ${why}`);
     }
   }
 
@@ -748,7 +786,9 @@ export class WatcherRegistry {
         }
       },
       release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (!slot.holders.delete(holder)) return;
+        this.faults.clear(holder.source, "let go");
+        if (slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
         this.closeSlot(slot, "last release");
         this.slots.delete(slot.key);
@@ -781,6 +821,8 @@ export class WatcherRegistry {
       pending.cancel();
       window.pending = null;
     }
+    for (const holder of slot.holders)
+      this.faults.clear(holder.source, "let go");
     for (const listener of slot.listeners.values()) this.left(listener, cause);
     for (const record of slot.polled) {
       record.slots.delete(slot);

@@ -1,6 +1,7 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
+import type { DaemonFault } from "../daemon/foundations/standing-faults";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
@@ -522,6 +523,7 @@ export function drawRender(
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
+    ...daemon.faults,
     ...launched,
     ...held,
     ...(configWatch === null
@@ -557,9 +559,10 @@ export function drawRender(
     [
       // A standing warning is one per kind whose words change as it does (a
       // pipe event's counts), so its kind alone is what it is about: a viewer
-      // open on it stays open. A render warning is about its words.
+      // open on it stays open. A daemon fault is one per source, which it
+      // names. A render warning is about its words.
       ...standing.map((w) => ({
-        about: w.kind,
+        about: w.kind === "daemon-fault" ? w.about : w.kind,
         text: w.message,
         copy: w.message,
       })),
@@ -704,7 +707,14 @@ export function drawRender(
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing.map((w) => faultOf("warning", w.kind, w.message)),
+    ...standing.map((w) =>
+      faultOf(
+        "warning",
+        w.kind,
+        w.message,
+        w.kind === "daemon-fault" ? w.about : undefined,
+      ),
+    ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
     ),
@@ -862,6 +872,7 @@ type StandingWarning =
   | LauncherWarning
   | DaemonEventWarning
   | ConfigWatchWarning
+  | DaemonFault
   | LoadWarning
   | FactsWarning;
 

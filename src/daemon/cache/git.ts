@@ -16,6 +16,10 @@ import {
 } from "../../utils/refresh-ledger";
 import { WatcherRegistry } from "./watchers";
 import {
+  StandingFaults,
+  type FaultSource,
+} from "../foundations/standing-faults";
+import {
   specOf,
   type HeldWatch,
   type WatchMove,
@@ -310,6 +314,7 @@ export class GitDataProvider {
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
+  private readonly faults: StandingFaults;
   private readonly clock: Pick<Timekeeper, "monotonic" | "after" | "every">;
 
   constructor(opts: {
@@ -326,6 +331,9 @@ export class GitDataProvider {
     // non-daemon consumers leave the default (debug-routed, quiet
     // unless CC_CANDYBAR_DEBUG is set).
     logger?: GitProviderLogger;
+    // Where a refresh pass that throws stands until one returns. The daemon
+    // passes its one store, which every bar reads.
+    faults?: StandingFaults;
     ledger?: RefreshLedger;
   }) {
     this.inner = opts.inner;
@@ -334,6 +342,7 @@ export class GitDataProvider {
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
     this.logger = opts.logger ?? quietLogger;
+    this.faults = opts.faults ?? new StandingFaults(this.logger);
     const ledger = opts.ledger ?? new RefreshLedger(this.logger);
     this.gitRefreshes = ledger.declare({
       name: "git",
@@ -356,6 +365,7 @@ export class GitDataProvider {
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
+        faults: this.faults,
       });
       this.ownsWatchers = true;
     }
@@ -561,15 +571,21 @@ export class GitDataProvider {
   }
 
   // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
-  // when the pass ENDS, after its every await, so a tick that shares a running
-  // pass is always followed by the landing that schedules the next one.
+  // [LAW:no-silent-failure] a throw stands as the repo's fault, on every bar,
+  // until a pass returns, never an unhandled rejection. Only the repo's
+  // current state speaks for its root: a pass of a dropped one says nothing
+  // of the state built after it. [LAW:no-ambient-temporal-coupling] The
+  // period lands when the pass ENDS, after its every await, so a tick that
+  // shares a running pass is always followed by the landing that schedules
+  // the next one.
   private async refreshPass(state: RepoState): Promise<void> {
     try {
       await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+      if (this.repos.get(state.root) === state)
+        this.faults.clear(gitFault(state), "recovered");
+    } catch (thrown) {
+      if (this.repos.get(state.root) === state)
+        this.faults.raise(gitFault(state), thrown);
     } finally {
       state.period.landed(this.periodMs);
     }
@@ -598,6 +614,8 @@ export class GitDataProvider {
     return () => {
       state.holders--;
       this.held(state);
+      // With no holder no pass runs, so a fault would outlive its cause.
+      if (state.holders === 0) this.faults.clear(gitFault(state), "let go");
     };
   }
 
@@ -779,6 +797,7 @@ export class GitDataProvider {
     answerPending(state.value, gone);
     answerPending(state.pr, gone);
     this.repos.delete(state.root);
+    this.faults.clear(gitFault(state), "let go");
     state.refresh.clear();
     state.watch.handle.release();
     state.period.dispose();
@@ -807,3 +826,8 @@ export class GitDataProvider {
     if (this.ownsWatchers) this.watchers.closeAll();
   }
 }
+
+const gitFault = ({ root }: { readonly root: string }): FaultSource => ({
+  work: "git refresh",
+  subject: [["repo", root]],
+});

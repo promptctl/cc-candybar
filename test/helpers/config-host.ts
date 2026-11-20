@@ -1,4 +1,5 @@
 import { compareStructural, reaction } from "mobx";
+import { unexpectedFaults } from "./standing-faults";
 import { configQuery } from "../../src/config/loader/chain-places.js";
 // The host's half of a config, for a test that drives a render cache with no
 // renderer around it: a real config discovery over the test's own watcher
@@ -86,6 +87,7 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
+    faults: unexpectedFaults(),
     reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
   });

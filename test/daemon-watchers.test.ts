@@ -11,6 +11,7 @@ import {
   WatcherRegistry,
 } from "../src/daemon/cache/watchers";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
+import { StandingFaults } from "../src/daemon/foundations/standing-faults";
 import {
   specOf,
   watchFault,
@@ -99,6 +100,52 @@ describe("WatcherRegistry", () => {
       swept();
       expect(stale).toHaveLength(1);
       expect(fresh).toEqual([]);
+    });
+
+    test("a holder whose delivery throws stands until a delivery to it returns or it lets go, while its key's other holder still hears", () => {
+      const file = path.join(dir, "watched");
+      fs.writeFileSync(file, "0");
+      const logged: string[] = [];
+      const faults = new StandingFaults((_level, line) => logged.push(line));
+      const own = new WatcherRegistry({ clock, logger: () => {}, faults });
+      const targets = { dirs: [], polled: [file] };
+      let refuse = true;
+      const heard: Invalidation[] = [];
+      const throwing = own.acquire("shared", targets, () => {
+        if (refuse) throw new Error("holder broke");
+      });
+      own.acquire("shared", targets, (inv) => heard.push(inv));
+      const edited = (text: string): void => {
+        fs.writeFileSync(file, text);
+        swept();
+      };
+      try {
+        edited("one");
+        expect(heard).toHaveLength(1);
+        expect(faults.list().map((fault) => fault.message)).toEqual([
+          'watch delivery threw watch=shared holder=1 failed="holder broke"',
+        ]);
+        edited("two!");
+        expect(logged).toHaveLength(1);
+
+        refuse = false;
+        edited("three");
+        expect(faults.list()).toEqual([]);
+        expect(logged.at(-1)).toBe(
+          "watch delivery recovered watch=shared holder=1",
+        );
+
+        refuse = true;
+        edited("four!!");
+        throwing.release();
+        expect(faults.list()).toEqual([]);
+        expect(logged.at(-1)).toBe(
+          "watch delivery let go watch=shared holder=1",
+        );
+        expect(heard).toHaveLength(4);
+      } finally {
+        own.closeAll();
+      }
     });
 
     // The daemon makes the file between two sweeps and a holder reads it and

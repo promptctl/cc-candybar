@@ -758,6 +758,21 @@ describe("a statusline request", () => {
     ]);
   });
 
+  test("draws each standing daemon fault for as long as the daemon carries it, with nothing to acknowledge", async () => {
+    const fault = (repo: string) => ({
+      kind: "daemon-fault" as const,
+      about: `git refresh repo=${repo}`,
+      message: `git refresh threw repo=${repo} failed=boom`,
+    });
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      faults: [fault("/a"), fault("/b")],
+    }));
+    const { effects, record } = answered(await request(t));
+    expect(new Map(record).get("warn")).toBe("daemon-fault,daemon-fault");
+    expect(presentOf(effects).displayedEvents).toBeUndefined();
+  });
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = answered(await request({ r, rig }));

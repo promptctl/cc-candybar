@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { unexpectedFaults } from "./helpers/standing-faults";
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
@@ -222,6 +223,7 @@ function rig(): Rig {
       watchers,
       fileEvents,
       logger: log,
+      faults: unexpectedFaults(),
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
         launcher: world.launcher,

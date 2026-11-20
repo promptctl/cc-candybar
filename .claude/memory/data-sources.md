@@ -92,6 +92,8 @@ The window changes only when someone types /autocompact in the session. It is re
 
 The pane comes from the client's hint. The daemon's own TMUX and TMUX_PANE are never read. A slash click types into that pane, so every bundled slash control is gated on the session being in tmux.
 
+A throw from work that retries (a watch delivery, an origin's discovery, a git refresh pass) is a fault its source holds: it stands on every bar until that source next succeeds or is let go, and the log records only its start, a changed reason and its end. A held event that a bar acknowledges is for work done once. Holding one per throw from retried work raises every bar again on each retry, and deduplicating it goes quiet once acknowledged while the source is still broken. Config discovery keeps an origin owed until the batch that discovered it completes, and keeps the digest its holders were last handed, so a throw anywhere in a batch leaves its work to the next batch, which the daemon's period runs.
+
 ## Authoring a data-backed segment
 
 docs/segment-authoring.md walks through it, and its snippets run in CI. A built-in segment is authored the same way against the bundled default. The one difference is the data source: a provider fills it into the payload, and input variables read it.

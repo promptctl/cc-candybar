@@ -10,6 +10,7 @@
 // holds one of its entries; the log sink and the watcher pool are the
 // caller's, so only the daemon writes daemon.log.
 
+import type { StandingFaults } from "./foundations/standing-faults";
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
@@ -49,6 +50,8 @@ export function createPayloadProviders(opts: {
   // their timers through: the daemon's.
   readonly clock: Timekeeper;
   readonly logger: DaemonLogger;
+  // The daemon's lasting faults, which every bar reads.
+  readonly faults: StandingFaults;
   readonly ledger: RefreshLedger;
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
@@ -78,6 +81,7 @@ export function createPayloadProviders(opts: {
       watchers: opts.watchers,
       clock,
       logger,
+      faults: opts.faults,
       ledger,
     }),
     tmuxService: new TmuxService({ launcher, clock, logger, ledger }),

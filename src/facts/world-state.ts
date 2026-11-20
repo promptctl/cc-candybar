@@ -8,6 +8,7 @@ import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
+import type { DaemonFault } from "../daemon/foundations/standing-faults";
 import type { LauncherFact } from "../proc/launcher";
 import type { HeldEvent } from "../utils/event-hold";
 
@@ -72,12 +73,14 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // and for whom it draws, src/utils/event-hold.ts), how the last renderer
 // process ended, and the acts that failed with no session's bar to hold them
 // (one no session asked for, or one whose renderer had ended), each held the
-// same way: null while none has.
+// same way: null while none has. And the daemon's work that keeps failing,
+// each for as long as its fault stands (src/daemon/foundations/standing-faults.ts).
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;
+  readonly faults: readonly DaemonFault[];
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

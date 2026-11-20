@@ -6,6 +6,9 @@
 // hand edit an origin's watch hears moves that origin; and an answer to the
 // trust book moves every origin that consulted it.
 
+import { fieldsOf } from "../src/utils/logfmt";
+import { StandingFaults } from "../src/daemon/foundations/standing-faults";
+import { unexpectedFaults } from "./helpers/standing-faults";
 import { writeStatePlan } from "./helpers/state-file";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -86,7 +89,12 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = stateDir(HOST)) {
+function discoveryRig(
+  files = diskFiles,
+  clock = systemTimekeeper,
+  state = stateDir(HOST),
+  heard: (line: string) => void = () => {},
+) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -103,12 +111,18 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   const moved: string[] = [];
   const logged: string[] = [];
   const delivered: Array<readonly [RendererName, string]> = [];
+  const log = (_level: string, line: string): void => {
+    heard(line);
+    logged.push(line);
+  };
+  const faults = new StandingFaults(log);
   const service = new ConfigDiscovery({
     locations: locations(HOST),
     stateDir: state,
     watchers,
     files: () => files,
-    log: (_level, line) => logged.push(line),
+    log,
+    faults,
     moved: (renderer, origins) => {
       for (const origin of origins) {
         const key = originKey(origin);
@@ -120,7 +134,16 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
   const discovery = service.forRenderer(MAIN_RENDERER);
-  return { service, discovery, watchers, counters, moved, logged, delivered };
+  return {
+    service,
+    discovery,
+    watchers,
+    counters,
+    moved,
+    logged,
+    delivered,
+    faults,
+  };
 }
 
 const textOfLayer = (
@@ -166,7 +189,9 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
+  expect(logged.at(-1)).toMatch(
+    /why=landed followed=2 discovered=1 moved=1 owed=0$/,
+  );
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -598,7 +623,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("an origin that cannot be discovered again stands as a fault while its sibling lands, and the period's retry recovers it for every holder", () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -608,6 +633,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
     discovery: writer,
     delivered,
     logged,
+    faults,
   } = discoveryRig({
     ...diskFiles,
     text(read) {
@@ -627,20 +653,139 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
+  const standing = faults.list();
+  expect(standing).toHaveLength(1);
+  expect(Object.fromEntries(fieldsOf(standing[0]!.message))).toMatchObject({
+    projectDir: b.origin.projectDir,
+    config: b.file,
+    failed: "rediscovery failed",
+  });
+  expect(fieldsOf(logged.at(-1)!).get("owed")).toBe("1");
+
+  // Failing again is the fault already standing: no record per retry.
+  const records = logged.length;
+  service.retry();
+  expect(logged.slice(records).filter((line) => line.includes(" threw "))).toEqual(
+    [],
   );
+  expect(faults.list()).toEqual(standing);
 
   refuse = false;
-  service.again("events-resumed");
+  service.retry();
   expect(delivered).toEqual([
     [name, originKey(a.origin)],
     [MAIN_RENDERER, originKey(b.origin)],
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
+  expect(faults.list()).toEqual([]);
+  expect(logged).toContainEqual(
+    expect.stringMatching(/^config discovery recovered projectDir=/),
+  );
+  expect(fieldsOf(logged.at(-1)!).get("owed")).toBe("0");
+});
+
+test("a rediscovery that would rebind and throws first keeps the held watch and snapshot, and rebinds once it recovers", () => {
+  const dir = project("rebinding");
+  const first = path.join(dir, "first.json5");
+  const second = path.join(dir, "second.json5");
+  fs.writeFileSync(first, "{}");
+  fs.writeFileSync(second, "{ globals: { padding: 2 } }");
+  const link = path.join(dir, "config.json5");
+  fs.symlinkSync(first, link);
+  const origin = originOf(dir, dir, link);
+  let refuse = false;
+  const { service, discovery, delivered, faults, logged, counters } =
+    discoveryRig({
+      ...diskFiles,
+      text(read) {
+        if (refuse && read === second) throw new Error("second refused");
+        return diskFiles.text(read);
+      },
+    });
+  discovery.follow([origin]);
+  const opened = counters.watchersOpened + counters.watchRefusals;
+  refuse = true;
+  fs.rmSync(link);
+  fs.symlinkSync(second, link);
+  expect(discovery.landed([link])).toEqual([]);
+  expect(textOfLayer(discovery, origin, link)).toBe("{}");
+  expect(faults.list()).toHaveLength(1);
+  expect(counters.watchersOpened + counters.watchRefusals).toBe(opened);
+
+  refuse = false;
+  service.retry();
+  expect(delivered).toEqual([[MAIN_RENDERER, originKey(origin)]]);
+  expect(textOfLayer(discovery, origin, link)).toBe(
+    "{ globals: { padding: 2 } }",
+  );
+  expect(faults.list()).toEqual([]);
+  expect(
+    logged.filter((line) => line.startsWith("config watch bound ")),
+  ).toHaveLength(2);
+  service.close();
+  expect(counters.watchersOpened + counters.watchRefusals).toBe(
+    counters.watchersClosed,
+  );
+});
+
+test("letting go of an origin whose discovery fails ends its fault", () => {
+  const { origin, file } = named("let-go");
+  let refuse = false;
+  const { service, discovery, faults, logged } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (refuse && read === file) throw new Error("unreadable for now");
+      return diskFiles.text(read);
+    },
+  });
+  discovery.follow([origin]);
+  refuse = true;
+  service.again("asked");
+  expect(faults.list()).toHaveLength(1);
+  discovery.follow([]);
+  expect(faults.list()).toEqual([]);
+  expect(logged).toContainEqual(
+    expect.stringMatching(/^config discovery let go projectDir=/),
+  );
+  service.retry();
+  expect(faults.list()).toEqual([]);
+});
+
+test("a batch that throws after writing a change hands it to every holder, the writer included, at the next batch", () => {
+  const { origin, file } = named("record-throws");
+  let record = "works";
+  const { service, discovery, delivered, faults } = discoveryRig(
+    diskFiles,
+    systemTimekeeper,
+    stateDir(HOST),
+    (line) => {
+      if (record === "throws" && line.startsWith("config discovery why="))
+        throw new Error("record broke");
+    },
+  );
+  const other = rendererNameOf("other");
+  discovery.follow([origin]);
+  service.forRenderer(other).follow([origin]);
+  record = "throws";
+  const next = "{ globals: { padding: 3 } }";
+  fs.writeFileSync(file, next);
+  expect(discovery.landed([file])).toEqual([]);
+  expect(delivered).toEqual([]);
+  expect(faults.list().map(({ message }) => message)).toEqual([
+    'config discovery threw failed="record broke"',
+  ]);
+
+  record = "works";
+  service.retry();
+  expect(delivered).toEqual([
+    [MAIN_RENDERER, originKey(origin)],
+    [other, originKey(origin)],
+  ]);
+  expect(textOfLayer(discovery, origin, file)).toBe(next);
+  expect(faults.list()).toEqual([]);
+  service.retry();
+  expect(delivered).toHaveLength(2);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
@@ -847,6 +992,7 @@ function physicalDiscovery(
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
+    faults: unexpectedFaults(),
     moved: () => {},
     reloaded,
   });
@@ -1096,7 +1242,9 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+  expect(logged).toContain(
+    "config discovery why=landed followed=4 discovered=2 moved=2 owed=0",
+  );
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {
@@ -1362,6 +1510,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
     },
     stateDir: stateDir(HOST),
     watchers,
+    faults: unexpectedFaults(),
     openText(at, use) {
       const result = observe(at, use);
       if (at === file) fs.unlinkSync(file);

@@ -6,6 +6,7 @@
 // cache over the payload providers, read by the host's collector, drawn from
 // `sessionSource`.
 
+import { unexpectedFaults } from "./helpers/standing-faults";
 import { holdClickError } from "../src/daemon/foundations/click-error";
 import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
@@ -228,6 +229,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       logger: log,
     }),
     logger: log,
+    faults: unexpectedFaults(),
     ledger: new RefreshLedger(log),
     sourceRuns: new SourceRuns({
       launcher: processLauncher,

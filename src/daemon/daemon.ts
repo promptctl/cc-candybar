@@ -13,8 +13,10 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
 } from "./foundations/verb-error.js";
 import { failedWith } from "./foundations/render-answers.js";
+import { StandingFaults } from "./foundations/standing-faults.js";
 import {
   handleRequest,
   refuseClosingInbound,
@@ -265,6 +267,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const stats = new RuntimeStats(clock);
   const recordings =
     inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
+  // [LAW:one-source-of-truth] The daemon's work that keeps failing, raised and
+  // cleared by each owner and read by every session's world state.
+  // [LAW:no-ambient-temporal-coupling] Declared before the owners that raise.
+  const standingFaults = new StandingFaults(log);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -273,6 +279,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
     counters: stats,
     logger: log,
+    faults: standingFaults,
   });
   // [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
   // events: one owner, started once the bind is won (`arm`).
@@ -287,7 +294,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<DaemonFacts>(
+  const daemonFaults = observable.box<Omit<DaemonFacts, "faults">>(
     { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural },
   );
@@ -429,6 +436,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     fileEvents,
     clock,
     logger: log,
+    faults: standingFaults,
     ledger: refreshLedger,
     sourceRuns,
   });
@@ -572,7 +580,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // after a request, so the parts exist by then.
   const collector = new Collector<CheckedRenderRequest>({
     owners: payloadProviders,
-    daemon: () => daemonFaults.get(),
+    // The collector's computed tracks the standing faults' map here, so a
+    // fault moves every document with no restatement.
+    daemon: () => ({ ...daemonFaults.get(), faults: standingFaults.list() }),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
     deliver: (event) => {
@@ -597,6 +607,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     watchers: watcherRegistry,
     files: checkouts.discovery,
     log,
+    faults: standingFaults,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
   });
@@ -752,20 +763,24 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
-        unheard: (text, fromEnvironment) => {
-          // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
-          );
-          restateFaults();
-        },
+        unheard,
       },
     );
     return { reported, entry, stores, link, renderer };
   };
+
+  // [LAW:no-silent-failure] One-shot work that failed with no session's bar
+  // to hold it: held on every bar until an answer has carried it. The
+  // unacknowledged text is included in the next warning.
+  function unheard(text: string, fromEnvironment?: true): void {
+    const prior = actFailed;
+    actFailed = environmentOutput(
+      joinedEvent(prior, text, instant()),
+      fromEnvironment === true ||
+        (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+    );
+    restateFaults();
+  }
 
   const primary = connectRenderer(primaryPrepared);
   renderers.set(inputs.rendererName, primary);
@@ -856,11 +871,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
               }),
               [["why", "renderer-moved"]],
             )
-            .catch((error: unknown) => {
-              log(
-                "error",
-                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
-              );
+            .catch((thrown: unknown) => {
+              const text = `renderer ${former.renderer.name}'s retire of ${session} did not settle: ${failureOf(thrown).detail}`;
+              log("error", text);
+              unheard(text);
             });
         frameFeeds.handedIn(null);
         frameFeeds.announce();
@@ -924,6 +938,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     switch (notice.kind) {
       case "period":
         watcherRegistry.judge();
+        configDiscovery.retry();
         return;
       case "caught-up":
         restateFaults();

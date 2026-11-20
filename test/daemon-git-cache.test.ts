@@ -1,4 +1,5 @@
 import { systemTimekeeper } from "../src/time";
+import { StandingFaults } from "../src/daemon/foundations/standing-faults";
 import fs from "node:fs";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -164,7 +165,9 @@ function makeCache(
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
+  const faults = new StandingFaults((_level, message) => logs.push(message));
   const svc = new GitDataProvider({
+    faults,
     clock: systemTimekeeper,
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
@@ -179,7 +182,7 @@ function makeCache(
     },
   });
   built.push(svc);
-  return { svc, inner, logs, holds: new Holds() };
+  return { svc, inner, logs, faults, holds: new Holds() };
 }
 
 // The git passes' refresh events, without the PR lookups' between them.
@@ -1168,9 +1171,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws stands as the repo's fault until a pass returns, and the repo keeps its period", async () => {
     jest.useFakeTimers();
-    const { svc, inner, logs, holds } = makeCache({
+    const { svc, inner, logs, faults, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
     });
@@ -1179,13 +1182,31 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
 
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+    expect(faults.list().map(({ message }) => message)).toEqual([
+      'git refresh threw repo=/repo failed="logger bug"',
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
     expect(failuresIn(logs)).toEqual(["git status: boom"]);
+    expect(faults.list()).toEqual([]);
+    expect(logs).toContain("git refresh recovered repo=/repo");
+  });
+
+  test("a repo's fault ends when its last holder lets it go", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, faults } = makeCache({
+      periodMs: 1_000,
+      throwOn: "outcome=failed",
+    });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoFailure = "git status: boom";
+    const holds = new Holds();
+    void gitOf(svc, holds, "/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(faults.list()).toHaveLength(1);
+    holds.close();
+    expect(faults.list()).toEqual([]);
+    expect(logs).toContain("git refresh let go repo=/repo");
   });
 });
 

@@ -5,6 +5,7 @@
 // `effect-done`; and an origin a watch moved that the renderer let go before
 // its slot came is abandoned, with nothing handed in.
 
+import { unexpectedFaults } from "./helpers/standing-faults";
 import fs from "node:fs";
 import {
   MAIN_RENDERER,
@@ -346,6 +347,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
     stateDir: path.join(dir, "state"),
     watchers: watches,
     log: () => {},
+    faults: unexpectedFaults(),
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });
   try {

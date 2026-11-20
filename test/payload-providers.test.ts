@@ -2,6 +2,7 @@
 // teardown: what a teardown that meets a throwing owner still ends, and what
 // it says.
 
+import { unexpectedFaults } from "./helpers/standing-faults";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -28,6 +29,7 @@ function providers() {
       logger: log,
     }),
     logger: log,
+    faults: unexpectedFaults(),
     ledger: new RefreshLedger(log),
     sourceRuns: unscriptedRuns(),
   });
