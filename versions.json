@@ -4,15 +4,22 @@
     {
       "version": "pr-919",
       "ref": "refs/pull/919/merge",
-      "sha": "7b775ec05e30fdccc281ce8c6d40df75a945c771",
-      "timestamp": "2026-11-20T16:14:56.282Z",
+      "sha": "00a76035b02ac8f71ab11ef5253b65fb90b61983",
+      "timestamp": "2026-11-20T16:39:57.197Z",
       "commits": [
         {
-          "sha": "7b775ec05e30fdccc281ce8c6d40df75a945c771",
+          "sha": "00a76035b02ac8f71ab11ef5253b65fb90b61983",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T09:13:46-07:00",
-          "message": "Merge 28d25643122762cfcaceaee1147f8a28db23b58b into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T16:38:49Z",
+          "message": "Merge e00a205d0ed38b336813161505fc2f84e711b07f into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "e00a205d0ed38b336813161505fc2f84e711b07f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T09:38:36-07:00",
+          "message": "fix(daemon): managed storage holds a throw asking of a folder, so a config hand-off always lands\n\nReview pass 1 of #919. A throw rechecking plugin storage reached whoever\ntriggered the recheck: a watch window's delivery fault, or a write's lost\nhand-off. Managed storage now holds it as the folder's fault, as it holds\nevery other, so the rediscovery tail runs straight through again.\n\n- Git: a thrown pass answers its PR with the failure, and writes one\n  refresh line carrying the throw's detail.\n- Config discovery: the shared read runs once per batch with its outcome\n  kept; a first follow rechecks storage for every origin it committed; the\n  snapshot field is `discoveryFault`.\n- Watch delivery: a window's fault leaves with its last slot, and listeners\n  hear only a fault that moved, once per delivery, through one `Listeners`\n  shape shared with file-event delivery.\n"
         },
         {
           "sha": "28d25643122762cfcaceaee1147f8a28db23b58b",
