@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-915",
-      "ref": "refs/pull/915/merge",
-      "sha": "c6ccd6874e6b7bc258ffe8b14447005f69c46020",
-      "timestamp": "2026-11-20T13:13:39.526Z",
+      "version": "pr-916",
+      "ref": "refs/pull/916/merge",
+      "sha": "41e17748617676dec4678962d35b42c79b748b0d",
+      "timestamp": "2026-11-20T13:42:47.786Z",
       "commits": [
         {
-          "sha": "c6ccd6874e6b7bc258ffe8b14447005f69c46020",
+          "sha": "41e17748617676dec4678962d35b42c79b748b0d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T06:12:27-07:00",
-          "message": "Merge 9a0a79bc9a6f95b994071c05c1d17768dd8f24f6 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T06:41:32-07:00",
+          "message": "Merge 073663efa313b90c632a570ea9a8b079878b5183 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "9a0a79bc9a6f95b994071c05c1d17768dd8f24f6",
+          "sha": "073663efa313b90c632a570ea9a8b079878b5183",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T06:12:03-07:00",
-          "message": "fix(daemon): show a watch delivery that throws on every bar\n\nThe watcher registry caught a throw from a holder or a batch completion\nand wrote it to the log as a warning, so a broken delivery left every bar\non stale config with nothing on screen. The registry now reports each such\nthrow once to a failure sink, naming the consumer, and the daemon holds it\nas a daemon failure shown as ⚠ on every bar.\n\nConfig discovery's watch batch reads every origin it heard before any\nwatch or snapshot moves, and keeps the heard set until the batch has\npublished, so a throw writes nothing and the next window still owes every\norigin. A follow reads all of its new origins before holding any of them.\n\nThe held-failure fact is renamed from act failures to daemon failures,\nsince it now carries more than acts; the renderer wire version is bumped.\n"
+          "timestamp": "2026-11-20T06:41:14-07:00",
+          "message": "fix(daemon): keep owed config deliveries as data and show every failed delivery\n\nA discovery batch's steps are irreversible: a watch rebinds, an entry is\nwritten, a holder is handed its turn. Each origin's holders now record the\ndigest each renderer was last handed, so publishing hands every holder whose\ndigest differs from its origin's, whichever batch moved it and whatever threw\nsince. An origin stays owed a rediscovery until its own entry is written, and\nthe entry takes its rebound watch before anything else can throw.\n\nOne origin's or one renderer's throw is reported and leaves its obligation for\nthe next batch without holding back the others. Every watch delivery that\nthrows, discovery's included, goes through one daemon writer that logs it and\nholds it for every bar; a failure already held unanswered is not added again.\nThe watcher registry takes that sink as a required argument.\n\nThe held daemon failure is renamed daemonFailed (wire version 14), since it\nnow holds more than failed acts. Each discovery batch and follow writes one\nlogfmt record, one that changed nothing included.\n"
         }
       ]
     },
