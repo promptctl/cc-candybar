@@ -93,7 +93,7 @@ export function searchConfig(
   files = discoveryFiles(),
 ): {
   readonly resolution: ConfigResolution;
-  readonly repoRoot: RootListing<string> | null;
+  readonly repoRoot: RootListing | null;
   readonly locations: readonly ObservedLocation[];
   readonly watchedFiles: readonly string[];
 } {

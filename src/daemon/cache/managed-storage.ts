@@ -26,7 +26,6 @@ import { jsonDocumentParser } from "../../var-system/parse";
 import { SourceFiles } from "../source-files";
 import { sessionFileName } from "../../config/loader/plugins";
 import type { JsonValue } from "../../var-system/types";
-import type { StorageHoldId } from "../../renderer-interface/adapter";
 import type {
   ManagedStorageStats,
   FaultCause,
@@ -197,9 +196,9 @@ const targetsOf = (folder: string) => ({
   polled: [],
 });
 
-// The triggers that ask again for a held folder: a load's hold, the delivery
-// owner's period, and its catch-up.
-type Trigger = "hold" | "period" | "caught-up";
+// A new config declaration or an observed config can provision immediately.
+// File-event recovery gives discovery a turn to observe a removed plugin.
+type Trigger = "config" | "period" | "caught-up";
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -208,13 +207,11 @@ type Trigger = "hold" | "period" | "caught-up";
 // sessions something holds, and removes files nobody has written for 30 days.
 //
 // [LAW:no-ambient-temporal-coupling] A folder's watch lives as long as a
-// render state declaring it holds it (`hold` to `release`), never as long as a
-// view: opening or closing a directory watch leaks on macOS. A folder gone or
-// replaced ends its generation. Every hold, period and catch-up asks again of
-// every held folder (`asked`), so a fault stands only while the OS or the disk
-// keeps giving its answer. A lost folder is made again by the next trigger, not
-// by the event that found it gone, so a plugin folder being removed is gone,
-// and its hold released, before the folder is made in it again.
+// retained config in any renderer declares it. A folder gone or replaced
+// ends its generation. A config observation rechecks the folders it names.
+// File-event periods and catch-up recheck all retained folders.
+// A delivery check that finds a lost folder records the loss. Provisioning
+// can resume on the next observation while a config still declares it.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
@@ -223,13 +220,12 @@ export class ManagedStorage {
   private readonly files: SourceFiles;
   private readonly sessions: KeyedSource<SessionFile, JsonValue>;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
-  // a hold names.
+  // a loaded config declares.
   private readonly folders = new Map<string, Folder>();
   // By folder: the faults last logged and counted, so each is told once as it
   // starts, changes and clears.
   private readonly told = new Map<string, Faults>();
-  // The folders each render state's latest load named.
-  private readonly holds = new Map<StorageHoldId, readonly string[]>();
+  private closed = false;
   private readonly faultCounts: Record<FaultCause, number> = {
     unusable: 0,
     unreadable: 0,
@@ -288,23 +284,35 @@ export class ManagedStorage {
     });
   }
 
-  // A render state's load names its folders: held under its id until the next
-  // load replaces the list or its `release`. Each named folder is asked again
-  // before any unheld one closes, so a folder two states name is never closed
-  // between them.
-  hold(id: StorageHoldId, folders: readonly string[]): void {
-    this.holds.set(id, folders);
-    const changed = this.reconcile(new Set(folders), "hold");
-    this.closeUnheld(changed);
+  // [LAW:one-source-of-truth] The host supplies the union of its renderers'
+  // declared folders. The keys of this owner's live table are the prior union.
+  follow(wanted: ReadonlySet<string>): void {
+    if (this.closed) return;
+    const changed = new Set<string>();
+    for (const folder of wanted)
+      if (!this.folders.has(folder) && this.asked(folder, "config"))
+        changed.add(folder);
+    for (const folder of this.folders.keys()) {
+      if (wanted.has(folder)) continue;
+      if (this.moved(folder, undefined)) changed.add(folder);
+    }
     this.refreshFolders(changed);
+  }
+
+  // A physical config observation retries only the retained plugin folders it
+  // observed. A renderer redraw or another holder joining reads no directory.
+  recheck(observed: ReadonlySet<string>): void {
+    if (this.closed) return;
+    const held = [...observed].filter((folder) => this.folders.has(folder));
+    this.refreshFolders(this.reconcile(held, "config"));
   }
 
   // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
   // A generation's folder is read, never made: a stat that fails keeps the
   // generation, and the registry judges its watch again, as it does for an
   // acquire joining the slot, so a deaf watch reopens on the owner's own
-  // triggers. A folder found gone or replaced is lost, except at a hold, which
-  // makes it again at once. Any other state is made and read again, and a
+  // triggers. A config observation reprovisions a missing or replaced folder
+  // immediately. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
   private asked(folder: string, trigger: Trigger): boolean {
     const was = this.folders.get(folder);
@@ -320,9 +328,9 @@ export class ManagedStorage {
           .release();
         return this.settle(folder);
       }
-      // [LAW:nothing-unseen] Lost at every trigger; a hold makes it again.
+      // [LAW:nothing-unseen] Record the loss before attempting to provision again.
       this.lostAt(was, read);
-      if (trigger === "hold") this.moved(folder, this.made(folder));
+      if (trigger === "config") this.moved(folder, this.made(folder));
       return true;
     }
     return this.moved(folder, this.made(folder));
@@ -335,15 +343,9 @@ export class ManagedStorage {
     return changed;
   }
 
-  // A render state reclaimed: the folders only it named close.
-  release(id: StorageHoldId): void {
-    this.holds.delete(id);
-    this.refreshFolders(this.closeUnheld());
-  }
-
   // A session's declaration of one session's file: held at (folder, session
-  // id) until the session's next declaration takes it no more. A folder no
-  // hold names has no standing failure: its file reads the path.
+  // id) until the session's next declaration takes it no more. If its folder
+  // demand leaves first, the remaining lane refreshes as absent.
   declare(holds: Holds, folder: string, sessionId: SessionId): Lane<JsonValue> {
     return this.sessions.declare(holds, { folder, sessionId });
   }
@@ -364,10 +366,11 @@ export class ManagedStorage {
   }
 
   close(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.unsubscribe();
     this.sessions.close();
-    this.holds.clear();
-    this.closeUnheld();
+    for (const folder of this.folders.keys()) this.moved(folder, undefined);
   }
 
   // What a folder's path holds once made: the storage folder is made first,
@@ -413,17 +416,6 @@ export class ManagedStorage {
   // Whether a read found the folder a generation's watch opened on.
   private present(was: Watching, read: Read): boolean {
     return read.kind === "found" && sameIdentity(read.identity, was.identity);
-  }
-
-  // Closes every folder no hold names.
-  private closeUnheld(changed = new Set<string>()): Set<string> {
-    const named = new Set([...this.holds.values()].flat());
-    for (const folder of this.folders.keys()) {
-      if (named.has(folder)) continue;
-      this.moved(folder, undefined);
-      changed.add(folder);
-    }
-    return changed;
   }
 
   private refreshFolders(changed: ReadonlySet<string>): void {
@@ -584,11 +576,8 @@ export class ManagedStorage {
   }
 
   // The folder's standing failure, which every source in it reads first:
-  // every fault standing, else the stall. A folder no hold names has none:
-  // its files read the path.
-  private standing(folder: string): string | null {
-    const state = this.folders.get(folder);
-    if (state === undefined) return null;
+  // every fault standing, else the stall.
+  private standing(folder: string, state: Folder): string | null {
     const faults = faultsOf(state);
     const reasons = SOURCES.flatMap((source) => {
       const fault = faults[source];
@@ -608,7 +597,11 @@ export class ManagedStorage {
     f: SessionFile,
     signal: AbortSignal,
   ): Promise<Outcome<JsonValue>> {
-    const fault = this.standing(f.folder);
+    // [LAW:single-enforcer] A remaining file lane cannot keep reading after
+    // the last config holding its folder leaves.
+    const state = this.folders.get(f.folder);
+    if (state === undefined) return ABSENT;
+    const fault = this.standing(f.folder, state);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     const read = await this.files.read(file, signal);

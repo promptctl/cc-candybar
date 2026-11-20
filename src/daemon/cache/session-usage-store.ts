@@ -8,7 +8,7 @@ import {
 } from "../../segments/session";
 import type { Host } from "../../host";
 import { cacheDir } from "../paths";
-import { PricingService } from "../../segments/pricing";
+import { PricingService } from "./pricing";
 import {
   getClaudePaths,
   findProjectPaths,

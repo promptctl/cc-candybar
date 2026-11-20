@@ -373,6 +373,9 @@ function pipeEvent(
   state.pipeEvent = {
     text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
     at: state.scope.now(),
+    // [LAW:types-are-the-program] An old write must not answer a later event
+    // with the same count, category and instant.
+    revision: (last?.revision ?? 0) + 1,
     answered: false,
     counts,
   };
@@ -385,10 +388,11 @@ function pipeEvent(
 
 // [LAW:single-enforcer] The one write after a pipe event: an answer carrying
 // `event` reached its client. A newer event since is left unmarked.
-function answeredPipeEvent(state: LaunchState, event: HeldEvent): void {
+function answeredPipeEvent(state: LaunchState, event: HeldEvent): boolean {
   const last = state.pipeEvent;
-  if (last === null || !answeredBy(last, event)) return;
+  if (last === null || !answeredBy(last, event)) return false;
   state.pipeEvent = { ...last, answered: true };
+  return true;
 }
 
 // What the launcher stands behind now: the lifeline's fault while it stands,
@@ -404,7 +408,12 @@ function standing(state: LaunchState): LauncherFact[] {
       : [
           {
             kind: "launch-pipes" as const,
-            event: { text: event.text, at: event.at, answered: event.answered },
+            event: {
+              text: event.text,
+              at: event.at,
+              revision: event.revision,
+              answered: event.answered,
+            },
           },
         ]),
   ];

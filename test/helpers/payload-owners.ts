@@ -50,7 +50,7 @@ import {
   type Reading,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
-import { HostService } from "../../src/segments/host";
+import { HostService } from "../../src/daemon/cache/host-identity";
 import { assembleFacts } from "../../src/daemon/facts-assembly";
 import { instantOf } from "../../src/utils/instant";
 import { settledWorld } from "./settled";

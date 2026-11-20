@@ -73,7 +73,6 @@ import type {
   Viewers,
 } from "../renderer-interface/interface.js";
 import type { RendererLink, RendererPort } from "./renderer-process.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import {
   variableOf,
   type SessionEnvironment,
@@ -81,6 +80,7 @@ import {
 import {
   answeredBy,
   joinedEvent,
+  type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { compareStructural, observable, runInAction } from "mobx";
@@ -322,6 +322,33 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       if (phase.kind !== "building") restateFaults();
     },
   });
+  // [LAW:single-enforcer] Both client writers acknowledge events at the
+  // owner of the daemon's latest occurrences, independent of their renderer.
+  const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
+    let changed = false;
+    for (const { kind, event } of shown) {
+      switch (kind) {
+        case "launch-pipes":
+          if (launcher.answeredPipeEvent(event)) changed = true;
+          break;
+        case "renderer-ended":
+          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
+            rendererEnded = { ...rendererEnded, answered: true };
+            changed = true;
+          }
+          break;
+        case "act-failed":
+          if (actFailed !== null && answeredBy(actFailed, event)) {
+            actFailed = { ...actFailed, answered: true };
+            changed = true;
+          }
+          break;
+      }
+    }
+    // [LAW:dataflow-not-control-flow] Writers can confirm independently;
+    // publish new facts only when the first confirmation changes an owner.
+    if (changed) restateFaults();
+  };
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -461,6 +488,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     publishFrame,
+    acknowledgeDisplayed,
+    requestChanged: (session, previous) =>
+      declaredBarPanes.reported(session, previous?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {
@@ -547,26 +577,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     log,
   });
 
-  // [LAW:one-way-deps] The host's parts the main renderer reaches: the
-  // compiler checks each against its entry in `AdapterToHost` here, so no
-  // renderer file names a host type.
-  const reaches: AdapterToHost = {
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice.
-    log,
-    eventAnswered: (event) => {
-      launcher.answeredPipeEvent(event);
-      if (rendererEnded !== null && answeredBy(rendererEnded, event))
-        rendererEnded = { ...rendererEnded, answered: true };
-      if (actFailed !== null && answeredBy(actFailed, event))
-        actFailed = { ...actFailed, answered: true };
-      restateFaults();
-    },
-    storage: {
-      hold: (id, folders) => managedStorage.hold(id, folders),
-      release: (id) => managedStorage.release(id),
-    },
-  };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
@@ -575,6 +585,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
+    reloaded: (folders) => managedStorage.recheck(folders),
   });
 
   interface RendererRuntime {
@@ -586,19 +597,32 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   }
   const declared = new Map<
     RendererName,
-    Pick<Subscriptions, "sources" | "lanes">
+    Pick<Subscriptions, "sources" | "lanes"> & {
+      readonly managedFolders: ReadonlySet<string>;
+    }
   >();
   const aggregate = (): void => {
     const sources: Record<SessionId, Subscriptions["sources"][SessionId]> = {};
     const lanes: Record<SessionId, Subscriptions["lanes"][SessionId]> = {};
+    const folders = new Set<string>();
     // [LAW:one-source-of-truth] A whole declaration only replaces its own
     // renderer's part. Shared providers see the current owner's demands.
     for (const [name, subscription] of declared) {
-      for (const [id, values] of Object.entries(subscription.sources))
-        if (nameOf(id as SessionId) === name) sources[id as SessionId] = values;
+      for (const folder of subscription.managedFolders) folders.add(folder);
+      for (const [id, values] of Object.entries(subscription.sources)) {
+        if (nameOf(id as SessionId) !== name) continue;
+        // [LAW:single-enforcer] A source read uses this renderer's admitted
+        // folders. Another renderer holding the same path confers no access.
+        sources[id as SessionId] = values.filter(
+          (source) =>
+            source.kind !== "plugin" ||
+            subscription.managedFolders.has(source.folder),
+        );
+      }
       for (const [id, values] of Object.entries(subscription.lanes))
         if (nameOf(id as SessionId) === name) lanes[id as SessionId] = values;
     }
+    managedStorage.follow(folders);
     collector.subscribed({ sources });
     frameFeeds.switched(lanes);
     declaredBarPanes.declare(lanes);
@@ -633,7 +657,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     prepared,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
     const link = prepared.start({
-      reaches,
       log,
       clock,
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
@@ -665,7 +688,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        rendererEnded = event;
+        // [LAW:types-are-the-program] A later exit can have the same text and
+        // instant as an earlier one, even as an old reply is still writing.
+        rendererEnded = {
+          ...event,
+          revision: (rendererEnded?.revision ?? 0) + 1,
+        };
         restateFaults();
       },
     });
@@ -676,8 +704,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
       {
         subscribed: (subscriptions) => {
+          const managedFolders = configDiscovery.admitManagedFolders(
+            name,
+            subscriptions.managedFolders,
+            declared.get(name)?.managedFolders,
+          );
           declared.set(name, {
             sources: subscriptions.sources,
+            managedFolders,
             lanes: subscriptions.lanes,
           });
           aggregate();
@@ -701,6 +735,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),
         closing: cancelling,
+        acknowledgeDisplayed,
         unheard: (text) => {
           actFailed = joinedEvent(actFailed, text, instant());
           restateFaults();
@@ -786,6 +821,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     if (route === undefined || order >= route.order) {
       routes.set(session, { name, order });
       if (route !== undefined && route.name !== name) {
+        // Routing changes the aggregate even when neither renderer's
+        // declarations moved. Apply the existing plans under the new owner.
+        aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
           void former.renderer
@@ -976,7 +1014,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     ): TeardownStep[] =>
       draining.map((renderer) => [
         `${renderer.name} ${kind}`,
-        () => renderer.ask({ kind }),
+        () => renderer.command({ kind }),
       ]);
     // The stores still flush after a close failed (runTeardown).
     const teardown: readonly TeardownStep[] = [

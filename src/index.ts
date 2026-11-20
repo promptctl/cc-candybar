@@ -6,7 +6,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld } from "./host";
+import { processWorld, type Host, type World } from "./host";
+import { systemTimekeeper } from "./time";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -41,17 +42,18 @@ import { exitWith } from "./cli-plan";
 // and names a Node client.
 const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 
-// [LAW:effects-at-boundaries] What this process knows of its machine, read once
-// and handed to every subcommand; the debug channel is the one place a switch
-// is set from it.
-const world = processWorld();
-const { host } = world;
-setDebug(Boolean(host.env.CC_CANDYBAR_DEBUG));
+// [LAW:effects-at-boundaries] Commands that act on the machine assemble its
+// world as they run and configure their debug channel from that environment.
+function commandWorld(): World {
+  const world = processWorld();
+  setDebug(Boolean(world.host.env.CC_CANDYBAR_DEBUG));
+  return world;
+}
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
 
-function showHelpText(): void {
+function showHelpText(host: Host): void {
   console.log(HELP_TEXT);
   // The one line of help that names this install: where its preload sits.
   const preload = stableAttachPreload(RUNNING_BUNDLE, host);
@@ -78,47 +80,47 @@ function showHelpText(): void {
 type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   install: async (args) => {
-    await runInstall(args, RUNNING_BUNDLE, world);
+    await runInstall(args, RUNNING_BUNDLE, commandWorld());
     process.exit(0);
   },
   "install-url-handler": async () => {
-    runInstallUrlHandler(RUNNING_BUNDLE, world);
+    runInstallUrlHandler(RUNNING_BUNDLE, commandWorld());
     process.exit(0);
   },
   "url-handle": async (args) => {
-    await runUrlHandle(args[0], world);
+    await runUrlHandle(args[0], commandWorld());
   },
   // The daemon owns its own lifecycle.
   daemon: async () => {
-    runDaemon(world);
+    runDaemon(commandWorld());
   },
   // A renderer's own process, which its daemon starts and talks to over its
   // stdio; it ends when its stdin does.
   renderer: async () => {
-    runRenderer(world);
+    runRenderer(systemTimekeeper.monotonic);
   },
   "daemon-stats": async (args) => {
-    await exitWith(await daemonStatsPlan(world, args));
+    await exitWith(await daemonStatsPlan(commandWorld(), args));
   },
   // The stream owns its own lifecycle.
   frames: async () => {
-    await runFrames(process.argv, RUNNING_BUNDLE, world);
+    await runFrames(process.argv, RUNNING_BUNDLE, commandWorld());
   },
   plugin: async (args) => {
-    process.exit(runPlugin(args, world));
+    process.exit(runPlugin(args, commandWorld()));
   },
   schema: async () => {
     await exitWith(schemaPlan());
   },
   // Runs until the pane closes.
   "bar-pane": async (args) => {
-    process.exit(await runBarPane(args, world));
+    process.exit(await runBarPane(args, commandWorld()));
   },
   ...Object.fromEntries(
     DEBUG_WHATS.map((what): [string, Subcommand] => [
       what,
       async (args) => {
-        await exitWith(await debugCommandPlan(world, what, args));
+        await exitWith(await debugCommandPlan(commandWorld(), what, args));
       },
     ]),
   ),
@@ -138,7 +140,7 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     if (hasFlag(NODE_FLAGS.help)) {
-      showHelpText();
+      showHelpText(commandWorld().host);
       process.exit(0);
     }
     // [LAW:one-type-per-behavior] Answers "what is THIS binary" from the baked
@@ -175,6 +177,8 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.exit(1);
     }
 
+    const world = commandWorld();
+    const { host } = world;
     debug(`Working directory: ${process.cwd()}`);
     debug(`Process args:`, process.argv);
 
@@ -183,14 +187,14 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
 
     if (!hookData) {
       console.error("Error: No input data received from stdin");
-      showHelpText();
+      showHelpText(host);
       process.exit(1);
     }
 
-    // [LAW:one-source-of-truth] The daemon is the *only* renderer. The CLI is
-    // a relay: forward stdin to the daemon and print its frame. While the
-    // daemon is starting or a reply is overdue, the client can report its
-    // own transport status without gathering or rendering any session data.
+    // [LAW:one-source-of-truth] The daemon chooses the session's renderer. The
+    // statusline client forwards stdin to the daemon and prints its frame.
+    // While the daemon is starting or a reply is overdue, the client can
+    // report transport status without gathering or rendering session data.
     //
     // Terminal dimensions and client identity belong to this tick. The host
     // can derive the other hints from the environment it holds for the session.

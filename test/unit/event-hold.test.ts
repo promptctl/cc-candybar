@@ -45,16 +45,47 @@ test("an event while the last is still owed joins it; once an answer carried the
   expect(joinedEvent(null, "run failed", at(200))).toEqual({
     text: "run failed",
     at: at(200),
+    revision: 1,
     answered: false,
   });
   expect(joinedEvent(fresh, "run failed", at(200))).toEqual({
     text: "e\nrun failed",
     at: at(200),
+    revision: 1,
     answered: false,
   });
   expect(joinedEvent(answered, "run failed", at(200))).toEqual({
     text: "run failed",
     at: at(200),
+    revision: 1,
     answered: false,
   });
+});
+
+test("only the most recent unanswered diagnostics are kept once the text budget fills", () => {
+  let last = joinedEvent(null, `early ${"x".repeat(400)} tail`, at(200));
+  for (let i = 1; i <= 20; ++i)
+    last = joinedEvent(last, `launch ${i}: ${"y".repeat(140)}`, at(200 + i));
+  expect(last.text.length).toBeLessThanOrEqual(2048);
+  expect(last.text).not.toContain("early");
+  expect(last.text).toContain("…");
+  expect(last.text).toContain(`launch 19: ${"y".repeat(140)}\nlaunch 20:`);
+  expect(last.text).toMatch(/launch 20: y{140}$/u);
+});
+
+test("an oversized newest diagnostic retains its action and outcome and is acknowledged by identity", () => {
+  const text = (middle: string) => `run build: ${middle.repeat(1800)}: exit 1`;
+  const earlier = joinedEvent(null, text("😀"), at(300));
+  const newest = joinedEvent(earlier, text("😀"), at(300));
+  expect(newest.text.length).toBeLessThanOrEqual(2048);
+  expect(newest.text).toBe(earlier.text);
+  expect(newest.text).toBe(newest.text.toWellFormed());
+  expect(newest.text).toMatch(/^run build:/u);
+  expect(newest.text).toMatch(/: exit 1$/u);
+  expect(newest.text).toContain("…");
+  expect(answeredBy(newest, earlier)).toBe(false);
+  expect(answeredBy(newest, newest)).toBe(true);
+  const after = joinedEvent({ ...newest, answered: true }, text("😀"), at(300));
+  expect(after.text).toBe(newest.text);
+  expect(answeredBy(after, newest)).toBe(false);
 });

@@ -73,8 +73,12 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { DiscoveringCache, originOf } from "./helpers/config-host";
-import { loadDiscovered } from "./helpers/config-host";
+import {
+  DiscoveringCache,
+  followManagedStorage,
+  loadDiscovered,
+  originOf,
+} from "./helpers/config-host";
 
 const S2 = sessionIdOf("s2");
 const S9 = sessionIdOf("s9");
@@ -238,7 +242,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       locations: locs(),
       sessionState,
       watchers,
-      storage: providers.managedStorage,
+      reloaded: (folders) => providers.managedStorage.recheck(folders),
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -252,6 +256,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
   served.serve(cache);
+  const stopFollowing = followManagedStorage(cache, providers.managedStorage);
   const runs = new Runs({
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
@@ -269,6 +274,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   cleanups.push(() => {
     runs.close();
     cache.close();
+    stopFollowing();
     for (const [, close] of providers.closes) close();
     watchers.closeAll();
   });
@@ -279,7 +285,9 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     runs,
     lines,
     hold: (configFile, sid) => {
-      const facts = heardRequest(sid, dir);
+      const facts = heardRequest(sid, dir, {
+        claudeConfigDir: path.join(dir, "claude"),
+      });
       return served.config(facts, () =>
         cache.holdSession(originOf(dir, dir, configFile), facts),
       );

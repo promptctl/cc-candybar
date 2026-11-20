@@ -25,9 +25,13 @@ import { linksOf } from "../../../src/click/read";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
+import { readProbe, readsOf, type Read } from "../../helpers/daemon-read-probe";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
-import { repoConfigs } from "../../../src/daemon/config-discovery/repo-configs";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../../../src/daemon/config-discovery/repo-configs";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -72,62 +76,6 @@ function worktreeBundle(file: string): void {
   );
 }
 
-interface Read {
-  readonly file: string;
-  readonly pid: number;
-  readonly operation: string;
-}
-
-// The probe counts filesystem calls for the exact
-// fixture paths. Child renderers inherit the preload as well.
-function readProbe(
-  file: string,
-  output: string,
-  selected: Readonly<Record<string, readonly string[]>>,
-): void {
-  fs.writeFileSync(
-    file,
-    `
-    const fs = require("node:fs");
-    const fsp = require("node:fs/promises");
-    const { syncBuiltinESMExports } = require("node:module");
-    const wanted = ${JSON.stringify(selected)};
-    const append = fs.appendFileSync;
-    const tracked = new Map();
-    const record = (file, operation) => append(${JSON.stringify(output)}, JSON.stringify({file,pid:process.pid,operation}) + "\\n");
-    for (const [api, name] of [[fs,"openSync"], [fsp,"open"], [fsp,"readFile"]]) {
-      const original = api[name];
-      api[name] = function (file, ...rest) {
-        const result = original.call(this, file, ...rest);
-        if (typeof file === "string" && wanted[file]?.includes(name)) record(file, name);
-        if (name === "openSync" && typeof file === "string" && wanted[file]?.includes("payload")) tracked.set(result, file);
-        return result;
-      };
-    }
-    const readFileSync = fs.readFileSync;
-    fs.readFileSync = function (file, ...rest) {
-      const payload = typeof file === "string" && wanted[file]?.includes("payload") ? file : tracked.get(file);
-      if (payload !== undefined) record(payload, "payload");
-      return readFileSync.call(this, file, ...rest);
-    };
-    const closeSync = fs.closeSync;
-    fs.closeSync = function (fd) {
-      tracked.delete(fd);
-      return closeSync.call(this, fd);
-    };
-    syncBuiltinESMExports();
-  `,
-  );
-}
-
-function readsOf(file: string): Read[] {
-  return fs
-    .readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Read);
-}
-
 test("two named renderer processes draw separately and share config, transcript and plugin-source reads", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-named");
   const root = fs.realpathSync(
@@ -141,6 +89,10 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.mkdirSync(plugin, { recursive: true });
     const source = path.join(plugin, "marker.txt");
     const definition = path.join(plugin, "plugin.json5");
+    const packaged = path.join(root, "package-data");
+    const shadowed = path.join(packaged, "cc-candybar", "plugins", "shared", "plugin.json5");
+    fs.mkdirSync(path.dirname(shadowed), { recursive: true });
+    fs.writeFileSync(shadowed, '{ segments: { marker: { template: "package copy" } } }');
     const config = path.join(root, "config.json5");
     const transcriptOf = (session: string) =>
       path.join(root, `${session}.jsonl`);
@@ -187,6 +139,7 @@ test("two named renderer processes draw separately and share config, transcript 
     readProbe(probe, reads, {
       [config]: ["openSync", "payload"],
       [definition]: ["openSync", "payload"],
+      [shadowed]: ["openSync", "payload"],
       [source]: ["readFile"],
       [firstTranscript]: ["open", "openSync"],
       [secondTranscript]: ["open", "openSync"],
@@ -195,6 +148,7 @@ test("two named renderer processes draw separately and share config, transcript 
       {
         ...isolated.env,
         XDG_DATA_HOME: data,
+        XDG_DATA_DIRS: packaged,
         NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
           .filter(Boolean)
           .join(" "),
@@ -293,6 +247,7 @@ test("two named renderer processes draw separately and share config, transcript 
     expect(stillPrimary).toContain("one-shared-plugin-read");
     expect(stillPrimary).not.toContain(WORKTREE_MODEL);
     const both = readsOf(reads);
+    expect(both.filter((read) => read.file === shadowed)).toEqual([]);
     for (const file of shared) expect(count(both, file)).toBe(1);
     expect(count(both, firstTranscript)).toBe(count(before, firstTranscript));
     expect(count(both, secondTranscript)).toBeGreaterThan(0);
@@ -485,6 +440,15 @@ test("two named renderer processes draw separately and share config, transcript 
       "the primary feed stays live during worktree recovery",
       8000,
     );
+    // Both subscriptions survived the change of process. A fresh file
+    // observation reaches its existing feed without another render request.
+    const afterRecovery = "existing-feeds-after-worktree-restart";
+    fs.writeFileSync(source, `${afterRecovery}\n`);
+    await until(
+      () => delivered(afterRecovery),
+      "both existing feeds draw after the renderer restart",
+      8_000,
+    );
     expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(
       1,
     );
@@ -573,6 +537,14 @@ test("one project approval from an earlier frame covers both renderers, a config
     const edited = ["PROJECT-EDITED", "NEW-LOCAL", "NEW-PLUGIN"];
     await bothSee(edited);
     await daemon.stop();
+    const answerFile = repoConfigsPath(isolated.stateDir);
+    expect(JSON.parse(fs.readFileSync(answerFile, "utf8"))).toEqual({
+      [project]: "approved",
+    });
+    fs.writeFileSync(
+      answerFile,
+      JSON.stringify({ [project + path.sep]: "approved" }),
+    );
     daemon = await spawnDaemonWithEnv(isolated.env);
     await bothSee(edited, true);
     const after = await readDiagnostics(
@@ -594,6 +566,55 @@ test("one project approval from an earlier frame covers both renderers, a config
     fs.rmSync(project, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("a delivered pane frame settles in the subprocess that drew it", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-pane-receipt");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pane-receipt-"));
+  try {
+    const session = "pane-receipt";
+    const config = path.join(dir, "config.json5");
+    const text = "settle this pane";
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { experimentalPane: true },
+        segments: { sample: { template: text } },
+        root: { h: ["sample"] },
+      }),
+    );
+    const args = ["cc-candybar", "--config", config];
+    const statusline = await frameRequest(
+      daemon.sockPath,
+      renderBody(session, dir, {}, args),
+    );
+    expect(textOf(statusline)).toContain(text);
+
+    const pane = observePane(daemon.sockPath, session);
+    try {
+      await pane.waitFor((line) => line.includes(text), text);
+      let pending: number | undefined;
+      await until(
+        async () => {
+          const response = await sendDaemonRequest(daemon.sockPath, {
+            v: PROTOCOL_VERSION,
+            kind: "stats",
+          });
+          if (!response.ok || !("stats" in response))
+            throw new Error(`no daemon stats: ${JSON.stringify(response)}`);
+          pending = response.stats.rendererTurns.presents;
+          return response.stats.frameFeeds.drawn > 0 && pending === 0;
+        },
+        () => `the delivered pane frame settled (${pending} pending)`,
+        2_000,
+      );
+    } finally {
+      pane.close();
+    }
+  } finally {
+    await daemon.cleanup();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("the named renderer receives its pane control and earlier statusline run", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-named-clicks");

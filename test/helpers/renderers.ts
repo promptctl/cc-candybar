@@ -1,16 +1,12 @@
-// Renderers a test builds around its own answer to events: one that answers
-// events alone, and one that hears each event on its way into a real
-// renderer. A push reaches neither test's answer.
+// Renderers a test builds around its own answer to an input.
 
 import type {
-  AdapterInput,
-  AdapterOutput,
   EventInput,
   Renderer,
   RendererOutput,
   TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import { rendererOf, timed } from "../../src/renderer-interface/interface";
+import { timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
@@ -36,38 +32,18 @@ export const unfollowedCollector = (
   recorded: () => {},
 });
 
-// A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(
-  answered: (input: EventInput) => Promise<RendererOutput>,
+  answer: (input: EventInput) => Promise<RendererOutput>,
 ): Renderer {
-  return rendererOf({
-    event: answered,
-    adapter: async (input) => {
-      throw new Error(`this renderer takes no push (${input.push.kind})`);
-    },
-  });
-}
-
-// A renderer whose pushes `replied` answers, and which no event reaches.
-export function pushRenderer(
-  replied: (input: AdapterInput) => Promise<AdapterOutput>,
-): Renderer {
-  return rendererOf({
-    event: async (input) => {
-      throw new Error(`this renderer takes no event (${input.event.kind})`);
-    },
-    adapter: replied,
-  });
+  return { answer };
 }
 
 // The stored writes of a rig whose host holds no store: its renderer's turns
 // tell it none.
-export const NOTHING_STORED = (): readonly [] => [];
-
-// The pushes of a rig that hands its renderer none: one would be the rig's
-// bug, said.
-export const NO_PUSHES = (): never => {
-  throw new Error("this rig hands the renderer no push");
+const noneStored = (): readonly [] => [];
+export const NOTHING_STORED = {
+  "session-state": noneStored,
+  "settings-history": noneStored,
 };
 
 // The config discovery of a rig whose renderer names no origin: one it
@@ -80,6 +56,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
       );
   },
   snapshotOf: () => null,
+  selected: () => {},
+  retainedOf: () => undefined,
   landed: () => [],
   path: () => undefined,
   repoDir: () => undefined,
@@ -92,7 +70,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
 export const NO_ACTS: HostWorld = {
-  authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
+  authorizeRun: (request, captures) =>
+    authorizeRun(TEST_SIGNER, request, captures),
   perform: async (act) => ({
     kind: "failed",
     reason: `${act.kind}: this rig performs no act`,
@@ -100,6 +79,7 @@ export const NO_ACTS: HostWorld = {
   stateDir: "/nonexistent/this-rig-has-no-state-dir",
   configs: NO_CONFIGS,
   closing: () => false,
+  acknowledgeDisplayed: () => {},
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },
@@ -110,13 +90,12 @@ export function hearingEvents(
   renderer: Renderer,
   heard: (input: EventInput) => void,
 ): Renderer {
-  return rendererOf({
-    event: (input) => {
+  return {
+    answer: (input) => {
       heard(input);
       return renderer.answer(input);
     },
-    adapter: (input) => renderer.answer(input),
-  });
+  };
 }
 
 // `renderer`, with a turn a test holds: `hold` keeps the next input's turn
@@ -133,10 +112,9 @@ export function holdable(renderer: Renderer): {
     return waiting.then(answer);
   };
   return {
-    renderer: rendererOf({
-      event: (input) => turn(() => renderer.answer(input)),
-      adapter: (input) => turn(() => renderer.answer(input)),
-    }),
+    renderer: {
+      answer: (input) => turn(() => renderer.answer(input)),
+    },
     hold: () => {
       let open = (): void => {};
       held = new Promise<void>((resolve) => (open = resolve));

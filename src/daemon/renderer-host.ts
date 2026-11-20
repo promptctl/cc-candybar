@@ -1,7 +1,7 @@
 // The host's one path to a renderer: every input it hands one passes the
 // renderer's mailbox, and is one turn, which answers with the turn's output or
 // with how the turn failed: a turn's throw comes back as a value, never as a
-// rejection. Every turn's subscriptions are taken here, in the order the turns
+// rejection. Subscription changes are taken here, in the order the turns
 // answered, its config changes landed, and its acts performed once they have;
 // a present a turn that answers no request returned is refused. A caller whose
 // own event records the turn takes it by `answer`; every other input is taken
@@ -26,28 +26,38 @@
 // landing left.
 
 import {
+  isCommand,
+  sessionOfEvent,
   type ConfigChange,
+  type Command,
+  type CommandReply,
+  type ReplyTo,
   type Effect,
   type EffectOutcome,
   type Event,
   type EventInput,
+  type Notification,
+  type Present,
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
+  type Timed,
+  type TurnFailure,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
+import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
-import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
+import { inspectionPayloadProblem } from "./foundations/inspection-reply.js";
 import {
   CrossedFailure,
   failureOf,
@@ -64,6 +74,7 @@ import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
+import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { RendererName } from "./foundations/renderer-name.js";
@@ -77,7 +88,7 @@ export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
 type SettlePresentation = (
-  effect: Pick<Effect, "id" | "session">,
+  effect: Pick<Present, "id" | "session" | "displayedEvents">,
   reason: string | null,
 ) => void;
 type TakenTurn = TurnOutcome & {
@@ -89,16 +100,32 @@ type TakenTurn = TurnOutcome & {
   readonly configFailure?: Failure;
 };
 
+// [LAW:nothing-unseen] Give every secondary renderer failure its own field
+// in the diagnostic for the input that encountered it.
+const finalizationFields = (
+  outcome: { readonly kind: "answered" } | TurnFailure,
+): Array<TurnRecord[number]> | undefined =>
+  outcome.kind === "threw"
+    ? outcome.secondary?.map(({ stage, failure }) => [
+        `finalize.${stage}`,
+        `${failure.kind}: ${failure.detail}`,
+      ])
+    : undefined;
+
 // What a caller makes as its input's slot comes up: the event, or why there
 // is none to send, which is the turn's failure. The host stamps it with the
 // slot's readings.
-interface MadeEvent {
+type StartEvent = Extract<Event, { kind: "start" }>;
+type StartRequest = Omit<StartEvent, "configs">;
+type BeforeDiscovery = Exclude<Notification, StartEvent> | StartRequest;
+
+interface MadeEvent<E = Event> {
   readonly kind: "event";
-  readonly event: Event;
+  readonly event: E;
   // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
   readonly runEvidence?: readonly RunEvidence[];
 }
-export type Made = MadeEvent | Failure;
+export type Made<E = BeforeDiscovery> = MadeEvent<E> | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
 // directory, what config discovery found at each origin it follows, whether
@@ -113,6 +140,7 @@ export interface HostWorld {
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly closing: () => boolean;
+  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string) => void;
 }
 
@@ -131,13 +159,12 @@ export interface RendererHost {
   // A fresh renderer's start, recorded on its own line: it heads the
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
-  start(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, answered by its reply. A push that threw or rejected, or one
-  // answered by another push's reply, rejects with an Error naming the
-  // renderer and the push: the caller that awaits it owns the failure.
-  ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
-  // One push nobody awaits: its failure is logged here.
-  tell(push: AdapterPush): void;
+  start(
+    make: () => Made<StartRequest>,
+    about: TurnRecord,
+  ): Promise<TurnOutcome>;
+  // An inspection or teardown event, answered by its own reply.
+  command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
   moved(origins: readonly RenderOrigin[]): void;
@@ -165,11 +192,16 @@ const THREW_AS = {
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
 interface Slotted {
+  readonly received: boolean;
   readonly turn: TakenTurn;
   readonly settled: Promise<readonly EffectOutcome[]>;
 }
 
-type ConfigDelivery = "scheduled" | "received" | "unreceived";
+type ConfigDelivery =
+  | { readonly kind: "scheduled" | "unreceived" }
+  // The immutable observation actually offered to this worker. Discovery
+  // may publish a newer observation before the worker selects this one.
+  | { readonly kind: "received"; readonly config: ConfigSnapshot };
 
 type ConfigFollowing =
   | { readonly kind: "following"; readonly named: readonly RenderOrigin[] }
@@ -190,7 +222,7 @@ export function rendererHost(
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
-    // [LAW:single-enforcer] Where every output's subscriptions go: the
+    // [LAW:single-enforcer] Where changed subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
@@ -229,6 +261,65 @@ export function rendererHost(
   // latest subscriptions. Reserve a batch before entering its config turns,
   // which can publish subscriptions of their own. A start clears delivery.
   let configs = new Map<string, ConfigDelivery>();
+  let declared: Subscriptions | undefined;
+  let origins: Subscriptions["configs"] | undefined;
+  // A declaration can name origins that discovery failed to acquire. Keep
+  // the last applied holds so an unsuccessful START can restore them.
+  let followedOrigins: Subscriptions["configs"] = [];
+  let selected: Subscriptions["configSelections"] | undefined;
+  let followFailure: Failure | null = null;
+  // [LAW:no-ambient-temporal-coupling] Only a complete replacement can
+  // publish over the predecessor's declaration. Later inputs stay out of a
+  // generation whose initial turn never reached that point.
+  let startFailure: Failure | null = null;
+
+  type StartResult =
+    | { readonly kind: "threw"; readonly failure: Failure }
+    | { readonly kind: "answered"; readonly event: StartEvent };
+
+  const endedStart = (result: StartResult): void => {
+    startFailure = result.kind === "threw" ? result.failure : null;
+    if (result.kind === "threw") return;
+    configs.clear();
+    for (const { origin, config } of result.event.configs)
+      configs.set(originKey(origin), { kind: "received", config });
+    declared = undefined;
+    origins = undefined;
+    selected = undefined;
+    followFailure = null;
+  };
+
+  const follow = (wanted: Subscriptions["configs"]): void => {
+    world.configs.follow(wanted);
+    followedOrigins = wanted;
+  };
+
+  // [LAW:one-source-of-truth] Restoring a generation uses the same discovery
+  // holds as an ordinary config turn. It still follows preceding origins
+  // until the replacement answers with its own complete declaration.
+  const prepareStart = (
+    event: Omit<StartEvent, "configs">,
+    borrow: (wanted: Subscriptions["configs"]) => void,
+  ): StartEvent => {
+    const wanted = new Map(followedOrigins.map((o) => [originKey(o), o]));
+    for (const origin of origins ?? []) wanted.set(originKey(origin), origin);
+    for (const { context } of event.sessions)
+      wanted.set(originKey(context.requested), context.requested);
+    if (wanted.size > followedOrigins.length || followFailure !== null)
+      borrow([...wanted.values()]);
+    const configs = [...wanted].map(([key, origin]) => {
+      const config = world.configs.snapshotOf(origin);
+      if (config === null)
+        throw new Error(`no config snapshot for renderer start origin ${key}`);
+      const retained = world.configs.retainedOf(origin);
+      return {
+        origin,
+        config,
+        ...(retained === undefined ? {} : { retained }),
+      };
+    });
+    return { ...event, configs };
+  };
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -259,6 +350,7 @@ export function rendererHost(
   // A turn no renderer answered: nothing of it was taken, so the
   // subscriptions last taken stand.
   const unanswered = (failure: Failure, queuedMs: number): Slotted => ({
+    received: false,
     turn: {
       kind: "threw",
       failure,
@@ -272,6 +364,31 @@ export function rendererHost(
     settled: Promise.resolve([]),
   });
 
+  const commandLabel = (event: Command): string =>
+    `renderer ${name} command ${event.kind}`;
+
+  // [LAW:parse-dont-validate] Check correlation before the host can accept
+  // a successful command's stores or declarations.
+  const requireReply = (
+    event: Command,
+    reply: CommandReply | undefined,
+  ): void => {
+    const label = commandLabel(event);
+    if (reply == null) throw new Error(`${label} returned no reply`);
+    if (reply.kind !== event.kind)
+      throw new Error(`${label} returned a ${reply.kind} reply`);
+    if (
+      event.kind === "debug" &&
+      reply.kind === "debug" &&
+      reply.snapshot?.what !== event.what
+    )
+      throw new Error(`${label} returned no ${event.what} snapshot`);
+    if (reply.kind === "stats" && reply.stats == null)
+      throw new Error(`${label} returned no stats snapshot`);
+    const problem = inspectionPayloadProblem(reply);
+    if (problem !== null) throw new Error(`${label} returned ${problem}`);
+  };
+
   // [LAW:single-enforcer] The transport owns whether the renderer
   // answered. Host failures during landing cannot replace that answer.
   const inSlot = async (
@@ -281,9 +398,9 @@ export function rendererHost(
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
-    const session = sessionOf(input.event);
+    const session = sessionOfEvent(input.event);
     let release = (): void => {};
-    let output: RendererOutput & { readonly turnMs: number };
+    let output: Timed<RendererOutput>;
     let sentAt: Monotonic;
     try {
       if (session !== null) release = collector.holding(session);
@@ -291,20 +408,66 @@ export function rendererHost(
       output = await renderer.answer(input);
     } catch (thrown) {
       recordTaken("session release", release);
-      return unanswered(failureOf(thrown), queuedMs);
+      const failure = failureOf(thrown);
+      if (input.event.kind === "start") endedStart({ kind: "threw", failure });
+      return unanswered(failure, queuedMs);
     }
-    if (input.event.kind === "config") {
+    recordDiagnostics(output.diagnostics);
+    if (isCommand(input.event)) {
+      if (output.kind === "answered") requireReply(input.event, output.reply);
+      if (output.frames.length > 0 || output.effects.length > 0) {
+        // [LAW:effects-at-boundaries] Commands can finalize stores and
+        // declarations. Their replies cannot publish a frame or act.
+        const problem = `${commandLabel(input.event)} returned a frame or effect`;
+        if (output.kind === "answered") throw new Error(problem);
+        recordDiagnostics([{ level: "error", line: problem }]);
+        output = { ...output, frames: [], effects: [] };
+      }
+    } else if (output.kind === "answered" && output.reply !== undefined) {
+      recordDiagnostics([
+        {
+          level: "error",
+          line: `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
+        },
+      ]);
+    }
+    if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
-      if (configs.has(key)) configs.set(key, "received");
+      if (configs.has(key))
+        configs.set(key, { kind: "received", config: input.event.config });
     }
-    const { subscriptions, frames, stored, turnMs, ...answer } = output;
+    const {
+      subscriptions,
+      wake,
+      frames,
+      stored,
+      diagnostics: _diagnostics,
+      turnMs,
+      ...answer
+    } = output;
+    const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
+      record:
+        finalization === undefined
+          ? answer.record
+          : [...answer.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
-      hopMs: elapsedMs(clock, sentAt) - turnMs,
+      hopMs:
+        turnMs === null
+          ? null
+          : recordTaken(
+              "renderer round-trip timing",
+              () => elapsedMs(clock, sentAt) - turnMs,
+            ),
     };
+    if (input.event.kind === "start")
+      endedStart(
+        turn.kind === "threw" ? turn : { kind: "answered", event: input.event },
+      );
+    recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
       output,
@@ -312,6 +475,7 @@ export function rendererHost(
       receipt,
     );
     return {
+      received: true,
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled.finally(
         () => void recordTaken("session release", release),
@@ -331,7 +495,6 @@ export function rendererHost(
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
-    recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect): effect is ConfigChange => effect.kind === "change",
     );
@@ -339,10 +502,11 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
-    const requested =
-      event.kind === "context" ? originKey(event.context.requested) : null;
+    const requested = event.kind === "context" ? event.context.requested : null;
+    const requestedKey = requested === null ? null : originKey(requested);
     const followed = took(
       output.subscriptions,
+      output.wake,
       output.frames,
       output.stored,
       requested,
@@ -352,12 +516,15 @@ export function rendererHost(
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
-      if (requested !== null && configs.get(requested) !== "received")
+      if (
+        requestedKey !== null &&
+        configs.get(requestedKey)?.kind !== "received"
+      )
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
         const config = await configInSlot(origin, "config-subscribed");
-        if (originKey(origin) === requested) configFailure = config.failure;
+        if (originKey(origin) === requestedKey) configFailure = config.failure;
         if (config.kind === "unreceived") unreceived.push(origin);
         waited.push(config.settled);
       }
@@ -485,6 +652,24 @@ export function rendererHost(
     }
   };
 
+  // [LAW:single-enforcer] The accepting slot writes each line once, at its
+  // original level, before the turn's effects can produce further input.
+  const recordDiagnostics = (
+    diagnostics: RendererOutput["diagnostics"],
+  ): void => {
+    for (const { level, line } of diagnostics ?? []) {
+      try {
+        log(level, line);
+      } catch (thrown) {
+        // A failed log sink cannot report its own failure. The daemon can
+        // still show the diagnostic and the reason it could not be written.
+        world.unheard(
+          `renderer ${name} could not log ${line}: ${failureOf(thrown).detail}`,
+        );
+      }
+    }
+  };
+
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
   // taker that throws leaves the renderer's next turn armed. Taking never
   // fails a turn that answered: its effects are still owed their
@@ -493,14 +678,19 @@ export function rendererHost(
   // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
   const took = (
     subscriptions: Subscriptions,
+    nextWake: RendererOutput["wake"],
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
-    requested: string | null,
+    requested: RenderOrigin | null,
     receipt: SettlePresentation,
   ): ConfigFollowing => {
-    recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
+    // [LAW:effects-at-boundaries] A failed replacement still owes its own
+    // collected writes and effects. Its view and wake declarations cannot
+    // replace the predecessor's, including during effect settlement.
+    const adoptDemand = startFailure === null;
+    if (adoptDemand)
+      recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    recordTaken("subscriptions", () => collector.subscribed(subscriptions));
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(({ frame }) =>
@@ -522,30 +712,70 @@ export function rendererHost(
       )
         for (const frame of frames) settled(frame, false);
     }
+    if (!adoptDemand) return { kind: "following", named: [] };
     const named: RenderOrigin[] = [];
-    try {
+    const moved = origins !== subscriptions.configs;
+    if (moved) {
       const next = new Map<string, ConfigDelivery>();
       for (const origin of subscriptions.configs) {
         const key = originKey(origin);
         const before = configs.get(key);
-        // [LAW:no-ambient-temporal-coupling] A new context retries only the
-        // undelivered config it needs. A feed tick cannot poll it.
-        if (
-          before === undefined ||
-          (key === requested && before === "unreceived")
-        ) {
+        if (before === undefined) {
           named.push(origin);
-          next.set(key, "scheduled");
+          next.set(key, { kind: "scheduled" });
         } else next.set(key, before);
       }
       // A renderer has already dropped any unlisted config, even when the
       // host cannot update its discovery subscriptions.
       configs = next;
-      world.configs.follow(subscriptions.configs);
+      origins = subscriptions.configs;
+    }
+    // [LAW:no-ambient-temporal-coupling] A new context retries just its
+    // undelivered config, even if the complete declaration stayed the same.
+    // A feed tick cannot poll a failed follow or delivery.
+    if (requested !== null) {
+      const key = originKey(requested);
+      if (configs.get(key)?.kind === "unreceived") {
+        named.push(requested);
+        configs.set(key, { kind: "scheduled" });
+      }
+    }
+    try {
+      if (moved || (requested !== null && followFailure !== null)) {
+        if (
+          subscriptions.configs.length > 0 ||
+          followedOrigins.length > 0 ||
+          followFailure !== null
+        )
+          follow(subscriptions.configs);
+        followFailure = null;
+      }
+      if (followFailure !== null)
+        return { kind: "failed", failure: followFailure };
+      const entries = subscriptions.configSelections;
+      if (selected !== entries) {
+        world.configs.selected(entries, (origin) => {
+          const delivered = configs.get(originKey(origin));
+          return delivered?.kind === "received" ? delivered.config : undefined;
+        });
+        selected = entries;
+      }
+      // Plugin sources and folders can only refer to origins the host now
+      // follows. Publish demand after resolving the selected observations.
+      if (
+        (declared?.sources !== subscriptions.sources ||
+          declared?.managedFolders !== subscriptions.managedFolders ||
+          declared?.lanes !== subscriptions.lanes) &&
+        recordTaken("subscriptions", () =>
+          collector.subscribed(subscriptions),
+        ) !== null
+      )
+        declared = subscriptions;
       return { kind: "following", named };
     } catch (thrown) {
       for (const origin of named) markUnreceived(origin);
       const failure = failureOf(thrown);
+      followFailure = failure;
       notTaken("configs", failure);
       return { kind: "failed", failure };
     }
@@ -553,14 +783,15 @@ export function rendererHost(
 
   const markUnreceived = (origin: RenderOrigin): void => {
     const key = originKey(origin);
-    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
+    if (configs.get(key)?.kind === "scheduled")
+      configs.set(key, { kind: "unreceived" });
   };
 
   // [LAW:one-source-of-truth] An origin's `config`, made from what discovery
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made => {
+  const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
     const config = world.configs.snapshotOf(origin);
     return config === null
       ? {
@@ -576,7 +807,7 @@ export function rendererHost(
     origin: RenderOrigin,
     why: string,
   ): Promise<ConfigTurn> => {
-    let made: Made;
+    let made: Made<Event>;
     try {
       made = configMade(origin)();
     } catch (thrown) {
@@ -592,7 +823,7 @@ export function rendererHost(
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
-    const { turn, settled } = await inSlot(input, 0);
+    const { received, turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
     // A `config` turn that threw failed whatever waited on it, as its own
     // turn would have: a waiting click's bad request is still the user's.
@@ -606,7 +837,7 @@ export function rendererHost(
           ]
         : [];
     const outcomes = settled.then((outcomes) => [...threw, ...outcomes]);
-    return turn.kind === "threw" && turn.turnMs === null
+    return turn.kind === "threw" && !received
       ? { kind: "unreceived", failure: turn.failure, settled: outcomes }
       : {
           kind: "received",
@@ -623,7 +854,7 @@ export function rendererHost(
   const doneOf = (
     effect: Pick<Effect, "id" | "session">,
     outcome: EffectOutcome,
-  ): MadeEvent => ({
+  ): MadeEvent<Notification> => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -637,6 +868,11 @@ export function rendererHost(
   const receiptFor =
     (issuer: number): SettlePresentation =>
     (effect, reason) => {
+      // [LAW:effects-at-boundaries] The write can acknowledge a daemon
+      // event after its renderer has gone. Only the local receipt needs
+      // the generation that issued it.
+      if (reason === null && effect.displayedEvents !== undefined)
+        world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       const retired = "the renderer that drew the frame has ended";
       unawaited(
@@ -695,7 +931,7 @@ export function rendererHost(
     about: TurnRecord,
     delivered: TakenTurn,
   ): void => {
-    const session = event === null ? null : sessionOf(event);
+    const session = event === null ? null : sessionOfEvent(event);
     const head: TurnRecord = [
       ["renderer", name],
       ["input", event?.kind ?? "-"],
@@ -711,8 +947,8 @@ export function rendererHost(
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
-        // [LAW:single-enforcer] No renderer was live to take it: the
-        // supervisor says that once, with the count it refused.
+        // [LAW:single-enforcer] The supervisor identifies interrupted
+        // inputs and counts those refused while no worker was live.
         if (delivered.failure.kind === "down") return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
@@ -729,7 +965,7 @@ export function rendererHost(
   // One input through its slot: made there, and answered, its acts still
   // settling. `event` is null when its make failed, so no input was made.
   const throughSlot = (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place,
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
@@ -742,33 +978,53 @@ export function rendererHost(
       pendingClicks.set(held.session, held);
     }
     return inMailbox(async (queuedMs, holds) => {
+      let restore: Subscriptions["configs"] | undefined;
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
-        let made: Made;
+        let made: Made<Event>;
+        let starting = at === "first";
         try {
-          made = make();
+          const captured = make();
+          if (captured.kind === "event") {
+            const { event } = captured;
+            if (event.kind === "start") {
+              starting = true;
+              const ready = prepareStart(event, (wanted) => {
+                // Discovery can acquire some watches before it fails.
+                restore = followedOrigins;
+                follow(wanted);
+              });
+              made = { ...captured, event: ready };
+            } else made = { ...captured, event };
+          } else made = captured;
         } catch (thrown) {
           made = failureOf(thrown);
         }
-        // A new renderer holds no config, even if its start was not made or
-        // could not be answered. The first mailbox place belongs to start.
-        if (
-          at === "first" ||
-          (made.kind === "event" && made.event.kind === "start")
-        )
-          configs.clear();
-        if (made.kind !== "event")
+        if (made.kind !== "event") {
+          if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
+        }
+        if (
+          !starting &&
+          startFailure !== null &&
+          made.event.kind !== "effect-done"
+        )
+          return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds(made.event.kind);
-        return {
-          event: made.event,
-          slotted: await inSlot(
-            stamped(made),
-            queuedMs,
-            made.event.kind === "click" ? made.runEvidence : undefined,
-          ),
-        };
+        const slotted = await inSlot(
+          stamped(made),
+          queuedMs,
+          made.event.kind === "click" ? made.runEvidence : undefined,
+        );
+        if (starting && slotted.turn.kind === "answered") restore = undefined;
+        return { event: made.event, slotted };
       } finally {
+        // Config effects land inside the slot. Keep their discovery holds
+        // until then, and restore previous demand before another input.
+        if (restore !== undefined) {
+          const previous = restore;
+          recordTaken("start config demand rollback", () => follow(previous));
+        }
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
         // select another slot, including when this click was refused.
         if (held !== null && --held.count === 0)
@@ -779,7 +1035,7 @@ export function rendererHost(
   // One input from its arrival to its settling: its acts settled after its
   // slot.
   const taken = async (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place = "last",
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
@@ -813,69 +1069,27 @@ export function rendererHost(
       log("error", text);
       world.unheard(text);
     });
-  // [LAW:single-enforcer] The one place a push's output is judged: a push is
-  // answered by the reply of its own kind, or it failed.
-  const ask = async <P extends AdapterPush>(
-    push: P,
-  ): Promise<ReplyTo<P["kind"]>> => {
-    // A renderer that rejected fails the push as one whose turn threw, so
-    // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox(async (_queuedMs, holds) => {
-      holds(`push:${push.kind}`);
-      try {
-        const { subscriptions, stored, ...answered } = await renderer.answer({
-          kind: "adapter",
-          push,
-          ...readingsAt(clock),
-        });
-        // [LAW:no-ambient-temporal-coupling] A push's newly named configs
-        // enter before the next queued slot, as they do for an event.
-        const followed = took(
-          subscriptions,
-          [],
-          stored,
-          null,
-          receiptFor(generation),
-        );
-        if (followed.kind === "following")
-          for (const origin of followed.named) {
-            const config = await configInSlot(origin, "config-subscribed");
-            if (config.kind === "unreceived") markUnreceived(origin);
-            unawaited("config", config.settled);
-          }
-        return answered;
-      } catch (thrown) {
-        return {
-          kind: "threw",
-          failure: failureOf(thrown),
-          turnMs: null,
-        } as const;
-      }
-    });
-    // The failure keeps its kind, so a push no renderer took reads as one.
-    if (output.kind === "threw") {
-      const took = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+  // [LAW:single-enforcer] A command uses the same slot and lands every
+  // part of its turn before its caller can use the result.
+  const command = async <C extends Command>(
+    event: C,
+  ): Promise<ReplyTo<C["kind"]>> => {
+    const { turn } = await taken(() => ({ kind: "event", event }));
+    if (turn.kind === "threw") {
+      const label = commandLabel(event);
+      const fields = finalizationFields(turn) ?? [];
+      if (turn.turnMs !== null) fields.unshift(["took", `${turn.turnMs}ms`]);
+      fields.push(["error", turn.failure.detail]);
       throw new CrossedFailure({
-        ...output.failure,
-        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took}: ${output.failure.detail}`,
+        ...turn.failure,
+        message: `${label} threw: ${turn.failure.message}`,
+        detail: eventLine(`${label} threw`, fields),
       });
     }
-    if (output.reply.kind !== push.kind)
-      throw new Error(
-        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
-      );
-    // [LAW:types-are-the-program] exception: the kinds were just compared,
-    // which the compiler cannot carry from the reply's kind to its type.
-    return output.reply as ReplyTo<P["kind"]>;
+    // [LAW:types-are-the-program] exception: inSlot admits the corresponding
+    // reply before landing. The shared turn type cannot carry that correlation.
+    return turn.reply as ReplyTo<C["kind"]>;
   };
-  const tell = (push: AdapterPush): void =>
-    void ask(push).catch((thrown: unknown) => {
-      const failure = failureOf(thrown);
-      // [LAW:single-enforcer] A push no renderer was live to take is the
-      // supervisor's to say.
-      if (failure.kind !== "down") log("error", failure.detail);
-    });
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
       unawaited(
@@ -932,8 +1146,7 @@ export function rendererHost(
     answerClick,
     deliver,
     start: recorded("first"),
-    ask,
-    tell,
+    command,
     moved,
     stats,
     closeWake: () => wake.close(),
@@ -950,31 +1163,3 @@ const stampedOf =
     event: made.event,
     ...readingsAt(clock),
   });
-
-// [LAW:one-source-of-truth] The session an event names: what a turn holds,
-// and what its line's `sid` says. A click naming none, or one whose id failed
-// its checkpoint, names none.
-function sessionOf(event: Event): SessionId | null {
-  switch (event.kind) {
-    // A start is every session's: it holds none of them alone.
-    case "start":
-      return null;
-    case "context":
-    case "request":
-      return event.context.hookData.session_id;
-    // An origin's config is every session's there.
-    case "config":
-      return null;
-    case "world-state":
-      return event.worldState.session;
-    case "click":
-      return event.click.scope === "session" ? event.click.session : null;
-    case "retire":
-    case "effect-done":
-      return event.session;
-    // Every watched session's, or the renderer's own.
-    case "viewers":
-    case "due":
-      return null;
-  }
-}

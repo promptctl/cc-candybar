@@ -70,31 +70,3 @@ type Fields<T, D extends readonly unknown[]> = {
 export type Crosses<T> = [Exclude<Each<T, DEPTH>, true>] extends [never]
   ? true
   : Exclude<Each<T, DEPTH>, true>;
-
-// A reach of one side into the other crosses when what it is handed does and
-// it answers nothing: a notice, so a turn never waits on the other side. Its
-// arguments are a list, so an `undefined` among them arrives as null.
-export interface CannotReach<Reach> {
-  readonly cannotReach: Reach;
-}
-
-// `any` passes for `void` unread, so it is named first, as `Part` names it.
-type Answer<R> = 0 extends 1 & R
-  ? CannotReach<R>
-  : [R] extends [void]
-    ? true
-    : CannotReach<R>;
-
-type Reach<T> = [T] extends [(...args: infer A) => infer R]
-  ? [Exclude<Crosses<A> | Answer<R>, true>] extends [never]
-    ? true
-    : CannotReach<T>
-  : [T] extends [object]
-    ? { [K in keyof T]-?: Reach<T[K]> }[keyof T]
-    : CannotReach<T>;
-
-// `Reaches<T>` is `true` when every reach in `T`, a group of them included,
-// crosses, and otherwise names each that does not.
-export type Reaches<T> = [Exclude<Reach<T>, true>] extends [never]
-  ? true
-  : Exclude<Reach<T>, true>;

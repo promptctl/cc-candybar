@@ -1,3 +1,35 @@
+## [1.235.15](https://github.com/promptctl/cc-candybar/compare/v1.235.14...v1.235.15) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** settle pane deliveries and inspections in their owning turns ([#912](https://github.com/promptctl/cc-candybar/issues/912)) ([5963672](https://github.com/promptctl/cc-candybar/commit/5963672e13da996839cf05d223e81c4ddc63f648))
+
+## [1.235.14](https://github.com/promptctl/cc-candybar/compare/v1.235.13...v1.235.14) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** share managed plugin watches across renderer lifetimes ([#909](https://github.com/promptctl/cc-candybar/issues/909)) ([30e8732](https://github.com/promptctl/cc-candybar/commit/30e873263e903714b0febd0021507e4d0bc6b95a))
+
+## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** keep writes and failures attached to their turn ([#908](https://github.com/promptctl/cc-candybar/issues/908)) ([4680c55](https://github.com/promptctl/cc-candybar/commit/4680c55df0a0905e549e817bb85a273c8c6dc221))
+
+## [1.235.12](https://github.com/promptctl/cc-candybar/compare/v1.235.11...v1.235.12) (2026-11-19)
+
+### Bug Fixes
+
+* **config:** recognize equivalent saved project directories ([#896](https://github.com/promptctl/cc-candybar/issues/896)) ([99736d5](https://github.com/promptctl/cc-candybar/commit/99736d58e59a636f23bf2fc28651bb8eeb1df4da))
+* **config:** select plugin definitions before reading them ([#906](https://github.com/promptctl/cc-candybar/issues/906)) ([98df29e](https://github.com/promptctl/cc-candybar/commit/98df29e0562517e9beb1e1386c47a4f552e80236))
+* **renderer:** use one outcome for each config delivery ([#894](https://github.com/promptctl/cc-candybar/issues/894)) ([f9d55e5](https://github.com/promptctl/cc-candybar/commit/f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81))
+
+## [1.235.11](https://github.com/promptctl/cc-candybar/compare/v1.235.10...v1.235.11) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** check render workspace directories at ingress ([#895](https://github.com/promptctl/cc-candybar/issues/895)) ([c2d97e8](https://github.com/promptctl/cc-candybar/commit/c2d97e8387a54fe5bcd2ce30580d704c3d509943))
+
 ## [1.235.10](https://github.com/promptctl/cc-candybar/compare/v1.235.9...v1.235.10) (2026-11-19)
 
 ### Bug Fixes
