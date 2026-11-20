@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd",
-      "timestamp": "2026-11-20T00:46:17.923Z",
+      "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
+      "timestamp": "2026-11-20T00:54:05.750Z",
       "commits": [
         {
-          "sha": "95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:45:15-07:00",
-          "message": "fix(daemon): reobserve files after incomplete config rollback (#898)\n\n* fix(daemon): reobserve files after incomplete config rollback\n\n* test(config): assert the reported outcome of a refused save\n\n* fix(daemon): reconcile config writes by directory entry\n\n* fix(daemon): preserve file permissions on removal rollback"
+          "sha": "a3a568d69f6f3ad58a5cb426776392244be3a484",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-20T00:52:58Z",
+          "message": "chore(release): set `package.json` to 1.236.1\n\n## [1.236.1](https://github.com/promptctl/cc-candybar/compare/v1.236.0...v1.236.1) (2026-11-20)\n\n### Bug Fixes\n\n* **daemon:** reobserve files after incomplete config rollback ([#898](https://github.com/promptctl/cc-candybar/issues/898)) ([95143c6](https://github.com/promptctl/cc-candybar/commit/95143c6bb6ddc8bc9ce095ccaf20e1a74fdb16cd))\n"
         }
       ]
     },
