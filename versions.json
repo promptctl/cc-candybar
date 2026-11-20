@@ -4,15 +4,22 @@
     {
       "version": "pr-917",
       "ref": "refs/pull/917/merge",
-      "sha": "5f927c4fc7391a567b8827628a83b3cc34c8198c",
-      "timestamp": "2026-11-20T14:42:48.712Z",
+      "sha": "5b68673288ad1a09b7caa2e55bb87ca278f08658",
+      "timestamp": "2026-11-20T15:02:59.584Z",
       "commits": [
         {
-          "sha": "5f927c4fc7391a567b8827628a83b3cc34c8198c",
+          "sha": "5b68673288ad1a09b7caa2e55bb87ca278f08658",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T14:41:28Z",
-          "message": "Merge b1f4cafedb4b752b158d2f2274c06aa704201783 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T15:01:59Z",
+          "message": "Merge 4667551a0f9f888087151268047b06d19052a029 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "4667551a0f9f888087151268047b06d19052a029",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T08:01:47-07:00",
+          "message": "fix(daemon): report a failing config origin once, recheck before hand-off, and hold each daemon fact in its own box\n\nRediscovery reports an owed origin's failure when its reason starts or\nchanges and logs its recovery, so a broken origin no longer re-reports on\nevery batch. Managed folders are rechecked before holders are handed their\norigins, because an idle holder's turn starts on hand-off. The renderer-ended\nand daemon-failed events each get an observable box; answering one rereads\nno restated fault. Git's own registry, the host's throw sink (scoped by\nrenderer) and the retire turn report through the daemon's threw.\n"
         },
         {
           "sha": "b1f4cafedb4b752b158d2f2274c06aa704201783",

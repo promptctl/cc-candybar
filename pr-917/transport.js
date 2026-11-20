@@ -79663,8 +79663,7 @@ var WatcherRegistry = class {
     const slot = shared ?? this.opened(
       key,
       targets,
-      window2 ?? { kind: "direct", completed: () => {
-      }, pending: null },
+      window2 ?? { kind: "direct", pending: null },
       observed2
     );
     const holder = { onInvalidate, observed: /* @__PURE__ */ new Map() };
@@ -79937,7 +79936,7 @@ var WatcherRegistry = class {
                   () => holder.onInvalidate(heard)
                 );
             }
-            window2.completed();
+            if (window2.kind === "batch") window2.completed();
           },
           { unref: true }
         )
@@ -83078,7 +83077,7 @@ var GitDataProvider = class {
       this.watchers = new WatcherRegistry({
         clock: this.clock,
         logger: this.logger,
-        threw: loggedThrew(this.logger)
+        threw: this.threw
       });
       this.ownsWatchers = true;
     }
@@ -90366,11 +90365,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return { kind: "failed", reason: failureOf(thrown2).detail };
     }
   };
-  const work = (what) => [
-    ["renderer", name],
-    ["work", what]
-  ];
-  const notTaken = (what, thrown2) => world.threw("renderer work not taken", work(what), thrown2);
+  const threw2 = (event, fields2, thrown2) => world.threw(event, [["renderer", name], ...fields2], thrown2);
+  const notTaken = (what, thrown2) => threw2("renderer work not taken", [["work", what]], thrown2);
   const recordTaken = (what, operation) => {
     try {
       return operation();
@@ -90494,13 +90490,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const input = stamped(made);
     const { received, turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why]], turn);
-    const threw2 = turn.kind === "threw" ? [
+    const threw3 = turn.kind === "threw" ? [
       {
         kind: THREW_AS[turn.failure.kind],
         reason: turn.failure.message
       }
     ] : [];
-    const outcomes = settled3.then((outcomes2) => [...threw2, ...outcomes2]);
+    const outcomes = settled3.then((outcomes2) => [...threw3, ...outcomes2]);
     return turn.kind === "threw" && !received ? { kind: "unreceived", failure: turn.failure, settled: outcomes } : {
       kind: "received",
       failure: turn.kind === "threw" ? turn.failure : null,
@@ -90646,7 +90642,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const deliver2 = recorded2("last");
   const unawaited = (what, settling) => void settling.catch(
-    (thrown2) => world.threw("renderer turn unsettled", work(what), thrown2)
+    (thrown2) => threw2("renderer turn unsettled", [["work", what]], thrown2)
   );
   const command = async (event) => {
     const { turn } = await taken2(() => ({ kind: "event", event }));
@@ -90703,7 +90699,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     // every bar.
     said: (text4) => world.unheard(text4),
     log: (text4) => log("info", text4),
-    threw: world.threw
+    threw: threw2
   });
   return {
     name,
@@ -91672,7 +91668,11 @@ var ConfigDiscovery = class {
     this.texts = new ConfigText(deps.openText);
     this.watches = deps.watchers.batch(
       "config-discovery",
-      () => this.rediscovered({ kind: "config-watch" })
+      () => this.rediscovered({
+        why: "config-watch",
+        answers: null,
+        rechecks: "observed"
+      })
     );
   }
   deps;
@@ -91753,15 +91753,14 @@ var ConfigDiscovery = class {
         const shared = this.batch();
         for (const [key, origin] of fresh)
           observed2.push(
-            this.discovered(key, origin, shared, null, {
-              renderers: /* @__PURE__ */ new Map([[renderer, moved2]]),
-              selected: /* @__PURE__ */ new Map(),
-              debt: { owed: false }
+            this.discovered(key, origin, shared, {
+              kind: "fresh",
+              renderer,
+              moved: moved2
             })
           );
       }
     } finally {
-      this.reloaded(observed2);
       let released = 0;
       for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
         if (wanted.has(key)) {
@@ -91784,6 +91783,7 @@ var ConfigDiscovery = class {
             ["released", String(released)]
           ])
         );
+      this.reloaded(observed2);
     }
   }
   // [LAW:single-enforcer] The renderer can keep its earlier selection or
@@ -91835,13 +91835,17 @@ var ConfigDiscovery = class {
     const changed = files.flatMap((file) => [file, landingPath(file)]);
     for (const { landingPaths, debt } of this.followed.values())
       if (changed.some((file) => landingPaths.has(file))) debt.owed = true;
-    return this.rediscovered({ kind: "landed", writer });
+    return this.rediscovered({
+      why: "landed",
+      answers: writer,
+      rechecks: "observed"
+    });
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
     for (const { debt } of this.followed.values()) debt.owed = true;
-    this.rediscovered({ kind: "again", why });
+    this.rediscovered({ why, answers: null, rechecks: "moved" });
   }
   close() {
     if (this.closed) return;
@@ -91869,45 +91873,57 @@ var ConfigDiscovery = class {
   // again: one read of what they share, each origin's watch following where
   // its config can change now. Those whose snapshot digests anew go to their
   // holders; a landed write's writer has them as its answer.
-  rediscovered(trigger) {
+  rediscovered({
+    why,
+    answers,
+    rechecks
+  }) {
     const owed = [...this.followed].filter(([, { debt }]) => debt.owed);
     if (owed.length === 0) return [];
-    const why = trigger.kind === "again" ? trigger.why : trigger.kind;
     const shared = this.batch();
     const moved2 = [];
     const observed2 = [];
     for (const [key, was] of owed) {
+      const at = [
+        ["why", why],
+        ["origin", key]
+      ];
+      const { debt } = was;
       try {
-        const now2 = this.discovered(key, was.origin, shared, was, was);
+        const now2 = this.discovered(key, was.origin, shared, {
+          kind: "followed",
+          was
+        });
         observed2.push(now2);
         if (now2.digest !== was.digest) moved2.push(now2);
+        if (debt.failing !== null)
+          this.deps.log("info", eventLine("config discovery recovered", at));
+        debt.failing = null;
       } catch (thrown2) {
-        this.deps.threw(
-          "config discovery threw",
-          [
-            ["why", why],
-            ["origin", key]
-          ],
-          thrown2
-        );
+        const reason = failureOf(thrown2).message;
+        if (reason !== debt.failing)
+          this.deps.threw("config discovery threw", at, thrown2);
+        debt.failing = reason;
       }
     }
-    const answered = this.publish(
-      moved2,
-      trigger.kind === "landed" ? trigger.writer : null
-    );
-    this.deps.log(
-      "info",
-      eventLine("config discovery", [
-        ["why", why],
-        ["followed", String(this.followed.size)],
-        ["discovered", String(owed.length)],
-        ["moved", String(moved2.length)],
-        ["owed", String(owed.length - observed2.length)]
-      ])
-    );
-    this.reloaded(trigger.kind === "again" ? moved2 : observed2);
-    return answered;
+    const handOff = () => this.publish(moved2, answers);
+    try {
+      this.deps.log(
+        "info",
+        eventLine("config discovery", [
+          ["why", why],
+          ["followed", String(this.followed.size)],
+          ["discovered", String(owed.length)],
+          ["moved", String(moved2.length)],
+          ["owed", String(owed.length - observed2.length)]
+        ])
+      );
+      this.reloaded(rechecks === "observed" ? observed2 : moved2);
+    } catch (thrown2) {
+      handOff();
+      throw thrown2;
+    }
+    return handOff();
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -91945,7 +91961,13 @@ var ConfigDiscovery = class {
   // What discovery finds at `origin` now, written as its entry: its watch
   // following the targets that finding names, and what that watch cannot
   // hear in the snapshot. A snapshot that digests as `was` did stays `was`'s.
-  discovered(key, origin, shared, was, holders) {
+  discovered(key, origin, shared, prior) {
+    const { was, renderers, selected, debt } = prior.kind === "followed" ? { ...prior.was, was: prior.was } : {
+      was: null,
+      renderers: /* @__PURE__ */ new Map([[prior.renderer, prior.moved]]),
+      selected: /* @__PURE__ */ new Map(),
+      debt: { owed: false, failing: null }
+    };
     const found2 = discover(
       {
         ...configQuery(origin.projectDir, origin.target),
@@ -91966,7 +91988,6 @@ var ConfigDiscovery = class {
     const landingPaths = new Set(
       paths2.targets.polled.flatMap((file) => [file, shared.landingPath(file)])
     );
-    const { debt } = holders;
     const { watch: watch2, move } = this.watches.follow(
       was?.watch ?? null,
       spec,
@@ -91987,7 +92008,6 @@ var ConfigDiscovery = class {
       managedFolders
     };
     this.observations.set(observed2.snapshot, observed2);
-    const { renderers, selected } = holders;
     const entry = {
       ...observed2,
       watch: watch2,
@@ -92131,7 +92151,9 @@ function createDaemon(inputs) {
   );
   const stats = new RuntimeStats(clock);
   const recordings = inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
-  let rendererEnded = null;
+  const rendererEnded = observable.box(null, {
+    deep: false
+  });
   const daemonFailed = observable.box(null, { deep: false });
   const held = (text4, fromEnvironment) => {
     const prior = daemonFailed.get();
@@ -92161,21 +92183,21 @@ function createDaemon(inputs) {
     clock
   });
   const restated = observable.box(
-    { fileEvents: [], launcher: [], rendererEnded: null },
+    { fileEvents: [], launcher: [] },
     { deep: false, equals: compareStructural }
   );
   function restateFaults() {
     runInAction(
       () => restated.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing(),
-        rendererEnded
+        launcher: launcher.standing()
       })
     );
   }
   const daemonFaults = computed(
     () => ({
       ...restated.get(),
+      rendererEnded: rendererEnded.get(),
       daemonFailed: daemonFailed.get()
     })
   );
@@ -92199,6 +92221,11 @@ function createDaemon(inputs) {
       if (phase.kind !== "building") restateFaults();
     }
   });
+  const answer2 = (box, event) => {
+    const held2 = box.get();
+    if (held2 !== null && answeredBy(held2, event))
+      runInAction(() => box.set({ ...held2, answered: true }));
+  };
   const acknowledgeDisplayed = (shown) => {
     let changed = false;
     for (const { kind, event } of shown) {
@@ -92207,17 +92234,11 @@ function createDaemon(inputs) {
           if (launcher.answeredPipeEvent(event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
+          answer2(rendererEnded, event);
           break;
-        case "daemon-failed": {
-          const failed3 = daemonFailed.get();
-          if (failed3 !== null && answeredBy(failed3, event))
-            runInAction(() => daemonFailed.set({ ...failed3, answered: true }));
+        case "daemon-failed":
+          answer2(daemonFailed, event);
           break;
-        }
       }
     }
     if (changed) restateFaults();
@@ -92481,11 +92502,13 @@ function createDaemon(inputs) {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        rendererEnded = {
-          ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1
-        };
-        restateFaults();
+        const prior = rendererEnded.get();
+        runInAction(
+          () => rendererEnded.set({
+            ...event,
+            revision: (prior?.revision ?? 0) + 1
+          })
+        );
       }
     });
     const renderer = rendererHost(
@@ -92595,12 +92618,16 @@ function createDaemon(inputs) {
               event: { kind: "retire", session }
             }),
             [["why", "renderer-moved"]]
-          ).catch((error) => {
-            log(
-              "error",
-              `renderer ${former.renderer.name} retire ${session}: ${String(error)}`
-            );
-          });
+          ).catch(
+            (thrown2) => threw2(
+              "renderer retire threw",
+              [
+                ["renderer", former.renderer.name],
+                ["session", session]
+              ],
+              thrown2
+            )
+          );
         frameFeeds.handedIn(null);
         frameFeeds.announce();
       }
