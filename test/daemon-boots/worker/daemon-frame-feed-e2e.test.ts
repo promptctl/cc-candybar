@@ -63,6 +63,7 @@ import { writeAtomic } from "../../../src/utils/atomic-write";
 import { until, type Condition } from "../../helpers/until";
 import { elapsedMs } from "../../../src/time";
 import {
+  keptRenders,
   loggedLines,
   logLines,
   renderEventsOf,
@@ -746,18 +747,35 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // single line that contains a button to reset those settings".
   test("while the pane draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
     const sid = "feed-handoff";
-    // [LAW:nothing-unseen] Each render's event says whether the statusline
-    // handed off, and to which lanes.
-    const events = (): string[] => renderEvents(sid);
+    const body = renderBody(sid, projectDir, {}, args("handoff"));
     // The switch alone draws nothing: with no pane following the session, the
     // statusline keeps the bar.
     expect(
       textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
-    await until(() => events().length > 0, "the first render's event");
-    // A request answered TIMEOUT under load is asked again, and each is an
-    // event: every one so far kept the bar.
-    for (const event of events()) expect(event).toMatch(/ handoff=- /);
+    // A reply whose deadline is already past records an attempt without a draw.
+    const expired = await sendDaemonRequest(
+      sockPath,
+      { ...body, v: PROTOCOL_VERSION, kind: "render", deadline: 1 },
+      5_000,
+    );
+    if (expired.ok || expired.code !== "TIMEOUT" || expired.request === undefined)
+      throw new Error(
+        `expected a timeout for the expired draw: ${JSON.stringify(expired)}`,
+      );
+    await until(
+      () =>
+        renderEvents(sid).some(
+          (line) =>
+            line.includes(` req=${expired.request} `) &&
+            line.includes(" outcome=abandoned "),
+        ),
+      "the expired request's abandoned render event",
+    );
+    // [LAW:nothing-unseen] Every frame the statusline received so far kept
+    // the bar. Use the same log selection as the render retry helpers.
+    for (const event of await renderLines(env, sid))
+      expect(event).toMatch(/ handoff=- /);
     // The stream draws the whole bar.
     const stream = subscribeUntilEnd(sid, "pane");
     await until(() => stream.live().length > 0, "the stream's frame");
@@ -775,7 +793,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `🧪 ${HANDOFF_BUTTON}`,
     ]);
     // A reader asking for the Frame is answered the line the statusline shows.
-    const body = renderBody(sid, projectDir, {}, args("handoff"));
     const handoffFrame = await frameRequest(sockPath, body);
     expect(composeBar(handoffFrame)).toBe(await renderRequest(sockPath, body));
     expect(handoffFrame).toMatchObject({ nextChange: Infinity, pending: [] });
@@ -784,7 +801,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // first render can land its event after that count is taken.
     await loggedLines(
       env,
-      (lines) => renderEventsOf(lines, sid),
+      (lines) => keptRenders(lines, sid),
       (found) => / handoff=pane /.test(found.at(-1) ?? ""),
       "the handoff render's event",
     );

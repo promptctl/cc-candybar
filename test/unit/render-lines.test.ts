@@ -59,10 +59,13 @@ describe("keptRenders", () => {
 
   test("a render the client asked again keeps the attempt it read, and no other session's", () => {
     const timedOut = rendered("s", "timedOut=Y ended=deadline pending=git");
+    const abandoned = rendered("s", "timedOut=N drew=- outcome=abandoned");
     const retried = rendered("s", "timedOut=N ended=deadline pending=git");
     const kept = rendered("s", "timedOut=N ended=settled pending=-");
     const other = rendered("t", "timedOut=N ended=settled pending=-");
-    expect(keptRenders([timedOut, retried, kept, other], "s")).toEqual([kept]);
+    expect(keptRenders([timedOut, abandoned, retried, kept, other], "s")).toEqual([
+      kept,
+    ]);
   });
 
   test("a render that drew only a superseded source pending is kept", () => {

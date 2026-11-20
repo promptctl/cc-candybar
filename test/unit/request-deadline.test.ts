@@ -11,7 +11,7 @@ import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
   parseClientDeadline,
-  waitBudgetMs,
+  renderDeadlines,
 } from "../../src/daemon/foundations/request-deadline";
 
 // A request accepted at 1000 ms on the monotonic clock, beginning 10 ms later,
@@ -19,45 +19,49 @@ import {
 const ACCEPTED = 1000;
 const ARRIVAL = { epochMs: 5_000_000, monoMs: 1010 };
 
-describe("a request's wait budget", () => {
+describe("a request's source wait and reply deadlines", () => {
   test("a stated deadline ends the wait the reserve before it", () => {
     expect(
-      waitBudgetMs(
+      renderDeadlines(
         { kind: "stated", at: ARRIVAL.epochMs + 100 },
         ACCEPTED,
         ARRIVAL,
       ),
-    ).toBe(100 - DRAW_RESERVE_MS);
+    ).toEqual({
+      waitEndsAt: ARRIVAL.monoMs + 100 - DRAW_RESERVE_MS,
+      clientEndsAt: ARRIVAL.monoMs + 100,
+    });
   });
 
   test("a deadline past the backstop waits only until the backstop's reserve", () => {
     expect(
-      waitBudgetMs(
+      renderDeadlines(
         { kind: "stated", at: ARRIVAL.epochMs + 60_000 },
         ACCEPTED,
         ARRIVAL,
       ),
-    ).toBe(ACCEPTED + REQUEST_TIMEOUT_MS - DRAW_RESERVE_MS - ARRIVAL.monoMs);
+    ).toEqual({
+      waitEndsAt: ACCEPTED + REQUEST_TIMEOUT_MS - DRAW_RESERVE_MS,
+      clientEndsAt: ARRIVAL.monoMs + 60_000,
+    });
   });
 
-  test("an unstated deadline is the earliest an old client hangs up: the native client's, after a connect that took all its time", () => {
-    expect(waitBudgetMs({ kind: "unstated" }, ACCEPTED, ARRIVAL)).toBe(
-      ACCEPTED +
-        TOTAL_BUDGET_MS -
-        CONNECT_TIMEOUT_MS -
-        DRAW_RESERVE_MS -
-        ARRIVAL.monoMs,
-    );
+  test("an old client can take a reply until the backstop even after its estimated wait", () => {
+    expect(renderDeadlines({ kind: "unstated" }, ACCEPTED, ARRIVAL)).toEqual({
+      waitEndsAt:
+        ACCEPTED + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS - DRAW_RESERVE_MS,
+      clientEndsAt: null,
+    });
   });
 
   test("a deadline already inside the reserve leaves no wait", () => {
     expect(
-      waitBudgetMs(
+      renderDeadlines(
         { kind: "stated", at: ARRIVAL.epochMs + 5 },
         ACCEPTED,
         ARRIVAL,
-      ),
-    ).toBeLessThan(0);
+      ).waitEndsAt,
+    ).toBeLessThan(ARRIVAL.monoMs);
   });
 });
 

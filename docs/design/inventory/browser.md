@@ -147,7 +147,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 
 ## 5. Transport
 
-- **No server in `src/`.** The only listener is the unix socket in `runDaemon`. `node:https` is used as a client in `src/segments/pricing.ts`.
+- **No server in `src/`.** The only listener is the unix socket in `runDaemon`. `node:https` is used as a client in `src/daemon/cache/pricing.ts`.
 - **`scripts/bar-web/server.ts`** is a dev harness: `node:http`, importing `test/helpers/drive-bar`, one bar, serial POSTs, assets read from disk. It shows Host checking (421) and JSON-only requests, but it must not ship.
 - **Node:** `engines` is `^20.19.0 || >=22.12.0`. This machine runs v26.7.0, where `WebSocket` is a client global, and there is no `WebSocketServer`, no `EventSource`, and no WebSocket builtin module. So no WebSocket server exists without a dependency or hand-written framing.
 - **A mismatch to flag:** `tsdown.config.ts` targets `node18`, below `engines`.

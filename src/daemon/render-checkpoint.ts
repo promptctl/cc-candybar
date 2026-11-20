@@ -214,6 +214,14 @@ export function checkRenderRequest(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`,
     );
   }
+  // [LAW:single-enforcer] This directory selects the host's checkout
+  // observation. A reported path is absolute. Only an omitted one uses cwd.
+  const currentDir = req.hookData?.workspace?.current_dir;
+  if (typeof currentDir === "string" && !isAbsolute(currentDir)) {
+    wireProblems.push(
+      `field 'workspace.current_dir' is not an absolute path: ${JSON.stringify(currentDir)}`,
+    );
+  }
   // The args too: parseRenderArgs reads them below, outside the render's own
   // error path, so a value that is not a list of strings is refused here
   // rather than thrown past the render event.
@@ -316,7 +324,14 @@ export function checkRenderRequest(
       ...Object.fromEntries(
         refusedHints(rawHints, hints).map(({ hint, sent }) => [hint, sent]),
       ),
-      hookData: { ...req.hookData, session_id: sessionId.id },
+      hookData: {
+        ...req.hookData,
+        session_id: sessionId.id,
+        workspace: {
+          ...req.hookData.workspace,
+          current_dir: currentDir ?? req.cwd,
+        },
+      },
       deadline,
       encoding: encoding.encoding,
       hints,

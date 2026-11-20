@@ -1,7 +1,7 @@
 import { logLines as linesOf } from "../../src/daemon/log";
 import { hostOf } from "./host";
 import { logPath } from "../../src/daemon/paths";
-import { valueOf } from "../../src/utils/logfmt";
+import { fieldsOf, valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] The daemon writes its log off the event
@@ -52,11 +52,12 @@ export const renderEventsOf = (
 ): string[] =>
   lines.filter((l) => l.includes(`] render sid=${valueOf(sessionId)} `));
 
-// [LAW:one-source-of-truth] A render event whose reply its client read: an
-// attempt the client gave up on is logged too, so a count of a session's
-// answers counts these, never every event.
-export const answeredRender = (line: string): boolean =>
-  line.includes(" timedOut=N ");
+// [LAW:one-source-of-truth] Count the session's render answers. A backstop
+// or an abandoned draw can log an attempt that only produced a timeout.
+export const answeredRender = (line: string): boolean => {
+  const fields = fieldsOf(line);
+  return fields.get("timedOut") === "N" && fields.get("outcome") !== "abandoned";
+};
 
 // Whether every value a render event drew pending is a plugin source a run
 // superseded, as its `sourcesPending=` names them.

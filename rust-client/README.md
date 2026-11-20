@@ -30,6 +30,10 @@ cargo build --release
 # Binary at: target/release/cc-candybar (~365 KB stripped on aarch64-apple-darwin)
 ```
 
+From a source checkout, `just install-rust` stages the built executable at
+`bin/cc-candybar-native`. It replaces the executable in one rename so existing
+processes can finish using the copy they launched.
+
 To test locally with the binary in its production layout (so the
 `<bin>/../dist/index.mjs` resolution works):
 

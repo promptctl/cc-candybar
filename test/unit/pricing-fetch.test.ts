@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 
-import { PricingService } from "../../src/segments/pricing";
+import { PricingService } from "../../src/daemon/cache/pricing";
 
 // The one seam is the network: `get` answers with a real Readable that has the
 // reads a test pushes, so what decodes them across a read boundary is node's

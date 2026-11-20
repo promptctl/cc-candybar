@@ -35,7 +35,6 @@ import {
   type RendererName,
 } from "../../../src/daemon/foundations/renderer-name";
 import {
-  rendererOf,
   type RendererBoot,
 } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
@@ -76,7 +75,7 @@ const WORKTREE = rendererNameOf("worktree");
 // renderer boot waiting for the child, with end and crash under the test's clock.
 function waitingRenderer(waitingFor: RendererName) {
   const launches: Array<(result: LaunchResult) => void> = [];
-  const pushes: Array<[RendererName, string]> = [];
+  const commands: Array<[RendererName, string]> = [];
   const closed: RendererName[] = [];
   const supervised = processPort({
     cwd: "/",
@@ -105,13 +104,14 @@ function waitingRenderer(waitingFor: RendererName) {
         const link = chosen(prepared).start(own);
         return {
           ...link,
-          renderer: rendererOf({
-            event: (input) => link.renderer.answer(input),
-            adapter: (input) => {
-              pushes.push([prepared.name, input.push.kind]);
+          renderer: {
+            answer: (input) => {
+              const { kind } = input.event;
+              if (kind === "close-journal" || kind === "close-views")
+                commands.push([prepared.name, kind]);
               return link.renderer.answer(input);
             },
-          }),
+          },
           close: async () => {
             await link.close();
             closed.push(prepared.name);
@@ -120,7 +120,7 @@ function waitingRenderer(waitingFor: RendererName) {
       },
     };
   };
-  return { port, launches, pushes, closed };
+  return { port, launches, commands, closed };
 }
 
 jest.setTimeout(30_000);
@@ -212,9 +212,11 @@ describe("the daemon is a value", () => {
     open = null;
   };
 
+  // [LAW:one-source-of-truth] These clients take replies directly. A case
+  // that states a deadline uses the wall clock of the daemon it drives.
   const renderRequest = (
     sessionId: string,
-    deadlineMs = 2_000,
+    deadline?: number,
   ): ReaderRenderRequest => ({
     v: PROTOCOL_VERSION,
     kind: "render",
@@ -224,7 +226,7 @@ describe("the daemon is a value", () => {
     cwd: projectDir,
     termCols: 200,
     termRows: 40,
-    deadline: Date.now() + deadlineMs,
+    ...(deadline === undefined ? {} : { deadline }),
     // The environment it runs in now, as a client started by Claude Code
     // reports its own.
     env: plainEnvironment(process.env),
@@ -383,7 +385,7 @@ describe("the daemon is a value", () => {
 
     await close(daemon);
 
-    expect(renderer.pushes).toEqual([]);
+    expect(renderer.commands).toEqual([]);
     expect(renderer.closed).toEqual([MAIN_RENDERER]);
     await Promise.all(openLogs.map((log) => log.drained()));
     const log = readFileSync(daemonPaths(hostNow()).log, "utf8");
@@ -426,7 +428,7 @@ describe("the daemon is a value", () => {
     await close(daemon);
     await clock.settle(60_000);
 
-    expect(renderer.pushes).toEqual([
+    expect(renderer.commands).toEqual([
       [MAIN_RENDERER, "close-journal"],
       [MAIN_RENDERER, "close-views"],
     ]);
@@ -468,24 +470,18 @@ describe("the daemon is a value", () => {
         const link = local(prepared).start(own);
         return {
           ...link,
-          renderer: rendererOf({
-            event: async (input) => {
+          renderer: {
+            answer: async (input) => {
               if (
                 input.event.kind === "context" &&
                 input.event.context.hookData.session_id === session
               )
                 await context.wait();
-              return link.renderer.answer(input);
-            },
-            adapter: async (input) => {
-              if (
-                prepared.name === WORKTREE &&
-                input.push.kind === "close-journal"
-              )
+              if (prepared.name === WORKTREE && input.event.kind === "close-journal")
                 await journal.wait();
               return link.renderer.answer(input);
             },
-          }),
+          },
         };
       },
     });
@@ -550,7 +546,9 @@ describe("the daemon is a value", () => {
       const second = request(clickBody(clear));
       // The context uses the same mailbox. Once it reaches the renderer,
       // the second click has already handed its act to the pane queue.
-      const pending = request(renderRequest(session, 20_000));
+      const pending = request(
+        renderRequest(session, systemTimekeeper.now() + 20_000),
+      );
       await context.reached;
       expect(linesTyped).toEqual(["/compact"]);
       void daemon.close();
@@ -700,11 +698,13 @@ describe("the daemon is a value", () => {
       `{ segments: { at: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['at'] } }`,
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
-    const daemon = construct({
-      clock: { ...systemTimekeeper, now: () => frozen.getTime() },
-    });
+    const clock = { ...systemTimekeeper, now: () => frozen.getTime() };
+    const daemon = construct({ clock });
 
-    const bar = await answer(daemon, renderRequest("value-clock"));
+    const bar = await answer(
+      daemon,
+      renderRequest("value-clock", clock.now() + 2_000),
+    );
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
@@ -727,7 +727,7 @@ describe("the daemon is a value", () => {
     daemon.arm();
 
     // A recorded session and a source waiting in the background.
-    await answer(daemon, renderRequest("value-close", 1));
+    await answer(daemon, renderRequest("value-close"));
     const { setting, on } = LANES.statusline.switch;
     await clickLink(
       daemon,
@@ -771,7 +771,9 @@ describe("the daemon is a value", () => {
     // A render waiting on the slow source as the daemon closes.
     await until(() => existsSync(ran), "the slow source running");
     const midWait = daemon.handle(
-      classifyInbound(renderRequest("value-close", 20_000)),
+      classifyInbound(
+        renderRequest("value-close", systemTimekeeper.now() + 20_000),
+      ),
       () => false,
       daemon.stats.accept(),
       () => false,

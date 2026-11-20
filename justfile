@@ -17,8 +17,7 @@ deploy:
 # and `--locked` refuses a build that would change it after.
 install-rust:
     cd rust-client && cargo metadata --format-version 1 >/dev/null && digest="$(../node_modules/.bin/tsx ../scripts/crate-digest.ts .)" && CC_CANDYBAR_RUST_SOURCE="$digest" cargo build --release --locked
-    cp rust-client/target/release/cc-candybar bin/cc-candybar-native
-    chmod +x bin/cc-candybar-native
+    ./node_modules/.bin/tsx scripts/stage-executable.ts rust-client/target/release/cc-candybar bin/cc-candybar-native
     @file bin/cc-candybar-native
     @echo "Native binary staged at bin/cc-candybar-native."
 

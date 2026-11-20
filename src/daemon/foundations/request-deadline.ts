@@ -6,11 +6,30 @@
 // it, as `deadline` on the request, and the wait ends early enough for the
 // draw to fit before it. A value still not answered then draws as pending.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "./protocol";
+import type { RequestId } from "../../renderer-interface/interface.js";
+import {
+  CONNECT_TIMEOUT_MS,
+  PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
+  type Refusal,
+} from "./protocol";
 
 // [LAW:single-enforcer] Every handler's backstop: the connection's own timer
 // answers TIMEOUT at this, whatever its request is still doing.
 export const REQUEST_TIMEOUT_MS = 200;
+
+// [LAW:single-enforcer] The timeout sent by the connection backstop or by
+// the render that learned its reply cannot arrive within its own deadline.
+export const timeoutResponse = (
+  request: RequestId,
+  error = `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
+): Refusal => ({
+  ok: false,
+  error,
+  code: "TIMEOUT",
+  daemonV: PROTOCOL_VERSION,
+  request,
+});
 
 // What a request's wait leaves for its draw: the synchronous turn that reads
 // the view and turns it into the answer's bytes. Held to at p99 by
@@ -54,21 +73,24 @@ export interface Arrival {
   readonly monoMs: number;
 }
 
-// [LAW:one-source-of-truth] The milliseconds a request's wait has from its
-// arrival: until its client hangs up or the connection's backstop answers,
-// whichever is first, less the draw's reserve. A client that states no
-// deadline is taken to hang up at the earliest an old client can: the native
-// client's, whose budget runs from before a connect that took all its time.
-// Below zero is no wait at all.
-export function waitBudgetMs(
+// [LAW:one-source-of-truth] Translate a client's explicit deadline to the
+// host clock. The source wait leaves the draw's reserve. The earlier budget
+// estimate for old clients limits the wait and gives no evidence the client
+// left. The connection owns its backstop.
+export function renderDeadlines(
   deadline: ClientDeadline,
   acceptedMonoMs: number,
   arrival: Arrival,
-): number {
-  const clientEnd =
+): { readonly waitEndsAt: number; readonly clientEndsAt: number | null } {
+  const clientEndsAt =
     deadline.kind === "stated"
       ? arrival.monoMs + (deadline.at - arrival.epochMs)
-      : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
+      : null;
+  const sourceEnd = Math.min(
+    acceptedMonoMs + REQUEST_TIMEOUT_MS,
+    clientEndsAt ?? acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS,
+  );
+  const waitEndsAt =
+    arrival.monoMs + Math.round(sourceEnd - DRAW_RESERVE_MS - arrival.monoMs);
+  return { waitEndsAt, clientEndsAt };
 }

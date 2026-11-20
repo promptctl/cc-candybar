@@ -31,10 +31,12 @@ import type {
   Effect,
   Present,
   Event,
+  Notification,
   Renderer,
   RendererOutput,
   RequestId,
   Subscription,
+  Subscriptions,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import {
@@ -78,12 +80,15 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import type { HeldEvent } from "../src/utils/event-hold";
+import { joinedEvent } from "../src/utils/event-hold";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
+import { stateDir } from "../src/daemon/paths";
+import { STORAGE_FOLDER } from "../src/config/loader/plugins";
+import { writeStatePlan } from "./helpers/state-file";
 import {
   hearingEvents,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -113,12 +118,10 @@ function renderer(
   // Each session whose view told the cache its data moved, in order.
   readonly changed: string[];
   readonly logged: string[];
-  readonly pipesAnswered: HeldEvent[];
   readonly rig: SessionRig;
 } {
   const logged: string[] = [];
   const changed: string[] = [];
-  const pipesAnswered: HeldEvent[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
     observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
@@ -138,7 +141,6 @@ function renderer(
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
     }),
-    eventAnswered: (event) => pipesAnswered.push(event),
   };
   cleanups.push(() => parts.feeds.closeAll(READ.tick));
   // The cache's record of a delivered frame, heard on its way in.
@@ -150,12 +152,11 @@ function renderer(
     return result;
   };
   return {
-    r: mainRenderer(parts, NO_PUSHES, NOTHING_STORED),
+    r: mainRenderer(parts, NOTHING_STORED),
     parts,
     recorded,
     changed,
     logged,
-    pipesAnswered,
     rig,
   };
 }
@@ -167,6 +168,7 @@ function checked(
   pane?: string,
   file = "config.json5",
   terminal: Pick<ReaderRenderRequest, "termCols" | "termRows"> = {},
+  project = PROJECT,
 ): CheckedRenderRequest {
   const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
@@ -175,9 +177,17 @@ function checked(
     {
       v: PROTOCOL_VERSION,
       kind: "render",
-      hookData,
+      hookData: {
+        ...hookData,
+        cwd: project,
+        workspace: {
+          ...hookData.workspace,
+          current_dir: project,
+          project_dir: project,
+        },
+      },
       args: ["cc-candybar", "--config", configFile, "--bogus"],
-      cwd: PROJECT,
+      cwd: project,
       encoding: "frame",
       env: TEST_ENV,
       ...terminal,
@@ -344,7 +354,295 @@ async function dueFrame(r: Renderer, elapsed = 0) {
   return pushed.frame;
 }
 
+async function restartableRendererHost(context: CheckedRenderRequest) {
+  const prior = renderer();
+  let current = prior;
+  const origin = context.requested;
+  const worldState = prior.rig.served.collector.requested(
+    context,
+    TEST_ENVIRONMENT,
+  );
+  const { discovery } = prior.rig.cache.configs;
+  const published: Subscriptions[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      { answer: (input) => current.r.answer(input) },
+      systemTimekeeper.monotonic,
+    ),
+    () => {},
+    {
+      subscribed: (subscriptions) => void published.push(subscriptions),
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    { ...NO_ACTS, configs: discovery },
+  );
+  cleanups.push(() => host.closeWake());
+  const submit = (event: Notification) => host.answer(() => ({ kind: "event", event }));
+  const draw = async () => {
+    const { effects } = await submit({ kind: "request", id: REQUEST, context });
+    return textOf(parseFrame(presentOf(effects).frame));
+  };
+  expect(await submit({ kind: "context", context, worldState })).toMatchObject({
+    kind: "answered",
+  });
+  const reload = async (file: string) => {
+    expect(discovery.landed([file])).toEqual([origin]);
+    const config = discovery.snapshotOf(origin);
+    if (config === null) throw new Error("missing changed config");
+    expect(await submit({ kind: "config", origin, config })).toMatchObject({
+      kind: "answered",
+    });
+  };
+  const replace = async () => {
+    current = renderer();
+    expect(await host.start(
+      () => ({
+        kind: "event",
+        event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
+      }),
+      [],
+    )).toMatchObject({ kind: "answered" });
+  };
+  return {
+    discovery,
+    published,
+    draw,
+    reload,
+    replace,
+    entry: () => current.rig.cache.getOrCreate(origin),
+    hold: () => current.rig.cache.hold(origin),
+  };
+}
+
 describe("a statusline request", () => {
+  test("a replacement keeps the selected plugin build and the current error until valid removal", async () => {
+    const context = checked();
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, "p");
+    fs.mkdirSync(plugin);
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'VALID-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }');
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
+    expect(await draw()).toContain("VALID-PLUGIN");
+    const good = discovery.snapshotOf(origin);
+    if (good === null) throw new Error("missing accepted config");
+    expect(discovery.retainedOf(origin)).toBe("current");
+    const originalSources = published.at(-1)?.sources[SESSION];
+    expect(originalSources).toEqual([
+      expect.objectContaining({ kind: "plugin", source: "plugins.p.marker" }),
+    ]);
+
+    const edit = async (text: string) => {
+      fs.writeFileSync(file, text);
+      await reload(file);
+    };
+    await edit("{ invalid syntax");
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(discovery.retainedOf(origin)).toBe(good);
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+
+    await replace();
+    expect(published.at(-1)?.sources[SESSION]).toEqual(originalSources);
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(entry().lastError).toBe(error);
+    expect(discovery.retainedOf(origin)).toBe(good);
+
+    await edit("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
+    expect(published.at(-1)?.sources[SESSION]).toEqual([]);
+    expect(await draw()).toContain("AFTER-REMOVAL");
+    expect(entry().lastError).toBeNull();
+    expect(discovery.retainedOf(origin)).toBe("current");
+  });
+
+  test("withdrawing project approval replaces the live last-good build even while config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'APPROVED-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ root: { h: ["repo.p.marker"] } }');
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const { discovery, published, draw, reload, replace, entry, hold } =
+      await restartableRendererHost(context);
+    expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "approved" });
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    expect(published.at(-1)?.managedFolders).toContain(folder);
+    fs.writeFileSync(file, "{ invalid syntax");
+    await reload(file);
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+
+    {
+      using drawing = hold();
+      expect(writeStatePlan(book.plan(() => ({})))).toMatchObject({ kind: "ok" });
+      await reload(repoConfigsPath(state));
+      expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "awaiting" });
+      expect(published.at(-1)?.managedFolders).toContain(folder);
+      expect(drawing.state.config.segments["repo.p.marker"]).toBeDefined();
+    }
+    const live = await draw();
+    const liveFolders = published.at(-1)?.managedFolders;
+    expect(entry().lastError).toBe(error);
+
+    await replace();
+    expect(await draw()).not.toContain("APPROVED-PLUGIN");
+    expect(entry().lastError).toBe(error);
+    expect(live).not.toContain("APPROVED-PLUGIN");
+    expect(liveFolders).not.toContain(folder);
+
+    fs.writeFileSync(file, "{ segments: { s: { template: 'RECOVERED' } }, root: { h: ['s'] } }");
+    await reload(file);
+    expect(await draw()).toContain("RECOVERED");
+    expect(entry().lastError).toBeNull();
+  });
+
+  test("the bundled fallback follows project discovery while the authored config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const file = path.join(dir, "config.json5");
+    fs.writeFileSync(file, "{ invalid syntax");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const definition = path.join(plugin, "plugin.json5");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(definition, `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } }
+    }`);
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
+    const folders = () => published.at(-1)?.managedFolders;
+    const fallback = entry().state;
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+    expect(folders()).not.toContain(folder);
+
+    fs.writeFileSync(file, "\n\n{ another invalid edit");
+    await reload(file);
+    expect(entry().lastError).not.toBe(error);
+    expect(entry().state).toBe(fallback);
+
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const recorded = book.read();
+    await reload(repoConfigsPath(state));
+    expect(discovery.snapshotOf(context.requested)?.repo).toMatchObject({ dir, standing: "approved" });
+    const liveFolders = folders();
+    const latestError = entry().lastError;
+    await draw();
+    await replace();
+    expect(folders()).toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(liveFolders).toEqual(folders());
+
+    fs.rmSync(plugin, { recursive: true });
+    await reload(definition);
+    expect(folders()).not.toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(book.read()).toEqual(recorded);
+    const remaining = folders();
+    await replace();
+    expect(folders()).toEqual(remaining);
+  });
+
+  test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {
+    const t = renderer();
+    const context = checked();
+    const inactive = checked(undefined, "inactive-config.json5").requested;
+    const offerings = [context.requested, inactive].map((origin) => {
+      t.rig.cache.configs.follow(origin);
+      const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+      if (config === null) throw new Error("the host did not hold the config");
+      return { origin, config, retained: "current" as const };
+    });
+    const first = answered(await handIn(t.r, {
+      kind: "start",
+      viewers: {
+        [SESSION]: {
+          lanes: { pane: { drawing: true, subscribers: 1 } },
+          shown: true,
+          joined: 1,
+        },
+      },
+      sessions: [{
+        context,
+        worldState: t.rig.served.collector.requested(context, TEST_ENVIRONMENT),
+      }],
+      configs: offerings,
+    }));
+
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    expect(first.subscriptions.configs).toEqual(expect.arrayContaining([context.requested, inactive]));
+    expect((await dueFrame(t.r)).bar.rows.length).toBeGreaterThan(0);
+  });
+
+  test("successive ordinary draws retain the active subscription declaration", async () => {
+    const t = renderer();
+    const first = answered(await request(t));
+    const shown = presentOf(first.effects);
+    expect(first.subscriptions.configs).toHaveLength(1);
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    answered(await done(t.r, shown, true));
+
+    const next = answered(await request(t));
+    expect(presentOf(next.effects).frame.rows).toEqual(shown.frame.rows);
+    expect(next.subscriptions).toBe(first.subscriptions);
+  });
+
+  test("still feed draws do not read all active subscriptions again", async () => {
+    const t = renderer();
+    const mine = checked();
+    const second = sessionIdOf("another-session");
+    const theirs: CheckedRenderRequest = {
+      ...mine,
+      hookData: { ...mine.hookData, session_id: second },
+    };
+    await configure(t, mine);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: mine }),
+    );
+    await configure(t, theirs);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: theirs }),
+    );
+    const subscribed = await followFeed(t.r);
+    expect(Object.keys(subscribed.subscriptions.sources)).toEqual([
+      SESSION,
+      second,
+    ]);
+    const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
+    const origins = jest.spyOn(t.parts.renderCache, "origins");
+    const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    await dueFrame(t.r);
+    await dueFrame(t.r, 1_000);
+    expect(declarations).toHaveBeenCalledTimes(0);
+    expect(origins).toHaveBeenCalledTimes(0);
+    expect(sessions).toHaveBeenCalledTimes(0);
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: second }),
+    );
+    expect(retired.subscriptions).not.toBe(subscribed.subscriptions);
+    expect(Object.keys(retired.subscriptions.sources)).toEqual([SESSION]);
+  });
+
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
     const { effects, record } = answered(await request(renderer()));
     const present = presentOf(effects);
@@ -361,7 +659,7 @@ describe("a statusline request", () => {
 
   // A restarted renderer: the host releases whatever its first output does
   // not name, a tmux status row included.
-  test("of each live session is configured by a start's one turn and the config it names, whose output names them all", async () => {
+  test("starts two live sessions from the same offered config in one turn", async () => {
     const t = renderer();
     const { r, rig } = t;
     const mine = checked();
@@ -370,12 +668,16 @@ describe("a statusline request", () => {
       ...mine,
       hookData: { ...mine.hookData, session_id: other },
     };
+    rig.cache.configs.follow(mine.requested);
+    const config = rig.cache.configs.discovery.snapshotOf(mine.requested);
+    if (config === null) throw new Error("missing shared start config");
     const output = await r.answer({
       kind: "event",
       ...READ,
       event: {
         kind: "start",
         viewers: {},
+        configs: [{ origin: mine.requested, config }],
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context, TEST_ENVIRONMENT),
@@ -383,11 +685,8 @@ describe("a statusline request", () => {
       },
     });
     expect(output.kind).toBe("answered");
-    // Both wait for the one origin they share.
     expect(output.subscriptions.configs).toEqual([mine.requested]);
-    const configured = await configsNamed(t, output);
-    expect(configured.kind).toBe("answered");
-    expect(Object.keys(configured.subscriptions.sources).sort()).toEqual(
+    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
       [SESSION, other].sort(),
     );
   });
@@ -421,7 +720,7 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("draws the daemon's own faults its world state carries, and an answer that carried the pipe event tells the host once it arrived", async () => {
+  test("reports which launcher event the statusline drew alongside the frame", async () => {
     const event = {
       text: "a launched program's pipe outlived its launch",
       ...READ,
@@ -441,26 +740,22 @@ describe("a statusline request", () => {
     const facts = new Map(record);
     expect(facts.get("warn")).toBe("lifeline,launch-pipes");
     expect(facts.get("pipeEvent")).toBe("held");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "launch-pipes", event },
+    ]);
   });
 
-  test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
-    const event = {
-      text: "copy: pbcopy failed: exit 1",
-      ...READ,
-      answered: false,
-    };
+  test("reports which daemon act failure the statusline drew alongside the frame", async () => {
+    const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
       actFailed: event,
     }));
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "act-failed", event },
+    ]);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
@@ -562,6 +857,44 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
+  test.each([false, true])(
+    "a pane frame displays the daemon warning while its answered state is %s",
+    async (shown) => {
+      const event = {
+        ...joinedEvent(null, "a daemon act failed", READ.at),
+        answered: shown,
+      };
+      const t = renderer(undefined, () => ({
+        ...daemonFactsOf(),
+        actFailed: event,
+      }));
+      await configure(t, checked("%1"));
+      answered(
+        await handIn(t.r, {
+          kind: "viewers",
+          viewers: {
+            [SESSION]: {
+              lanes: { pane: { drawing: true, subscribers: 1 } },
+              shown: true,
+              joined: 1,
+            },
+          },
+        }),
+      );
+      const frame = await dueFrame(t.r);
+      expect(frame.displayedEvents).toEqual(
+        shown ? undefined : [{ kind: "act-failed", event }],
+      );
+      const confirmed = answered(
+        await done(t.r, { session: SESSION, id: frame.receipt }, true),
+      );
+      expect(confirmed.record).toContainEqual([
+        "faults",
+        expect.stringContaining(event.text),
+      ]);
+    },
+  );
+
   test("whose render threw names the failure for the host to publish", () => {
     const parts = {
       renderCache: {
@@ -913,7 +1246,7 @@ function productionAnswer(
         checked(),
         TEST_ENVIRONMENT,
         REQUEST,
-        systemTimekeeper.monotonic() + 5000,
+        { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
         [],
       ),
     {
@@ -947,11 +1280,6 @@ describe("the session's config, ahead of its request", () => {
 
   test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
     const t = renderer();
-    // Its origin's config is held, so the context opens the view itself.
-    await configure(t, checked());
-    t.rig.cache.holdSession = (() => {
-      throw new Error("the opening broke");
-    }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
@@ -961,6 +1289,18 @@ describe("the session's config, ahead of its request", () => {
       unfollowedCollector(t.rig.served.collector),
       { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
     );
+    cleanups.push(() => host.closeWake());
+    // Its origin's config was delivered, so the next context opens the view itself.
+    const context = checked();
+    const worldState = t.rig.served.collector.requested(context, TEST_ENVIRONMENT);
+    expect(await host.answer(() => ({
+      kind: "event",
+      event: { kind: "context", context, worldState },
+    }))).toMatchObject({ kind: "answered" });
+    expect(kinds.splice(0)).toEqual(["context", "config"]);
+    t.rig.cache.holdSession = () => {
+      throw new Error("the opening broke");
+    };
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
@@ -973,10 +1313,10 @@ describe("the session's config, ahead of its request", () => {
       checked(),
       TEST_ENVIRONMENT,
       REQUEST,
-      systemTimekeeper.monotonic() + 5000,
+      { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
       facts as never,
     );
-    expect(kinds).toEqual(["context", "config"]);
+    expect(kinds).toEqual(["context"]);
     expect(answered.resp).toMatchObject({
       ok: false,
       error: expect.stringMatching(
@@ -1279,7 +1619,7 @@ describe("two requests of one session at different keys", () => {
         checked(pane, `${id}.json5`),
         TEST_ENVIRONMENT,
         id as RequestId,
-        systemTimekeeper.monotonic() + 10_000,
+        { waitEndsAt: systemTimekeeper.monotonic() + 10_000, gone: () => false },
         [],
       );
 
@@ -1396,7 +1736,7 @@ test("overlapping requests draw the latest pane with each client's width, then a
       context,
       TEST_ENVIRONMENT,
       id as RequestId,
-      systemTimekeeper.monotonic() + 10_000,
+      { waitEndsAt: systemTimekeeper.monotonic() + 10_000, gone: () => false },
       [],
     );
 
@@ -1492,6 +1832,106 @@ describe("a click", () => {
     expect(seen).toEqual([]);
     answered(await configsNamed(t, currentWaiting));
     expect(seen).toEqual([heardContextOf(current)]);
+  });
+
+  test("a failed config delivery reaches the live frame, request, and click, and a later delivery restores them", async () => {
+    const acted = jest.fn();
+    const t = renderer({ ...NO_VERBS, click: acted });
+    const context = checked(undefined, "availability.json5");
+    fs.writeFileSync(
+      path.join(dir, "availability.json5"),
+      JSON.stringify({
+        globals: { experimentalStatusline: true },
+        variables: {
+          canWrite: {
+            kind: "input",
+            path: "layers.user",
+            type: "boolean",
+            default: false,
+          },
+        },
+        segments: {
+          access: {
+            template:
+              "{{ if .canWrite }}WRITABLE{{ else }}UNAVAILABLE{{ end }}",
+          },
+        },
+        root: { h: ["access"] },
+      }),
+    );
+    answered(await configure(t, context));
+    const event = { kind: "request", context, id: REQUEST } as const;
+    const ordinary = () => handIn(t.r, event);
+    const first = presentOf(answered(await ordinary()).effects);
+    expect(textOf(first.frame)).toContain("WRITABLE");
+    const live = viewOf(t.rig);
+    expect(live?.configAccess()).toEqual({
+      kind: "available",
+      roles: ["user"],
+    });
+    answered(await done(t.r, first, true));
+    answered(await followFeed(t.r));
+    const ready = await dueFrame(t.r);
+    expect(textOf(parseFrame(ready.bar))).toContain("WRITABLE");
+    answered(await done(t.r, { session: SESSION, id: ready.receipt }, true));
+
+    const origin = context.requested;
+    const config = t.rig.cache.configs.discovery.snapshotOf(origin)!;
+    const delivery = { kind: "config", origin, config } as const;
+    const apply = t.rig.cache.configure.bind(t.rig.cache);
+    t.rig.cache.configure = () => {
+      throw new Error("config stream interrupted");
+    };
+    const { failure } = threw(await handIn(t.r, delivery));
+    expect(failure.message).toBe("config stream interrupted");
+    expect(threw(await ordinary()).failure).toEqual(failure);
+    expect(threw(await handIn(t.r, click("act", context))).failure).toEqual(
+      failure,
+    );
+    expect(() => t.rig.cache.snapshotFor(origin)).toThrow(failure.message);
+    expect(acted).not.toHaveBeenCalled();
+
+    const frame = await dueFrame(t.r, 1);
+    expect(textOf(parseFrame(frame.bar))).toContain("UNAVAILABLE");
+    expect(viewOf(t.rig)?.configAccess()).toEqual({
+      kind: "unavailable",
+      error: "config stream interrupted",
+    });
+    answered(await done(t.r, { session: SESSION, id: frame.receipt }, true));
+
+    t.rig.cache.configure = apply;
+    answered(await handIn(t.r, delivery));
+    expect(viewOf(t.rig)).toBe(live);
+    const next = await dueFrame(t.r, 2);
+    expect(textOf(parseFrame(next.bar))).toContain("WRITABLE");
+    answered(await done(t.r, { session: SESSION, id: next.receipt }, true));
+    const recovered = presentOf(answered(await ordinary()).effects);
+    expect(textOf(recovered.frame)).toContain("WRITABLE");
+    answered(await done(t.r, recovered, true));
+    expect(acted).not.toHaveBeenCalled();
+    answered(await handIn(t.r, click("act", context)));
+    expect(acted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retiring an origin with no view releases its rejected config delivery", async () => {
+    const t = renderer();
+    const context = checked();
+    answered(await contextTurn(t, context));
+    const origin = context.requested;
+    t.rig.cache.configs.follow(origin);
+    const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+    if (config === null) throw new Error("expected the followed config");
+    t.rig.cache.configure = () => {
+      throw new Error("the origin's delivery failed");
+    };
+    await expect(
+      handIn(t.r, { kind: "config", origin, config }),
+    ).resolves.toMatchObject({
+      kind: "threw",
+    });
+    expect(t.rig.cache.configDelivery(origin).kind).toBe("failed");
+    answered(await handIn(t.r, { kind: "retire", session: SESSION }));
+    expect(t.rig.cache.configDelivery(origin).kind).toBe("pending");
   });
 
   test("failed config settles parked clicks and a later config does not replay them", async () => {
@@ -1632,11 +2072,11 @@ describe("the idle close", () => {
       });
     expect(answered(await due(29)).effects).toEqual([]);
     expect(closed).toEqual([]);
-    const { effects, subscriptions } = answered(await due(30));
+    const { effects, wake } = answered(await due(30));
     expect(effects).toEqual([]);
     expect(closed).toEqual([[SESSION, 30]]);
     // Taken as closed: no close is due until a draw shows a menu again.
-    expect(subscriptions.wake).toBeNull();
+    expect(wake).toBeNull();
     expect(answered(await due(1000)).effects).toEqual([]);
     expect(closed).toHaveLength(1);
   });

@@ -331,7 +331,7 @@ export function applyPlugins(
               const config = mergeWithDefault(
                 fragmentOf(
                   file,
-                  read.dir,
+                  read,
                   definition,
                   { source, json: JSON5.parse(source) as unknown },
                   ctx,
@@ -648,8 +648,7 @@ function settingFor(
 // into a drop.
 function fragmentOf(
   file: string,
-  // The real path of the definition's folder, as discovery resolved it.
-  dir: string,
+  { dir, storage }: Extract<PluginFile["definition"], { kind: "text" }>,
   id: PluginId,
   { source, json }: { readonly source: string; readonly json: unknown },
   { checkout, home }: PluginContext,
@@ -684,7 +683,7 @@ function fragmentOf(
       ? undefined
       : dataPathOf(json.data, file, checkout, home, issues);
   const sources =
-    json.sources === undefined ? {} : sourcesOf(json.sources, dir, issues);
+    json.sources === undefined ? {} : sourcesOf(json.sources, storage, issues);
   if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
@@ -1063,8 +1062,7 @@ const BUILT_SOURCE = {
 // linked plugin folder replaced by an install is another folder.
 function sourcesOf(
   sources: unknown,
-  // The definition folder's real path.
-  dir: string,
+  storage: string,
   issues: ConfigIssue[],
 ): Record<string, SourceVarDecl> {
   if (!isPlainObject(sources)) {
@@ -1074,7 +1072,6 @@ function sourcesOf(
     });
     return {};
   }
-  const storage = path.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered: Record<string, SourceVarDecl> = {};
   for (const [name, source] of Object.entries(sources)) {

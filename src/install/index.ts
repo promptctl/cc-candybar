@@ -37,6 +37,7 @@ import {
   REGISTRY_URL,
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
+import { stageExecutable } from "./stage-executable.js";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -287,8 +288,7 @@ export function runStageRuntime(
   stageFile(sourceDist, distPath);
   stageDir(attach, path.join(path.dirname(distPath), ATTACH_DIR));
   stageFile(preload, path.join(path.dirname(distPath), ATTACH_PRELOAD));
-  stageFile(entry.sourcePath, binPath);
-  fs.chmodSync(binPath, 0o755);
+  stageExecutable(entry.sourcePath, binPath);
 
   // The pre-1.21 layout kept a second copy of the bundle as url-handler.mjs;
   // dist/index.mjs is the one staged bundle now. Remove the stale copy so it

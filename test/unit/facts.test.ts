@@ -7,7 +7,7 @@ import {
 } from "../../src/facts/fact";
 import type { WorldState } from "../../src/facts/world-state";
 import type {
-  RendererInput,
+  EventInput,
   RendererOutput,
 } from "../../src/renderer-interface/interface";
 import type { GitInfo, PullRequest } from "../../src/segments/git";
@@ -24,7 +24,7 @@ describe("what can cross as JSON", () => {
   const worldStateCross: AssertWire<WorldState> = true;
   // Every input the host hands its renderer and every output it answers
   // with, so the renderer can leave the host's process as it is.
-  const inputCrosses: AssertWire<RendererInput> = true;
+  const inputCrosses: AssertWire<EventInput> = true;
   const outputCrosses: AssertWire<RendererOutput> = true;
   // @ts-expect-error a Map becomes `{}`
   const mapDoesNot: AssertWire<{ sums: ReadonlyMap<string, number> }> = true;

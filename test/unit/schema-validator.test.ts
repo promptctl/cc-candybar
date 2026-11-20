@@ -83,7 +83,6 @@ describe("validateHookData — required fields", () => {
       "model.id",
       "model.display_name",
       "workspace",
-      "workspace.current_dir",
       "workspace.project_dir",
     ];
     for (const field of required) {
@@ -131,16 +130,6 @@ describe("validateHookData — required fields", () => {
     const { workspace: _, ...rest } = VALID_HOOK;
     expect(validateHookData(rest).report.missingRequired).toContain(
       "workspace",
-    );
-  });
-
-  test("missing workspace.current_dir", () => {
-    const hook = {
-      ...VALID_HOOK,
-      workspace: { project_dir: "/p", added_dirs: [] },
-    };
-    expect(validateHookData(hook).report.missingRequired).toContain(
-      "workspace.current_dir",
     );
   });
 
@@ -220,16 +209,19 @@ describe("validateHookData — type mismatches", () => {
     );
   });
 
-  test("workspace.current_dir as number", () => {
+  test.each([
+    [0, "number"],
+    [null, "object"],
+  ])("workspace.current_dir rejects %s", (current_dir, got) => {
     const hook = {
       ...VALID_HOOK,
-      workspace: { ...VALID_HOOK.workspace, current_dir: 0 },
+      workspace: { ...VALID_HOOK.workspace, current_dir },
     };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
       expect.objectContaining({
         path: "workspace.current_dir",
         expected: "string",
-        got: "number",
+        got,
       }),
     );
   });
