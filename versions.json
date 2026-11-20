@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-918",
-      "ref": "refs/pull/918/merge",
-      "sha": "8984aadfd45add50dd86bde7638a65e51a316587",
-      "timestamp": "2026-11-20T15:41:46.795Z",
+      "version": "pr-919",
+      "ref": "refs/pull/919/merge",
+      "sha": "7b775ec05e30fdccc281ce8c6d40df75a945c771",
+      "timestamp": "2026-11-20T16:14:56.282Z",
       "commits": [
         {
-          "sha": "8984aadfd45add50dd86bde7638a65e51a316587",
+          "sha": "7b775ec05e30fdccc281ce8c6d40df75a945c771",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T08:40:31-07:00",
-          "message": "Merge 324f455cf855005882a62da8ecb7c7d20b48cc3a into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-20T09:13:46-07:00",
+          "message": "Merge 28d25643122762cfcaceaee1147f8a28db23b58b into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
         },
         {
-          "sha": "324f455cf855005882a62da8ecb7c7d20b48cc3a",
+          "sha": "28d25643122762cfcaceaee1147f8a28db23b58b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T08:38:16-07:00",
-          "message": "fix(daemon): hold a failure on the config watch path as a standing fault on every bar until it clears\n\nA watch delivery, an origin's rediscovery or a git refresh pass that throws\nraises a fault keyed by its source in one daemon store. Every session's daemon\nfacts carry the standing faults and the bar draws them as warnings. The log\nrecords a fault's start, a changed reason and its end, never each retry. Config\ndiscovery keeps origins owed until their batch completes and records the digest\nits holders were last handed, so a throw anywhere in a batch leaves its work to\nthe next one, which the daemon's period retries. A rediscovery runs every\nfallible step before following its watch. A renderer retire that does not\nsettle joins the held one-shot event.\n"
+          "timestamp": "2026-11-20T09:13:21-07:00",
+          "message": "fix(daemon): hold a throw on the path to the bar by what failed, and show it until it clears\n\nA throw on the path from a watch or a git refresh to the bar was only\nlogged, so no bar said the config or git value it drew might be stale, and\na throw between a config entry's write and its hand-off lost the change.\n\nEach fault is now state held by the thing whose work failed, and the bar's\nview is derived from that owner, so it ends with its owner:\n- a git pass that throws stores the failure as the repo's read and records\n  a failed refresh; the next clean pass replaces it\n- a config origin whose rediscovery throws keeps its last snapshot, which\n  says why in a new `discovery` field drawn as an error; the next clean\n  rediscovery clears it, and the batch's other origins still land\n- the managed-storage recheck runs before the hand-off in a try whose\n  finally publishes, so a recheck throw cannot lose the change\n- a watch delivery that throws stands on its holder or window, derived into\n  the daemon's facts and drawn as an error until a delivery returns or the\n  watch is released\n"
         }
       ]
     },
