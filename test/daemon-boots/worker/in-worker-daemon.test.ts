@@ -195,7 +195,10 @@ describe("a daemon in this worker", () => {
       renderer: inProcessRenderer((real) =>
         hearingEvents(real, ({ event }) => {
           if (event.kind === "context" || event.kind === "world-state")
-            pipeHeld = event.worldState.daemon.launchPipes;
+            pipeHeld =
+              event.worldState.daemon.held.find(
+                ({ kind }) => kind === "launch-pipes",
+              )?.event ?? null;
         }),
       ),
       launcher: (owner) =>
@@ -271,20 +274,22 @@ describe("a daemon in this worker", () => {
     }
   });
 
-  test("a pipe event leaves the daemon's facts once no bar can show it, and what recurred meanwhile is held afresh", async () => {
+  test("each pipe event leaves the daemon's facts once no bar can show it, and what recurred of it meanwhile is held afresh", async () => {
     const sid = "pipe-hold";
     const clock = heldClock(new Date(), reportingClock);
     let report = (_text: string): void => {
       throw new Error("the daemon built no launcher");
     };
-    // The pipe event as the daemon's facts carry it to every bar.
-    let held: HeldEvent | null = null;
+    // The pipe events as the daemon's facts carry them to every bar.
+    let held: readonly HeldEvent[] = [];
     daemon = startDaemon(env, {
       clock,
       renderer: inProcessRenderer((real) =>
         hearingEvents(real, ({ event }) => {
           if (event.kind === "context" || event.kind === "world-state")
-            held = event.worldState.daemon.launchPipes;
+            held = event.worldState.daemon.held.flatMap((shown) =>
+              shown.kind === "launch-pipes" ? [shown.event] : [],
+            );
         }),
       ),
       launcher: (own) => {
@@ -294,28 +299,43 @@ describe("a daemon in this worker", () => {
       },
     });
     const running = daemon;
-    const heldText = (): string | null => held?.text ?? null;
+    const heldTexts = (): string[] => held.map(({ text }) => text);
     const pastHold = (): void =>
       clock.advance((DAEMON_EVENT_HOLD_S + 1) * 1000);
     await render(running, sid, projectDir);
 
     report("a pipe was cut");
-    await until(() => heldText() === "a pipe was cut", "the first pipe event");
-    // A confirmed write carries it; two more arrive while it is held.
+    await until(
+      () => heldTexts().join() === "a pipe was cut",
+      "the first pipe event",
+    );
+    // A confirmed write carries it. A different event is held beside it at
+    // once, and the first recurs twice while it is held, counted.
     await render(running, sid, projectDir);
-    await until(() => held?.answered === true, "the answer marking it");
+    await until(() => held[0]?.answered === true, "the answer marking it");
     report("a pipe failed to read");
-    report("a pipe was cut again");
-    expect(heldText()).toBe("a pipe was cut");
+    report("a pipe was cut");
+    report("a pipe was cut");
+    await until(
+      () => heldTexts().length === 2,
+      "the different event held beside it",
+    );
+    expect(heldTexts()).toEqual(["a pipe was cut", "a pipe failed to read"]);
 
+    // The first leaves with its hold, and what recurred of it is held afresh
+    // with its count. The other, never answered, is still owed.
     pastHold();
     await until(
-      () => heldText() === "a pipe was cut again (2 more times)",
+      () => heldTexts().includes("a pipe was cut 2 more times"),
       "what recurred, held afresh once the first left",
     );
+    expect(heldTexts()).toEqual([
+      "a pipe was cut 2 more times",
+      "a pipe failed to read",
+    ]);
     await render(running, sid, projectDir);
     pastHold();
-    await until(() => held === null, "the pipe event leaving the facts");
+    await until(() => held.length === 0, "the pipe events leaving the facts");
   });
 
   // [LAW:one-source-of-truth] A request's budget is its deadline less its

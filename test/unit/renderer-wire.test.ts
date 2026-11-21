@@ -20,7 +20,7 @@ import {
   type TimedRenderer,
 } from "../../src/renderer-interface/interface";
 import type { Instant, Tick } from "../../src/utils/instant";
-import { joinedEvent, type DisplayedEvent } from "../../src/utils/event-hold";
+import { joinedEvent, type DaemonEvent } from "../../src/utils/event-hold";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
   CrossedFailure,
@@ -118,7 +118,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
     motion: "still",
     pending: [],
   } as const;
-  const displayedEvents: readonly DisplayedEvent[] = [
+  const displayedEvents: readonly DaemonEvent[] = [
     {
       kind: "act-failed",
       event: joinedEvent(null, "a daemon failure", 7 as Instant),

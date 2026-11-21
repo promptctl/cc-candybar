@@ -89,8 +89,8 @@ import {
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
-import { joinedEvent, type DisplayedEvent } from "../utils/event-hold.js";
-import { HeldSlot } from "./held-slot.js";
+import { joinedEvent, type DaemonEvent } from "../utils/event-hold.js";
+import { HeldSlot, RecurringEvents, recurrence } from "./held-slot.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -292,56 +292,65 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    {
-      fileEvents: [],
-      launcher: [],
-      launchPipes: null,
-      rendererEnded: null,
-      actFailed: null,
-      taskThrows: [],
-    },
+    { fileEvents: [], launcher: null, held: [] },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] The latest pipe event of a launched program,
-  // how the last renderer process ended, the acts that failed with no
-  // session's bar to hold them, and what each of the daemon's tasks threw,
-  // each held until no bar can show it.
-  // A pipe event that recurs while one is held is counted, so a flood moves
-  // no bar; what recurred is held afresh when the slot lets go.
-  const launchPipes: HeldSlot<string> = new HeldSlot<string>(
+  // [LAW:one-source-of-truth] The daemon's own events, each held until no bar
+  // can show it: each pipe event of a launched program, how the last renderer
+  // process ended, the acts that failed with no session's bar to hold them,
+  // and what each of the daemon's tasks threw.
+  // [LAW:no-ambient-temporal-coupling] The launcher's factory may report a
+  // warning before its launcher can be read. The initial restatement reads
+  // it once the launcher exists.
+  const restateOnceBuilt = (): void => {
+    if (phase.kind !== "building") restateFaults();
+  };
+  const launchPipes = new RecurringEvents<string>(
     clock,
-    "launch pipes hold",
-    (recurred) => {
-      if (recurred !== null)
-        holdPipeEvent(
-          `${recurred.latest} (${recurred.count === 1 ? "once more" : `${recurred.count} more times`})`,
-        );
-      restateFaults();
-    },
+    "launch-pipes",
+    "launch pipe hold",
+    (text) => text,
+    (text, more) => joinedEvent(null, `${text}${recurrence(more)}`, instant()),
+    restateOnceBuilt,
   );
-  const holdPipeEvent = (text: string): void =>
-    launchPipes.hold({
-      text,
-      at: instant(),
-      revision: (launchPipes.event()?.revision ?? 0) + 1,
-      answered: false,
-    });
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  // [LAW:one-source-of-truth] Each task's error, as the slot that holds it.
-  const taskErrors = new Map<string, HeldSlot<ReportedThrow>>();
+  // A task's throw is logged in full whenever it is shown on every bar.
+  const taskThrows = new RecurringEvents<ReportedThrow>(
+    clock,
+    "task-threw",
+    "task throw hold",
+    (reported) => reported.task,
+    (reported, more) => {
+      const { shown, logged } = thrownText(reported, more);
+      log("error", logged);
+      // A thrown message can carry a launched command's output, and nothing
+      // here can tell which do, so each refuses a recording while it shows.
+      return environmentOutput(
+        joinedEvent(null, shown, instantOf(new Date(reported.at))),
+        true,
+      );
+    },
+    restateFaults,
+  );
+  const heldBy = (
+    kind: "renderer-ended" | "act-failed",
+    slot: HeldSlot,
+  ): DaemonEvent[] => {
+    const event = slot.event();
+    return event === null ? [] : [{ kind, event }];
+  };
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        launchPipes: launchPipes.event(),
-        rendererEnded: rendererEnded.event(),
-        actFailed: actFailed.event(),
-        taskThrows: [...taskErrors].flatMap(([task, slot]) => {
-          const event = slot.event();
-          return event === null ? [] : [{ task, event }];
-        }),
+        held: [
+          ...launchPipes.held(),
+          ...heldBy("renderer-ended", rendererEnded),
+          ...heldBy("act-failed", actFailed),
+          ...taskThrows.held(),
+        ],
       }),
     );
   }
@@ -353,37 +362,33 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     inherited: host.env,
     stats: stats.launchStats,
     signal: cancelWork.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
       if (change.kind === "launch-pipes") {
         log("warn", change.text);
-        if (!launchPipes.recur(change.text)) holdPipeEvent(change.text);
-      } else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null
-            ? "launch lifeline running again"
-            : `launch lifeline ${change.fault}; the next launch starts another`,
-        );
-      // [LAW:no-ambient-temporal-coupling] A factory may report a warning
-      // before its launcher can be read. The initial restatement reads it
-      // once the launcher exists.
-      if (phase.kind !== "building") restateFaults();
+        launchPipes.occur(change.text);
+        return;
+      }
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null
+          ? "launch lifeline running again"
+          : `launch lifeline ${change.fault}; the next launch starts another`,
+      );
+      restateOnceBuilt();
     },
   });
   // [LAW:single-enforcer] Both client writers acknowledge events at the
   // owner of the daemon's latest occurrences, independent of their renderer.
-  const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
+  const acknowledgeDisplayed = (shown: readonly DaemonEvent[]): void => {
     let changed = false;
     for (const shownEvent of shown) {
       switch (shownEvent.kind) {
         case "launch-pipes":
-          if (launchPipes.answer(shownEvent.event)) changed = true;
+          if (launchPipes.answer(shownEvent.about, shownEvent.event))
+            changed = true;
           break;
         case "renderer-ended":
           if (rendererEnded.answer(shownEvent.event)) changed = true;
@@ -391,10 +396,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         case "act-failed":
           if (actFailed.answer(shownEvent.event)) changed = true;
           break;
-        // A frame can carry a throw whose slot has since left: nothing
-        // holds it to mark.
         case "task-threw":
-          if (taskErrors.get(shownEvent.task)?.answer(shownEvent.event))
+          if (taskThrows.answer(shownEvent.about, shownEvent.event))
             changed = true;
           break;
         default:
@@ -405,40 +408,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // publish new facts only when the first confirmation changes an owner.
     if (changed) restateFaults();
   };
-  // A task's throw logged in full and held on every bar.
-  const showThrow = (
-    slot: HeldSlot<ReportedThrow>,
-    reported: ReportedThrow,
-    more: number,
-  ): void => {
-    const { shown, logged } = thrownText(reported, more);
-    log("error", logged);
-    // A thrown message can carry a launched command's output, and nothing
-    // here can tell which do, so each refuses a recording while it shows.
-    slot.hold(
-      environmentOutput(
-        joinedEvent(null, shown, instantOf(new Date(reported.at))),
-        true,
-      ),
-    );
-    restateFaults();
-  };
-  // A task's slot: what recurred while it held the error is held afresh
-  // when it lets go, and with nothing recurred the error leaves every bar.
-  const taskErrorOf = (task: string): HeldSlot<ReportedThrow> => {
-    const slot = new HeldSlot<ReportedThrow>(
-      clock,
-      `task throw hold ${task}`,
-      (recurred) => {
-        if (recurred !== null)
-          return showThrow(slot, recurred.latest, recurred.count);
-        taskErrors.delete(task);
-        restateFaults();
-      },
-    );
-    taskErrors.set(task, slot);
-    return slot;
-  };
   // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
   // those thrown before this daemon was built included. A task's first throw
   // is logged in full and held on every bar. One while its error is held is
@@ -448,8 +417,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // logs once a hold.
   const taken = (reported: ReportedThrow): void => {
     stats.tasksThrew++;
-    const slot = taskErrors.get(reported.task) ?? taskErrorOf(reported.task);
-    if (!slot.recur(reported)) showThrow(slot, reported, 0);
+    taskThrows.occur(reported);
   };
   // [LAW:no-silent-failure] Taking a throw cannot throw back into the task
   // that threw it: a failure here is logged beside the throw it was taking.
@@ -1209,7 +1177,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             launchPipes,
             rendererEnded,
             actFailed,
-            ...taskErrors.values(),
+            taskThrows,
           ])
             slot.dispose();
         },
