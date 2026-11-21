@@ -95,24 +95,19 @@ import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
 //
 // [LAW:one-source-of-truth] Bounded by bytes, out of the daemon's one memory
 // budget: an entry is a new one per directory a session renders from (every
-// worktree, every `cd`), so a count sized for watchers (it was 256, ~2.4 GB of
-// states) let the memory backstop trip long before anything was evicted
-// (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
-// the heap one compile holds — measured, and held to by
-// test/render-cache-sharing.test.ts, which fails when either is exceeded.
-// Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
-// MB in a daemon serving a full user config from forty real worktree
-// directories); a compile 7.1 MB, counted as an evicted builder leaves it —
-// its own heap and the part of that builder's config it still reaches. It was
-// 9.3 MB an entry, every one compiling its own.
+// worktree, every `cd`), so a count sized for watchers trips the memory
+// backstop long before anything is evicted. The heap a state holds beside its
+// compile, and the heap one compile holds, are charged here and held to by a
+// sharing test, which fails when either is exceeded. A compile is counted as
+// an evicted builder leaves it: its own heap and the part of that builder's
+// config it still reaches.
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 export const COMPILE_BYTES = 10 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
 // entry's, and the parts of every placement it has drawn, kept until it is
-// disposed (src/dsl/parts.ts). Measured 2026-10-23 over the bundled default:
-// 1.0 MB a view drawn once, and 1.6 MB a view that has opened every list the
-// menu hangs and every tab — the most it draws — so the constant charges that,
-// with headroom for a user config's further placements.
+// disposed. The constant charges a view that has opened every list the menu
+// hangs and every tab, the most it draws, with headroom for a user config's
+// further placements.
 export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
 // The render cache's share of the daemon's memory limit: what is left under
@@ -124,11 +119,7 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // session was charged, and a second runtime with its own copy of the loaded
 // bundle (a bare node is charged ~12 MB). The charges' own headroom over what
 // entries hold is the heap's growth room, so reserving more would starve the
-// cache at a lowered limit for nothing. At the default limit the share is
-// 672 MB: ~120 sessions on one compile, each an entry and a view, against a
-// working set of ~20 directories in the production daemon.
-// Measured, a full share costs less than its charges: serving 100 sessions,
-// the daemon is charged ~430 MB in all with 560 MB of the share accounted.
+// cache at a lowered limit for nothing.
 const RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 // Never less than a quarter of the limit, which a small limit has always had:
 // there the reserve would leave the cache too little to hold two sessions.
@@ -243,7 +234,7 @@ export type ReloadedEntry = Readonly<
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // bundle, never null: an entry can ALWAYS render. It is seeded with the
-// bundled default's state at creation (candybar-settings-ui-0gz) and
+// bundled default's state at creation and
 // replaced by each config that loads; a config that fails to load leaves it
 // as it was. So the bar under a load error is the best config the entry has
 // — the last one that loaded, or the bundled default before any has — and
@@ -272,8 +263,7 @@ export interface DslRenderState {
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
-  // FILE authors at the path presetRoot() reports for them (candybar-config-
-  // dqe): `root` for a preset staging the config's own root, `presets.<n>.
+  // FILE authors at the path presetRoot() reports for them: `root` for a preset staging the config's own root, `presets.<n>.
   // root` otherwise. This is what `.preset.customized` means now — the file
   // declares that tree, whether a hand wrote it or a `+`/`-` click did; the
   // two are indistinguishable by design. Computed from the SAME raw parse
@@ -374,11 +364,11 @@ export function pluginLoadLine(
 }
 
 // [LAW:nothing-unseen] A config's teardown releases every computed's MobX
-// subscriptions (brandon-unfiled-3248.t14 was a teardown that released none,
-// found in a heap snapshot because nothing said so). Why it was torn down,
-// how many it released, and how many renders were still drawing with it when
-// the cache retired it — those deferred the teardown to the last one's return
-// (brandon-unfiled-3248.6rc) — beside the load line of what replaced it.
+// subscriptions, and says so: a teardown that releases none shows only in a
+// heap snapshot otherwise. Why it was torn down, how many it released, and how
+// many renders were still drawing with it when the cache retired it (those
+// defer the teardown to the last one's return), beside the load line of what
+// replaced it.
 export interface Teardown {
   readonly reason: "reload" | "evict" | "close";
   // Renders holding the state when it was retired: 0 is a teardown at
@@ -453,30 +443,27 @@ export type ConfigDelivery = ArrivedConfig | typeof CONFIG_PENDING;
 // parse / validate); `lastWarnings` are advisory (e.g., extension collision —
 // load succeeded but something the user should know about). The render path
 // surfaces both through one diagnostics composer in src/renderer/draw-bar.ts.
-// [LAW:types-are-the-program] `projectDir` and `cwd` are required inputs to
-// every render request. The wire boundary in render-checkpoint.ts validates the
+// [LAW:types-are-the-program] An origin's project directory and cwd are
+// required inputs to every render request. The wire boundary validates the
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
-// the time a cache entry is built they are real non-empty paths. `configFile`
-// is the explicit path a session's render origin names (`--config`, or the
-// `configEnv` hint; absolute) — present when
-// overriding the standard precedence chain, undefined otherwise.
+// the time a cache entry is built they are real non-empty paths.
 export interface CacheEntry {
   // [LAW:one-source-of-truth] The origin used for loading, declaring sources
   // and subscribing is the same value.
   readonly origin: RenderOrigin;
   // The file paths in the most recent attempt, including a failed load.
   readonly configLayers: readonly string[];
-  // [LAW:one-source-of-truth] The snapshot the last load read, and its
-  // digest: a `config` turn whose snapshot digests alike reloads nothing.
-  // The bar's repository question and what the config's watch cannot hear
+  // [LAW:one-source-of-truth] The snapshot the last load read: a `config`
+  // turn whose snapshot digests alike reloads nothing. The bar's repository question and what the config's watch cannot hear
   // are read off it.
   readonly snapshot: ConfigSnapshot;
   readonly lastError: string | null;
   readonly lastWarnings: readonly string[];
   readonly state: DslRenderState;
-  readonly applied: AppliedConfig;
 }
 
+// [LAW:one-source-of-truth] What an entry shows is read off its one applied
+// load, which only the cache replaces.
 interface MaterializedEntry extends CacheEntry {
   applied: AppliedConfig;
 }
@@ -505,7 +492,7 @@ interface AppliedConfig {
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
-// owns (brandon-unfiled-3248.6rc): the renders holding it across their
+// owns: the renders holding it across their
 // payload await, and the teardown it is due once the cache stopped serving
 // it — evicted, or replaced by a reload. Deferred reclamation, RCU-style:
 // the map moves at once (the cap stays a bound, a reload swaps at once) and
@@ -780,7 +767,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // [LAW:one-source-of-truth] The compile holds no store: each render binds
     // its own (drawDsl), so the entry's registry is the store its renders read
     // — and the compile can be one shared by every entry whose config
-    // compiles alike (brandon-unfiled-3248.8yp).
+    // compiles alike.
     registration = registerCompiled(
       config,
       registry,
@@ -966,8 +953,8 @@ export function writableRoles(access: ConfigAccess): readonly LayerRole[] {
   return access.kind === "available" ? access.roles : NO_WRITABLE_LAYERS;
 }
 
-// [LAW:one-source-of-truth] A session's view of one entry's state
-// (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
+// [LAW:one-source-of-truth] A session's view of one entry's state: the
+// session's own values — its inputs,
 // its state reads, its derivations, the sources keyed on them — in a store
 // over the entry's directory store, which it reads through to. Each session
 // renders through its own, so a request writes only its own session's values
@@ -1419,7 +1406,7 @@ export class RenderCache<
   // session's first render can evict its entry and a saved file can reload
   // it. Either retires the state; the cache disposes it when this hold is
   // released, so the render finishes on the state it resolved its payload
-  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
+  // from. `using` at the call site releases on
   // every exit, a throw included.
   hold(origin: RenderOrigin): Hold {
     const entry = this.getOrCreate(origin);
@@ -1500,9 +1487,8 @@ export class RenderCache<
 
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O;
+  // only an event opens a view (ViewOpening).
   holdView(sessionId: SessionId): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
@@ -1987,7 +1973,7 @@ export class RenderCache<
     // retires every view of it first, so each is disposed before or with it.
     // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
     // over the new state first, drawn by the request the old one drew by, so
-    // the next frame draws a view (brandon-unfiled-3248.8ro6, 4a).
+    // the next frame draws a view.
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
       if (successor !== null)
