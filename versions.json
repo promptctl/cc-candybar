@@ -2,6 +2,77 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-905",
+      "ref": "refs/pull/905/merge",
+      "sha": "9b2f0afd0850a7a05501f6e372e2427ff3751ed7",
+      "timestamp": "2026-11-21T06:38:51.440Z",
+      "commits": [
+        {
+          "sha": "9b2f0afd0850a7a05501f6e372e2427ff3751ed7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T06:37:45Z",
+          "message": "Merge 6d7c0458a4aee3dbf1d3d815a097bd18f954d5a0 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+        },
+        {
+          "sha": "6d7c0458a4aee3dbf1d3d815a097bd18f954d5a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T23:30:48-07:00",
+          "message": "test(watchers): a tree test proves each watch it waits on live before the change (ibyq.xrv)\n"
+        },
+        {
+          "sha": "959e637e3b48117c4cb3999b979cfa9b451fd5b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T23:21:51-07:00",
+          "message": "test(daemon): the hang-up subscribe test runs on a clock that reports its throws (ibyq.xrv)\n"
+        },
+        {
+          "sha": "24608a47b4ae5633573703922f878b32f89c8633",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:58-07:00",
+          "message": "test(config): load an actual absent user layer (ibyq.xrv)\n"
+        },
+        {
+          "sha": "24d89fa47cd79a077381202ce0b9350128f623d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:58-07:00",
+          "message": "test(daemon): verify the click's exact mailbox wait (ibyq.xrv)\n"
+        },
+        {
+          "sha": "8e6b5919b48a21d0f29f73ccc109b6401a0b4bd0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:25:57-07:00",
+          "message": "test(proc): release launcher fixtures with their Jest runtime (ibyq.xrv)\n"
+        },
+        {
+          "sha": "8b51d793c5415b921db2368e3a5a2794991c9ac5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:04:02-07:00",
+          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
+        },
+        {
+          "sha": "48fd137e389a526439d9174e7eb9f9757a501f9d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:46:44-07:00",
+          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
+        },
+        {
+          "sha": "21116969b67a2566447daa38cd10cc0192c139c6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:57-07:00",
+          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b3abd81aa5481a19fffa48bfc65761eef7f30117",
@@ -13,63 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-20T23:18:04-07:00",
           "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval (#931)\n\nTwo repositories render through one installed plugin root, and only one of them is approved. A plugin installed, renamed and removed there reaches each origin through the root's watch, from a first install onto no root. Each renderer is delivered its own origin. The approved origin lists the installed plugin beside its own repository plugin. The awaiting origin lists only the installed plugin and never opens its project file or definitions. A batch that covers both origins observes each path once."
-        }
-      ]
-    },
-    {
-      "version": "pr-905",
-      "ref": "refs/pull/905/merge",
-      "sha": "810236ce3f2c2a50f87d214ba4c1f8fe8a7d3058",
-      "timestamp": "2026-11-19T20:30:11.376Z",
-      "commits": [
-        {
-          "sha": "810236ce3f2c2a50f87d214ba4c1f8fe8a7d3058",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T20:29:00Z",
-          "message": "Merge c92a89689bbac73fb744261dae5d18dbf40ca61d into f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81\n"
-        },
-        {
-          "sha": "c92a89689bbac73fb744261dae5d18dbf40ca61d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:58-07:00",
-          "message": "test(config): load an actual absent user layer (ibyq.xrv)\n"
-        },
-        {
-          "sha": "d6e9929090c1f2ccb3452b5b7a2cf392d6acedb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:58-07:00",
-          "message": "test(daemon): verify the click's exact mailbox wait (ibyq.xrv)\n"
-        },
-        {
-          "sha": "217aaa704c435340e09be04d73240d4a30377150",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:57-07:00",
-          "message": "test(proc): release launcher fixtures with their Jest runtime (ibyq.xrv)\n"
-        },
-        {
-          "sha": "c066983d77a8bb8b1420dc22ea34aab2450ebb27",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:04:02-07:00",
-          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
-        },
-        {
-          "sha": "8f5dca725e3f94d34305fbe6118968ac2a86e741",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:46:44-07:00",
-          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
-        },
-        {
-          "sha": "ca5f7c82b5124c6a7286278d4983b7c949abed77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:22:57-07:00",
-          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
         }
       ]
     },
