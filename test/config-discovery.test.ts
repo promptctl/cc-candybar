@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
 import { heldClock } from "./helpers/held-clock";
-import { answerRepo } from "./helpers/repo-approval";
+import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
 import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
@@ -25,6 +25,7 @@ import {
 } from "../src/daemon/config-discovery/discovery-files";
 import {
   ConfigDiscovery,
+  type ConfigDiscoveryDeps,
   type RendererConfigs,
 } from "../src/daemon/config-discovery/config-discovery";
 import {
@@ -39,6 +40,8 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
+import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import { presence } from "../src/utils/presence";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
@@ -837,12 +840,18 @@ function physicalDiscovery(
     state = path.join(root, "state"),
     clock = heldClock(new Date()),
     reloaded,
+    files,
+    log = () => {},
+    moved = () => {},
   }: {
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
-    clock?: ReturnType<typeof heldClock>;
+    clock?: ConstructorParameters<typeof WatcherRegistry>[0]["clock"];
     reloaded?: (folders: ReadonlySet<string>) => void;
+    files?: ConfigDiscoveryDeps["files"];
+    log?: ConfigDiscoveryDeps["log"];
+    moved?: ConfigDiscoveryDeps["moved"];
   } = {},
 ) {
   const watchers = new WatcherRegistry({
@@ -854,9 +863,10 @@ function physicalDiscovery(
     stateDir: state,
     watchers,
     openText: countingText(reads, opens),
+    files,
     clock: systemTimekeeper,
-    log: () => {},
-    moved: () => {},
+    log,
+    moved,
     reloaded,
   });
   cleanups.push(
@@ -1308,6 +1318,116 @@ test("physical config and plugin text are shared across separate renderer discov
   });
   expect(textOfLayer(next, c, hardlink)).toBe(changed);
 });
+
+// [LAW:verifiable-goals] Each step's change is heard by a watch batch that
+// discovers both origins together, from a first install onto no root.
+test("a plugin installed, renamed and removed in the shared root reaches each origin beside its own approved plugins", async () => {
+  const data = project("shared-data");
+  const installed = path.join(data, "cc-candybar", "plugins");
+  // A plugin folder at `dir`, laid down only when missing, so a round
+  // that finds it in place changes nothing before its gesture.
+  const lay = (dir: string) => {
+    const definition = path.join(dir, "plugin.json5");
+    if (presence(definition) === "present") return definition;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(definition, `{ segments: { s: { template: "${path.basename(dir)}" } } }`);
+    return definition;
+  };
+  const repo = (name: string, plugin: string) => {
+    const dir = project(name);
+    fs.mkdirSync(path.join(dir, ".git"));
+    fs.writeFileSync(path.join(dir, ".cc-candybar.json5"), "{}");
+    return { dir, definition: lay(path.join(dir, ".cc-candybar", "plugins", plugin)) };
+  };
+  const approved = repo("approved", "own");
+  const awaiting = repo("awaiting", "theirs");
+  const state = path.join(root, "state");
+  expect(recordAnswer(repoConfigs(state), approved.dir, "approved").kind).toBe("ok");
+  // What discovery observed, in order: each opened file and listed folder,
+  // and the line that ends each batch.
+  const observed: string[] = [];
+  const logged: string[] = [];
+  const delivered: string[] = [];
+  const service = physicalDiscovery(data, [], {
+    state,
+    clock: systemTimekeeper,
+    opens: observed,
+    files: () => ({
+      folders: (at) => {
+        observed.push(at);
+        return diskFiles.folders(at);
+      },
+    }),
+    log: (_level, line) => {
+      logged.push(line);
+      if (line.startsWith("config discovery why=")) observed.push(line);
+    },
+    moved: (renderer, origins) => {
+      for (const origin of origins) delivered.push(`${renderer} ${originKey(origin)}`);
+    },
+  });
+  const otherName = rendererNameOf("other");
+  const main = service.forRenderer(MAIN_RENDERER);
+  const other = service.forRenderer(otherName);
+  const a = originOf(approved.dir, approved.dir);
+  const b = originOf(awaiting.dir, awaiting.dir);
+  main.follow([a]);
+  other.follow([b]);
+  const plugins = (snapshot: ConfigSnapshot | null) =>
+    snapshot?.plugins.map((p) => path.basename(path.dirname(p.path))).sort();
+  const own = [`${MAIN_RENDERER} ${originKey(a)}`, `${otherName} ${originKey(b)}`].sort();
+  // The shared root's plugins reach both origins, each in its own delivery,
+  // and only the approved origin adds its repository's plugin.
+  const reached = async (step: string, change: () => void, shared: string[]) => {
+    const since = { delivered: delivered.length, logged: logged.length };
+    await untilHeard(
+      change,
+      () =>
+        String(plugins(main.snapshotOf(a))) === String([...shared, "own"].sort()) &&
+        String(plugins(other.snapshotOf(b))) === String(shared),
+      `${step} reaching both origins`,
+    );
+    expect([...new Set(delivered.slice(since.delivered))].sort()).toEqual(own);
+    expect(
+      logged
+        .slice(since.logged)
+        .filter((l) => l.startsWith("config discovery why=config-watch")),
+    ).toContainEqual(expect.stringContaining("discovered=2"));
+  };
+  expect(plugins(main.snapshotOf(a))).toEqual(["own"]);
+  expect(plugins(other.snapshotOf(b))).toEqual([]);
+
+  const widget = path.join(installed, "widget");
+  const gadget = path.join(installed, "gadget");
+  await reached("an install", () => {
+    fs.rmSync(widget, { recursive: true, force: true });
+    lay(widget);
+  }, ["widget"]);
+  await reached("a rename", () => {
+    fs.rmSync(gadget, { recursive: true, force: true });
+    lay(widget);
+    fs.renameSync(widget, gadget);
+  }, ["gadget"]);
+  await reached("a removal", () => {
+    lay(gadget);
+    fs.rmSync(gadget, { recursive: true });
+  }, []);
+
+  const roles = (snapshot: ConfigSnapshot | null) => snapshot?.chain.map((l) => l.role);
+  expect(roles(main.snapshotOf(a))).toContain("project");
+  expect(roles(other.snapshotOf(b))).not.toContain("project");
+  expect(other.snapshotOf(b)?.repo).toMatchObject({ standing: "awaiting" });
+  expect(observed).not.toContain(path.join(awaiting.dir, ".cc-candybar.json5"));
+  expect(observed).not.toContain(awaiting.definition);
+  // A batch that discovers both origins observes each path once.
+  let batch: string[] = [];
+  const batches = [batch];
+  for (const entry of observed)
+    if (entry.startsWith("config discovery why=")) batches.push((batch = []));
+    else batch.push(entry);
+  for (const batch of batches)
+    expect(batch.filter((entry, i) => batch.indexOf(entry) !== i)).toEqual([]);
+}, 60_000);
 
 test("a project cannot inherit another origin's approval through the same physical config", () => {
   const approved = project("approved");
