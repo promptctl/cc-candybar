@@ -4,15 +4,22 @@
     {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
-      "sha": "f23a7cef90753859fc268c384aa5b685e0518ed2",
-      "timestamp": "2026-11-21T07:21:15.623Z",
+      "sha": "cd9f3bda17f26723a02b9a5f8364b1a7de3d173c",
+      "timestamp": "2026-11-21T07:31:51.462Z",
       "commits": [
         {
-          "sha": "f23a7cef90753859fc268c384aa5b685e0518ed2",
+          "sha": "cd9f3bda17f26723a02b9a5f8364b1a7de3d173c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T07:20:17Z",
-          "message": "Merge 82e67fb525f8e5279b2a71d0832494fc2ec94426 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+          "timestamp": "2026-11-21T07:30:48Z",
+          "message": "Merge 1156cc8749dfa5f7c33b47c684bd5498959d44a4 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+        },
+        {
+          "sha": "1156cc8749dfa5f7c33b47c684bd5498959d44a4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:30:35-07:00",
+          "message": "test(fixtures): tighten the lifeline and stdlib checks (ibyq.xrv)\n\nThe heap test's default load also asserts it dropped no placement. The\nlifeline fixtures read liveness through the repo's process probe. The\nintegration test keeps its scratch directory under a worker-named jest\ndirectory, and checks for no failures rather than a fixed pass count.\n"
         },
         {
           "sha": "82e67fb525f8e5279b2a71d0832494fc2ec94426",
