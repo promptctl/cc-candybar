@@ -4,15 +4,22 @@
     {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
-      "sha": "f74d2708b5d6c509a422d91b41951e641ffc5dad",
-      "timestamp": "2026-11-21T07:01:59.428Z",
+      "sha": "bebebeb48c2d08a3353d9765fde77e1227f85fb2",
+      "timestamp": "2026-11-21T07:17:16.301Z",
       "commits": [
         {
-          "sha": "f74d2708b5d6c509a422d91b41951e641ffc5dad",
+          "sha": "bebebeb48c2d08a3353d9765fde77e1227f85fb2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T07:00:50Z",
-          "message": "Merge 257c9462713df2602f1c97c653629bcfc4069750 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+          "timestamp": "2026-11-21T07:16:12Z",
+          "message": "Merge 0e76d89bf3535a0b8001cf3ba5b6085cf0f696b5 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+        },
+        {
+          "sha": "0e76d89bf3535a0b8001cf3ba5b6085cf0f696b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:15:58-07:00",
+          "message": "test(fixtures): only a test file's runtime holds fixture launchers (ibyq.xrv)\n\nThe daemon pool takes the probe it reads the process table through, so\nthe runner's global teardown builds its own process-lifetime probe and\nnever loads test/helpers/host.ts. The environment's release hook is then\nrequired and called unconditionally, and the file's end is its fixture\nlaunchers' one owner. The release is no longer exported; an integration\ntest runs real Jest over two files in one process and checks that one\nfile's lifeline is gone before the other runs.\n\nFixture draws of a discovered load read the user file's authored preset\nroots through the daemon's own derivation. The session fixture's PATH is\nthe worker's. The real-launcher lint matches every spelling of the host\nmodule. The payload composer is named composePayload everywhere.\n"
         },
         {
           "sha": "257c9462713df2602f1c97c653629bcfc4069750",
