@@ -4,15 +4,22 @@
     {
       "version": "pr-925",
       "ref": "refs/pull/925/merge",
-      "sha": "c8d16d4fc00f2ee25b9c959af1e1f13d43884ffd",
-      "timestamp": "2026-11-21T01:20:27.547Z",
+      "sha": "21e80961b321da750e431694339ea44ad874febd",
+      "timestamp": "2026-11-21T01:45:35.619Z",
       "commits": [
         {
-          "sha": "c8d16d4fc00f2ee25b9c959af1e1f13d43884ffd",
+          "sha": "21e80961b321da750e431694339ea44ad874febd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:19:21Z",
-          "message": "Merge 94b09e0d27ba58e2066e6df9c56f8f3c0bbf155b into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-21T01:44:32Z",
+          "message": "Merge 2e3e7cb150231763c97656448b64658214a77811 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "2e3e7cb150231763c97656448b64658214a77811",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T18:44:18-07:00",
+          "message": "fix(daemon): a task's held error counts its throws and shows them once a hold\n\nA task's error is identified by its task, so the daemon no longer compares a\nthrow's message against a copy of the last one. The task's held event is the\none record of what its error says. A throw while the error is held is\ncounted, whatever it says. When the hold ends with throws counted, the latest\ncause is held and logged once with their count, so a task failing on every\ntick moves bars and the log once a hold.\n\nA throw keeps its own words: a watch's holders each run as a clock task named\nfor the watch, and a wait's work that fails after the wait ended is reported\nas the wait's task after its wait, with no wrapper hiding the cause.\n\nThe inbox's taker is a state: a second attach is refused, and the daemon's\nclose and a refused boot hand it to the log. Taking a throw never throws\nback into the task. A disposed held slot holds nothing.\n\nA wait's work that throws before returning fails the wait at once again.\nConfig discovery reports an origin it could not observe only after the batch\nhas published what its siblings observed. A bar pane's apply is named for\nthe pane. The daemon's clock has one builder.\n"
         },
         {
           "sha": "94b09e0d27ba58e2066e6df9c56f8f3c0bbf155b",

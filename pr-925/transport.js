@@ -73134,6 +73134,9 @@ var TurnTime = class {
   }
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
+  // [LAW:nothing-unseen] exception: the name is not kept. A deferral is the
+  // turn's own work, run inside the due turn, so what it throws is the turn's
+  // failure, named by the turn, and is never a clock task's.
   after(_task, ms, run2) {
     const deferral = { until: this.tick + ms / 1e3, run: run2 };
     this.held.add(deferral);
@@ -78802,20 +78805,29 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 // src/daemon/task-throws.ts
 init_globals();
 var TaskThrowInbox = class {
-  waiting = [];
-  take = (reported) => this.waiting.push(reported);
-  report = (task, thrown2, at) => this.take({ task, thrown: thrown2, at });
-  // [LAW:single-enforcer] The one taker: every throw waiting, oldest first,
-  // then each as it is reported, the daemon's close notwithstanding.
-  // One reported while the waiting are taken waits behind them.
+  taking = { kind: "waiting", waiting: [] };
+  report = (task, thrown2, at) => {
+    const reported = { task, thrown: thrown2, at };
+    if (this.taking.kind === "waiting") this.taking.waiting.push(reported);
+    else this.taking.take(reported);
+  };
+  // [LAW:single-enforcer] The daemon takes every throw, those waiting first,
+  // oldest first; one reported while they are taken waits behind them.
   attach(take) {
-    for (let reported = this.waiting.shift(); reported !== void 0; reported = this.waiting.shift())
-      take(reported);
-    this.take = take;
+    if (this.taking.kind !== "waiting")
+      throw new Error(`a throw inbox is already ${this.taking.kind}`);
+    this.handOver({ kind: "taken", take });
   }
-  // What no taker took: a boot refused before the daemon attached.
-  untaken() {
-    return this.waiting.splice(0);
+  // From here on a log takes them: whatever is waiting, then each as it comes.
+  close(take) {
+    this.handOver({ kind: "closed", take });
+  }
+  handOver(to) {
+    const { taking } = this;
+    if (taking.kind === "waiting")
+      for (let reported = taking.waiting.shift(); reported !== void 0; reported = taking.waiting.shift())
+        to.take(reported);
+    this.taking = to;
   }
 };
 function reportingClock(source) {
@@ -78824,8 +78836,9 @@ function reportingClock(source) {
 }
 
 // src/host.ts
+var daemonClock = () => reportingClock(systemTimers);
 function daemonWorld() {
-  return worldOver(reportingClock(systemTimers));
+  return worldOver(daemonClock());
 }
 function worldOver(clock) {
   return {
@@ -79431,18 +79444,14 @@ function waitWithin(task, work, ms, clock, closing) {
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    clock.detach(
-      task,
-      () => work(wait.signal).then(
-        () => resolve2("answered"),
-        (e) => {
-          if (!wait.signal.aborted) return reject2(e);
-          throw new Error(
-            `failed after its wait ended at its ${String(wait.signal.reason)}`,
-            { cause: e }
-          );
-        }
-      )
+    work(wait.signal).then(
+      () => resolve2("answered"),
+      (e) => {
+        if (!wait.signal.aborted) return reject2(e);
+        clock.detach(`${task} after its wait`, () => {
+          throw e;
+        });
+      }
     );
   });
   return ended.finally(() => {
@@ -79988,26 +79997,22 @@ var WatcherRegistry = class {
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
   }
-  // [LAW:no-ambient-temporal-coupling] A window's steps, each made as it is
-  // reached, so a slot an earlier holder closed or a holder it released
-  // hears nothing: a slot is judged when its turn comes, and its holders are
-  // walked as they stand. A holder's throw names the watch it held.
-  *delivery(changes, completed) {
+  // [LAW:no-silent-failure] Every holder hears the window, whatever one before
+  // it threw: each hearing is a clock task named for its watch, so what it
+  // throws reaches the bar as that watch's, in its own words.
+  // [LAW:no-ambient-temporal-coupling] A slot an earlier holder closed, or a
+  // holder it released, hears nothing: each is judged as its turn comes.
+  deliver(changes, completed) {
     for (const [changed, gathered] of changes) {
       if (this.slots.get(changed.key) !== changed) continue;
       const heard = heardOf(gathered);
       for (const holder of changed.holders)
-        yield () => {
-          try {
-            holder.onInvalidate(heard);
-          } catch (thrown2) {
-            throw new Error(`watch ${changed.key} holder threw`, {
-              cause: thrown2
-            });
-          }
-        };
+        this.clock.detach(
+          `watch ${changed.key} holder`,
+          () => holder.onInvalidate(heard)
+        );
     }
-    if (completed !== void 0) yield completed;
+    completed?.();
   }
   fire(slot, invalidation) {
     const { window: window2 } = slot;
@@ -80020,7 +80025,7 @@ var WatcherRegistry = class {
           DEBOUNCE_MS,
           () => {
             window2.pending = null;
-            runEach(this.delivery(changes2, window2.completed));
+            this.deliver(changes2, window2.completed);
           },
           { unref: true }
         )
@@ -82998,7 +83003,8 @@ var import_node_path18 = __toESM(require_path_browserify(), 1);
 // src/utils/trailing-edge.ts
 init_globals();
 var TrailingEdge = class {
-  // The keys whose loop is currently executing, each with its completion.
+  // The keys whose loop is currently executing, each with the token its loop
+  // compares itself against, so a loop a `clear` let go touches only its own.
   running = /* @__PURE__ */ new Map();
   // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
   // count: ten triggers during one pass mean the same thing as one — the work
@@ -83013,17 +83019,18 @@ var TrailingEdge = class {
   // and carries no news that the answer changed: the loop in flight already
   // answers it, so it shares that loop rather than queueing a
   // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
-  // does mid-read). Idle, it starts a loop exactly as `run` does.
+  // does mid-read). Idle, it starts a loop exactly as `run` does and hands
+  // back its completion; running, the loop's end is its starter's to hear, so
+  // it hands back nothing to report twice.
   share(key, work) {
-    if (this.running.has(key)) return { kind: "shared" };
+    if (this.running.has(key)) return void 0;
     this.again.add(key);
-    return { kind: "started", done: this.start(key, work) };
+    return this.start(key, work);
   }
   start(key, work) {
-    const running = { done: Promise.resolve() };
+    const running = Symbol(key);
     this.running.set(key, running);
-    running.done = this.loop(key, work, running);
-    return running.done;
+    return this.loop(key, work, running);
   }
   async loop(key, work, running) {
     const own2 = () => this.running.get(key) === running;
@@ -83294,10 +83301,7 @@ var GitDataProvider = class {
       watch: this.followWatch(root, null).watch,
       period: new Period(
         `git refresh ${root}`,
-        () => {
-          const ask2 = state.refresh.share(PASS, () => this.refreshPass(state));
-          return ask2.kind === "started" ? ask2.done : void 0;
-        },
+        () => state.refresh.share(PASS, () => this.refreshPass(state)),
         this.clock
       ),
       value: { reading: unread(), missed: false },
@@ -89519,7 +89523,7 @@ var DeclaredBarPanes = class {
     const event = `bar-pane sid=${JSON.stringify(session)} pane=${JSON.stringify(pane.pane)} desired=${on2 ? "on" : "off"}`;
     held.application = { kind: "running" };
     this.clock.detach(
-      event,
+      `bar pane ${pane.pane} apply`,
       () => this.setPane(pane, on2).then(
         (said2) => {
           held.application = { kind: "applied", on: on2 };
@@ -91367,28 +91371,33 @@ var HeldSlot = class {
   clock;
   task;
   left;
-  held = null;
+  state = "empty";
   event() {
-    return this.held?.event ?? null;
+    return typeof this.state === "string" ? null : this.state.event;
   }
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a disposed slot takes none and arms no end on a closed daemon.
   hold(event) {
-    this.held?.cancelEnd();
+    if (this.state === "disposed") return;
+    if (this.state !== "empty") this.state.cancelEnd();
     const held = { event, cancelEnd: () => {
     } };
-    this.held = held;
+    this.state = held;
     this.armEnd(held);
   }
   // Whether `shown` marked the held event, which leaves too if it is past
   // its hold.
   answer(shown) {
-    const { held } = this;
-    if (held === null || !answeredBy(held.event, shown)) return false;
+    const held = this.state;
+    if (typeof held === "string" || !answeredBy(held.event, shown))
+      return false;
     held.event = { ...held.event, answered: true };
     if (this.holdNow(held.event) === "over") this.leave(held);
     return true;
   }
   dispose() {
-    this.held?.cancelEnd();
+    if (typeof this.state !== "string") this.state.cancelEnd();
+    this.state = "disposed";
   }
   // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
   // and timed on the timers, which need not agree: an end that finds the
@@ -91421,7 +91430,7 @@ var HeldSlot = class {
   }
   leave(held) {
     held.cancelEnd();
-    this.held = null;
+    this.state = "empty";
     this.left();
   }
 };
@@ -92026,10 +92035,7 @@ var ConfigDiscovery = class {
     const touched = [...this.followed].filter(
       ([, { landingPaths }]) => changed.some((file) => landingPaths.has(file))
     ).map(([key]) => key);
-    return this.publish(
-      this.rediscovered(touched, "landed", "observed"),
-      writer
-    );
+    return this.refreshed(touched, "landed", "observed", writer);
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
@@ -92048,7 +92054,21 @@ var ConfigDiscovery = class {
   // moved go to the renderer.
   heard(keys2, why, recover) {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys2, why, recover), null);
+    this.refreshed(keys2, why, recover, null);
+  }
+  // [LAW:no-silent-failure] Origins discovered again and what moved published;
+  // an origin that cannot be observed keeps its last snapshot for a retry,
+  // and what it threw is its own task's, reported once the batch has
+  // published what its siblings observed: a failure is a value until then,
+  // so no reporter can cut the batch short.
+  refreshed(keys2, why, recover, writer) {
+    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
+    const answered = this.publish(moved2, writer);
+    for (const { key, thrown: thrown2 } of failed3)
+      this.deps.clock.detach(`config discovery ${key}`, () => {
+        throw thrown2;
+      });
+    return answered;
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -92068,32 +92088,37 @@ var ConfigDiscovery = class {
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why, recover) {
-    if (keys2.length === 0) return [];
+    if (keys2.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved2 = [];
     const observed2 = [];
+    const failed3 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
-      this.deps.clock.detach(`config discovery ${key}`, () => {
-        const found2 = this.discovered(was.origin, shared, was.watch);
-        const now2 = {
-          ...found2,
-          snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
-          renderers: was.renderers,
-          selected: was.selected
-        };
-        this.followed.set(key, now2);
-        observed2.push(now2);
-        if (now2.digest !== was.digest) moved2.push(now2);
-      });
+      let found2;
+      try {
+        found2 = this.discovered(was.origin, shared, was.watch);
+      } catch (thrown2) {
+        failed3.push({ key, thrown: thrown2 });
+        continue;
+      }
+      const now2 = {
+        ...found2,
+        snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+        renderers: was.renderers,
+        selected: was.selected
+      };
+      this.followed.set(key, now2);
+      observed2.push(now2);
+      if (now2.digest !== was.digest) moved2.push(now2);
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length} failed=${failed3.length}`
     );
     this.reloaded(recover === "observed" ? observed2 : moved2);
-    return moved2;
+    return { moved: moved2, failed: failed3 };
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
@@ -92322,7 +92347,7 @@ function createDaemon(inputs) {
   );
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  const taskThrown = /* @__PURE__ */ new Map();
+  const taskErrors = /* @__PURE__ */ new Map();
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
@@ -92330,7 +92355,7 @@ function createDaemon(inputs) {
         launcher: launcher.standing(),
         rendererEnded: rendererEnded.event(),
         actFailed: actFailed.event(),
-        taskThrows: [...taskThrown].flatMap(([task, { slot }]) => {
+        taskThrows: [...taskErrors].flatMap(([task, { slot }]) => {
           const event = slot.event();
           return event === null ? [] : [{ task, event }];
         })
@@ -92373,7 +92398,7 @@ function createDaemon(inputs) {
         // A frame can carry a throw whose slot has since left: nothing
         // holds it to mark.
         case "task-threw":
-          if (taskThrown.get(shownEvent.task)?.slot.answer(shownEvent.event))
+          if (taskErrors.get(shownEvent.task)?.slot.answer(shownEvent.event))
             changed = true;
           break;
         default:
@@ -92382,28 +92407,54 @@ function createDaemon(inputs) {
     }
     if (changed) restateFaults();
   };
-  const takeThrow = ({ task, thrown: thrown2, at }) => {
-    stats.tasksThrew++;
-    const failure2 = failureOf(thrown2);
-    const message = `${task} threw: ${failure2.message}`;
-    const held = taskThrown.get(task);
-    if (held?.message === message) return;
-    log("error", `${task} threw: ${failure2.detail}`);
-    if (cancelling()) return;
-    const slot = held?.slot ?? new HeldSlot(clock, `task throw hold ${task}`, () => {
-      taskThrown.delete(task);
-      restateFaults();
-    });
-    taskThrown.set(task, { slot, message });
+  const threwText = ({ task }, more) => `${task} threw${more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`}`;
+  const showThrow = (slot, reported, more) => {
+    const failure2 = failureOf(reported.thrown);
+    const threw2 = threwText(reported, more);
+    log("error", `${threw2}: ${failure2.detail}`);
     slot.hold(
       environmentOutput(
-        joinedEvent(slot.event(), message, instantOf(new Date(at))),
+        joinedEvent(
+          null,
+          `${threw2}: ${failure2.message}`,
+          instantOf(new Date(reported.at))
+        ),
         true
       )
     );
     restateFaults();
   };
-  clock.throws.attach(takeThrow);
+  const taken2 = (reported) => {
+    stats.tasksThrew++;
+    const known = taskErrors.get(reported.task);
+    if (known !== void 0) {
+      known.since = { count: (known.since?.count ?? 0) + 1, latest: reported };
+      return;
+    }
+    const slot = new HeldSlot(clock, `task throw hold ${reported.task}`, () => {
+      const { since } = error;
+      if (since === null) {
+        taskErrors.delete(reported.task);
+        restateFaults();
+        return;
+      }
+      error.since = null;
+      showThrow(slot, since.latest, since.count);
+    });
+    const error = { slot, since: null };
+    taskErrors.set(reported.task, error);
+    showThrow(slot, reported, 0);
+  };
+  clock.throws.attach((reported) => {
+    try {
+      taken2(reported);
+    } catch (failure2) {
+      log(
+        "error",
+        `taking what ${reported.task} threw failed: ${failureOf(failure2).detail}; it threw: ${failureOf(reported.thrown).detail}`
+      );
+    }
+  });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -92990,15 +93041,23 @@ function createDaemon(inputs) {
       ),
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
-      // [LAW:no-ambient-temporal-coupling] A closed daemon ends no holds: a
-      // throw from here on is logged, and holds nothing.
+      // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
+      // throw counted and not yet shown is logged now, and one from here on
+      // is logged as it comes.
       [
         "held events close",
         () => {
+          const logged = (reported, more) => log(
+            "error",
+            `${threwText(reported, more)}: ${failureOf(reported.thrown).detail}`
+          );
+          clock.throws.close((reported) => logged(reported, 0));
+          for (const { since } of taskErrors.values())
+            if (since !== null) logged(since.latest, since.count);
           for (const slot of [
             rendererEnded,
             actFailed,
-            ...[...taskThrown.values()].map(({ slot: slot2 }) => slot2)
+            ...[...taskErrors.values()].map(({ slot: slot2 }) => slot2)
           ])
             slot.dispose();
         }
