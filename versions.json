@@ -4,15 +4,22 @@
     {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
-      "sha": "9b2f0afd0850a7a05501f6e372e2427ff3751ed7",
-      "timestamp": "2026-11-21T06:38:51.440Z",
+      "sha": "f74d2708b5d6c509a422d91b41951e641ffc5dad",
+      "timestamp": "2026-11-21T07:01:59.428Z",
       "commits": [
         {
-          "sha": "9b2f0afd0850a7a05501f6e372e2427ff3751ed7",
+          "sha": "f74d2708b5d6c509a422d91b41951e641ffc5dad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T06:37:45Z",
-          "message": "Merge 6d7c0458a4aee3dbf1d3d815a097bd18f954d5a0 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+          "timestamp": "2026-11-21T07:00:50Z",
+          "message": "Merge 257c9462713df2602f1c97c653629bcfc4069750 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+        },
+        {
+          "sha": "257c9462713df2602f1c97c653629bcfc4069750",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:00:33-07:00",
+          "message": "test(fixtures): one owner per runtime for fixture launchers, and truthful fixture claims (ibyq.xrv)\n\nA test file's environment releases the launchers its runtime made, after\nthe file's last hook. The runner's global teardown holds its launchers for\nits whole process, so the hook is optional in the type rather than\ndetected, and global teardown keeps no second release. Every test launcher\nwith no owner of its own now comes from fixtureLauncher, which the\nreal-launcher lint guards like processLauncher. A new proc test proves a\nrelease ends the lifeline.\n\nThe session fixture reports its Claude directory from its declared\nenvironment. The absent-config test runs the real search with no user\nfile. Stale claims in headers and the browser inventory are corrected.\n"
         },
         {
           "sha": "6d7c0458a4aee3dbf1d3d815a097bd18f954d5a0",
