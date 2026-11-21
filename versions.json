@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-930",
+      "ref": "refs/pull/930/merge",
+      "sha": "6f0e1ca5b92d9e86a45aa119b010a0b32cabbaa7",
+      "timestamp": "2026-11-21T05:32:25.852Z",
+      "commits": [
+        {
+          "sha": "6f0e1ca5b92d9e86a45aa119b010a0b32cabbaa7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T05:31:21Z",
+          "message": "Merge 8de090b1cef7b927f927c0c10fee35a6501dd951 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+        },
+        {
+          "sha": "8de090b1cef7b927f927c0c10fee35a6501dd951",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:30:57-07:00",
+          "message": "fix(config): a rediscover retries every observed origin's storage folders\n\nA rediscover the user asks for observed every origin but retried only\nthe storage folders of origins whose snapshot moved, and nothing else\nretries them before the next period. Every observation now retries\nthe folders it names.\n\nA plugin root that is a link to nothing is reported as unreadable\nrather than read as an empty root.\n\nThe shared-root test drives each install, rename and removal through\nthe root's own watch from a first install onto no root, gives the\napproved project a repository plugin of its own, and checks that each\nrenderer is delivered its own origin and that one batch observes each\npath once.\n"
+        },
+        {
+          "sha": "346dad69ac641d9d2cecc8119016715180e622b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:06:41-07:00",
+          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1a3809a1c4fa16ba6b1e1aaec69afc0960897150",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-21T05:11:46Z",
           "message": "chore(release): set `package.json` to 1.236.4\n\n## [1.236.4](https://github.com/promptctl/cc-candybar/compare/v1.236.3...v1.236.4) (2026-11-21)\n\n### Bug Fixes\n\n* **renderer:** each render cache entry compares itself with its offered config wherever it is used ([#929](https://github.com/promptctl/cc-candybar/issues/929)) ([75d266a](https://github.com/promptctl/cc-candybar/commit/75d266afc00407c4ef75d5746c8e403b1348e78c))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-930",
-      "ref": "refs/pull/930/merge",
-      "sha": "075bd1a5e971d7e00ca4a0edd0fe707536c2f2fb",
-      "timestamp": "2026-11-21T05:08:35.741Z",
-      "commits": [
-        {
-          "sha": "075bd1a5e971d7e00ca4a0edd0fe707536c2f2fb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:07:25-07:00",
-          "message": "Merge 346dad69ac641d9d2cecc8119016715180e622b6 into 75d266afc00407c4ef75d5746c8e403b1348e78c\n"
-        },
-        {
-          "sha": "346dad69ac641d9d2cecc8119016715180e622b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:06:41-07:00",
-          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n"
         }
       ]
     },

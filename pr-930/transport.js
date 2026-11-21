@@ -87159,7 +87159,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.236.3";
+var PACKAGE_VERSION = "1.236.4";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -91542,7 +91542,15 @@ function listFolders(root) {
     }
     return { folders, files };
   } catch (e) {
-    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
+    return e.code === "ENOENT" && !isEntry(root) ? { folders: [], files: [] } : { path: root, error: e.message };
+  }
+}
+function isEntry(root) {
+  try {
+    fs_default.lstatSync(root);
+    return true;
+  } catch {
+    return false;
   }
 }
 function isDirectoryLink(root, e) {
@@ -91942,7 +91950,7 @@ var ConfigDiscovery = class {
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys2, "config-watch", "observed");
+      this.heard(keys2, "config-watch");
     });
   }
   deps;
@@ -92099,12 +92107,12 @@ var ConfigDiscovery = class {
     const touched = [...this.followed].filter(
       ([, { landingPaths }]) => changed.some((file) => landingPaths.has(file))
     ).map(([key]) => key);
-    return this.refreshed(touched, "landed", "observed", writer);
+    return this.refreshed(touched, "landed", writer);
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
-    this.heard([...this.followed.keys()], why, "moved");
+    this.heard([...this.followed.keys()], why);
   }
   close() {
     if (this.closed) return;
@@ -92116,17 +92124,17 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why, recover) {
+  heard(keys2, why) {
     if (this.closed) return;
-    this.refreshed(keys2, why, recover, null);
+    this.refreshed(keys2, why, null);
   }
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
   // an origin that cannot be observed keeps its last snapshot for a retry,
   // and what it threw is its own task's, handed to the clock before the batch
   // publishes: a failure is a value the batch carries, so neither a reporter
   // nor a publish that throws can cut the batch short or lose it.
-  refreshed(keys2, why, recover, writer) {
-    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
+  refreshed(keys2, why, writer) {
+    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why);
     for (const { key, thrown: thrown2 } of failed3)
       this.deps.clock.failed(`config discovery ${key}`, thrown2);
     return this.publish(moved2, writer);
@@ -92148,7 +92156,7 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why, recover) {
+  rediscovered(keys2, why) {
     if (keys2.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved2 = [];
@@ -92178,7 +92186,7 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length} failed=${failed3.length}`
     );
-    this.reloaded(recover === "observed" ? observed2 : moved2);
+    this.reloaded(observed2);
     return { moved: moved2, failed: failed3 };
   }
   reloaded(observed2) {
