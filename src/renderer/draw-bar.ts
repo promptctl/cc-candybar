@@ -5,9 +5,8 @@ import type { LifelineWarning } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
-  type DisplayedEvent,
+  type DaemonEvent,
   type EventHold,
-  type HeldEvent,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
@@ -407,7 +406,7 @@ export function drawRender(
   clickShown: ClickErrorRecord | null;
   // The held events this draw showed (the launcher's pipe event, the last
   // renderer's end), which an answer carrying them marks answered.
-  eventsShown: readonly DisplayedEvent[] | undefined;
+  eventsShown: readonly DaemonEvent[] | undefined;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
   candidate: FrameCandidate;
@@ -479,14 +478,9 @@ export function drawRender(
   const said = (kind: DrawError["kind"], text: string | null | undefined) =>
     sourced(kind, text ?? "", text);
   const { daemon } = document;
-  // [LAW:no-silent-failure] A daemon task that threw is a fault in the daemon,
-  // an error on every bar by the same event hold as a renderer's end. Each
-  // task is one message about itself, however often it threw.
-  const tasksThrew = daemon.taskThrows.flatMap(({ task, event }) =>
-    daemonEventShows(event, at, drawing.by)
-      ? [{ kind: "task-threw" as const, task, event }]
-      : [],
-  );
+  // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
+  // instant and for whom it draws, by the same event hold as the click error.
+  const daemonEvents = daemonEventsAt(daemon.held, at, drawing.by);
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
@@ -505,14 +499,21 @@ export function drawRender(
       }),
     ),
     said("click", clickShown?.text),
-    ...tasksThrew.map(
-      ({ task, event }): MaybeError => ({
-        kind: "task-threw",
-        subject: task,
-        about: `task-threw\0${task}`,
-        text: event.text,
-        copy: event.text,
-      }),
+    // [LAW:no-silent-failure] A daemon task that threw is a fault in the
+    // daemon, an error on every bar. Each task is one message about itself,
+    // however often it threw.
+    ...daemonEvents.flatMap(({ shown }): MaybeError[] =>
+      shown.kind === "task-threw"
+        ? [
+            {
+              kind: "task-threw",
+              subject: shown.about,
+              about: `task-threw\0${shown.about}`,
+              text: shown.event.text,
+              copy: shown.event.text,
+            },
+          ]
+        : [],
     ),
   ].flatMap(({ about, text, copy, ...named }) =>
     text != null && copy != null ? [{ ...named, about, text, copy }] : [],
@@ -525,23 +526,28 @@ export function drawRender(
   // says so, as discovery found it. A stall is no reason of this watch's: it
   // has the bar's own row.
   const configWatch = entry.revision.snapshot.watch;
-  // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
-  // instant and for whom it draws, by the same event hold as the click error.
-  const held = [
-    daemonEventAt("launch-pipes", daemon.launchPipes, at, drawing.by),
-    daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
-    daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
-  ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
-  const eventsShown: readonly DisplayedEvent[] = [
-    ...held.map(({ kind, event }) => ({ kind, event })),
-    ...tasksThrew,
-  ].filter(({ event }) => !event.answered);
+  const eventsShown: readonly DaemonEvent[] = daemonEvents
+    .map(({ shown }) => shown)
+    .filter(({ event }) => !event.answered);
+  const daemonWarnings = daemonEvents.flatMap(
+    ({ shown, hold }): DaemonEventWarning[] => {
+      const message = shown.event.text;
+      switch (shown.kind) {
+        case "task-threw":
+          return [];
+        case "launch-pipes":
+          return [{ kind: shown.kind, message, hold, subject: shown.about }];
+        default:
+          return [{ kind: shown.kind, message, hold }];
+      }
+    },
+  );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
-    ...daemon.launcher,
-    ...held,
+    ...(daemon.launcher === null ? [] : [daemon.launcher]),
+    ...daemonWarnings,
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -573,11 +579,12 @@ export function drawRender(
     errors,
     questions,
     [
-      // A standing warning is one per kind whose words change as it does (a
-      // pipe event's counts), so its kind alone is what it is about: a viewer
-      // open on it stays open. A render warning is about its words.
+      // A standing warning is one per kind, or per subject of a kind that
+      // recurs, whose words change as it does (a pipe event's count), so
+      // that is what it is about: a viewer open on it stays open. A render
+      // warning is about its words.
       ...standing.map((w) => ({
-        about: w.kind,
+        about: "subject" in w ? `${w.kind}\0${w.subject}` : w.kind,
         text: w.message,
         copy: w.message,
       })),
@@ -722,7 +729,14 @@ export function drawRender(
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing.map((w) => faultOf("warning", w.kind, w.message)),
+    ...standing.map((w) =>
+      faultOf(
+        "warning",
+        w.kind,
+        w.message,
+        "subject" in w ? w.subject : undefined,
+      ),
+    ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
     ),
@@ -759,7 +773,8 @@ export function drawRender(
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: held.find(({ kind }) => kind === "launch-pipes")?.hold ?? "-",
+    pipeEvent:
+      daemonWarnings.find(({ kind }) => kind === "launch-pipes")?.hold ?? "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -859,41 +874,37 @@ interface FactsWarning {
   readonly message: string;
 }
 
-// [LAW:no-silent-failure] The daemon's own events, each by the one event
-// hold: a launched program's pipe that outlived its launch; a renderer
-// process that ended, taking the session state that lives only in memory
-// with it (open menus, armed confirms), so the bar the next one draws says
-// so; and an act that failed where no session's bar could hold it.
-interface DaemonEventWarning {
-  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
-  readonly message: string;
-  readonly event: HeldEvent;
-  // Why this render shows it: inside the hold, or owed past it.
+// A daemon event a draw shows, and why: inside the hold, or owed past it.
+interface ShownDaemonEvent {
+  readonly shown: DaemonEvent;
   readonly hold: Exclude<EventHold, "over">;
 }
 
-function daemonEventAt(
-  kind: DaemonEventWarning["kind"],
-  event: HeldEvent | null,
+// [LAW:single-enforcer] Which of the daemon's events a render shows: by the
+// one hold every event of the daemon's own is held by.
+function daemonEventsAt(
+  held: readonly DaemonEvent[],
   at: Instant,
   render: Drawing["by"],
-): DaemonEventWarning | undefined {
-  if (event === null) return undefined;
-  const hold = eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render);
-  return hold === "over"
-    ? undefined
-    : { kind, message: event.text, event, hold };
+): ShownDaemonEvent[] {
+  return held.flatMap((shown) => {
+    const hold = eventHoldAt(shown.event, DAEMON_EVENT_HOLD_S, at, render);
+    return hold === "over" ? [] : [{ shown, hold }];
+  });
 }
 
-// [LAW:single-enforcer] Whether a render shows a daemon event: by the one
-// hold every event of the daemon's own is held by.
-function daemonEventShows(
-  event: HeldEvent,
-  at: Instant,
-  render: Drawing["by"],
-): boolean {
-  return eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) !== "over";
-}
+// [LAW:no-silent-failure] The daemon's own events that warn: a launched
+// program's pipe that outlived its launch, one warning per what it met; a
+// renderer process that ended, taking the session state that lives only in
+// memory with it (open menus, armed confirms), so the bar the next one draws
+// says so; and an act that failed where no session's bar could hold it.
+type DaemonEventWarning = {
+  readonly message: string;
+  readonly hold: ShownDaemonEvent["hold"];
+} & (
+  | { readonly kind: "renderer-ended" | "act-failed" }
+  | { readonly kind: "launch-pipes"; readonly subject: string }
+);
 
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
@@ -919,7 +930,7 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
-  readonly displayedEvents?: readonly DisplayedEvent[];
+  readonly displayedEvents?: readonly DaemonEvent[];
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }

@@ -49,7 +49,7 @@ import {
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
-import type { DisplayedEvent } from "../utils/event-hold.js";
+import type { DaemonEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
@@ -144,7 +144,7 @@ export interface HostWorld {
   readonly configs: RendererConfigs;
   readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
-  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
+  readonly acknowledgeDisplayed: (events: readonly DaemonEvent[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
 }
 

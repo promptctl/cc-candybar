@@ -9,7 +9,7 @@ import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
-import type { HeldEvent } from "../utils/event-hold";
+import type { DaemonEvent } from "../utils/event-hold";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -66,27 +66,17 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself: whether file events are heard, whether what the launcher
-// launches dies with it, and the events held while some bar can show them,
-// each judged by every draw at its own instant and for whom it draws
-// (src/utils/event-hold.ts): the latest pipe event of a launched program,
-// how the last renderer process ended, and the acts that failed with no
+// daemon itself: whether file events are heard, the launch lifeline's fault
+// while it stands (null while none does), and the daemon's own events while
+// some bar can show them, each judged by every draw at its own instant and
+// for whom it draws (src/utils/event-hold.ts): each pipe event of a launched
+// program, how the last renderer process ended, the acts that failed with no
 // session's bar to hold them (one no session asked for, or one whose renderer
-// had ended), each null while none is held.
+// had ended), and what each of the daemon's tasks threw.
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
-  readonly launcher: readonly LifelineWarning[];
-  readonly launchPipes: HeldEvent | null;
-  readonly rendererEnded: HeldEvent | null;
-  readonly actFailed: HeldEvent | null;
-  // What the daemon's own tasks threw, one held event per task while some bar
-  // can show it: an error, where the others are warnings.
-  readonly taskThrows: readonly TaskThrew[];
-}
-
-export interface TaskThrew {
-  readonly task: string;
-  readonly event: HeldEvent;
+  readonly launcher: LifelineWarning | null;
+  readonly held: readonly DaemonEvent[];
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

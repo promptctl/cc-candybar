@@ -273,7 +273,9 @@ test("a daemon task's throw refuses the capture while every bar holds it, and al
     ...clean,
     daemon: {
       ...clean.daemon,
-      taskThrows: [{ task: "session sweep", event: thrown }],
+      held: [
+        { kind: "task-threw" as const, about: "session sweep", event: thrown },
+      ],
     },
   };
   expect(

@@ -45,7 +45,6 @@ import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
-import { instantOf, type Instant } from "../utils/instant";
 import { withoutRepositoryScopedEnv } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
@@ -191,10 +190,6 @@ export interface LaunchScope {
   // kill grace run on, and where they wait for a loop turn. A child lives in
   // real time, so a held daemon is handed the real one here.
   readonly clock: Timekeeper;
-  // The owner's own instant: when a pipe event happened, on the clock every
-  // render compares the event hold against. A held daemon's renders run on its
-  // clock, not the machine's, so the event is stamped on the same one.
-  readonly now: () => Instant;
 }
 
 // [LAW:one-source-of-truth] Everything one owner's launches read and leave
@@ -351,8 +346,8 @@ const pipeEventWords = (kind: PipeEventKind): string =>
 
 const PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
 
-// [LAW:single-enforcer] A pipe event is reported as it happens, and its
-// owner holds it: the launcher keeps none of it.
+// A pipe event is reported as it happens, and the launcher keeps none of it:
+// its owner holds it while a bar can show it.
 function pipeEvent(
   state: LaunchState,
   kind: PipeEventKind,
@@ -365,10 +360,10 @@ function pipeEvent(
 }
 
 // What the launcher stands behind now: the lifeline's fault while it stands.
-function standing(state: LaunchState): LifelineWarning[] {
+function standing(state: LaunchState): LifelineWarning | null {
   return state.fault === null
-    ? []
-    : [{ kind: "lifeline", message: lifelineMessage(state.fault) }];
+    ? null
+    : { kind: "lifeline", message: lifelineMessage(state.fault) };
 }
 
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
@@ -1349,7 +1344,6 @@ function launcherWithState(
         if (message !== null) process.emitWarning(message);
       },
       signal: new AbortController().signal,
-      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock,
     },

@@ -223,9 +223,9 @@ export interface LifelineWarning {
   readonly message: string;
 }
 
-// [LAW:one-source-of-truth] What the launcher reports as it happens: each
-// change in whether what it launches dies with it, and each pipe event. A
-// pipe event's owner holds it while a bar can show it.
+// What the launcher reports as it happens: each change in whether what it
+// launches dies with it, and each pipe event, which its owner holds while a
+// bar can show it.
 export type WarningChange =
   | { readonly kind: "lifeline"; readonly fault: string | null }
   | { readonly kind: "launch-pipes"; readonly text: string };
@@ -313,5 +313,5 @@ export interface Launcher {
   // caller proved the group the job's (see `endJob`).
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
   // What the launcher stands behind now: the lifeline's fault while it stands.
-  standing(): LifelineWarning[];
+  standing(): LifelineWarning | null;
 }

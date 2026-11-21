@@ -854,28 +854,28 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("reports which launcher event the statusline drew alongside the frame", async () => {
-    const event = {
-      text: "a launched program's pipe outlived its launch",
-      ...READ,
-      answered: false,
-    };
+  test("reports which launcher events the statusline drew alongside the frame, one warning each", async () => {
+    const event = (text: string) => ({ text, ...READ, answered: false });
+    const cut = event("a launched program's pipe outlived its launch: cut");
+    const unread = event("a launched program's pipe outlived its launch: read");
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      launcher: [
-        {
-          kind: "lifeline",
-          message: "programs launched now would outlive their launcher",
-        },
+      launcher: {
+        kind: "lifeline",
+        message: "programs launched now would outlive their launcher",
+      },
+      held: [
+        { kind: "launch-pipes", about: cut.text, event: cut },
+        { kind: "launch-pipes", about: unread.text, event: unread },
       ],
-      launchPipes: event,
     }));
     const { effects, record } = answered(await request(t));
     const facts = new Map(record);
-    expect(facts.get("warn")).toBe("lifeline,launch-pipes");
+    expect(facts.get("warn")).toBe("lifeline,launch-pipes,launch-pipes");
     expect(facts.get("pipeEvent")).toBe("held");
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "launch-pipes", event },
+      { kind: "launch-pipes", about: cut.text, event: cut },
+      { kind: "launch-pipes", about: unread.text, event: unread },
     ]);
   });
 
@@ -883,7 +883,7 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      actFailed: event,
+      held: [{ kind: "act-failed", event }],
     }));
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
@@ -897,14 +897,14 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, `${task} threw: it broke`, READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      taskThrows: [{ task, event }],
+      held: [{ kind: "task-threw", about: task, event }],
     }));
     const { effects, record } = answered(await request(t));
     const facts = new Map(record);
     expect(facts.get("err")).toBe("Y");
     expect(facts.get("faults")).toEqual(expect.stringContaining(event.text));
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "task-threw", task, event },
+      { kind: "task-threw", about: task, event },
     ]);
   });
 
@@ -1016,7 +1016,7 @@ describe("a feed's frame", () => {
       };
       const t = renderer(undefined, () => ({
         ...daemonFactsOf(),
-        actFailed: event,
+        held: [{ kind: "act-failed", event }],
       }));
       await configure(t, checked("%1"));
       answered(
