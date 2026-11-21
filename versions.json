@@ -4,15 +4,22 @@
     {
       "version": "pr-931",
       "ref": "refs/pull/931/merge",
-      "sha": "9a5b6c8685ee80d737ef338ef28d934d52153258",
-      "timestamp": "2026-11-21T05:53:43.429Z",
+      "sha": "9c8b7a749f6a078b9070a8fb656223d2bd4e068e",
+      "timestamp": "2026-11-21T06:04:59.956Z",
       "commits": [
         {
-          "sha": "9a5b6c8685ee80d737ef338ef28d934d52153258",
+          "sha": "9c8b7a749f6a078b9070a8fb656223d2bd4e068e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:52:36-07:00",
-          "message": "Merge 488bfacb7541c21d9399121b2a2c2f9f43d182b6 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+          "timestamp": "2026-11-21T06:03:51Z",
+          "message": "Merge 3d7b65a8510ec4b71a69d3d01693410432292e9b into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+        },
+        {
+          "sha": "3d7b65a8510ec4b71a69d3d01693410432292e9b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T23:03:38-07:00",
+          "message": "test(config): the shared-root test runs in its own data home through the production read path\n"
         },
         {
           "sha": "488bfacb7541c21d9399121b2a2c2f9f43d182b6",
