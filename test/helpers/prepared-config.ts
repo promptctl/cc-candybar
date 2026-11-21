@@ -49,8 +49,10 @@ export interface PreparedConfig {
   readonly droppedPlugins: readonly DroppedPlugin[];
   readonly droppedPlacements: readonly string[];
   readonly config: ValidatedConfig;
-  // The preset roots the user's own file authors, read as the daemon reads them.
-  readonly authoredRoots: ReadonlySet<string>;
+  // [LAW:one-source-of-truth] The globals a session with these picks (none by
+  // default) resolves over this load, its user file's authored preset roots
+  // read as the daemon reads them.
+  effective(sessionPick?: (key: string) => string | null): EffectiveGlobals;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
@@ -77,16 +79,7 @@ export async function prepareConfig(
   );
   const prepared = prepareSnapshot(world, snapshot, cwd, warnings);
   try {
-    await renderEffective(
-      prepared,
-      resolveEffectiveGlobals(
-        prepared.config,
-        () => null,
-        () => false,
-      ),
-      200,
-      at,
-    );
+    await renderEffective(prepared, prepared.effective(), 200, at);
     return prepared;
   } catch (error) {
     prepared[Symbol.dispose]();
@@ -108,6 +101,10 @@ export function prepareSnapshot(
     warned: (w) => warnings.push(...w),
   });
   const { config } = loaded;
+  const authored = userAuthoredRoots(
+    loaded.layers,
+    configFiles(snapshot.chain).user,
+  );
   deriveActionGates(createGates(), config);
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
@@ -144,10 +141,10 @@ export function prepareSnapshot(
         ...loaded.layers.flatMap((l) => l.plugins.dropped),
       ],
       config,
-      authoredRoots: userAuthoredRoots(
-        loaded.layers,
-        configFiles(snapshot.chain).user,
-      ),
+      effective: (sessionPick = () => null) =>
+        resolveEffectiveGlobals(config, sessionPick, (preset) =>
+          authored.has(preset),
+        ),
       compiled,
       store,
       registry,

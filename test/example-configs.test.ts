@@ -12,7 +12,6 @@ import { textOf } from "../src/render/frame";
 import fs from "node:fs";
 import path from "node:path";
 
-import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { prepareSnapshot, renderEffective } from "./helpers/prepared-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -52,9 +51,7 @@ describe("shipped example configs (examples/*.json5)", () => {
     expect(prepared.droppedPlugins).toEqual([]);
     const at = instantOf(new Date(WORLD.clock.now()));
     for (const preset of presetNames(prepared.config.presets)) {
-      const effective = resolveEffectiveGlobals(
-        prepared.config, (key) => key === "preset" ? preset : null, (root) => prepared.authoredRoots.has(root),
-      );
+      const effective = prepared.effective((key) => key === "preset" ? preset : null);
       const { rendered, failures, pending } = await renderEffective(prepared, effective, 200, at);
       expect({ preset, failures, pending }).toEqual({ preset, failures: [], pending: [] });
       expect(textOf(rendered).length).toBeGreaterThan(0);
@@ -80,9 +77,12 @@ describe("shipped example configs (examples/*.json5)", () => {
       const cwd = path.dirname(file);
       const { snapshot, warnings } = discoverFixture(WORLD, file, cwd);
       using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
-      const draw = (preset: string | null) => renderEffective(prepared, resolveEffectiveGlobals(
-        prepared.config, (key) => key === "preset" ? preset : null, (root) => prepared.authoredRoots.has(root),
-      ), 200, instantOf(new Date(WORLD.clock.now())));
+      const draw = (preset: string | null) => renderEffective(
+        prepared,
+        prepared.effective((key) => key === "preset" ? preset : null),
+        200,
+        instantOf(new Date(WORLD.clock.now())),
+      );
       expect((await draw(null)).failures).toEqual([]);
       expect((await draw("b")).failures).toEqual([expect.stringContaining("mode")]);
     });
