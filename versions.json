@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "14deeab12b857259c13fcd5b6ce31034774a8f0b",
-      "timestamp": "2026-11-21T08:37:17.141Z",
+      "sha": "4639261509c048460769c3b12b325bc86a5ff100",
+      "timestamp": "2026-11-21T08:44:54.969Z",
       "commits": [
         {
-          "sha": "14deeab12b857259c13fcd5b6ce31034774a8f0b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:36:06-07:00",
-          "message": "fix(renderer): a still frame touches only the view it draws (#933)\n\nA still bar with N live sessions does no per-session walk per frame. Across still due frames, the renderer hands back the very subscriptions object the host already follows. The drawn session's view is held, and the other session's never is.\n\nA frame's setup reads the held view's request inside the scope that releases the hold, so a throw from that read can't strand it. The lane derivation's read of the last returned plan is marked as the exception it is. The frame path's comments give reasons instead of ticket ids.\n\nTicket: candybar-law-review-ibyq.at1"
+          "sha": "4639261509c048460769c3b12b325bc86a5ff100",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-21T08:43:48Z",
+          "message": "chore(release): set `package.json` to 1.236.5\n\n## [1.236.5](https://github.com/promptctl/cc-candybar/compare/v1.236.4...v1.236.5) (2026-11-21)\n\n### Bug Fixes\n\n* **renderer:** a still frame touches only the view it draws ([#933](https://github.com/promptctl/cc-candybar/issues/933)) ([14deeab](https://github.com/promptctl/cc-candybar/commit/14deeab12b857259c13fcd5b6ce31034774a8f0b))\n"
         }
       ]
     },
