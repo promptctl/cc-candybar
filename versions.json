@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-930",
-      "ref": "refs/pull/930/merge",
-      "sha": "6f0e1ca5b92d9e86a45aa119b010a0b32cabbaa7",
-      "timestamp": "2026-11-21T05:32:25.852Z",
+      "version": "pr-931",
+      "ref": "refs/pull/931/merge",
+      "sha": "19b791b309386cbfd13d08ae799de982719ff128",
+      "timestamp": "2026-11-21T05:45:30.418Z",
       "commits": [
         {
-          "sha": "6f0e1ca5b92d9e86a45aa119b010a0b32cabbaa7",
+          "sha": "19b791b309386cbfd13d08ae799de982719ff128",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T05:31:21Z",
-          "message": "Merge 8de090b1cef7b927f927c0c10fee35a6501dd951 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+          "timestamp": "2026-11-20T22:44:15-07:00",
+          "message": "Merge d43164afc29796cd815a4c610d26b93c5ac7a128 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
         },
         {
-          "sha": "8de090b1cef7b927f927c0c10fee35a6501dd951",
+          "sha": "d43164afc29796cd815a4c610d26b93c5ac7a128",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:30:57-07:00",
-          "message": "fix(config): a rediscover retries every observed origin's storage folders\n\nA rediscover the user asks for observed every origin but retried only\nthe storage folders of origins whose snapshot moved, and nothing else\nretries them before the next period. Every observation now retries\nthe folders it names.\n\nA plugin root that is a link to nothing is reported as unreadable\nrather than read as an empty root.\n\nThe shared-root test drives each install, rename and removal through\nthe root's own watch from a first install onto no root, gives the\napproved project a repository plugin of its own, and checks that each\nrenderer is delivered its own origin and that one batch observes each\npath once.\n"
-        },
-        {
-          "sha": "346dad69ac641d9d2cecc8119016715180e622b6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:06:41-07:00",
-          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n"
+          "timestamp": "2026-11-20T22:43:55-07:00",
+          "message": "fix(config): a plugin root behind a link to nothing is broken, never empty\n\nA missing plugin root read as one holding no plugins, even when the\nnearest entry on its path was a link to nothing: a removed volume, or a\npackage prefix uninstalled under a linked share/. Every plugin in it\nvanished with no warning. A missing root is now absent only when the\nnearest entry on its path is a directory.\n\nA new test covers a plugin installed, renamed and removed in the shared\ninstalled root, from a first install onto no root, through the root's\nown watch. Each origin gets its own result. The approved repository's\nplugin stands beside the installed ones, and the awaiting repository's\nproject file and definitions are never opened. One batch observes each\npath once.\n"
         }
       ]
     },

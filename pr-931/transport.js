@@ -91542,16 +91542,25 @@ function listFolders(root) {
     }
     return { folders, files };
   } catch (e) {
-    return e.code === "ENOENT" && !isEntry(root) ? { folders: [], files: [] } : { path: root, error: e.message };
+    const error = e.message;
+    if (e.code !== "ENOENT")
+      return { path: root, error };
+    try {
+      const nowhere = linkToNothing(root);
+      return nowhere === null ? { folders: [], files: [] } : { path: root, error: `${error} (${nowhere} is a link to nothing)` };
+    } catch (probe2) {
+      return { path: root, error: probe2.message };
+    }
   }
 }
-function isEntry(root) {
-  try {
-    fs_default.lstatSync(root);
-    return true;
-  } catch {
-    return false;
+function linkToNothing(root) {
+  let at = root;
+  while (fs_default.lstatSync(at, { throwIfNoEntry: false }) === void 0) {
+    const parent = import_node_path31.default.dirname(at);
+    if (parent === at) return null;
+    at = parent;
   }
+  return fs_default.statSync(at, { throwIfNoEntry: false })?.isDirectory() ? null : at;
 }
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
@@ -91950,7 +91959,7 @@ var ConfigDiscovery = class {
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys2, "config-watch");
+      this.heard(keys2, "config-watch", "observed");
     });
   }
   deps;
@@ -92107,12 +92116,12 @@ var ConfigDiscovery = class {
     const touched = [...this.followed].filter(
       ([, { landingPaths }]) => changed.some((file) => landingPaths.has(file))
     ).map(([key]) => key);
-    return this.refreshed(touched, "landed", writer);
+    return this.refreshed(touched, "landed", "observed", writer);
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
-    this.heard([...this.followed.keys()], why);
+    this.heard([...this.followed.keys()], why, "moved");
   }
   close() {
     if (this.closed) return;
@@ -92124,17 +92133,17 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why) {
+  heard(keys2, why, recover) {
     if (this.closed) return;
-    this.refreshed(keys2, why, null);
+    this.refreshed(keys2, why, recover, null);
   }
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
   // an origin that cannot be observed keeps its last snapshot for a retry,
   // and what it threw is its own task's, handed to the clock before the batch
   // publishes: a failure is a value the batch carries, so neither a reporter
   // nor a publish that throws can cut the batch short or lose it.
-  refreshed(keys2, why, writer) {
-    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why);
+  refreshed(keys2, why, recover, writer) {
+    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
     for (const { key, thrown: thrown2 } of failed3)
       this.deps.clock.failed(`config discovery ${key}`, thrown2);
     return this.publish(moved2, writer);
@@ -92156,7 +92165,7 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why) {
+  rediscovered(keys2, why, recover) {
     if (keys2.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved2 = [];
@@ -92186,7 +92195,7 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length} failed=${failed3.length}`
     );
-    this.reloaded(observed2);
+    this.reloaded(recover === "observed" ? observed2 : moved2);
     return { moved: moved2, failed: failed3 };
   }
   reloaded(observed2) {
