@@ -30,6 +30,7 @@ import type { SessionBook } from "../../src/daemon/session-book";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { HOST } from "./host";
 import { stateDir } from "../../src/daemon/paths";
+import { revisionOf } from "../../src/config/config-snapshot";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 
 export function clickParts(
@@ -87,11 +88,11 @@ export function clickParts(
       configSelections: () => [],
       managedFolders: () => [],
       holdView: () => null,
-      // An origin the verb fixture holds no config for throws.
-      configDelivery: (origin) => {
-        verbCtx.snapshotFor(origin);
-        return { kind: "received" };
-      },
+      // The verb fixture discovers every origin's config, so each is received.
+      configDelivery: (origin) => ({
+        kind: "received",
+        revision: revisionOf(verbCtx.snapshotFor(origin)),
+      }),
       prune: () => {},
     } satisfies Pick<
       MainRendererParts["renderCache"],

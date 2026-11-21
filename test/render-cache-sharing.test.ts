@@ -86,6 +86,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       locations: locs(),
       gates,
       sessionState,
+      editRevision: () => null,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },

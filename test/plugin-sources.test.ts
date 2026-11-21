@@ -246,6 +246,7 @@ function rig(): Rig {
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,
+      editRevision: () => null,
       gates: bareGates(),
       log,
       source: sessionSource({

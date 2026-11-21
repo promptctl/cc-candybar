@@ -28,6 +28,7 @@ import {
   type LoadCause,
   type Hold,
   type RenderCacheObservers,
+  type RenderDeps,
   type SessionView,
   SOURCES_NOTHING,
   openView,
@@ -64,7 +65,11 @@ import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
-import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import {
+  revisionOf,
+  type ConfigRevision,
+  type ConfigSnapshot,
+} from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { rendererFailureOf } from "../src/daemon/foundations/verb-error";
@@ -94,6 +99,7 @@ const oneRow = (...segments: string[]): LayoutNode => ({
 function makeCache(
   observers?: RenderCacheObservers,
   log?: DaemonLogger,
+  editRevision: RenderDeps["editRevision"] = () => null,
 ): {
   cache: RenderCache;
   originAt: ConfigHost["at"];
@@ -126,6 +132,7 @@ function makeCache(
       locations: locations(host),
       gates: bareGates(),
       sessionState,
+      editRevision,
       log,
       source: SOURCES_NOTHING,
     },
@@ -1112,8 +1119,6 @@ describe("RenderCache", () => {
     }
   });
 
-  // The host polls the decision file only for interested origins. Watching
-  // its directory would also wake the bar for unrelated state and log writes.
   test("a delivery that digests as the one loaded loads nothing, and a rejected one reapplies when it comes again", () => {
     const causes: string[] = [];
     const { cache, originAt, cleanups } = makeCache({
@@ -1139,50 +1144,30 @@ describe("RenderCache", () => {
   });
 
   test("a draft that digests as the one its entry loaded loads nothing", () => {
-    const watchers = new WatcherRegistry({
-      clock: systemTimekeeper,
-      logger: () => {},
-    });
     const causes: string[] = [];
-    const { dir, cleanup } = mkConfigDir();
-    let draft: ConfigSnapshot | null = null;
-    const cache = new RenderCache(
-      {
-        clock: systemTimekeeper,
-        locations: locations(host),
-        gates: bareGates(),
-        sessionState: new SessionState(),
-        editSnapshot: (_origin, session) => (session === S1 ? draft : null),
-        source: SOURCES_NOTHING,
-      },
-      {
-        budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
-        observers: {
-          onReload: (_entry, _sessions, cause) => causes.push(cause.kind),
-        },
-      },
+    let draft: ConfigRevision | null = null;
+    const { cache, originAt, cleanups } = makeCache(
+      { onReload: (_entry, _sessions, cause) => causes.push(cause.kind) },
+      undefined,
+      (_origin, session) => (session === S1 ? draft : null),
     );
-    const configs = configHost(cache, {
-      locations: locations(host),
-      stateDir: stateDir(host),
-      watchers,
-    });
+    const { dir, cleanup } = mkConfigDir();
     try {
-      const origin = configs.at(dir, dir, undefined);
-      draft = { ...cache.snapshotFor(origin) };
+      const origin = originAt(dir, dir, undefined);
+      draft = revisionOf({ ...cache.snapshotFor(origin) });
       const entry = cache.getOrCreate(origin, S1);
-      // The edit transaction hands back an equal draft as a new object.
-      draft = { ...draft };
+      // A host delivery while editing hands the draft an equal snapshot.
+      draft = revisionOf({ ...draft.snapshot });
       expect(cache.getOrCreate(origin, S1)).toBe(entry);
       expect(causes).toEqual(["open"]);
     } finally {
-      cache.close();
-      configs.close();
-      watchers.closeAll();
+      for (const c of cleanups) c();
       cleanup();
     }
   });
 
+  // The host polls the decision file only for interested origins. Watching
+  // its directory would also wake the bar for unrelated state and log writes.
   test("a layered entry follows the decision file without watching its state directory", async () => {
     const { dir, cleanup } = mkConfigDir();
     const causes: LoadCause["kind"][] = [];
@@ -1516,6 +1501,7 @@ describe("RenderCache close", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         source: SOURCES_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1572,6 +1558,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         log: (_level, line) => logs.push(line),
         source,
       },
@@ -1685,7 +1672,7 @@ describe("RenderCache frames and pins", () => {
       const { dir, cleanup } = mkConfigDir();
       const other = mkConfigDir();
       let latest = viewFacts(dir, "s1");
-      let draft: ConfigSnapshot | null = null;
+      let draft: ConfigRevision | null = null;
       let opens = 0;
       const cache = new RenderCache(
         {
@@ -1694,7 +1681,7 @@ describe("RenderCache frames and pins", () => {
           gates: bareGates(),
           sessionState: new SessionState(),
           currentRequest: () => latest,
-          editSnapshot: (_origin, session) => (session === S1 ? draft : null),
+          editRevision: (_origin, session) => (session === S1 ? draft : null),
           log: (_level, line) => logs.push(line),
           // The second view built over the entry, the reload's successor, fails.
           source: (view) => {
@@ -1716,13 +1703,13 @@ describe("RenderCache frames and pins", () => {
       const edit = () => {
         configs.again();
         if (which === "draft") {
-          draft = cache.snapshotFor(originAt(dir, dir, undefined));
+          draft = revisionOf(cache.snapshotFor(originAt(dir, dir, undefined)));
           cache.refreshEditedView(S1);
         }
       };
       try {
         const origin = originAt(dir, dir, undefined);
-        if (which === "draft") draft = cache.snapshotFor(origin);
+        if (which === "draft") draft = revisionOf(cache.snapshotFor(origin));
         {
           using _request = cache.holdSession(origin, latest);
         }
@@ -1798,6 +1785,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         log: () => {},
         source: (view) => {
           opens++;

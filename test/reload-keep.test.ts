@@ -72,6 +72,7 @@ function rig(
       locations: locations(host),
       gates: bareGates(),
       sessionState: new SessionState(),
+      editRevision: () => null,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },

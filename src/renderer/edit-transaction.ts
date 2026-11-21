@@ -6,6 +6,8 @@ import {
   contentOfText,
   layerAtPath,
   layerForRole,
+  revisionOf,
+  type ConfigRevision,
   type ConfigSnapshot,
   type Layer,
   type LayerContent,
@@ -50,7 +52,9 @@ class EditDraft {
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   private latest: ConfigSnapshot;
-  snapshot: ConfigSnapshot;
+  // [LAW:one-source-of-truth] The draft's content and its digest, taken
+  // only when the content changes, so a frame that reads it digests nothing.
+  revision: ConfigRevision;
 
   constructor(
     private readonly session: SessionId,
@@ -59,7 +63,8 @@ class EditDraft {
     private readonly committed: SessionStateRW,
     log: DaemonLogger,
   ) {
-    this.latest = this.snapshot = base;
+    this.latest = base;
+    this.revision = revisionOf(base);
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
     // draft. Only the journal's destination changes. Chrome still uses the
     // normal session store, so opening menus never adds an edit step.
@@ -88,7 +93,7 @@ class EditDraft {
   }
 
   private refreshSnapshot(): void {
-    this.snapshot = {
+    this.revision = revisionOf({
       ...this.latest,
       chain: this.latest.chain.flatMap((layer) => {
         const base = layerAtPath(this.base.chain, layer.path);
@@ -102,7 +107,7 @@ class EditDraft {
               : { kind: "text" as const, text: value };
         return [{ ...layer, content }];
       }),
-    };
+    });
   }
 
   depth(): HistoryDepth {
@@ -263,10 +268,10 @@ export class EditTransactions {
     return this.entries.get(sid)?.draft ?? null;
   }
 
-  snapshot(origin: RenderOrigin, sid: SessionId): ConfigSnapshot | null {
+  revision(origin: RenderOrigin, sid: SessionId): ConfigRevision | null {
     const draft = this.draft(sid);
     return draft !== null && originKey(draft.origin) === originKey(origin)
-      ? draft.snapshot
+      ? draft.revision
       : null;
   }
 

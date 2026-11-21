@@ -70,6 +70,7 @@ function rig(
         dataDirs: [],
       },
       sessionState: state,
+      editRevision: () => null,
       gates: createGates(),
       source: SOURCES_NOTHING,
     },
