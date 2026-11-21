@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-927",
-      "ref": "refs/pull/927/merge",
-      "sha": "c1c960f24d655616eceb6b9bfdba0292f74f7f13",
-      "timestamp": "2026-11-21T03:17:29.664Z",
+      "version": "pr-928",
+      "ref": "refs/pull/928/merge",
+      "sha": "1b92056a51aacbab3283745d0af6c54fd29d0930",
+      "timestamp": "2026-11-21T03:36:02.122Z",
       "commits": [
         {
-          "sha": "c1c960f24d655616eceb6b9bfdba0292f74f7f13",
+          "sha": "1b92056a51aacbab3283745d0af6c54fd29d0930",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T03:16:25Z",
-          "message": "Merge 10ae7cb51bedab7cb7c9798f6a9fe7cc4bf8f836 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+          "timestamp": "2026-11-20T20:34:56-07:00",
+          "message": "Merge 38b00ea068b95cbcfad7cb4ef14bc1952d75e278 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
         },
         {
-          "sha": "10ae7cb51bedab7cb7c9798f6a9fe7cc4bf8f836",
+          "sha": "38b00ea068b95cbcfad7cb4ef14bc1952d75e278",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T20:16:14-07:00",
-          "message": "fix(renderer): a draft carries its own revision and an entry takes a load once its build is served\n\nLaw review 1 of #927. The edit draft digests its content when it changes, so a frame digests nothing. reloadInto serves the new build before the entry takes it. One predicate decides whether an entry loads a revision. One delivery union. The write gate keeps its law marker. Watcher tests that wrote once into a just-opened watch rewrite until delivered.\n"
-        },
-        {
-          "sha": "11f0764e68affab0188a091d5c908716fb53b5d4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:57:20-07:00",
-          "message": "fix(renderer): the render cache stores each config fact once and compares revisions by digest\n"
+          "timestamp": "2026-11-20T20:34:29-07:00",
+          "message": "fix(renderer): a render cache entry reloads exactly when its offered config digests differently\n\nAn entry holds one value, what its last load produced, and takes it only once its build is served; every step after the take runs whatever another throws. No entry is left half-applied, so one digest comparison decides whether a host delivery or an edit draft loads, with no record of rejected deliveries. A revision is made by one function for host discovery, the renderer's delivery and the edit draft, which digests when its content changes. Watcher tests that wrote once into a just-opened watch rewrite until it delivers.\n"
         }
       ]
     },

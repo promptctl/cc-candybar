@@ -70463,6 +70463,28 @@ var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
+// src/utils/run-each.ts
+init_globals();
+function runEach(steps2) {
+  const thrown2 = [];
+  for (const step4 of steps2) {
+    try {
+      step4();
+    } catch (error) {
+      thrown2.push(error);
+    }
+  }
+  throwAll(thrown2);
+}
+function throwAll(thrown2) {
+  if (thrown2.length === 1) throw thrown2[0];
+  if (thrown2.length > 1)
+    throw new AggregateError(
+      thrown2,
+      thrown2.map((each) => each instanceof Error ? each.message : inspect(each)).join("; ")
+    );
+}
+
 // src/renderer/render-cache.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -70524,31 +70546,44 @@ function configDisposeLine(teardown, released) {
 }
 var CONFIG_PENDING = { kind: "pending" };
 var LoadedEntry = class {
-  constructor(origin, applied3) {
+  constructor(origin, current) {
     this.origin = origin;
-    this.applied = applied3;
-    makeObservable(this, { applied: observableRef });
+    this.current = current;
+    makeObservable(this, { current: observableRef });
   }
   origin;
-  applied;
-  get configLayers() {
-    return this.applied.load.layers;
+  current;
+  get applied() {
+    return this.current;
   }
+  // [LAW:single-enforcer] The one write: the cache's, once the build it
+  // selected is served (`reloadInto`).
+  take(applied3) {
+    runInAction(() => {
+      this.current = applied3;
+    });
+  }
+  // The file paths the last load read.
+  get configLayers() {
+    return this.current.load.layers;
+  }
+  // The snapshot the last load read. The bar's repository question and what
+  // the config's watch cannot hear are read off it.
   get snapshot() {
-    return this.applied.revision.snapshot;
+    return this.current.revision.snapshot;
   }
   get lastError() {
-    return this.applied.load.error;
+    return this.current.load.error;
   }
   get lastWarnings() {
-    return this.applied.load.warnings;
+    return this.current.load.warnings;
   }
   get state() {
-    return this.applied.selected.state;
+    return this.current.selected.state;
   }
 };
-function loads(entry, revision, afterRejection) {
-  return afterRejection || entry.applied.revision.digest !== revision.digest;
+function loads(entry, revision) {
+  return entry.applied.revision.digest !== revision.digest;
 }
 function authoredRoots(config, raw) {
   return new Set(
@@ -70909,24 +70944,17 @@ var RenderCache = class {
   }
   // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
   // now. Its entry, when it has one, reloads from it as `loads` decides, and a
-  // reload whose load inputs did not move
-  // keeps the state it serves (`loadOrigin`).
+  // reload whose load inputs did not move keeps the state it serves
+  // (`loadOrigin`).
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
     const revision = revisionOf(snapshot);
     runInAction(() => {
-      const rejected = this.configDeliveries.get(key)?.kind === "failed";
       this.configDeliveries.set(key, { kind: "received", revision });
       const entry = this.entries.get(key);
-      if (entry === void 0) return;
-      if (loads(entry, revision, rejected))
+      if (entry !== void 0 && loads(entry, revision))
         this.reloadInto(entry, revision, { kind: "config" });
-      else
-        this.log(
-          "info",
-          `config unchanged projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} digest=${revision.digest.slice(0, 12)}`
-        );
     });
   }
   rejectConfig(origin, failure2) {
@@ -70982,7 +71010,7 @@ var RenderCache = class {
         this.entries.delete(key);
         this.entries.set(key, existing);
       });
-      if (draft !== null && loads(existing, draft, false))
+      if (draft !== null && loads(existing, draft))
         this.reloadInto(existing, draft, { kind: "edit" });
       return existing;
     }
@@ -71327,12 +71355,11 @@ var RenderCache = class {
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
   applyConfig(origin, revision, previous2) {
+    const { snapshot, digest: digest2 } = revision;
     if (this.closed) throw new Error("render cache used after close");
-    const { snapshot } = revision;
     const retained = previous2?.kind === "authored" && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
     const bundled = previous2?.kind === "bundled" ? previous2 : null;
     const { cwd: cwd2 } = origin;
-    const { digest: digest2 } = revision;
     const { repo: repo2 } = snapshot;
     const load = loadOrigin(
       cwd2,
@@ -71457,15 +71484,18 @@ var RenderCache = class {
   // replaced it with `successor`. Its teardown is due — now, or at its last
   // holder's return.
   retire(state, reason, successor) {
-    for (const view of [...this.views.values()]) {
-      if (view.state !== state) continue;
-      if (successor !== null)
-        this.reopen(successor, view.sessionId, view.facts);
-      this.retireView(view, reason);
-    }
-    const hold2 = this.holdOf(state);
-    hold2.retired = { reason, held: hold2.holders };
-    this.reclaim(state, hold2);
+    runEach([
+      ...[...this.views.values()].filter((view) => view.state === state).map((view) => () => {
+        if (successor !== null)
+          this.reopen(successor, view.sessionId, view.facts);
+        this.retireView(view, reason);
+      }),
+      () => {
+        const hold2 = this.holdOf(state);
+        hold2.retired = { reason, held: hold2.holders };
+        this.reclaim(state, hold2);
+      }
+    ]);
   }
   // [LAW:single-enforcer] A reload opens a successor once. A failed opening
   // remains visible to its feed and leaves the other sessions recoverable.
@@ -71486,9 +71516,9 @@ var RenderCache = class {
   reclaim(state, hold2) {
     if (hold2.retired === null || hold2.holders > 0) return;
     runInAction(() => this.holds.delete(state));
-    this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
     if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
       this.compiles.delete(state.compileKey);
+    this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
   }
   // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
   // state.
@@ -71525,18 +71555,27 @@ var RenderCache = class {
       entry.applied.selected
     );
     const { load, selected } = applied3;
-    if (selected.state !== served) this.serve(selected.state);
-    runInAction(() => {
-      entry.applied = applied3;
-    });
-    if (load.state !== null)
-      this.log("info", pluginLoadLine(load.layers, load.state));
-    if (selected.state !== served) this.retire(served, "reload", entry);
-    if (selected.state !== served || load.state !== null)
-      for (const [session, failure2] of retry)
-        this.reopen(entry, session, failure2.requestOf);
-    this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, load.kind);
+    const moved2 = selected.state !== served;
+    if (moved2) this.serve(selected.state);
+    entry.take(applied3);
+    const reopening = moved2 || load.state !== null ? retry : [];
+    runEach([
+      () => {
+        if (load.state !== null)
+          this.log("info", pluginLoadLine(load.layers, load.state));
+      },
+      () => {
+        if (moved2) this.retire(served, "reload", entry);
+      },
+      ...reopening.map(
+        ([session, failure2]) => () => this.reopen(entry, session, failure2.requestOf)
+      ),
+      // A reload can move the entry onto a compile no other entry carries,
+      // and charges the views it reopened, once their predecessors are
+      // retired.
+      () => this.fit(entry),
+      () => this.observers.onReload?.(entry, sessions, cause, load.kind)
+    ]);
   }
   get size() {
     return this.entries.size;
@@ -73090,30 +73129,6 @@ function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, else
 
 // src/renderer/turn-time.ts
 init_globals();
-
-// src/utils/run-each.ts
-init_globals();
-function runEach(steps2) {
-  const thrown2 = [];
-  for (const step4 of steps2) {
-    try {
-      step4();
-    } catch (error) {
-      thrown2.push(error);
-    }
-  }
-  throwAll(thrown2);
-}
-function throwAll(thrown2) {
-  if (thrown2.length === 1) throw thrown2[0];
-  if (thrown2.length > 1)
-    throw new AggregateError(
-      thrown2,
-      thrown2.map((each) => each instanceof Error ? each.message : inspect(each)).join("; ")
-    );
-}
-
-// src/renderer/turn-time.ts
 var TurnTime = class {
   readings = null;
   // In the order they were held, so two due at one tick run in that order.
@@ -75920,10 +75935,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text4, read2) => proveLoadsAsLayer(ctx, origin, file, text4, read2)
   };
-  const draft = origin === null || ctx.edits.revision(origin, sid) === null ? null : ctx.edits.draft(sid);
+  const draft = origin === null || ctx.edits.configRevision(origin, sid) === null ? null : ctx.edits.draft(sid);
   const scoped = draft === null ? ctx : {
     ...ctx,
-    snapshotFor: (of) => ctx.edits.revision(of, sid)?.snapshot ?? ctx.snapshotFor(of),
+    snapshotFor: (of) => ctx.edits.configRevision(of, sid)?.snapshot ?? ctx.snapshotFor(of),
     configFor: (of) => ctx.configFor(of, sid)
   };
   const edit = draft?.begin(
@@ -76107,7 +76122,7 @@ var EditDraft = class {
     this.base = base;
     this.committed = committed;
     this.latest = base;
-    this.revision = revisionOf(base);
+    this.configRevision = revisionOf(base);
     this.history = new SettingsHistory(
       {
         get: (sid, key) => sid === session ? this.read(key) : committed.get(sid, key),
@@ -76130,9 +76145,9 @@ var EditDraft = class {
   files = /* @__PURE__ */ new Map();
   history;
   latest;
-  // [LAW:one-source-of-truth] The draft's content and its digest, taken
-  // only when the content changes, so a frame that reads it digests nothing.
-  revision;
+  // [LAW:one-source-of-truth] The draft's content as a revision, retaken
+  // only when the content changes: a frame that reads it digests nothing.
+  configRevision;
   // [LAW:effects-at-boundaries] A transaction pins the content it edits.
   // The host's current layer identities and plugin discovery still decide
   // what it can load, including when the user revokes repository trust.
@@ -76141,7 +76156,7 @@ var EditDraft = class {
     this.refreshSnapshot();
   }
   refreshSnapshot() {
-    this.revision = revisionOf({
+    this.configRevision = revisionOf({
       ...this.latest,
       chain: this.latest.chain.flatMap((layer) => {
         const base = layerAtPath(this.base.chain, layer.path);
@@ -76277,9 +76292,9 @@ var EditTransactions = class {
   draft(sid) {
     return this.entries.get(sid)?.draft ?? null;
   }
-  revision(origin, sid) {
+  configRevision(origin, sid) {
     const draft = this.draft(sid);
-    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.revision : null;
+    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.configRevision : null;
   }
   configured(origin, snapshot) {
     const key = originKey(origin);
@@ -77310,7 +77325,7 @@ function build2(inputs, turnLog) {
       locations: inputs.locations,
       region: inputs.region,
       sessionState: edits.view,
-      editRevision: (origin, sid) => edits.revision(origin, sid),
+      editRevision: (origin, sid) => edits.configRevision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       gates,
@@ -92241,8 +92256,7 @@ var ConfigDiscovery = class {
     );
     const observed2 = {
       origin,
-      snapshot,
-      digest: digestOf(snapshot),
+      ...revisionOf(snapshot),
       managedFolders
     };
     this.observations.set(snapshot, observed2);
