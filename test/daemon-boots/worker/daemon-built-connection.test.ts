@@ -342,7 +342,7 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   test("a valid pane subscribe leaves no follower when its peer departs", async () => {
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     const running = start(clock);
     const daemon = running.daemon;
     const sessionId = "connection-pane-hangup";
