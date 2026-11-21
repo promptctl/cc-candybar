@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-932",
-      "ref": "refs/pull/932/merge",
-      "sha": "94dddf39d64b26082a1bd2e182940a5b7b41faa3",
-      "timestamp": "2026-11-21T07:57:59.720Z",
+      "version": "pr-933",
+      "ref": "refs/pull/933/merge",
+      "sha": "6903927bc82438868e26c687fbdf2bf1967071bf",
+      "timestamp": "2026-11-21T08:10:03.911Z",
       "commits": [
         {
-          "sha": "94dddf39d64b26082a1bd2e182940a5b7b41faa3",
+          "sha": "6903927bc82438868e26c687fbdf2bf1967071bf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T07:56:56Z",
-          "message": "Merge 2d9a3b4a7479047ca7c4df4eb7d487c580308229 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+          "timestamp": "2026-11-21T01:08:59-07:00",
+          "message": "Merge 8c8526903024087460ea603ff2881f39e0935772 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
         },
         {
-          "sha": "2d9a3b4a7479047ca7c4df4eb7d487c580308229",
+          "sha": "8c8526903024087460ea603ff2881f39e0935772",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:56:45-07:00",
-          "message": "refactor(renderer): the lane declaration walks views without a hold (ibyq.l7z)\n\nThe lane derivation reads each live view's source through one walk that\ntakes no hold, so it cannot dispose a retired state from inside a MobX\ncomputed and has no null arm for a view its own walk just found. The plan\nthe renderer last returned is an observable the derivation tracks, so a\ndraft that keeps its last returned lane switches no longer reads an\nuntracked variable. The still-frame test spies that walk, like its\nsibling spies, instead of pinning the exact holdView calls.\n"
-        },
-        {
-          "sha": "cef1a8973488b6c6b65ef42069a2d0a07b256a74",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:46:56-07:00",
-          "message": "test(renderer): a still feed frame holds only the view it draws (ibyq.l7z)\n\nAcross two still due frames with two live sessions, the only view held\nis the drawn session's. The lane declaration's walk over every session's\nview stays cached, so a still bar does no per-session walk per frame.\n"
+          "timestamp": "2026-11-21T01:07:08-07:00",
+          "message": "test(renderer): a still frame touches only the view it draws (ibyq.at1)\n\nAcross still due frames with two live sessions, the session that is not\ndrawn has its view held by nothing, beside the existing checks that the\nsubscription, origin and session reads are not repeated. A walk over\nevery view's hold injected into the per-turn declaration fails it.\n\nThe render cache's frame-path comments give their reasons without\nticket ids.\n"
         }
       ]
     },
