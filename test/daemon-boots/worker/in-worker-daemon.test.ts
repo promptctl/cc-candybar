@@ -18,7 +18,12 @@ import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
-import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";
+import {
+  DAEMON_EVENT_HOLD_S,
+  type HeldEvent,
+} from "../../../src/utils/event-hold";
+import { inProcessRenderer } from "../../../src/in-process-renderer";
+import { hearingEvents } from "../../helpers/renderers";
 import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
@@ -182,8 +187,17 @@ describe("a daemon in this worker", () => {
     // are simulated. The launcher owns the late read failure and its receipt.
     const pipe = Object.assign(new PassThrough(), { unref() {} });
     let now = Date.now();
+    // The pipe event as the daemon's facts carry it to every bar: the latest
+    // world state the renderer was handed.
+    let pipeHeld: HeldEvent | null = null;
     const running = startDaemon(env, {
       clock: { ...daemonClock(), now: () => now },
+      renderer: inProcessRenderer((real) =>
+        hearingEvents(real, ({ event }) => {
+          if (event.kind === "context" || event.kind === "world-state")
+            pipeHeld = event.worldState.daemon.launchPipes;
+        }),
+      ),
       launcher: (owner) =>
         createLauncher(owner, systemTimekeeper, {
           ...spawner,
@@ -196,10 +210,7 @@ describe("a daemon in this worker", () => {
         }),
     });
     daemon = running;
-    const pipeEvent = () =>
-      running.daemon.launcher
-        .standing()
-        .find((fact) => fact.kind === "launch-pipes")?.event;
+    const pipeEvent = (): HeldEvent | null => pipeHeld;
     const pending = async () => {
       const { resp, settled } = await running.daemon.reply(
         {
@@ -225,9 +236,12 @@ describe("a daemon in this worker", () => {
       expect(spawner.spawned.find((child) => child.bin === bin)?.stdin).toBe(
         "copy failure",
       );
+      // The session holds a context, so its world state reaches the renderer;
+      // an unconfirmed write answers neither event.
+      (await pending()).settled(false);
       pipe.destroy(new Error("fixture cannot read the inherited pipe"));
       await until(
-        () => pipeEvent() !== undefined,
+        () => pipeEvent() !== null,
         "the actual launcher's pipe warning",
       );
       expect(pipeEvent()).toMatchObject({
@@ -247,13 +261,61 @@ describe("a daemon in this worker", () => {
       owed.settled(false);
 
       expect(indicatorOf(await render(running, sid, projectDir))).toBe("⚠ 2");
-      expect(pipeEvent()?.answered).toBe(true);
+      // Answered past its hold, no bar can show it: it leaves the facts.
+      await until(() => pipeEvent() === null, "the answered pipe event leaving");
       const after = await pending();
       expect(indicatorOf(after.frame)).toBeNull();
       after.settled(false);
     } finally {
       pipe.destroy();
     }
+  });
+
+  test("a pipe event leaves the daemon's facts once no bar can show it, and what recurred meanwhile is held afresh", async () => {
+    const sid = "pipe-hold";
+    const clock = heldClock(new Date(), reportingClock);
+    let report = (_text: string): void => {
+      throw new Error("the daemon built no launcher");
+    };
+    // The pipe event as the daemon's facts carry it to every bar.
+    let held: HeldEvent | null = null;
+    daemon = startDaemon(env, {
+      clock,
+      renderer: inProcessRenderer((real) =>
+        hearingEvents(real, ({ event }) => {
+          if (event.kind === "context" || event.kind === "world-state")
+            held = event.worldState.daemon.launchPipes;
+        }),
+      ),
+      launcher: (own) => {
+        report = (text) =>
+          own.observeWarnings?.({ kind: "launch-pipes", text });
+        return fakeLauncher(systemTimekeeper, own).launcher;
+      },
+    });
+    const running = daemon;
+    const heldText = (): string | null => held?.text ?? null;
+    const pastHold = (): void =>
+      clock.advance((DAEMON_EVENT_HOLD_S + 1) * 1000);
+    await render(running, sid, projectDir);
+
+    report("a pipe was cut");
+    await until(() => heldText() === "a pipe was cut", "the first pipe event");
+    // A confirmed write carries it; two more arrive while it is held.
+    await render(running, sid, projectDir);
+    await until(() => held?.answered === true, "the answer marking it");
+    report("a pipe failed to read");
+    report("a pipe was cut again");
+    expect(heldText()).toBe("a pipe was cut");
+
+    pastHold();
+    await until(
+      () => heldText() === "a pipe was cut again (2 more times)",
+      "what recurred, held afresh once the first left",
+    );
+    await render(running, sid, projectDir);
+    pastHold();
+    await until(() => held === null, "the pipe event leaving the facts");
   });
 
   // [LAW:one-source-of-truth] A request's budget is its deadline less its

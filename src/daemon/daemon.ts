@@ -295,15 +295,37 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     {
       fileEvents: [],
       launcher: [],
+      launchPipes: null,
       rendererEnded: null,
       actFailed: null,
       taskThrows: [],
     },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, the acts
-  // that failed with no session's bar to hold them, and what each of the
-  // daemon's tasks threw, each held until no bar can show it.
+  // [LAW:one-source-of-truth] The latest pipe event of a launched program,
+  // how the last renderer process ended, the acts that failed with no
+  // session's bar to hold them, and what each of the daemon's tasks threw,
+  // each held until no bar can show it.
+  // A pipe event that recurs while one is held is counted, so a flood moves
+  // no bar; what recurred is held afresh when the slot lets go.
+  const launchPipes: HeldSlot<string> = new HeldSlot<string>(
+    clock,
+    "launch pipes hold",
+    (recurred) => {
+      if (recurred !== null)
+        holdPipeEvent(
+          `${recurred.latest} (${recurred.count === 1 ? "once more" : `${recurred.count} more times`})`,
+        );
+      restateFaults();
+    },
+  );
+  const holdPipeEvent = (text: string): void =>
+    launchPipes.hold({
+      text,
+      at: instant(),
+      revision: (launchPipes.event()?.revision ?? 0) + 1,
+      answered: false,
+    });
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
   // [LAW:one-source-of-truth] Each task's error, as the slot that holds it.
@@ -313,6 +335,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
+        launchPipes: launchPipes.event(),
         rendererEnded: rendererEnded.event(),
         actFailed: actFailed.event(),
         taskThrows: [...taskErrors].flatMap(([task, slot]) => {
@@ -337,8 +360,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
+      if (change.kind === "launch-pipes") {
+        log("warn", change.text);
+        if (!launchPipes.recur(change.text)) holdPipeEvent(change.text);
+      } else
         log(
           change.fault === null ? "info" : "warn",
           change.fault === null
@@ -358,7 +383,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     for (const shownEvent of shown) {
       switch (shownEvent.kind) {
         case "launch-pipes":
-          if (launcher.answeredPipeEvent(shownEvent.event)) changed = true;
+          if (launchPipes.answer(shownEvent.event)) changed = true;
           break;
         case "renderer-ended":
           if (rendererEnded.answer(shownEvent.event)) changed = true;
@@ -1180,7 +1205,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           clock.throws.close((reported) =>
             log("error", thrownText(reported).logged),
           );
-          for (const slot of [rendererEnded, actFailed, ...taskErrors.values()])
+          for (const slot of [
+            launchPipes,
+            rendererEnded,
+            actFailed,
+            ...taskErrors.values(),
+          ])
             slot.dispose();
         },
       ],

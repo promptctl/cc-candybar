@@ -14,6 +14,7 @@ export const daemonFactsOf = (
 ): DaemonFacts => ({
   fileEvents,
   launcher: [],
+  launchPipes: null,
   rendererEnded: null,
   actFailed: null,
   taskThrows: [],
