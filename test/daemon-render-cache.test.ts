@@ -60,15 +60,14 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  repoConfigsPath,
-} from "../src/daemon/config-discovery/repo-configs";
+import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { rendererFailureOf } from "../src/daemon/foundations/verb-error";
 import { shellEnvOf } from "../src/config/shell-env";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
@@ -1115,6 +1114,75 @@ describe("RenderCache", () => {
 
   // The host polls the decision file only for interested origins. Watching
   // its directory would also wake the bar for unrelated state and log writes.
+  test("a delivery that digests as the one loaded loads nothing, and a rejected one reapplies when it comes again", () => {
+    const causes: string[] = [];
+    const { cache, originAt, cleanups } = makeCache({
+      onReload: (_entry, _sessions, cause) => causes.push(cause.kind),
+    });
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const origin = originAt(dir, dir, undefined);
+      cache.getOrCreate(origin);
+      const snapshot = cache.snapshotFor(origin);
+      cache.configure(origin, { ...snapshot });
+      expect(causes).toEqual(["open"]);
+      cache.rejectConfig(
+        origin,
+        rendererFailureOf(new Error("the application threw")),
+      );
+      cache.configure(origin, { ...snapshot });
+      expect(causes).toEqual(["open", "config"]);
+    } finally {
+      for (const c of cleanups) c();
+      cleanup();
+    }
+  });
+
+  test("a draft that digests as the one its entry loaded loads nothing", () => {
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
+    const causes: string[] = [];
+    const { dir, cleanup } = mkConfigDir();
+    let draft: ConfigSnapshot | null = null;
+    const cache = new RenderCache(
+      {
+        clock: systemTimekeeper,
+        locations: locations(host),
+        gates: bareGates(),
+        sessionState: new SessionState(),
+        editSnapshot: (_origin, session) => (session === S1 ? draft : null),
+        source: SOURCES_NOTHING,
+      },
+      {
+        budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
+        observers: {
+          onReload: (_entry, _sessions, cause) => causes.push(cause.kind),
+        },
+      },
+    );
+    const configs = configHost(cache, {
+      locations: locations(host),
+      stateDir: stateDir(host),
+      watchers,
+    });
+    try {
+      const origin = configs.at(dir, dir, undefined);
+      draft = { ...cache.snapshotFor(origin) };
+      const entry = cache.getOrCreate(origin, S1);
+      // The edit transaction hands back an equal draft as a new object.
+      draft = { ...draft };
+      expect(cache.getOrCreate(origin, S1)).toBe(entry);
+      expect(causes).toEqual(["open"]);
+    } finally {
+      cache.close();
+      configs.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
   test("a layered entry follows the decision file without watching its state directory", async () => {
     const { dir, cleanup } = mkConfigDir();
     const causes: LoadCause["kind"][] = [];
@@ -1140,9 +1208,7 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(book, declined),
-      );
+      await reloads.after(entry, () => writeFileSync(book, declined));
       expect(entry.configLayers).toEqual([]);
       expect(entry.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");
