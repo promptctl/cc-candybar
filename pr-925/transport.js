@@ -73134,9 +73134,10 @@ var TurnTime = class {
   }
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
-  // [LAW:nothing-unseen] exception: the name is not kept. A deferral is the
-  // turn's own work, run inside the due turn, so what it throws is the turn's
-  // failure, named by the turn, and is never a clock task's.
+  // [LAW:nothing-unseen] exception: the name is not kept. A deferral runs
+  // inside the renderer's due turn, so what it throws is that turn's failure,
+  // in its own words: the daemon logs it with the turn and holds it on every
+  // bar as the renderer's due work.
   after(_task, ms, run2) {
     const deferral = { until: this.tick + ms / 1e3, run: run2 };
     this.held.add(deferral);
@@ -77642,6 +77643,9 @@ var import_node_string_decoder = __toESM(require_string_decoder(), 1);
 init_globals();
 init_timers();
 function clockOver(source, report2) {
+  const settle3 = (task, settled3) => void Promise.resolve(settled3).catch(
+    (thrown2) => report2(task, thrown2, source.now())
+  );
   const run2 = (task, fire) => () => {
     let settled3;
     try {
@@ -77650,9 +77654,7 @@ function clockOver(source, report2) {
       report2(task, thrown2, source.now());
       return;
     }
-    Promise.resolve(settled3).catch(
-      (thrown2) => report2(task, thrown2, source.now())
-    );
+    settle3(task, settled3);
   };
   return {
     now: () => source.now(),
@@ -77660,7 +77662,16 @@ function clockOver(source, report2) {
     after: (task, ms, fire, options) => source.timer(ms, run2(task, fire), options),
     every: (task, ms, fire, options) => source.interval(ms, run2(task, fire), options),
     defer: (task, fire) => source.turn(run2(task, fire)),
-    detach: (task, fire) => run2(task, fire)()
+    detach: (task, fire) => {
+      let settled3;
+      try {
+        settled3 = fire();
+      } catch (thrown2) {
+        settled3 = Promise.reject(thrown2);
+      }
+      settle3(task, settled3);
+    },
+    failed: (task, thrown2) => settle3(task, Promise.reject(thrown2))
   };
 }
 function spanMs(from, to) {
@@ -78804,6 +78815,15 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/daemon/task-throws.ts
 init_globals();
+function thrownText(reported, more = 0) {
+  const failure2 = failureOf(reported.thrown);
+  const again = more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
+  const threw2 = `${reported.task} threw${again}`;
+  return {
+    shown: `${threw2}: ${failure2.message}`,
+    logged: `${threw2}: ${failure2.detail}`
+  };
+}
 var TaskThrowInbox = class {
   taking = { kind: "waiting", waiting: [] };
   report = (task, thrown2, at) => {
@@ -79444,13 +79464,17 @@ function waitWithin(task, work, ms, clock, closing) {
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    work(wait.signal).then(
+    let working;
+    try {
+      working = work(wait.signal);
+    } catch (thrown2) {
+      working = Promise.reject(thrown2);
+    }
+    working.then(
       () => resolve2("answered"),
       (e) => {
-        if (!wait.signal.aborted) return reject2(e);
-        clock.detach(`${task} after its wait`, () => {
-          throw e;
-        });
+        if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
+        else reject2(e);
       }
     );
   });
@@ -83003,6 +83027,12 @@ var import_node_path18 = __toESM(require_path_browserify(), 1);
 // src/utils/trailing-edge.ts
 init_globals();
 var TrailingEdge = class {
+  constructor(clock, passOf) {
+    this.clock = clock;
+    this.passOf = passOf;
+  }
+  clock;
+  passOf;
   // The keys whose loop is currently executing, each with the token its loop
   // compares itself against, so a loop a `clear` let go touches only its own.
   running = /* @__PURE__ */ new Map();
@@ -83034,14 +83064,13 @@ var TrailingEdge = class {
   }
   async loop(key, work, running) {
     const own2 = () => this.running.get(key) === running;
-    const threw2 = [];
     try {
       do {
         this.again.delete(key);
         try {
           await work();
         } catch (thrown2) {
-          threw2.push(thrown2);
+          this.clock.failed(this.passOf(key), thrown2);
         }
       } while (own2() && this.again.has(key));
     } finally {
@@ -83050,7 +83079,6 @@ var TrailingEdge = class {
         this.again.delete(key);
       }
     }
-    throwAll(threw2);
   }
   // Drop every record of running and pending work — the teardown path of an
   // owner being disposed. In-flight passes cannot be cancelled from here (the
@@ -83297,7 +83325,7 @@ var GitDataProvider = class {
     };
     const state = {
       root,
-      refresh: new TrailingEdge(),
+      refresh: new TrailingEdge(this.clock, () => `git refresh ${root}`),
       watch: this.followWatch(root, null).watch,
       period: new Period(
         `git refresh ${root}`,
@@ -90704,6 +90732,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             ["error", delivered.failure.detail]
           ])
         );
+        if (event?.kind === "due")
+          clock.failed(
+            `renderer ${name} due work`,
+            new CrossedFailure(delivered.failure)
+          );
     }
   };
   const throughSlot = (make, at, click2 = null) => {
@@ -91381,7 +91414,7 @@ var HeldSlot = class {
     if (this.state === "disposed") return;
     if (this.state !== "empty") this.state.cancelEnd();
     const held = { event, cancelEnd: () => {
-    } };
+    }, recurred: null };
     this.state = held;
     this.armEnd(held);
   }
@@ -91395,9 +91428,22 @@ var HeldSlot = class {
     if (this.holdNow(held.event) === "over") this.leave(held);
     return true;
   }
+  // Counts `latest` against the held event, for the owner to hear when the
+  // slot lets it go; false when nothing is held to count it against.
+  recur(latest) {
+    const held = this.state;
+    if (typeof held === "string") return false;
+    held.recurred = { count: (held.recurred?.count ?? 0) + 1, latest };
+    return true;
+  }
+  // A disposed slot lets go of what it holds as any slot does, so what
+  // recurred reaches the owner, and it holds nothing after.
   dispose() {
-    if (typeof this.state !== "string") this.state.cancelEnd();
+    const held = this.state;
     this.state = "disposed";
+    if (typeof held === "string") return;
+    held.cancelEnd();
+    this.left(held.recurred);
   }
   // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
   // and timed on the timers, which need not agree: an end that finds the
@@ -91431,7 +91477,7 @@ var HeldSlot = class {
   leave(held) {
     held.cancelEnd();
     this.state = "empty";
-    this.left();
+    this.left(held.recurred);
   }
 };
 
@@ -92058,17 +92104,14 @@ var ConfigDiscovery = class {
   }
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
   // an origin that cannot be observed keeps its last snapshot for a retry,
-  // and what it threw is its own task's, reported once the batch has
-  // published what its siblings observed: a failure is a value until then,
-  // so no reporter can cut the batch short.
+  // and what it threw is its own task's, handed to the clock before the batch
+  // publishes: a failure is a value the batch carries, so neither a reporter
+  // nor a publish that throws can cut the batch short or lose it.
   refreshed(keys2, why, recover, writer) {
     const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
-    const answered = this.publish(moved2, writer);
     for (const { key, thrown: thrown2 } of failed3)
-      this.deps.clock.detach(`config discovery ${key}`, () => {
-        throw thrown2;
-      });
-    return answered;
+      this.deps.clock.failed(`config discovery ${key}`, thrown2);
+    return this.publish(moved2, writer);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -92355,7 +92398,7 @@ function createDaemon(inputs) {
         launcher: launcher.standing(),
         rendererEnded: rendererEnded.event(),
         actFailed: actFailed.event(),
-        taskThrows: [...taskErrors].flatMap(([task, { slot }]) => {
+        taskThrows: [...taskErrors].flatMap(([task, slot]) => {
           const event = slot.event();
           return event === null ? [] : [{ task, event }];
         })
@@ -92398,7 +92441,7 @@ function createDaemon(inputs) {
         // A frame can carry a throw whose slot has since left: nothing
         // holds it to mark.
         case "task-threw":
-          if (taskErrors.get(shownEvent.task)?.slot.answer(shownEvent.event))
+          if (taskErrors.get(shownEvent.task)?.answer(shownEvent.event))
             changed = true;
           break;
         default:
@@ -92407,43 +92450,35 @@ function createDaemon(inputs) {
     }
     if (changed) restateFaults();
   };
-  const threwText = ({ task }, more) => `${task} threw${more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`}`;
   const showThrow = (slot, reported, more) => {
-    const failure2 = failureOf(reported.thrown);
-    const threw2 = threwText(reported, more);
-    log("error", `${threw2}: ${failure2.detail}`);
+    const { shown, logged } = thrownText(reported, more);
+    log("error", logged);
     slot.hold(
       environmentOutput(
-        joinedEvent(
-          null,
-          `${threw2}: ${failure2.message}`,
-          instantOf(new Date(reported.at))
-        ),
+        joinedEvent(null, shown, instantOf(new Date(reported.at))),
         true
       )
     );
     restateFaults();
   };
+  const taskErrorOf = (task) => {
+    const slot = new HeldSlot(
+      clock,
+      `task throw hold ${task}`,
+      (recurred) => {
+        if (recurred !== null)
+          return showThrow(slot, recurred.latest, recurred.count);
+        taskErrors.delete(task);
+        restateFaults();
+      }
+    );
+    taskErrors.set(task, slot);
+    return slot;
+  };
   const taken2 = (reported) => {
     stats.tasksThrew++;
-    const known = taskErrors.get(reported.task);
-    if (known !== void 0) {
-      known.since = { count: (known.since?.count ?? 0) + 1, latest: reported };
-      return;
-    }
-    const slot = new HeldSlot(clock, `task throw hold ${reported.task}`, () => {
-      const { since } = error;
-      if (since === null) {
-        taskErrors.delete(reported.task);
-        restateFaults();
-        return;
-      }
-      error.since = null;
-      showThrow(slot, since.latest, since.count);
-    });
-    const error = { slot, since: null };
-    taskErrors.set(reported.task, error);
-    showThrow(slot, reported, 0);
+    const slot = taskErrors.get(reported.task) ?? taskErrorOf(reported.task);
+    if (!slot.recur(reported)) showThrow(slot, reported, 0);
   };
   clock.throws.attach((reported) => {
     try {
@@ -93042,23 +93077,16 @@ function createDaemon(inputs) {
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
       // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
-      // throw counted and not yet shown is logged now, and one from here on
-      // is logged as it comes.
+      // throw from here on is logged as it comes, and each slot lets go as it
+      // would at its hold's end, so a throw counted and not yet shown is
+      // logged now.
       [
         "held events close",
         () => {
-          const logged = (reported, more) => log(
-            "error",
-            `${threwText(reported, more)}: ${failureOf(reported.thrown).detail}`
+          clock.throws.close(
+            (reported) => log("error", thrownText(reported).logged)
           );
-          clock.throws.close((reported) => logged(reported, 0));
-          for (const { since } of taskErrors.values())
-            if (since !== null) logged(since.latest, since.count);
-          for (const slot of [
-            rendererEnded,
-            actFailed,
-            ...[...taskErrors.values()].map(({ slot: slot2 }) => slot2)
-          ])
+          for (const slot of [rendererEnded, actFailed, ...taskErrors.values()])
             slot.dispose();
         }
       ],

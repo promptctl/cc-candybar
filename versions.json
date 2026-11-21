@@ -4,15 +4,22 @@
     {
       "version": "pr-925",
       "ref": "refs/pull/925/merge",
-      "sha": "21e80961b321da750e431694339ea44ad874febd",
-      "timestamp": "2026-11-21T01:45:35.619Z",
+      "sha": "369dc77981a6372665fd956bae10bd00b1206b4d",
+      "timestamp": "2026-11-21T02:11:46.290Z",
       "commits": [
         {
-          "sha": "21e80961b321da750e431694339ea44ad874febd",
+          "sha": "369dc77981a6372665fd956bae10bd00b1206b4d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:44:32Z",
-          "message": "Merge 2e3e7cb150231763c97656448b64658214a77811 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-21T02:10:37Z",
+          "message": "Merge 48b1530c648a6186fe86c26727c2ca615fbcb308 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "48b1530c648a6186fe86c26727c2ca615fbcb308",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:10:25-07:00",
+          "message": "fix(daemon): a held slot owns what recurs while it holds\n\nA held slot counts what recurs while it holds an event, and hands that to\nits owner when it lets the event go: at its hold's end, at an answer past the\nhold, and at disposal. The daemon's task errors are just slots, its close\nflushes nothing by hand, and one formatter writes a throw's words for the bar\nand its detail for the log.\n\n`detach` settles a sync throw as it settles a rejection, so a task's throw\nnever reaches the code that detached it, whatever the clock reports to.\n`failed` is the one way to report a failure an owner holds as a value.\n\nA trailing edge reports each pass's throw as it happens, so a loop that\nchanges keep alive still shows its failures. Config discovery reports an\norigin it could not observe before it publishes. A renderer's failed due turn\nreaches every bar. A wait begun closed reports a sync throw from its work.\n"
         },
         {
           "sha": "2e3e7cb150231763c97656448b64658214a77811",
