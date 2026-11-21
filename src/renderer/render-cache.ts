@@ -941,10 +941,10 @@ export function writableRoles(access: ConfigAccess): readonly LayerRole[] {
   return access.kind === "available" ? access.roles : NO_WRITABLE_LAYERS;
 }
 
-// [LAW:one-source-of-truth] A session's view of one entry's state
-// (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
-// its state reads, its derivations, the sources keyed on them — in a store
-// over the entry's directory store, which it reads through to. Each session
+// [LAW:one-source-of-truth] A session's view of one entry's state: the
+// session's own values — its inputs, its state reads, its derivations, the
+// sources keyed on them — in a store over the entry's directory store, which
+// it reads through to. Each session
 // renders through its own, so a request writes only its own session's values
 // and no other session's render re-runs, reads, or reports them.
 //
@@ -1475,9 +1475,8 @@ export class RenderCache<
 
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O;
+  // only an event opens a view (ViewOpening).
   holdView(sessionId: SessionId): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
@@ -1973,7 +1972,7 @@ export class RenderCache<
     // retires every view of it first, so each is disposed before or with it.
     // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
     // over the new state first, drawn by the request the old one drew by, so
-    // the next frame draws a view (brandon-unfiled-3248.8ro6, 4a).
+    // the next frame draws a view.
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
       if (successor !== null)

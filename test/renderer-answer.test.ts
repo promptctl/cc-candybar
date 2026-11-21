@@ -754,11 +754,14 @@ describe("a statusline request", () => {
     const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
     const origins = jest.spyOn(t.parts.renderCache, "origins");
     const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    const holds = jest.spyOn(t.parts.renderCache, "holdView");
     await dueFrame(t.r);
     await dueFrame(t.r, 1_000);
     expect(declarations).toHaveBeenCalledTimes(0);
     expect(origins).toHaveBeenCalledTimes(0);
     expect(sessions).toHaveBeenCalledTimes(0);
+    // The session that is not drawn has its view held by nothing.
+    expect(holds).not.toHaveBeenCalledWith(second);
     const retired = answered(
       await handIn(t.r, { kind: "retire", session: second }),
     );
