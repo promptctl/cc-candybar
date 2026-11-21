@@ -49487,7 +49487,7 @@ var PAYLOAD_INPUTS = {
   },
   "session.id": { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
-  // root by projectPayload). Read by the quick-action tray's
+  // root by composePayload). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.
   transcript_path: {
     kind: "input",
@@ -62892,7 +62892,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
     "glyph.worktree": { kind: "literal", value: "\u22AB" },
     ...GIT_INIT.variables,
     version: { kind: "input", path: "version", default: "" },
-    // home flows through the augmented payload (projectPayload reads
+    // home flows through the augmented payload (composePayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
     // unset). Sourcing via `kind: "input"` rather than `kind: "env",
     // name: "HOME"` makes the directory `~` collapse work on every
@@ -69259,9 +69259,6 @@ function decoratedStyles(ref, node, palette, region, drawnAt) {
   );
 }
 
-// src/dsl/view-source.ts
-init_globals();
-
 // src/dsl/render.ts
 function toCachePolicy(cache2) {
   if ("ttl" in cache2)
@@ -70342,6 +70339,9 @@ function createGates(held = { state: [], config: [] }) {
   return { state, config };
 }
 
+// src/dsl/view-source.ts
+init_globals();
+
 // src/config/unused.ts
 init_globals();
 function* variablesOf(cfg) {
@@ -70551,6 +70551,12 @@ function authoredRoots(config, raw) {
     )
   );
 }
+function userAuthoredRoots(layers, userPath) {
+  return authoredRoots(
+    layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG,
+    layers.find(({ path: path31 }) => path31 === userPath)?.raw ?? {}
+  );
+}
 var thrown = (err) => err instanceof Error ? err.message : String(err);
 function plugins(p2) {
   return {
@@ -70625,7 +70631,6 @@ function resolveLoad(cwd2, snapshot, home) {
 function buildRenderState(load, deps) {
   const { cwd: cwd2, files, loaded } = load;
   const { layers, config, installed, dropped } = loaded;
-  const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const userRaw = layers.find(({ path: path31 }) => path31 === files.user)?.raw ?? {};
   const projectRaw = layers.find(({ path: path31 }) => path31 === files.project)?.raw;
   const inserted = layers.flatMap(
@@ -70671,7 +70676,7 @@ function buildRenderState(load, deps) {
       registry,
       compiled: registration.compiled,
       // What the menu's resets clear is the user layer's: they name no other.
-      authoredRoots: authoredRoots(merged, userRaw),
+      authoredRoots: userAuthoredRoots(layers, files.user),
       fileHeldSettings: fileHeldSettings(userRaw),
       configPath: files.user,
       writable: files.writable,

@@ -2,116 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-905",
-      "ref": "refs/pull/905/merge",
-      "sha": "cd9f3bda17f26723a02b9a5f8364b1a7de3d173c",
-      "timestamp": "2026-11-21T07:31:51.462Z",
-      "commits": [
-        {
-          "sha": "cd9f3bda17f26723a02b9a5f8364b1a7de3d173c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T07:30:48Z",
-          "message": "Merge 1156cc8749dfa5f7c33b47c684bd5498959d44a4 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
-        },
-        {
-          "sha": "1156cc8749dfa5f7c33b47c684bd5498959d44a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:30:35-07:00",
-          "message": "test(fixtures): tighten the lifeline and stdlib checks (ibyq.xrv)\n\nThe heap test's default load also asserts it dropped no placement. The\nlifeline fixtures read liveness through the repo's process probe. The\nintegration test keeps its scratch directory under a worker-named jest\ndirectory, and checks for no failures rather than a fixed pass count.\n"
-        },
-        {
-          "sha": "82e67fb525f8e5279b2a71d0832494fc2ec94426",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:20:04-07:00",
-          "message": "test(fixtures): a prepared config resolves its own globals (ibyq.xrv)\n\nPreparedConfig resolves the globals for a session's picks over its own\nuser file's authored preset roots. prepareConfig's warm-up draw,\nrenderConfig and the example-config draws all call it, so no fixture\nresolves a prepared load by hand or treats an authored preset as\nuncustomized.\n"
-        },
-        {
-          "sha": "0e76d89bf3535a0b8001cf3ba5b6085cf0f696b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:15:58-07:00",
-          "message": "test(fixtures): only a test file's runtime holds fixture launchers (ibyq.xrv)\n\nThe daemon pool takes the probe it reads the process table through, so\nthe runner's global teardown builds its own process-lifetime probe and\nnever loads test/helpers/host.ts. The environment's release hook is then\nrequired and called unconditionally, and the file's end is its fixture\nlaunchers' one owner. The release is no longer exported; an integration\ntest runs real Jest over two files in one process and checks that one\nfile's lifeline is gone before the other runs.\n\nFixture draws of a discovered load read the user file's authored preset\nroots through the daemon's own derivation. The session fixture's PATH is\nthe worker's. The real-launcher lint matches every spelling of the host\nmodule. The payload composer is named composePayload everywhere.\n"
-        },
-        {
-          "sha": "257c9462713df2602f1c97c653629bcfc4069750",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:00:33-07:00",
-          "message": "test(fixtures): one owner per runtime for fixture launchers, and truthful fixture claims (ibyq.xrv)\n\nA test file's environment releases the launchers its runtime made, after\nthe file's last hook. The runner's global teardown holds its launchers for\nits whole process, so the hook is optional in the type rather than\ndetected, and global teardown keeps no second release. Every test launcher\nwith no owner of its own now comes from fixtureLauncher, which the\nreal-launcher lint guards like processLauncher. A new proc test proves a\nrelease ends the lifeline.\n\nThe session fixture reports its Claude directory from its declared\nenvironment. The absent-config test runs the real search with no user\nfile. Stale claims in headers and the browser inventory are corrected.\n"
-        },
-        {
-          "sha": "6d7c0458a4aee3dbf1d3d815a097bd18f954d5a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T23:30:48-07:00",
-          "message": "test(watchers): a tree test proves each watch it waits on live before the change (ibyq.xrv)\n"
-        },
-        {
-          "sha": "959e637e3b48117c4cb3999b979cfa9b451fd5b8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T23:21:51-07:00",
-          "message": "test(daemon): the hang-up subscribe test runs on a clock that reports its throws (ibyq.xrv)\n"
-        },
-        {
-          "sha": "24608a47b4ae5633573703922f878b32f89c8633",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:58-07:00",
-          "message": "test(config): load an actual absent user layer (ibyq.xrv)\n"
-        },
-        {
-          "sha": "24d89fa47cd79a077381202ce0b9350128f623d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:58-07:00",
-          "message": "test(daemon): verify the click's exact mailbox wait (ibyq.xrv)\n"
-        },
-        {
-          "sha": "8e6b5919b48a21d0f29f73ccc109b6401a0b4bd0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:57-07:00",
-          "message": "test(proc): release launcher fixtures with their Jest runtime (ibyq.xrv)\n"
-        },
-        {
-          "sha": "8b51d793c5415b921db2368e3a5a2794991c9ac5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:04:02-07:00",
-          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
-        },
-        {
-          "sha": "48fd137e389a526439d9174e7eb9f9757a501f9d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:46:44-07:00",
-          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
-        },
-        {
-          "sha": "21116969b67a2566447daa38cd10cc0192c139c6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:22:57-07:00",
-          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "b3abd81aa5481a19fffa48bfc65761eef7f30117",
-      "timestamp": "2026-11-21T06:19:12.825Z",
+      "sha": "1c4ae7403a7b27557867f286571f4d2fe4159694",
+      "timestamp": "2026-11-21T07:41:49.263Z",
       "commits": [
         {
-          "sha": "b3abd81aa5481a19fffa48bfc65761eef7f30117",
+          "sha": "1c4ae7403a7b27557867f286571f4d2fe4159694",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T23:18:04-07:00",
-          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval (#931)\n\nTwo repositories render through one installed plugin root, and only one of them is approved. A plugin installed, renamed and removed there reaches each origin through the root's watch, from a first install onto no root. Each renderer is delivered its own origin. The approved origin lists the installed plugin beside its own repository plugin. The awaiting origin lists only the installed plugin and never opens its project file or definitions. A batch that covers both origins observes each path once."
+          "timestamp": "2026-11-21T00:40:41-07:00",
+          "message": "test(renderer): use explicit session inputs and bind samples once (#905)\n\nHost and renderer tests run on the production daemon with explicit session inputs, and fixture draws bind their sample once, as a session binds its view.\n\n- Sessions report only what they declare: the worker's PATH and an empty Claude directory.\n- A test file's fixture launchers belong to its runtime, and the test environment ends them after the file's last hook. An integration test checks this across two files in one process. The runner's global teardown reads the process table through its own probe.\n- Prepared configs resolve their globals over their own user file's authored preset roots, through the daemon's derivation.\n- The pane-subscribe hang-up, the click's mailbox wait and the absent user layer are each pinned against real behaviour.\n\nFour law-review passes; triage is recorded on the PR and on candybar-law-review-ibyq.xrv. Follow-ups are filed in the epic as .s4k (watch join window) and .6zj (launcher lifetime required)."
         }
       ]
     },
