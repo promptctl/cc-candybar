@@ -4,15 +4,22 @@
     {
       "version": "pr-929",
       "ref": "refs/pull/929/merge",
-      "sha": "5ff6f2a2fda520cca2fd6410e7df5d11e6af1f88",
-      "timestamp": "2026-11-21T04:16:16.526Z",
+      "sha": "8874fffc692d93e0233b8747fec39fea76234f47",
+      "timestamp": "2026-11-21T04:42:39.252Z",
       "commits": [
         {
-          "sha": "5ff6f2a2fda520cca2fd6410e7df5d11e6af1f88",
+          "sha": "8874fffc692d93e0233b8747fec39fea76234f47",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T21:15:14-07:00",
-          "message": "Merge 3ed2020ce0ef0df289948889ac8f99d49c4a55de into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+          "timestamp": "2026-11-21T04:41:25Z",
+          "message": "Merge 5373a1a85bab4f580a03b4a8d758b9eeeb73d203 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+        },
+        {
+          "sha": "5373a1a85bab4f580a03b4a8d758b9eeeb73d203",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T21:40:05-07:00",
+          "message": "fix(renderer): an entry whose load threw shows the throw until a load is taken\n\nA load that throws before the entry takes it now leaves its message on\nthe entry as its fault. Frames and writes read it without loading, so\nthe bar says UNAVAILABLE at once instead of drawing the old config as\nhealthy. The entry loads again on its next use, and an offer that\ndigests as the load it holds still loads while a fault stands.\n\nA build the cache selected and could not serve is disposed. Serving\ndoes everything that can throw before it enters the state. Each step\nafter a new entry is inserted runs whatever another step throws.\n\nThe delivery record is the revision itself, and absence means pending.\nPruning keeps the delivery of every origin an entry loads from. The\nstart turn records the latest offer whatever building the retained one\nthrew. A request's answer takes its session out of `opening`.\n`editRevision` is a required dependency, and discovery builds its\nobservation from the same revision recipe as the renderer.\n\nThe test cache's `getOrCreate` dropped its session argument, so no test\ndrew through a draft. It passes the session on now.\n"
         },
         {
           "sha": "3ed2020ce0ef0df289948889ac8f99d49c4a55de",
