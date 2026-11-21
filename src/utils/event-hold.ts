@@ -30,16 +30,19 @@ export interface HeldEvent {
   readonly answered: boolean;
 }
 
-// [LAW:types-are-the-program] A frame names the daemon's occurrence and its
-// owner. Session click errors never leave the renderer's delivery record.
-export type DisplayedEvent =
+// [LAW:types-are-the-program] An event of the daemon's own, as its facts
+// carry it and a frame that showed it names it back to its owner: the kind
+// that owns it, and for a kind that recurs, the subject it is about (the task
+// that threw, a pipe event's words). Session click errors never leave the
+// renderer's delivery record.
+export type DaemonEvent =
   | {
-      readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
+      readonly kind: "renderer-ended" | "act-failed";
       readonly event: HeldEvent;
     }
   | {
-      readonly kind: "task-threw";
-      readonly task: string;
+      readonly kind: "launch-pipes" | "task-threw";
+      readonly about: string;
       readonly event: HeldEvent;
     };
 

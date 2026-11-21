@@ -100,8 +100,7 @@ const launchDetachedSync: Launcher["launchDetachedSync"] = (opts) =>
 const launchJobSync: Launcher["launchJobSync"] = (opts, files) =>
   launcher.launchJobSync(opts, files);
 // The lifeline's warning stands whatever the instant.
-const lifelineWarnings = () =>
-  launcher.standing().filter((w) => w.kind === "lifeline");
+const lifelineWarning = () => launcher.standing();
 const lifeline = () => launcher.__lifelineForTest();
 
 beforeEach(() => {
@@ -838,13 +837,11 @@ describe("the lifeline", () => {
       () => heard.includes("exited SIGKILL"),
       "the lost lifeline's fault",
     );
-    expect(lifelineWarnings()).toEqual([
-      {
-        kind: "lifeline",
-        message:
-          "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
-      },
-    ]);
+    expect(lifelineWarning()).toEqual({
+      kind: "lifeline",
+      message:
+        "programs launched now would outlive their launcher if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
+    });
     const second = launch(grandchild("30.863"));
     const replacement = lifeline();
     expect(replacement.pid).not.toBe(lostPid);
@@ -852,10 +849,7 @@ describe("the lifeline", () => {
       () => running("30.862") && running("30.863"),
       "both launched sleeps",
     );
-    await until(
-      () => lifelineWarnings().length === 0,
-      "the replacement running",
-    );
+    await until(() => lifelineWarning() === null, "the replacement running");
     expect(heard.at(-1)).toBe(null);
     replacement.cut();
     expect(await first).toMatchObject({ ok: false, reason: "signal" });

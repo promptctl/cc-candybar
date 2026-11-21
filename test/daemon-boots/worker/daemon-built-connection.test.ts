@@ -168,7 +168,10 @@ describe("a connection to a daemon built in this worker", () => {
     const inProcess = inProcessRenderer((real) =>
       hearingEvents(real, ({ event }) => {
         if (event.kind === "context" && event.worldState.session === "observe")
-          observed = event.worldState.daemon.rendererEnded;
+          observed =
+            event.worldState.daemon.held.find(
+              ({ kind }) => kind === "renderer-ended",
+            )?.event ?? null;
       }),
     );
     const running = startDaemon(process.env, {

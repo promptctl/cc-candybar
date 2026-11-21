@@ -35,7 +35,7 @@ import {
 } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
-import type { DisplayedEvent } from "../../src/utils/event-hold";
+import type { DaemonEvent } from "../../src/utils/event-hold";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -59,7 +59,7 @@ function rig(
     reject: (thrown: Error) => void;
   }> = [];
   const logged: string[] = [];
-  const acknowledged: DisplayedEvent[] = [];
+  const acknowledged: DaemonEvent[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
     publishFrame,
@@ -166,7 +166,7 @@ const frame = (
   bar = "r",
   handoff: string | null = "s",
   receipt = 1,
-  displayedEvents?: readonly DisplayedEvent[],
+  displayedEvents?: readonly DaemonEvent[],
 ): PushedFrame => ({
   session,
   frame: {
@@ -828,11 +828,11 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   const pane = deferredSubscriber("pane");
   feeds.subscribe(S, pane.sub);
   const event = { text: "an act failed", at: 7 as Instant, answered: false };
-  const first: DisplayedEvent = {
+  const first: DaemonEvent = {
     kind: "act-failed",
     event: { ...event, revision: 1 },
   };
-  const second: DisplayedEvent = {
+  const second: DaemonEvent = {
     kind: "act-failed",
     event: { ...event, revision: 2 },
   };
@@ -871,7 +871,7 @@ test.each([
     const { feeds, took, settled, acknowledged } = rig();
     const initial = deferredSubscriber(lane);
     feeds.subscribe(S, initial.sub);
-    const shown: DisplayedEvent = {
+    const shown: DaemonEvent = {
       kind: "renderer-ended",
       event: { text: "the renderer ended", at: 7 as Instant, answered: false },
     };
@@ -902,11 +902,11 @@ test("a slower pane confirmation reports its own event after another pane confir
     at: 7 as Instant,
     answered: false,
   };
-  const first: DisplayedEvent = {
+  const first: DaemonEvent = {
     kind: "renderer-ended",
     event: { ...event, revision: 1 },
   };
-  const second: DisplayedEvent = {
+  const second: DaemonEvent = {
     kind: "renderer-ended",
     event: { ...event, revision: 2 },
   };
@@ -945,7 +945,7 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
       }),
     refused: (resp) => out.end(JSON.stringify(resp)),
   });
-  const shown: DisplayedEvent = {
+  const shown: DaemonEvent = {
     kind: "act-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
