@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-929",
-      "ref": "refs/pull/929/merge",
-      "sha": "26aa2a09a502cda8d9e080400a3fc328d965ed64",
-      "timestamp": "2026-11-21T04:57:06.663Z",
-      "commits": [
-        {
-          "sha": "26aa2a09a502cda8d9e080400a3fc328d965ed64",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T04:55:56Z",
-          "message": "Merge 43746fea4a2db353fe95971c2c8579d8553c6119 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
-        },
-        {
-          "sha": "43746fea4a2db353fe95971c2c8579d8553c6119",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T21:55:44-07:00",
-          "message": "fix(renderer): a start whose offer throws still opens its session\n\nThe start turn opened each session in the same step as its offer, so\nan offer that threw skipped the session's context. Each is a step of\nits own now.\n\nA load that throws is a line in the log on every attempt, and the bar\nrenders its fault with the renderer's one failure text. Pruning trusts\nthe declaration, which already names every origin an entry loads from.\nComments now say which uses offer an entry its config and which only\nread what it holds.\n"
-        },
-        {
-          "sha": "5373a1a85bab4f580a03b4a8d758b9eeeb73d203",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T21:40:05-07:00",
-          "message": "fix(renderer): an entry whose load threw shows the throw until a load is taken\n\nA load that throws before the entry takes it now leaves its message on\nthe entry as its fault. Frames and writes read it without loading, so\nthe bar says UNAVAILABLE at once instead of drawing the old config as\nhealthy. The entry loads again on its next use, and an offer that\ndigests as the load it holds still loads while a fault stands.\n\nA build the cache selected and could not serve is disposed. Serving\ndoes everything that can throw before it enters the state. Each step\nafter a new entry is inserted runs whatever another step throws.\n\nThe delivery record is the revision itself, and absence means pending.\nPruning keeps the delivery of every origin an entry loads from. The\nstart turn records the latest offer whatever building the retained one\nthrew. A request's answer takes its session out of `opening`.\n`editRevision` is a required dependency, and discovery builds its\nobservation from the same revision recipe as the renderer.\n\nThe test cache's `getOrCreate` dropped its session argument, so no test\ndrew through a draft. It passes the session on now.\n"
-        },
-        {
-          "sha": "3ed2020ce0ef0df289948889ac8f99d49c4a55de",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T21:11:40-07:00",
-          "message": "fix(renderer): each render cache entry compares itself with its offered config wherever it is used\n\nThe host offers a config snapshot only when its digest moves, so a\nrenderer that recorded a throwing load as a failed delivery waited for a\nresend that never came. The delivery now records only what the host\noffered. Every use of a cache entry compares the entry's loaded revision\nwith the one offered to it (the session's draft, or else the delivery),\nso the next event loads the same delivery again.\n\n- A config revision pairs a snapshot with its digest, taken once.\n- The delivery has no failed kind; rejectConfig and the renderer's\n  recovery replay are gone.\n- A session stays waiting until its view opens, so an opening whose load\n  threw opens on its origin's next config turn.\n- A reload takes its revision only once the cache serves its build, and\n  the steps after it all run, raising their throws together.\n- Writes are gated on the drawn entry's own load error.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0b7b6935a6f829b85c5844fcbc580d013853719b",
-      "timestamp": "2026-11-21T02:42:24.212Z",
+      "sha": "75d266afc00407c4ef75d5746c8e403b1348e78c",
+      "timestamp": "2026-11-21T05:02:58.532Z",
       "commits": [
         {
-          "sha": "0b7b6935a6f829b85c5844fcbc580d013853719b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-21T02:41:24Z",
-          "message": "chore(release): set `package.json` to 1.236.3\n\n## [1.236.3](https://github.com/promptctl/cc-candybar/compare/v1.236.2...v1.236.3) (2026-11-21)\n\n### Bug Fixes\n\n* **daemon:** every clock task's throw reaches the bar ([#925](https://github.com/promptctl/cc-candybar/issues/925)) ([1c9001a](https://github.com/promptctl/cc-candybar/commit/1c9001abf07cdf49706032b66a888807190c0a6b))\n"
+          "sha": "75d266afc00407c4ef75d5746c8e403b1348e78c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:01:56-07:00",
+          "message": "fix(renderer): each render cache entry compares itself with its offered config wherever it is used (#929)\n\n* fix(renderer): each render cache entry compares itself with its offered config wherever it is used\n\nThe host offers a config snapshot only when its digest moves, so a\nrenderer that recorded a throwing load as a failed delivery waited for a\nresend that never came. The delivery now records only what the host\noffered. Every use of a cache entry compares the entry's loaded revision\nwith the one offered to it (the session's draft, or else the delivery),\nso the next event loads the same delivery again.\n\n- A config revision pairs a snapshot with its digest, taken once.\n- The delivery has no failed kind; rejectConfig and the renderer's\n  recovery replay are gone.\n- A session stays waiting until its view opens, so an opening whose load\n  threw opens on its origin's next config turn.\n- A reload takes its revision only once the cache serves its build, and\n  the steps after it all run, raising their throws together.\n- Writes are gated on the drawn entry's own load error.\n\n* fix(renderer): an entry whose load threw shows the throw until a load is taken\n\nA load that throws before the entry takes it now leaves its message on\nthe entry as its fault. Frames and writes read it without loading, so\nthe bar says UNAVAILABLE at once instead of drawing the old config as\nhealthy. The entry loads again on its next use, and an offer that\ndigests as the load it holds still loads while a fault stands.\n\nA build the cache selected and could not serve is disposed. Serving\ndoes everything that can throw before it enters the state. Each step\nafter a new entry is inserted runs whatever another step throws.\n\nThe delivery record is the revision itself, and absence means pending.\nPruning keeps the delivery of every origin an entry loads from. The\nstart turn records the latest offer whatever building the retained one\nthrew. A request's answer takes its session out of `opening`.\n`editRevision` is a required dependency, and discovery builds its\nobservation from the same revision recipe as the renderer.\n\nThe test cache's `getOrCreate` dropped its session argument, so no test\ndrew through a draft. It passes the session on now.\n\n* fix(renderer): a start whose offer throws still opens its session\n\nThe start turn opened each session in the same step as its offer, so\nan offer that threw skipped the session's context. Each is a step of\nits own now.\n\nA load that throws is a line in the log on every attempt, and the bar\nrenders its fault with the renderer's one failure text. Pruning trusts\nthe declaration, which already names every origin an entry loads from.\nComments now say which uses offer an entry its config and which only\nread what it holds."
         }
       ]
     },

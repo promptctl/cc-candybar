@@ -64479,6 +64479,29 @@ function holds(doc, path31) {
 
 // src/config/config-snapshot.ts
 init_globals();
+
+// src/utils/plain.ts
+init_globals();
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
+// src/config/config-snapshot.ts
+function revisionOf(snapshot) {
+  return { snapshot, digest: digestOf(snapshot) };
+}
 function layerForRole(chain2, role) {
   return chain2.find((layer) => layer.role === role);
 }
@@ -65405,26 +65428,6 @@ function unwrapDocument(name, doc) {
 
 // src/facts/source-identity.ts
 init_globals();
-
-// src/utils/plain.ts
-init_globals();
-function ownValue(record2, key) {
-  return Object.hasOwn(record2, key) ? record2[key] : void 0;
-}
-function digestOf(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
-// src/facts/source-identity.ts
 var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
@@ -70460,6 +70463,28 @@ var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 
+// src/utils/run-each.ts
+init_globals();
+function runEach(steps2) {
+  const thrown2 = [];
+  for (const step4 of steps2) {
+    try {
+      step4();
+    } catch (error) {
+      thrown2.push(error);
+    }
+  }
+  throwAll(thrown2);
+}
+function throwAll(thrown2) {
+  if (thrown2.length === 1) throw thrown2[0];
+  if (thrown2.length > 1)
+    throw new AggregateError(
+      thrown2,
+      thrown2.map((each) => each instanceof Error ? each.message : inspect(each)).join("; ")
+    );
+}
+
 // src/renderer/render-cache.ts
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
@@ -70512,14 +70537,13 @@ function pluginLoadLine(layers, {
   return `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
 }
 function configLoadedLine(entry, cause, settled3) {
-  const { repo: repo2 } = entry.snapshot;
+  const { repo: repo2 } = entry.revision.snapshot;
   const { projectDir, cwd: cwd2 } = entry.origin;
   return `config loaded projectDir=${valueOf(projectDir)} cwd=${valueOf(cwd2)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
-var CONFIG_PENDING = { kind: "pending" };
 function authoredRoots(config, raw) {
   return new Set(
     presetNames(config.presets).filter(
@@ -70814,8 +70838,11 @@ var RenderCache = class {
   entries = observable.map(void 0, {
     deep: false
   });
-  // [LAW:one-source-of-truth] The latest delivery of each retained origin
-  // gates admission and writes, including controls on an already live view.
+  // [LAW:one-source-of-truth] What the host last offered for each retained
+  // origin, digested once as it arrived; an origin absent here is pending. It
+  // records the offer and nothing about how a load of it went: that is each
+  // entry's own (`reconcile`). It gates admission and writes, including
+  // controls on an already live view.
   configDeliveries = observable.map(
     void 0,
     { deep: false }
@@ -70877,42 +70904,42 @@ var RenderCache = class {
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
   }
-  // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
-  // now. Its entry, when it has one, reloads from it unless it digests as the
-  // one the entry last loaded, and a reload whose load inputs did not move
-  // keeps the state it serves (`loadOrigin`).
+  // A `config` turn: what discovery found at `origin` now. The offer is
+  // recorded before its entry, when it has one, reconciles with it, so a load
+  // that throws leaves the offer for the next event that uses the entry.
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = {
-      kind: "received",
-      snapshot,
-      digest: digestOf(snapshot)
-    };
+    const revision = revisionOf(snapshot);
     runInAction(() => {
-      const recovering = this.configDeliveries.get(key)?.kind === "failed";
-      this.configDeliveries.set(key, held);
+      this.configDeliveries.set(key, revision);
       const entry = this.entries.get(key);
-      if (entry !== void 0 && (recovering || entry.digest !== held.digest))
-        this.reloadInto(entry, held, { kind: "config" });
+      if (entry !== void 0)
+        this.reconcile(entry, revision, { kind: "config" });
     });
   }
-  rejectConfig(origin, failure2) {
-    if (this.closed) return;
-    runInAction(() => {
-      this.configDeliveries.set(originKey(origin), { kind: "failed", failure: failure2 });
-    });
-  }
-  configDelivery(origin) {
-    return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
+  // [LAW:single-enforcer] The one test of whether an entry loads: the
+  // revision offered to it (its session's draft, or else the host's
+  // delivery) is not the one it holds a load of: it digests differently, or
+  // the entry's latest load threw. Every event that draws or reads config
+  // through an entry (`getOrCreate`) offers it, so an entry a throwing load
+  // left behind catches up on the next such event, with no resend from the
+  // host. Frames and the lane declaration read what the entry holds and
+  // offer nothing. A reload whose load inputs did not move keeps the state
+  // it serves (`loadOrigin`).
+  reconcile(entry, offered, cause) {
+    if (entry.fault !== null || entry.revision.digest !== offered.digest)
+      this.reloadInto(entry, offered, cause);
   }
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
   holdsConfig(origin) {
-    return this.configDelivery(origin).kind === "received";
+    return this.configDeliveries.has(originKey(origin));
   }
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
-  // `originKey`: every other one goes, as the host lets its origin go.
+  // `originKey`: every other one goes, as the host lets its origin go. The
+  // renderer's declaration names every origin an entry loads from
+  // (`origins`), so an entry is never left without its delivery.
   prune(keep) {
     runInAction(() => {
       for (const key of [...this.configDeliveries.keys()])
@@ -70941,55 +70968,58 @@ var RenderCache = class {
     let key = originKey(origin);
     let draft = null;
     if (editing !== void 0) {
-      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
+      draft = this.deps.editRevision(origin, editing);
       if (draft !== null) key = draftKey(editing);
     }
+    const offered = draft ?? this.held(origin);
+    const cause = { kind: draft === null ? "config" : "edit" };
     const existing = this.entries.get(key);
     if (existing !== void 0 && originKey(existing.origin) === originKey(origin)) {
       runInAction(() => {
         this.entries.delete(key);
         this.entries.set(key, existing);
       });
-      if (draft !== null && existing.snapshot !== draft)
-        this.reloadInto(
-          existing,
-          { snapshot: draft, digest: digestOf(draft) },
-          { kind: "edit" }
-        );
+      this.reconcile(existing, offered, cause);
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    const held = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd: cwd2 } = origin;
-    const { loaded, selected } = this.selectState(origin, held, null);
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    const { loaded, selected } = this.enter(origin, offered, null);
     const entry = {
       origin,
       get configLayers() {
-        return configPaths(this.snapshot);
+        return configPaths(this.revision.snapshot);
       },
-      snapshot: held.snapshot,
-      digest: held.digest,
+      revision: offered,
       selected,
       lastError: loaded.error,
+      fault: null,
       lastWarnings: loaded.warnings,
       get state() {
         return this.selected.state;
       }
     };
     makeObservable(entry, {
+      revision: observableRef,
       selected: observableRef,
-      lastError: observable
+      lastError: observable,
+      fault: observable,
+      lastWarnings: observableRef
     });
-    this.serve(entry.state);
     runInAction(() => this.entries.set(key, entry));
-    this.fit(entry);
-    this.log(
-      "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
-    );
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    runEach([
+      () => {
+        if (loaded.state !== null)
+          this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      },
+      () => this.fit(entry),
+      () => this.log(
+        "info",
+        `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
+      ),
+      // An entry just created was drawn by no session.
+      () => this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind)
+    ]);
     return entry;
   }
   // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
@@ -71052,7 +71082,7 @@ var RenderCache = class {
     const entry = this.getOrCreate(origin, sessionId2);
     if (entry !== previous2.entry)
       this.viewOf(entry, entry.state, requested, "reload");
-    if (this.deps.editSnapshot?.(origin, sessionId2) == null)
+    if (this.deps.editRevision(origin, sessionId2) === null)
       this.dropDraft(sessionId2);
     this.observers.onViewChanged?.(sessionId2);
   }
@@ -71198,17 +71228,14 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   accessTo(entry, state) {
-    const held = this.configDelivery(entry.origin);
-    if (held.kind === "failed")
-      return { kind: "unavailable", error: held.failure.message };
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(entry.origin));
+    if (held === void 0)
       return {
         kind: "unavailable",
         error: "No current config is held for this session"
       };
-    const key = originKey(entry.origin);
-    const error = entry.lastError ?? this.entries.get(key)?.lastError;
-    if (error != null) return { kind: "unavailable", error };
+    const error = entry.fault ?? entry.lastError;
+    if (error !== null) return { kind: "unavailable", error };
     for (const { role, path: path31, content } of held.snapshot.chain)
       if (content.kind === "unreadable")
         return {
@@ -71354,9 +71381,8 @@ var RenderCache = class {
   }
   held(origin) {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.configDelivery(origin);
-    if (held.kind === "failed") throw new CrossedFailure(held.failure);
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(origin));
+    if (held === void 0)
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
       );
@@ -71418,21 +71444,37 @@ var RenderCache = class {
         `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
       );
   }
+  // [LAW:single-enforcer] `selectState`, entered: a state the selection built
+  // is served, or disposed when serving it throws, so no build is left with
+  // no owner to tear down its watchers and timers.
+  enter(origin, revision, previous2) {
+    const chosen = this.selectState(origin, revision, previous2);
+    const { state } = chosen.selected;
+    if (state === previous2?.state) return chosen;
+    try {
+      this.serve(state);
+    } catch (error) {
+      state.registry.dispose();
+      throw error;
+    }
+    return chosen;
+  }
   // The cache starts serving `state`: unheld, and not yet retired — and the
-  // compile it carries is the table's for its key.
+  // compile it carries is the table's for its key. Whatever can throw runs
+  // before the cache holds it, so a throw leaves nothing entered.
   serve(state) {
     const held = this.compiles.get(state.compileKey);
     if (held !== void 0 && held !== state.compiled)
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
       );
-    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
-    this.compiles.set(state.compileKey, state.compiled);
     if (held === void 0)
       this.log(
         "info",
-        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`
+        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size + 1}`
       );
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
+    this.compiles.set(state.compileKey, state.compiled);
   }
   holdOf(state) {
     const hold2 = this.holds.get(state);
@@ -71496,7 +71538,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  reloadInto(entry, held, cause) {
+  reloadInto(entry, revision, cause) {
     const retry = [...this.openFailures].filter(
       ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
     );
@@ -71505,29 +71547,46 @@ var RenderCache = class {
       ...retry.map(([session]) => session)
     ];
     const served = entry.state;
-    const { loaded, selected } = this.selectState(
-      entry.origin,
-      held,
-      entry.selected
-    );
-    entry.snapshot = held.snapshot;
-    entry.digest = held.digest;
-    entry.lastWarnings = loaded.warnings;
-    runInAction(() => {
-      entry.lastError = loaded.error;
-      entry.selected = selected;
-    });
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (selected.state !== served) {
-      this.serve(selected.state);
-      this.retire(served, "reload", entry);
+    let chosen;
+    try {
+      chosen = this.enter(entry.origin, revision, entry.selected);
+    } catch (error) {
+      const fault = rendererFailureOf(error).message;
+      runInAction(() => {
+        entry.fault = fault;
+      });
+      this.log(
+        "error",
+        `config load threw projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${cause.kind} error=${JSON.stringify(fault)}`
+      );
+      throw error;
     }
-    if (selected.state !== served || loaded.state !== null)
-      for (const [session, failure2] of retry)
-        this.reopen(entry, session, failure2.requestOf);
-    this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
+    const { loaded, selected } = chosen;
+    const replaced = selected.state !== served;
+    runInAction(() => {
+      entry.revision = revision;
+      entry.selected = selected;
+      entry.lastError = loaded.error;
+      entry.fault = null;
+      entry.lastWarnings = loaded.warnings;
+    });
+    runEach([
+      () => {
+        if (loaded.state !== null)
+          this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      },
+      () => {
+        if (replaced) this.retire(served, "reload", entry);
+      },
+      ...(replaced || loaded.state !== null ? retry : []).map(
+        ([session, failure2]) => () => this.reopen(entry, session, failure2.requestOf)
+      ),
+      // A reload can move the entry onto a compile no other entry carries,
+      // and charges the views it reopened, once their predecessors are
+      // retired.
+      () => this.fit(entry),
+      () => this.observers.onReload?.(entry, sessions, cause, loaded.kind)
+    ]);
   }
   get size() {
     return this.entries.size;
@@ -72743,7 +72802,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const questions = repoQuestions(entry.snapshot.repo, sessionId2);
+  const questions = repoQuestions(entry.revision.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const { daemon: daemon2 } = document;
@@ -72780,7 +72839,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   ].flatMap(
     ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
-  const configWatch = entry.snapshot.watch;
+  const configWatch = entry.revision.snapshot.watch;
   const launched = launcherWarningsAt(daemon2.launcher, at, drawing2.by);
   const launchEvents = launched.flatMap(
     (warning) => "event" in warning ? [warning] : []
@@ -73081,30 +73140,6 @@ function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, else
 
 // src/renderer/turn-time.ts
 init_globals();
-
-// src/utils/run-each.ts
-init_globals();
-function runEach(steps2) {
-  const thrown2 = [];
-  for (const step4 of steps2) {
-    try {
-      step4();
-    } catch (error) {
-      thrown2.push(error);
-    }
-  }
-  throwAll(thrown2);
-}
-function throwAll(thrown2) {
-  if (thrown2.length === 1) throw thrown2[0];
-  if (thrown2.length > 1)
-    throw new AggregateError(
-      thrown2,
-      thrown2.map((each) => each instanceof Error ? each.message : inspect(each)).join("; ")
-    );
-}
-
-// src/renderer/turn-time.ts
 var TurnTime = class {
   readings = null;
   // In the order they were held, so two due at one tick run in that order.
@@ -75911,10 +75946,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text4, read2) => proveLoadsAsLayer(ctx, origin, file, text4, read2)
   };
-  const draft = origin === null || ctx.edits.snapshot(origin, sid) === null ? null : ctx.edits.draft(sid);
+  const draft = origin === null || ctx.edits.revision(origin, sid) === null ? null : ctx.edits.draft(sid);
   const scoped = draft === null ? ctx : {
     ...ctx,
-    snapshotFor: (of) => ctx.edits.snapshot(of, sid) ?? ctx.snapshotFor(of),
+    snapshotFor: (of) => ctx.edits.revision(of, sid)?.snapshot ?? ctx.snapshotFor(of),
     configFor: (of) => ctx.configFor(of, sid)
   };
   const edit = draft?.begin(
@@ -76097,7 +76132,8 @@ var EditDraft = class {
     this.origin = origin;
     this.base = base;
     this.committed = committed;
-    this.latest = this.snapshot = base;
+    this.latest = base;
+    this.#revision = revisionOf(base);
     this.history = new SettingsHistory(
       {
         get: (sid, key) => sid === session ? this.read(key) : committed.get(sid, key),
@@ -76120,7 +76156,10 @@ var EditDraft = class {
   files = /* @__PURE__ */ new Map();
   history;
   latest;
-  snapshot;
+  // [LAW:one-source-of-truth] Derived from `latest`, `base` and the draft's
+  // files, and retaken whenever one of them changes: never assigned from
+  // outside the draft.
+  #revision;
   // [LAW:effects-at-boundaries] A transaction pins the content it edits.
   // The host's current layer identities and plugin discovery still decide
   // what it can load, including when the user revokes repository trust.
@@ -76128,8 +76167,13 @@ var EditDraft = class {
     this.latest = latest;
     this.refreshSnapshot();
   }
+  // The config the draft previews: the host's latest layers, each holding
+  // the draft's text for its file.
+  get revision() {
+    return this.#revision;
+  }
   refreshSnapshot() {
-    this.snapshot = {
+    this.#revision = revisionOf({
       ...this.latest,
       chain: this.latest.chain.flatMap((layer) => {
         const base = layerAtPath(this.base.chain, layer.path);
@@ -76138,7 +76182,7 @@ var EditDraft = class {
         const content = value === void 0 ? base.content : value === null ? { kind: "absent" } : { kind: "text", text: value };
         return [{ ...layer, content }];
       })
-    };
+    });
   }
   depth() {
     return {
@@ -76265,9 +76309,9 @@ var EditTransactions = class {
   draft(sid) {
     return this.entries.get(sid)?.draft ?? null;
   }
-  snapshot(origin, sid) {
+  revision(origin, sid) {
     const draft = this.draft(sid);
-    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.snapshot : null;
+    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.revision : null;
   }
   configured(origin, snapshot) {
     const key = originKey(origin);
@@ -76830,14 +76874,9 @@ function mainRenderer(parts, drains) {
     });
     return ready;
   };
-  const configForTurn = (origin) => {
-    const delivery = parts.renderCache.configDelivery(origin);
-    if (delivery.kind === "failed") throw new CrossedFailure(delivery.failure);
-    return delivery;
-  };
-  const failClicks = (clicks, failure2) => {
-    for (const { session } of clicks)
-      holdClickError(parts.sessionState, session, failure2.message, time.at);
+  const openWaiting = (session) => () => {
+    openSession(parts, session);
+    opening.delete(session);
   };
   const resume = (ready, effects, record2) => ready.map((click2) => () => {
     try {
@@ -76903,23 +76942,29 @@ function mainRenderer(parts, drains) {
           if (offer === void 0) return;
           configs.delete(key);
           const { origin, config, retained } = offer;
-          if (typeof retained === "object") {
-            parts.renderCache.configure(origin, retained);
-            parts.renderCache.getOrCreate(origin);
-          }
-          parts.renderCache.configure(origin, config);
+          runEach([
+            () => {
+              if (typeof retained !== "object") return;
+              parts.renderCache.configure(origin, retained);
+              parts.renderCache.getOrCreate(origin);
+            },
+            () => parts.renderCache.configure(origin, config)
+          ]);
         };
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(({ context, worldState }) => () => {
-            offered(context.requested);
-            notify2(
+          // A session's offer and its opening are steps of their own: an
+          // offer that throws still records the latest config, and the
+          // session's context still opens over it.
+          ...event.sessions.flatMap(({ context, worldState }) => [
+            () => offered(context.requested),
+            () => notify2(
               { kind: "context", context, worldState },
               record2,
               effects,
               frames
-            );
-          }),
+            )
+          ]),
           // A live session gets its cache entry before idle entries warm,
           // so they cannot take the budget a pinned view needs.
           () => runEach(
@@ -76944,54 +76989,30 @@ function mainRenderer(parts, drains) {
           const editMoved = parts.edits.moved(session, origin);
           if (editMoved || previous2 !== null && originKey(previous2.durable.origin) !== originKey(origin))
             parts.renderCache.retireSession(session);
-          const delivery = parts.renderCache.configDelivery(origin);
-          if (delivery.kind === "failed") {
-            opening.delete(session);
-            failClicks(
-              takeClicks((click2) => click2.session === session),
-              delivery.failure
-            );
-            throw new CrossedFailure(delivery.failure);
-          }
-          if (delivery.kind === "pending") {
-            opening.add(session);
+          opening.add(session);
+          if (!parts.renderCache.holdsConfig(origin)) {
             record2.push(["parked", "context"]);
             return;
           }
-          opening.delete(session);
           const ready = takeClicks((click2) => click2.session === session);
-          runEach([
-            () => openSession(parts, session),
-            ...resume(ready, effects, record2)
-          ]);
+          runEach([openWaiting(session), ...resume(ready, effects, record2)]);
         });
         return;
       }
       case "config": {
         const key = originKey(event.origin);
-        const recovering = parts.renderCache.configDelivery(event.origin).kind === "failed";
-        const sessions = (recovering ? parts.worldStates.sessions() : [...opening]).filter(
+        const sessions = [...opening].filter(
           (session) => originKey(parts.worldStates.requestOf(session).requested) === key
         );
-        for (const session of sessions) opening.delete(session);
         const ready = takeClicks(
           (click2) => originKey(parkedContext(click2).durable.origin) === key
         );
-        runInAction(() => {
-          try {
-            parts.renderCache.configure(event.origin, event.config);
-          } catch (thrown2) {
-            const failure2 = rendererFailureOf(thrown2);
-            parts.renderCache.rejectConfig(event.origin, failure2);
-            failClicks(ready, failure2);
-            throw new CrossedFailure(failure2);
-          }
-        });
         runEach([
+          () => parts.renderCache.configure(event.origin, event.config),
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
-          ...sessions.map((session) => () => openSession(parts, session)),
+          ...sessions.map(openWaiting),
           ...resume(ready, effects, record2)
         ]);
         return;
@@ -77000,7 +77021,7 @@ function mainRenderer(parts, drains) {
         const current = parts.worldStates.requestOf(
           event.context.hookData.session_id
         );
-        if (configForTurn(current.requested).kind === "pending")
+        if (!parts.renderCache.holdsConfig(current.requested))
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
@@ -77010,6 +77031,7 @@ function mainRenderer(parts, drains) {
           event.context.hints,
           record2
         );
+        opening.delete(current.hookData.session_id);
         effects.push({
           kind: "present",
           id: prepare(delivery),
@@ -77053,7 +77075,7 @@ function mainRenderer(parts, drains) {
         const context = click2.scope === "session" ? live ?? event.context : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (configForTurn(origin).kind === "pending") {
+          if (!parts.renderCache.holdsConfig(origin)) {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             runInAction(
@@ -77105,11 +77127,10 @@ function mainRenderer(parts, drains) {
         let committed = null;
         if (editing) {
           const { requested } = parts.worldStates.requestOf(session);
-          const delivery = parts.renderCache.configDelivery(requested);
+          const delivered = parts.renderCache.holdsConfig(requested);
           const state = parts.renderCache.committedState(requested);
-          if (delivery.kind !== "received" || state === null) {
-            if (delivery.kind === "received")
-              unprepared.set(originKey(requested), requested);
+          if (!delivered || state === null) {
+            if (delivered) unprepared.set(originKey(requested), requested);
             const held = subscriptions.lanes[session];
             if (held !== void 0) lanes[session] = held;
             continue;
@@ -77298,7 +77319,7 @@ function build2(inputs, turnLog) {
       locations: inputs.locations,
       region: inputs.region,
       sessionState: edits.view,
-      editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
+      editRevision: (origin, sid) => edits.revision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       gates,
@@ -77386,8 +77407,9 @@ function build2(inputs, turnLog) {
     edits,
     editViewChanged: (sid) => renderCache.refreshEditedView(sid),
     navigation: navigationHistory,
-    // The config a session's last render resolved from — the same entry the
-    // render drew the bar with, so a save compares against the bar the user saw.
+    // The config of the entry the session's renders draw from, brought up to
+    // what was offered to it (`getOrCreate`), so a save compares against the
+    // config the bar draws next, never one a newer offer replaced.
     configFor: (origin, sid) => renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
@@ -92227,12 +92249,7 @@ var ConfigDiscovery = class {
         ({ definition }) => definition.kind === "text" ? [definition.storage] : []
       )
     );
-    const observed2 = {
-      origin,
-      snapshot,
-      digest: digestOf(snapshot),
-      managedFolders
-    };
+    const observed2 = { origin, ...revisionOf(snapshot), managedFolders };
     this.observations.set(snapshot, observed2);
     return {
       ...observed2,
