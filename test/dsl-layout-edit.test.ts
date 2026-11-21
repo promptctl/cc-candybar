@@ -1009,6 +1009,7 @@ function makeCache(reloads?: ReloadSignal): {
   const sessionState = new SessionState();
   const cache = new DiscoveringCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
@@ -1217,6 +1218,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const sessionState = new SessionState();
     const cache = new DiscoveringCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),

@@ -161,7 +161,7 @@ export interface RenderDeps<
   locations: Locations;
   sessionState: SessionStateRW;
   // The session's open edit draft at `origin`, or null when it edits none.
-  editRevision?: (
+  editRevision: (
     origin: RenderOrigin,
     session: SessionId,
   ) => ConfigRevision | null;
@@ -413,17 +413,6 @@ export function configDisposeLine(
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
 
-// [LAW:one-source-of-truth] What the host last offered for an origin,
-// digested once as it arrived. It records the offer and nothing about how a
-// load of it went: that is each entry's own revision (`reconcile`).
-interface ReceivedConfig {
-  readonly kind: "received";
-  readonly revision: ConfigRevision;
-}
-
-const CONFIG_PENDING = { kind: "pending" } as const;
-type ConfigDelivery = ReceivedConfig | typeof CONFIG_PENDING;
-
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
 // the last error AND last warning from a reload attempt. A state is only
 // ever replaced by a state — a load failure means "show the error but keep
@@ -455,6 +444,11 @@ export interface CacheEntry {
   revision: ConfigRevision;
   selected: SelectedState;
   lastError: string | null;
+  // [LAW:no-silent-failure] What the latest load threw before the entry took
+  // it, or null once one is taken. The entry serves what it had, shows the
+  // throw to every frame and write, and loads again on its next use
+  // (`reconcile`).
+  fault: string | null;
   lastWarnings: readonly string[];
   readonly state: DslRenderState;
 }
@@ -1154,9 +1148,12 @@ export class RenderCache<
   private readonly entries = observable.map<string, CacheEntry>(undefined, {
     deep: false,
   });
-  // [LAW:one-source-of-truth] The latest delivery of each retained origin
-  // gates admission and writes, including controls on an already live view.
-  private readonly configDeliveries = observable.map<string, ReceivedConfig>(
+  // [LAW:one-source-of-truth] What the host last offered for each retained
+  // origin, digested once as it arrived; an origin absent here is pending. It
+  // records the offer and nothing about how a load of it went: that is each
+  // entry's own (`reconcile`). It gates admission and writes, including
+  // controls on an already live view.
+  private readonly configDeliveries = observable.map<string, ConfigRevision>(
     undefined,
     { deep: false },
   );
@@ -1234,7 +1231,7 @@ export class RenderCache<
     const key = originKey(origin);
     const revision = revisionOf(snapshot);
     runInAction(() => {
-      this.configDeliveries.set(key, { kind: "received", revision });
+      this.configDeliveries.set(key, revision);
       const entry = this.entries.get(key);
       if (entry !== undefined)
         this.reconcile(entry, revision, { kind: "config" });
@@ -1243,36 +1240,36 @@ export class RenderCache<
 
   // [LAW:single-enforcer] The one test of whether an entry loads: the
   // revision offered to it (its session's draft, or else the host's
-  // delivery) digests differently from the one it loaded. Every use of an
-  // entry offers it, so an entry a throwing load left behind catches up on
-  // the next event, with no resend from the host and no record of the throw.
-  // A reload whose load inputs did not move keeps the state it serves
-  // (`loadOrigin`).
+  // delivery) is not the one it holds a load of: it digests differently, or
+  // the entry's latest load threw. Every use of an entry offers it, so an
+  // entry a throwing load left behind catches up on the next event, with no
+  // resend from the host. A reload whose load inputs did not move keeps the
+  // state it serves (`loadOrigin`).
   private reconcile(
     entry: CacheEntry,
     offered: ConfigRevision,
     cause: LoadCause,
   ): void {
-    if (entry.revision.digest !== offered.digest)
+    if (entry.fault !== null || entry.revision.digest !== offered.digest)
       this.reloadInto(entry, offered, cause);
-  }
-
-  private configDelivery(origin: RenderOrigin): ConfigDelivery {
-    return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
   }
 
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
   holdsConfig(origin: RenderOrigin): boolean {
-    return this.configDelivery(origin).kind === "received";
+    return this.configDeliveries.has(originKey(origin));
   }
 
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
   // `originKey`: every other one goes, as the host lets its origin go.
+  // [LAW:single-enforcer] An entry offers itself its origin's delivery on
+  // every use, so the delivery of every origin an entry loads from stays.
   prune(keep: ReadonlySet<string>): void {
+    const loading = new Set(this.origins().map(originKey));
     runInAction(() => {
       for (const key of [...this.configDeliveries.keys()])
-        if (!keep.has(key)) this.configDeliveries.delete(key);
+        if (!keep.has(key) && !loading.has(key))
+          this.configDeliveries.delete(key);
     });
   }
 
@@ -1306,7 +1303,7 @@ export class RenderCache<
     let key = originKey(origin);
     let draft: ConfigRevision | null = null;
     if (editing !== undefined) {
-      draft = this.deps.editRevision?.(origin, editing) ?? null;
+      draft = this.deps.editRevision(origin, editing);
       if (draft !== null) key = draftKey(editing);
     }
     const offered = draft ?? this.held(origin);
@@ -1326,9 +1323,7 @@ export class RenderCache<
     if (existing !== undefined) this.drop(key, existing, "evict");
 
     const { projectDir, cwd } = origin;
-    const { loaded, selected } = this.selectState(origin, offered, null);
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    const { loaded, selected } = this.enter(origin, offered, null);
     const entry: CacheEntry = {
       origin,
       get configLayers() {
@@ -1337,6 +1332,7 @@ export class RenderCache<
       revision: offered,
       selected,
       lastError: loaded.error,
+      fault: null,
       lastWarnings: loaded.warnings,
       get state() {
         return this.selected.state;
@@ -1348,26 +1344,33 @@ export class RenderCache<
       revision: observableRef,
       selected: observableRef,
       lastError: observable,
+      fault: observable,
       lastWarnings: observableRef,
     });
-    this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
-    // From the moment the entry is in the map it is reachable for eviction
-    // and dispose, so a throwing observer cannot strand a registry outside
-    // it, and a reentrant getOrCreate for this key finds the entry rather
-    // than building a duplicate. The hold precedes the bound: an eviction
-    // there releases another state's folders, which this one may name too.
-    // The bound is a fact about the MAP, complete at insertion: nothing later
-    // (including an observer throwing) can skip it.
+    // [LAW:single-enforcer] Hold, insert, then bound and notify. From the
+    // moment the entry is in the map it is reachable for eviction and
+    // dispose, so no later step can strand a registry outside it, and a
+    // reentrant getOrCreate for this key finds the entry rather than building
+    // a duplicate. The hold precedes the bound: an eviction there releases
+    // another state's folders, which this one may name too. Every step after
+    // the insertion runs whatever another throws, so a throwing log line
+    // cannot skip the bound.
     // [LAW:dataflow-not-control-flow]
     runInAction(() => this.entries.set(key, entry));
-    this.fit(entry);
-    this.log(
-      "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
-    );
-    // An entry just created was drawn by no session.
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    runEach([
+      () => {
+        if (loaded.state !== null)
+          this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      },
+      () => this.fit(entry),
+      () =>
+        this.log(
+          "info",
+          `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+        ),
+      // An entry just created was drawn by no session.
+      () => this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind),
+    ]);
 
     return entry;
   }
@@ -1445,7 +1448,7 @@ export class RenderCache<
     // different owner needs another opening here.
     if (entry !== previous.entry)
       this.viewOf(entry, entry.state, requested, "reload");
-    if (this.deps.editRevision?.(origin, sessionId) == null)
+    if (this.deps.editRevision(origin, sessionId) === null)
       this.dropDraft(sessionId);
     this.observers.onViewChanged?.(sessionId);
   }
@@ -1630,18 +1633,19 @@ export class RenderCache<
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   private accessTo(entry: CacheEntry, state: DslRenderState): ConfigAccess {
-    const held = this.configDelivery(entry.origin);
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(entry.origin));
+    if (held === undefined)
       return {
         kind: "unavailable",
         error: "No current config is held for this session",
       };
     // [LAW:one-source-of-truth] The load of the entry the view draws gates
     // its writes: a draft that loads can save over a committed file that
-    // does not.
-    if (entry.lastError !== null)
-      return { kind: "unavailable", error: entry.lastError };
-    for (const { role, path, content } of held.revision.snapshot.chain)
+    // does not. An entry whose latest load threw holds no load of what it
+    // was offered, whatever it last loaded.
+    const error = entry.fault ?? entry.lastError;
+    if (error !== null) return { kind: "unavailable", error };
+    for (const { role, path, content } of held.snapshot.chain)
       if (content.kind === "unreadable")
         return {
           kind: "unavailable",
@@ -1814,12 +1818,12 @@ export class RenderCache<
 
   private held(origin: RenderOrigin): ConfigRevision {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.configDelivery(origin);
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(origin));
+    if (held === undefined)
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
       );
-    return held.revision;
+    return held;
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
@@ -1894,8 +1898,29 @@ export class RenderCache<
       );
   }
 
+  // [LAW:single-enforcer] `selectState`, entered: a state the selection built
+  // is served, or disposed when serving it throws, so no build is left with
+  // no owner to tear down its watchers and timers.
+  private enter(
+    origin: RenderOrigin,
+    revision: ConfigRevision,
+    previous: SelectedState | null,
+  ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
+    const chosen = this.selectState(origin, revision, previous);
+    const { state } = chosen.selected;
+    if (state === previous?.state) return chosen;
+    try {
+      this.serve(state);
+    } catch (error) {
+      state.registry.dispose();
+      throw error;
+    }
+    return chosen;
+  }
+
   // The cache starts serving `state`: unheld, and not yet retired — and the
-  // compile it carries is the table's for its key.
+  // compile it carries is the table's for its key. Whatever can throw runs
+  // before the cache holds it, so a throw leaves nothing entered.
   private serve(state: DslRenderState): void {
     const held = this.compiles.get(state.compileKey);
     // [LAW:no-silent-failure] compileOf hands a build the table's compile for
@@ -1905,13 +1930,13 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
-    this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
-        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
+        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size + 1}`,
       );
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
+    this.compiles.set(state.compileKey, state.compiled);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -2016,21 +2041,26 @@ export class RenderCache<
     ];
     // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
-    const { loaded, selected } = this.selectState(
-      entry.origin,
-      revision,
-      entry.selected,
-    );
-    const moved = selected.state !== served;
     // [LAW:no-ambient-temporal-coupling] The entry takes the load once the
-    // cache serves its build, so a throw before leaves the entry on the
-    // revision it had, and the next use offering this one loads it again
+    // cache serves its build. A throw before leaves the entry on the revision
+    // it had, holding the throw as its fault, and the next use loads again
     // (`reconcile`).
-    if (moved) this.serve(selected.state);
+    let chosen: ReturnType<typeof this.enter>;
+    try {
+      chosen = this.enter(entry.origin, revision, entry.selected);
+    } catch (error) {
+      runInAction(() => {
+        entry.fault = thrown(error);
+      });
+      throw error;
+    }
+    const { loaded, selected } = chosen;
+    const replaced = selected.state !== served;
     runInAction(() => {
       entry.revision = revision;
       entry.selected = selected;
       entry.lastError = loaded.error;
+      entry.fault = null;
       entry.lastWarnings = loaded.warnings;
     });
     // Every step after the take runs whatever another throws, and their
@@ -2042,9 +2072,9 @@ export class RenderCache<
           this.log("info", pluginLoadLine(loaded.layers, loaded.state));
       },
       () => {
-        if (moved) this.retire(served, "reload", entry);
+        if (replaced) this.retire(served, "reload", entry);
       },
-      ...(moved || loaded.state !== null ? retry : []).map(
+      ...(replaced || loaded.state !== null ? retry : []).map(
         ([session, failure]) =>
           () =>
             this.reopen(entry, session, failure.requestOf),

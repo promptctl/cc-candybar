@@ -11,6 +11,8 @@ import { originKey, type RenderOrigin } from "../../config-hint.js";
 import type { ConfigSelection } from "../../renderer-interface/interface.js";
 import {
   retainsConfig,
+  revisionOf,
+  type ConfigRevision,
   type ConfigSnapshot,
   type LayerRole,
 } from "../../config/config-snapshot.js";
@@ -34,7 +36,6 @@ import {
 import { configQuery } from "../../config/loader/chain-places.js";
 import { resolvedTarget } from "../../utils/atomic-write.js";
 import { directoryEntries } from "../../utils/directory-entry.js";
-import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
@@ -46,10 +47,10 @@ import {
   type PathsWatch,
 } from "../foundations/watch-targets.js";
 
-interface ObservedConfig {
+// [LAW:one-source-of-truth] A revision as the renderer digests it, so the
+// host's "moved" and the renderer's "reload" are one test.
+interface ObservedConfig extends ConfigRevision {
   readonly origin: RenderOrigin;
-  readonly snapshot: ConfigSnapshot;
-  readonly digest: string;
   readonly managedFolders: ReadonlySet<string>;
 }
 
@@ -516,12 +517,7 @@ export class ConfigDiscovery {
         definition.kind === "text" ? [definition.storage] : [],
       ),
     );
-    const observed = {
-      origin,
-      snapshot,
-      digest: digestOf(snapshot),
-      managedFolders,
-    };
+    const observed = { origin, ...revisionOf(snapshot), managedFolders };
     this.observations.set(snapshot, observed);
     return {
       ...observed,

@@ -243,6 +243,7 @@ function rig(): Rig {
   );
   const cache = new RenderCache<SessionSource>(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,

@@ -52,7 +52,9 @@ class EditDraft {
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   private latest: ConfigSnapshot;
-  // [LAW:single-enforcer] Taken only from `latest` and the draft's files.
+  // [LAW:one-source-of-truth] Derived from `latest`, `base` and the draft's
+  // files, and retaken whenever one of them changes: never assigned from
+  // outside the draft.
   #revision: ConfigRevision;
 
   constructor(

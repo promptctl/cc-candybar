@@ -98,6 +98,7 @@ function makeCache(
   cleanups.push(() => watchers.closeAll());
   const cache = new DiscoveringCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

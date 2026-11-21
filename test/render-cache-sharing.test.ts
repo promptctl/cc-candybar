@@ -82,6 +82,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   const gates = bareGates();
   const cache = new RenderCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       locations: locs(),
       gates,

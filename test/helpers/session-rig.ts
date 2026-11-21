@@ -9,6 +9,7 @@ import path from "node:path";
 import {
   RenderCache,
   type RenderCacheObservers,
+  type RenderDeps,
   type SessionView,
 } from "../../src/renderer/render-cache";
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
@@ -146,6 +147,7 @@ export function sessionRig(
     log = () => {},
     observers = {},
     locations = locs(),
+    editRevision = () => null,
   }: {
     readonly daemon?: () => DaemonFacts;
     readonly owners?: Partial<ReturnType<typeof fixedOwners>>;
@@ -153,6 +155,7 @@ export function sessionRig(
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
     readonly locations?: Locations;
+    readonly editRevision?: RenderDeps<SessionSource>["editRevision"];
   } = {},
 ) {
   const providers = withTranscriptLanes({ ...fixedOwners(log), ...owners });
@@ -167,6 +170,7 @@ export function sessionRig(
   });
   const cache = new DiscoveringCache<SessionSource>(
     {
+      editRevision,
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
       locations,

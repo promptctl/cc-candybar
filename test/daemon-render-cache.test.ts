@@ -126,6 +126,7 @@ function makeCache(
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       locations: locations(host),
       gates: bareGates(),
@@ -1492,6 +1493,7 @@ describe("RenderCache close", () => {
     });
     const cache = new RenderCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),
         gates: bareGates(),
@@ -1548,6 +1550,7 @@ describe("RenderCache frames and pins", () => {
     const logs: string[] = [];
     const cache = new RenderCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),
         gates: bareGates(),
@@ -1775,6 +1778,7 @@ describe("RenderCache frames and pins", () => {
     let canOpen = false;
     const cache = new RenderCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         locations: locations(host),
         gates: bareGates(),

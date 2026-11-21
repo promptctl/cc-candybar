@@ -187,8 +187,8 @@ export function mainRenderer(
   };
 
   // [LAW:no-ambient-temporal-coupling] A session waits in `opening` until
-  // its view opens: an opening that throws keeps it there, so its origin's
-  // next `config` turn opens it again.
+  // its view opens, by this or by a request's answer: an opening that throws
+  // keeps it there, so its origin's next `config` turn opens it again.
   const openWaiting = (session: SessionId) => () => {
     openSession(parts, session);
     opening.delete(session);
@@ -290,11 +290,17 @@ export function mainRenderer(
           if (offer === undefined) return;
           configs.delete(key);
           const { origin, config, retained } = offer;
-          if (typeof retained === "object") {
-            parts.renderCache.configure(origin, retained);
-            parts.renderCache.getOrCreate(origin);
-          }
-          parts.renderCache.configure(origin, config);
+          // [LAW:no-ambient-temporal-coupling] The latest offer is recorded
+          // whatever building the retained input threw, since the host does
+          // not send it again.
+          runEach([
+            () => {
+              if (typeof retained !== "object") return;
+              parts.renderCache.configure(origin, retained);
+              parts.renderCache.getOrCreate(origin);
+            },
+            () => parts.renderCache.configure(origin, config),
+          ]);
         };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
@@ -368,10 +374,7 @@ export function mainRenderer(
         // throws reports on each step that needed it and none waits on a
         // resend.
         runEach([
-          () =>
-            runInAction(() =>
-              parts.renderCache.configure(event.origin, event.config),
-            ),
+          () => parts.renderCache.configure(event.origin, event.config),
           () =>
             runEach(
               parts.edits
@@ -389,8 +392,10 @@ export function mainRenderer(
         const current = parts.worldStates.requestOf(
           event.context.hookData.session_id,
         );
-        // The host settles this request's answer in this turn. Config
-        // failure is reported here before a present is minted.
+        // [LAW:no-silent-failure] The host settles this request's answer in
+        // this turn, so it sends one only once the origin's config is held.
+        // Checked here, before a present is minted, because a session drawing
+        // its edit draft loads without asking for the delivery.
         if (!parts.renderCache.holdsConfig(current.requested))
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
@@ -401,6 +406,8 @@ export function mainRenderer(
           event.context.hints,
           record,
         );
+        // Its answer opened the session's view, so it waits for none.
+        opening.delete(current.hookData.session_id);
         effects.push({
           kind: "present",
           id: prepare(delivery),
@@ -871,8 +878,9 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     edits,
     editViewChanged: (sid) => renderCache.refreshEditedView(sid),
     navigation: navigationHistory,
-    // The config a session's last render resolved from — the same entry the
-    // render drew the bar with, so a save compares against the bar the user saw.
+    // The config of the entry the session's renders draw from, brought up to
+    // what was offered to it (`getOrCreate`), so a save compares against the
+    // config the bar draws next, never one a newer offer replaced.
     configFor: (origin, sid) =>
       renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.

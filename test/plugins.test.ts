@@ -956,6 +956,7 @@ describe("an installed plugin", () => {
     });
     const cache = new DiscoveringCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
@@ -1610,6 +1611,7 @@ describe("an installed plugin", () => {
     });
     const cache = new DiscoveringCache(
       {
+        editRevision: () => null,
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),

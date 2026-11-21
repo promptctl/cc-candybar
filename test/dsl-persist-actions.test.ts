@@ -832,6 +832,7 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new DiscoveringCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
