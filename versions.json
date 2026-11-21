@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-925",
-      "ref": "refs/pull/925/merge",
-      "sha": "06af0036646db3110f3d85c3c248d4119307e120",
-      "timestamp": "2026-11-21T02:25:52.701Z",
-      "commits": [
-        {
-          "sha": "06af0036646db3110f3d85c3c248d4119307e120",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T02:24:42Z",
-          "message": "Merge 49c2b595e9d320ccf230180f6fbaa379fa79ceee into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
-        },
-        {
-          "sha": "49c2b595e9d320ccf230180f6fbaa379fa79ceee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:24:30-07:00",
-          "message": "fix(daemon): a failed due turn is said once, and every exit logs early throws\n\nThe wake already says a run of failed due turns on every bar, so the host no\nlonger hands the same failure to the clock as well. Shutdown is the one exit,\nso it hands the clock's queued throws to the log on every early exit, not only\na refused boot. A repo's refresh task is named once.\n"
-        },
-        {
-          "sha": "48b1530c648a6186fe86c26727c2ca615fbcb308",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:10:25-07:00",
-          "message": "fix(daemon): a held slot owns what recurs while it holds\n\nA held slot counts what recurs while it holds an event, and hands that to\nits owner when it lets the event go: at its hold's end, at an answer past the\nhold, and at disposal. The daemon's task errors are just slots, its close\nflushes nothing by hand, and one formatter writes a throw's words for the bar\nand its detail for the log.\n\n`detach` settles a sync throw as it settles a rejection, so a task's throw\nnever reaches the code that detached it, whatever the clock reports to.\n`failed` is the one way to report a failure an owner holds as a value.\n\nA trailing edge reports each pass's throw as it happens, so a loop that\nchanges keep alive still shows its failures. Config discovery reports an\norigin it could not observe before it publishes. A renderer's failed due turn\nreaches every bar. A wait begun closed reports a sync throw from its work.\n"
-        },
-        {
-          "sha": "2e3e7cb150231763c97656448b64658214a77811",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T18:44:18-07:00",
-          "message": "fix(daemon): a task's held error counts its throws and shows them once a hold\n\nA task's error is identified by its task, so the daemon no longer compares a\nthrow's message against a copy of the last one. The task's held event is the\none record of what its error says. A throw while the error is held is\ncounted, whatever it says. When the hold ends with throws counted, the latest\ncause is held and logged once with their count, so a task failing on every\ntick moves bars and the log once a hold.\n\nA throw keeps its own words: a watch's holders each run as a clock task named\nfor the watch, and a wait's work that fails after the wait ended is reported\nas the wait's task after its wait, with no wrapper hiding the cause.\n\nThe inbox's taker is a state: a second attach is refused, and the daemon's\nclose and a refused boot hand it to the log. Taking a throw never throws\nback into the task. A disposed held slot holds nothing.\n\nA wait's work that throws before returning fails the wait at once again.\nConfig discovery reports an origin it could not observe only after the batch\nhas published what its siblings observed. A bar pane's apply is named for\nthe pane. The daemon's clock has one builder.\n"
-        },
-        {
-          "sha": "94b09e0d27ba58e2066e6df9c56f8f3c0bbf155b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T18:19:06-07:00",
-          "message": "fix(daemon): every unawaited settle is a named clock task\n\nThe daemon takes only a reporting clock, which carries the inbox its task\nthrows land in, so the clock and the bar's error list cannot be wired apart.\nA throw repeated with the same message stays quiet, and a new message is\nlogged once and joins the held error.\n\nWork that settled through a bare promise chain now runs as a named clock\ntask: a bar pane's effect, each keyed queue's drain, a wait whose work fails\nafter its deadline, and a launch's after-exit steps. A throw past their own\nhandlers reaches every bar instead of vanishing.\n\nEach keyed source's refresh event names how many holders share it.\n"
-        },
-        {
-          "sha": "1e71b2851f8bdf1abfd12c1691bb02091565b1a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T15:39:40-07:00",
-          "message": "fix(daemon): every clock task's throw reaches the bar\n\nA clock is now built only over a reporter of what its tasks throw\n(`clockOver`), and only the process world builds one over the machine's\nbare timers, which lint fences to src/host.ts. Every task is named.\n\nThe daemon's reporter holds one error per task on every bar, logs its\nfull detail once, and counts every throw in stats. A held throw refuses\nrecordings, since its message may carry a command's output.\n\nFire-and-forget work across the daemon (git refresh, PR lookup, watch\ndelivery, retires, log flush, launches, config discovery, the binary\nwatch) runs as clock tasks instead of `void`/log-only catches, and typed\nlint refuses a floating promise in src. Continuations that must run\nwhatever a task throws sit in `finally`.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
-      "timestamp": "2026-11-20T11:26:16.157Z",
+      "sha": "1c9001abf07cdf49706032b66a888807190c0a6b",
+      "timestamp": "2026-11-21T02:34:50.061Z",
       "commits": [
         {
-          "sha": "684638b5c514ddd2ee5da5cf1540983a098443ce",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-20T11:25:02Z",
-          "message": "chore(release): set `package.json` to 1.236.2\n\n## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)\n\n### Bug Fixes\n\n* **sources:** distinguish invalid inputs from typed empty values ([#897](https://github.com/promptctl/cc-candybar/issues/897)) ([c957046](https://github.com/promptctl/cc-candybar/commit/c957046c1280833322d322ac37f7edd30d094ff7))\n"
+          "sha": "1c9001abf07cdf49706032b66a888807190c0a6b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:33:47-07:00",
+          "message": "fix(daemon): every clock task's throw reaches the bar (#925)\n\n* fix(daemon): every clock task's throw reaches the bar\n\nA clock is now built only over a reporter of what its tasks throw\n(`clockOver`), and only the process world builds one over the machine's\nbare timers, which lint fences to src/host.ts. Every task is named.\n\nThe daemon's reporter holds one error per task on every bar, logs its\nfull detail once, and counts every throw in stats. A held throw refuses\nrecordings, since its message may carry a command's output.\n\nFire-and-forget work across the daemon (git refresh, PR lookup, watch\ndelivery, retires, log flush, launches, config discovery, the binary\nwatch) runs as clock tasks instead of `void`/log-only catches, and typed\nlint refuses a floating promise in src. Continuations that must run\nwhatever a task throws sit in `finally`.\n\n* fix(daemon): every unawaited settle is a named clock task\n\nThe daemon takes only a reporting clock, which carries the inbox its task\nthrows land in, so the clock and the bar's error list cannot be wired apart.\nA throw repeated with the same message stays quiet, and a new message is\nlogged once and joins the held error.\n\nWork that settled through a bare promise chain now runs as a named clock\ntask: a bar pane's effect, each keyed queue's drain, a wait whose work fails\nafter its deadline, and a launch's after-exit steps. A throw past their own\nhandlers reaches every bar instead of vanishing.\n\nEach keyed source's refresh event names how many holders share it.\n\n* fix(daemon): a task's held error counts its throws and shows them once a hold\n\nA task's error is identified by its task, so the daemon no longer compares a\nthrow's message against a copy of the last one. The task's held event is the\none record of what its error says. A throw while the error is held is\ncounted, whatever it says. When the hold ends with throws counted, the latest\ncause is held and logged once with their count, so a task failing on every\ntick moves bars and the log once a hold.\n\nA throw keeps its own words: a watch's holders each run as a clock task named\nfor the watch, and a wait's work that fails after the wait ended is reported\nas the wait's task after its wait, with no wrapper hiding the cause.\n\nThe inbox's taker is a state: a second attach is refused, and the daemon's\nclose and a refused boot hand it to the log. Taking a throw never throws\nback into the task. A disposed held slot holds nothing.\n\nA wait's work that throws before returning fails the wait at once again.\nConfig discovery reports an origin it could not observe only after the batch\nhas published what its siblings observed. A bar pane's apply is named for\nthe pane. The daemon's clock has one builder.\n\n* fix(daemon): a held slot owns what recurs while it holds\n\nA held slot counts what recurs while it holds an event, and hands that to\nits owner when it lets the event go: at its hold's end, at an answer past the\nhold, and at disposal. The daemon's task errors are just slots, its close\nflushes nothing by hand, and one formatter writes a throw's words for the bar\nand its detail for the log.\n\n`detach` settles a sync throw as it settles a rejection, so a task's throw\nnever reaches the code that detached it, whatever the clock reports to.\n`failed` is the one way to report a failure an owner holds as a value.\n\nA trailing edge reports each pass's throw as it happens, so a loop that\nchanges keep alive still shows its failures. Config discovery reports an\norigin it could not observe before it publishes. A renderer's failed due turn\nreaches every bar. A wait begun closed reports a sync throw from its work.\n\n* fix(daemon): a failed due turn is said once, and every exit logs early throws\n\nThe wake already says a run of failed due turns on every bar, so the host no\nlonger hands the same failure to the clock as well. Shutdown is the one exit,\nso it hands the clock's queued throws to the log on every early exit, not only\na refused boot. A repo's refresh task is named once."
         }
       ]
     },
