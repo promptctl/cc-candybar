@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-930",
+      "ref": "refs/pull/930/merge",
+      "sha": "075bd1a5e971d7e00ca4a0edd0fe707536c2f2fb",
+      "timestamp": "2026-11-21T05:08:35.741Z",
+      "commits": [
+        {
+          "sha": "075bd1a5e971d7e00ca4a0edd0fe707536c2f2fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:07:25-07:00",
+          "message": "Merge 346dad69ac641d9d2cecc8119016715180e622b6 into 75d266afc00407c4ef75d5746c8e403b1348e78c\n"
+        },
+        {
+          "sha": "346dad69ac641d9d2cecc8119016715180e622b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:06:41-07:00",
+          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "75d266afc00407c4ef75d5746c8e403b1348e78c",
