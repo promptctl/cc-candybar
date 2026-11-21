@@ -180,7 +180,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const base = testVerbContext(sessionState, history, undefined, durable.host);
   const context = bookedContext(sessionState, sessionId)!;
   const draftText = () =>
-    base.edits.snapshot(context.durable.origin, sessionId)?.chain
+    base.edits.revision(context.durable.origin, sessionId)?.snapshot.chain
       .find((layer) => layer.role === "user")?.content;
   let loaded = src;
   let authored = config;

@@ -78,6 +78,7 @@ function setUp() {
   const reloads: Array<readonly string[]> = [];
   const cache = new DiscoveringCache(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

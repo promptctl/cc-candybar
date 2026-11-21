@@ -68,6 +68,7 @@ function rig(
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
     {
+      editRevision: () => null,
       clock: opts.clock ?? systemTimekeeper,
       locations: locations(host),
       gates: bareGates(),

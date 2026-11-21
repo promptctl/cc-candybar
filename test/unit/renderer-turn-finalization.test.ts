@@ -62,6 +62,7 @@ function rig(
     }
   })(
     {
+      editRevision: () => null,
       clock,
       locations: {
         home: "/home",

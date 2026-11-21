@@ -76,11 +76,7 @@ import {
   serializeSegmentCells,
 } from "./debug.js";
 import { earliestOf, type Tick } from "../utils/instant.js";
-import {
-  CrossedFailure,
-  rendererFailureOf,
-  type Failure,
-} from "../daemon/foundations/verb-error.js";
+import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import {
   isCommand,
   type Command,
@@ -190,18 +186,12 @@ export function mainRenderer(
     return ready;
   };
 
-  const configForTurn = (origin: RenderOrigin) => {
-    const delivery = parts.renderCache.configDelivery(origin);
-    if (delivery.kind === "failed") throw new CrossedFailure(delivery.failure);
-    return delivery;
-  };
-
-  const failClicks = (
-    clicks: readonly ParkedClick[],
-    failure: Failure,
-  ): void => {
-    for (const { session } of clicks)
-      holdClickError(parts.sessionState, session, failure.message, time.at);
+  // [LAW:no-ambient-temporal-coupling] A session waits in `opening` until
+  // its view opens, by this or by a request's answer: an opening that throws
+  // keeps it there, so its origin's next `config` turn opens it again.
+  const openWaiting = (session: SessionId) => () => {
+    openSession(parts, session);
+    opening.delete(session);
   };
 
   const resume = (
@@ -300,27 +290,37 @@ export function mainRenderer(
           if (offer === undefined) return;
           configs.delete(key);
           const { origin, config, retained } = offer;
-          if (typeof retained === "object") {
-            parts.renderCache.configure(origin, retained);
-            parts.renderCache.getOrCreate(origin);
-          }
-          parts.renderCache.configure(origin, config);
+          // [LAW:no-ambient-temporal-coupling] The latest offer is recorded
+          // whatever building the retained input threw, since the host does
+          // not send it again.
+          runEach([
+            () => {
+              if (typeof retained !== "object") return;
+              parts.renderCache.configure(origin, retained);
+              parts.renderCache.getOrCreate(origin);
+            },
+            () => parts.renderCache.configure(origin, config),
+          ]);
         };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
-        // each whatever another's opening, or a feed, threw.
+        // each whatever another's opening, its offer, or a feed, threw.
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(({ context, worldState }) => () => {
-            offered(context.requested);
-            notify(
-              { kind: "context", context, worldState },
-              record,
-              effects,
-              frames,
-            );
-          }),
+          // A session's offer and its opening are steps of their own: an
+          // offer that throws still records the latest config, and the
+          // session's context still opens over it.
+          ...event.sessions.flatMap(({ context, worldState }) => [
+            () => offered(context.requested),
+            () =>
+              notify(
+                { kind: "context", context, worldState },
+                record,
+                effects,
+                frames,
+              ),
+          ]),
           // A live session gets its cache entry before idle entries warm,
           // so they cannot take the budget a pinned view needs.
           () =>
@@ -352,64 +352,40 @@ export function mainRenderer(
               originKey(previous.durable.origin) !== originKey(origin))
           )
             parts.renderCache.retireSession(session);
-          const delivery = parts.renderCache.configDelivery(origin);
-          if (delivery.kind === "failed") {
-            opening.delete(session);
-            failClicks(
-              takeClicks((click) => click.session === session),
-              delivery.failure,
-            );
-            throw new CrossedFailure(delivery.failure);
-          }
-          if (delivery.kind === "pending") {
-            opening.add(session);
+          opening.add(session);
+          if (!parts.renderCache.holdsConfig(origin)) {
             record.push(["parked", "context"]);
             return;
           }
-          opening.delete(session);
           const ready = takeClicks((click) => click.session === session);
-          runEach([
-            () => openSession(parts, session),
-            ...resume(ready, effects, record),
-          ]);
+          runEach([openWaiting(session), ...resume(ready, effects, record)]);
         });
         return;
       }
       case "config": {
         const key = originKey(event.origin);
-        const recovering =
-          parts.renderCache.configDelivery(event.origin).kind === "failed";
-        const sessions = (
-          recovering ? parts.worldStates.sessions() : [...opening]
-        ).filter(
+        const sessions = [...opening].filter(
           (session) =>
             originKey(parts.worldStates.requestOf(session).requested) === key,
         );
-        for (const session of sessions) opening.delete(session);
         const ready = takeClicks(
           (click) => originKey(parkedContext(click).durable.origin) === key,
         );
-        // [LAW:no-ambient-temporal-coupling] Waiters are detached before
-        // configuration. A failed load settles them and a successful load
-        // runs their intent directly, so neither can requeue the same click.
-        runInAction(() => {
-          try {
-            parts.renderCache.configure(event.origin, event.config);
-          } catch (thrown) {
-            const failure = rendererFailureOf(thrown);
-            parts.renderCache.rejectConfig(event.origin, failure);
-            failClicks(ready, failure);
-            throw new CrossedFailure(failure);
-          }
-        });
+        // [LAW:no-ambient-temporal-coupling] Waiting clicks are detached
+        // before configuration, so none can requeue. Each step runs whatever
+        // another throws: configuring records the offer before it loads, and
+        // every later step offers it to the entry again, so a load that
+        // throws reports on each step that needed it and none waits on a
+        // resend.
         runEach([
+          () => parts.renderCache.configure(event.origin, event.config),
           () =>
             runEach(
               parts.edits
                 .configured(event.origin, event.config)
                 .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
             ),
-          ...sessions.map((session) => () => openSession(parts, session)),
+          ...sessions.map(openWaiting),
           ...resume(ready, effects, record),
         ]);
         return;
@@ -420,9 +396,11 @@ export function mainRenderer(
         const current = parts.worldStates.requestOf(
           event.context.hookData.session_id,
         );
-        // The host settles this request's answer in this turn. Config
-        // failure is reported here before a present is minted.
-        if (configForTurn(current.requested).kind === "pending")
+        // [LAW:no-silent-failure] The host settles this request's answer in
+        // this turn, so it sends one only once the origin's config is held.
+        // Checked here, before a present is minted, because a session drawing
+        // its edit draft loads without asking for the delivery.
+        if (!parts.renderCache.holdsConfig(current.requested))
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
@@ -432,6 +410,8 @@ export function mainRenderer(
           event.context.hints,
           record,
         );
+        // Its answer opened the session's view, so it waits for none.
+        opening.delete(current.hookData.session_id);
         effects.push({
           kind: "present",
           id: prepare(delivery),
@@ -485,7 +465,7 @@ export function mainRenderer(
           click.scope === "session" ? (live ?? event.context) : null;
         if (context !== null) {
           const { origin } = context.durable;
-          if (configForTurn(origin).kind === "pending") {
+          if (!parts.renderCache.holdsConfig(origin)) {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             runInAction(() =>
@@ -550,13 +530,12 @@ export function mainRenderer(
         if (editing) {
           const { requested } = parts.worldStates.requestOf(session);
           // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
-          // through a failed delivery. Keep its last committed lane switches
-          // until the host can supply the committed config again.
-          const delivery = parts.renderCache.configDelivery(requested);
+          // while its committed config is not held. Keep its last committed
+          // lane switches until the host supplies that config again.
+          const delivered = parts.renderCache.holdsConfig(requested);
           const state = parts.renderCache.committedState(requested);
-          if (delivery.kind !== "received" || state === null) {
-            if (delivery.kind === "received")
-              unprepared.set(originKey(requested), requested);
+          if (!delivered || state === null) {
+            if (delivered) unprepared.set(originKey(requested), requested);
             const held = subscriptions.lanes[session];
             if (held !== undefined) lanes[session] = held;
             continue;
@@ -805,7 +784,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       locations: inputs.locations,
       region: inputs.region,
       sessionState: edits.view,
-      editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
+      editRevision: (origin, sid) => edits.revision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       gates,
@@ -903,8 +882,9 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     edits,
     editViewChanged: (sid) => renderCache.refreshEditedView(sid),
     navigation: navigationHistory,
-    // The config a session's last render resolved from — the same entry the
-    // render drew the bar with, so a save compares against the bar the user saw.
+    // The config of the entry the session's renders draw from, brought up to
+    // what was offered to it (`getOrCreate`), so a save compares against the
+    // config the bar draws next, never one a newer offer replaced.
     configFor: (origin, sid) =>
       renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.

@@ -238,6 +238,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const served = collected({ owners: providers, log }, cleanups);
   const cache = new DiscoveringCache<SessionSource>(
     {
+      editRevision: () => null,
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

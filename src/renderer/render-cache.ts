@@ -17,15 +17,13 @@ import type {
   Subscriptions,
 } from "../renderer-interface/interface.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import {
-  CrossedFailure,
-  type Failure,
-} from "../daemon/foundations/verb-error.js";
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
   layerForRole,
   retainsConfig,
+  revisionOf,
   writable,
+  type ConfigRevision,
   type ConfigSnapshot,
   type RepoQuestion,
 } from "../config/config-snapshot.js";
@@ -59,6 +57,7 @@ import {
   type Registration,
 } from "../dsl/render.js";
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
+import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { deriveActionGates, type Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
@@ -77,6 +76,7 @@ import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { Locations } from "../config/loader/chain-places.js";
 import { digestOf, type Projection } from "../utils/plain.js";
+import { runEach } from "../utils/run-each.js";
 import { pendingOf } from "../utils/outcome.js";
 import {
   pluginDataVar,
@@ -161,10 +161,11 @@ export interface RenderDeps<
   // (StateDeps).
   locations: Locations;
   sessionState: SessionStateRW;
-  editSnapshot?: (
+  // The session's open edit draft at `origin`, or null when it edits none.
+  editRevision: (
     origin: RenderOrigin,
     session: SessionId,
-  ) => ConfigSnapshot | null;
+  ) => ConfigRevision | null;
   // The gates a load builds against (StateDeps).
   gates: Gates;
   // What a view draws from (src/renderer/session-source.ts); a test drawing no
@@ -237,7 +238,7 @@ export interface RenderCacheObservers {
 export type ReloadedEntry = Readonly<
   Pick<
     CacheEntry,
-    "origin" | "configLayers" | "snapshot" | "lastError" | "lastWarnings"
+    "origin" | "configLayers" | "revision" | "lastError" | "lastWarnings"
   >
 > & { readonly state: Readonly<Pick<DslRenderState, "config">> };
 
@@ -401,7 +402,7 @@ export function configLoadedLine(
   cause: LoadCause,
   settled: Settled,
 ): string {
-  const { repo } = entry.snapshot;
+  const { repo } = entry.revision.snapshot;
   const { projectDir, cwd } = entry.origin;
   return `config loaded projectDir=${valueOf(projectDir)} cwd=${valueOf(cwd)} cause=${cause.kind} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo === null ? "-" : valueOf(`${repo.standing}:${repo.dir}`)} unproven=${repo?.unproven == null ? "-" : JSON.stringify(repo.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
@@ -412,22 +413,6 @@ export function configDisposeLine(
 ): string {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
-
-// A snapshot the host handed in, digested once as it arrived: what an entry
-// loaded from it is compared by.
-interface HeldSnapshot {
-  readonly snapshot: ConfigSnapshot;
-  readonly digest: string;
-}
-
-// [LAW:types-are-the-program] A rejected delivery carries its classified
-// failure. A compiled entry keeps its last attempted input for diagnostics.
-type ArrivedConfig =
-  | ({ readonly kind: "received" } & HeldSnapshot)
-  | { readonly kind: "failed"; readonly failure: Failure };
-
-const CONFIG_PENDING = { kind: "pending" } as const;
-export type ConfigDelivery = ArrivedConfig | typeof CONFIG_PENDING;
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
 // the last error AND last warning from a reload attempt. A state is only
@@ -454,14 +439,18 @@ export interface CacheEntry {
   readonly origin: RenderOrigin;
   // The file paths in the most recent attempt, including a failed load.
   readonly configLayers: readonly string[];
-  // [LAW:one-source-of-truth] The snapshot the last load read, and its
-  // digest: a `config` turn whose snapshot digests alike reloads nothing.
-  // The bar's repository question and what the config's watch cannot hear
-  // are read off it.
-  snapshot: ConfigSnapshot;
-  digest: string;
+  // [LAW:one-source-of-truth] The revision the last load taken read: an
+  // offer that digests alike reloads nothing while no fault stands. The bar's repository question and
+  // what the config's watch cannot hear are read off it.
+  revision: ConfigRevision;
   selected: SelectedState;
   lastError: string | null;
+  // [LAW:no-silent-failure] What the latest load threw before the entry took
+  // it, or null once one is taken. The entry serves what it had, shows the
+  // throw to the frames and controls of every session drawing it, and loads
+  // again on its next use (`reconcile`). A write that reads no config does
+  // not read the load either, so it still lands on the host's offer.
+  fault: string | null;
   lastWarnings: readonly string[];
   readonly state: DslRenderState;
 }
@@ -1161,9 +1150,12 @@ export class RenderCache<
   private readonly entries = observable.map<string, CacheEntry>(undefined, {
     deep: false,
   });
-  // [LAW:one-source-of-truth] The latest delivery of each retained origin
-  // gates admission and writes, including controls on an already live view.
-  private readonly configDeliveries = observable.map<string, ArrivedConfig>(
+  // [LAW:one-source-of-truth] What the host last offered for each retained
+  // origin, digested once as it arrived; an origin absent here is pending. It
+  // records the offer and nothing about how a load of it went: that is each
+  // entry's own (`reconcile`). It gates admission and writes, including
+  // controls on an already live view.
+  private readonly configDeliveries = observable.map<string, ConfigRevision>(
     undefined,
     { deep: false },
   );
@@ -1233,48 +1225,49 @@ export class RenderCache<
     this.observers = opts.observers ?? {};
   }
 
-  // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
-  // now. Its entry, when it has one, reloads from it unless it digests as the
-  // one the entry last loaded, and a reload whose load inputs did not move
-  // keeps the state it serves (`loadOrigin`).
+  // A `config` turn: what discovery found at `origin` now. The offer is
+  // recorded before its entry, when it has one, reconciles with it, so a load
+  // that throws leaves the offer for the next event that uses the entry.
   configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = {
-      kind: "received",
-      snapshot,
-      digest: digestOf(snapshot),
-    } as const;
+    const revision = revisionOf(snapshot);
     runInAction(() => {
-      const recovering = this.configDeliveries.get(key)?.kind === "failed";
-      this.configDeliveries.set(key, held);
+      this.configDeliveries.set(key, revision);
       const entry = this.entries.get(key);
-      // [LAW:no-ambient-temporal-coupling] A rejected application may have
-      // reached the entry before it threw. Reapply it when delivery resumes.
-      if (entry !== undefined && (recovering || entry.digest !== held.digest))
-        this.reloadInto(entry, held, { kind: "config" });
+      if (entry !== undefined)
+        this.reconcile(entry, revision, { kind: "config" });
     });
   }
 
-  rejectConfig(origin: RenderOrigin, failure: Failure): void {
-    if (this.closed) return;
-    runInAction(() => {
-      this.configDeliveries.set(originKey(origin), { kind: "failed", failure });
-    });
-  }
-
-  configDelivery(origin: RenderOrigin): ConfigDelivery {
-    return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
+  // [LAW:single-enforcer] The one test of whether an entry loads: the
+  // revision offered to it (its session's draft, or else the host's
+  // delivery) is not the one it holds a load of: it digests differently, or
+  // the entry's latest load threw. Every event that draws or reads config
+  // through an entry (`getOrCreate`) offers it, so an entry a throwing load
+  // left behind catches up on the next such event, with no resend from the
+  // host. Frames and the lane declaration read what the entry holds and
+  // offer nothing. A reload whose load inputs did not move keeps the state
+  // it serves (`loadOrigin`).
+  private reconcile(
+    entry: CacheEntry,
+    offered: ConfigRevision,
+    cause: LoadCause,
+  ): void {
+    if (entry.fault !== null || entry.revision.digest !== offered.digest)
+      this.reloadInto(entry, offered, cause);
   }
 
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
   holdsConfig(origin: RenderOrigin): boolean {
-    return this.configDelivery(origin).kind === "received";
+    return this.configDeliveries.has(originKey(origin));
   }
 
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
-  // `originKey`: every other one goes, as the host lets its origin go.
+  // `originKey`: every other one goes, as the host lets its origin go. The
+  // renderer's declaration names every origin an entry loads from
+  // (`origins`), so an entry is never left without its delivery.
   prune(keep: ReadonlySet<string>): void {
     runInAction(() => {
       for (const key of [...this.configDeliveries.keys()])
@@ -1310,11 +1303,13 @@ export class RenderCache<
     // [LAW:one-source-of-truth] The shared entry is still keyed by origin.
     // An active draft branches that input for one session inside the renderer.
     let key = originKey(origin);
-    let draft: ConfigSnapshot | null = null;
+    let draft: ConfigRevision | null = null;
     if (editing !== undefined) {
-      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
+      draft = this.deps.editRevision(origin, editing);
       if (draft !== null) key = draftKey(editing);
     }
+    const offered = draft ?? this.held(origin);
+    const cause: LoadCause = { kind: draft === null ? "config" : "edit" };
     const existing = this.entries.get(key);
     if (
       existing !== undefined &&
@@ -1324,33 +1319,22 @@ export class RenderCache<
         this.entries.delete(key);
         this.entries.set(key, existing);
       });
-      if (draft !== null && existing.snapshot !== draft)
-        this.reloadInto(
-          existing,
-          { snapshot: draft, digest: digestOf(draft) },
-          { kind: "edit" },
-        );
+      this.reconcile(existing, offered, cause);
       return existing;
     }
     if (existing !== undefined) this.drop(key, existing, "evict");
 
-    const held =
-      draft === null
-        ? this.held(origin)
-        : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd } = origin;
-    const { loaded, selected } = this.selectState(origin, held, null);
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+    const { loaded, selected } = this.enter(origin, offered, null);
     const entry: CacheEntry = {
       origin,
       get configLayers() {
-        return configPaths(this.snapshot);
+        return configPaths(this.revision.snapshot);
       },
-      snapshot: held.snapshot,
-      digest: held.digest,
+      revision: offered,
       selected,
       lastError: loaded.error,
+      fault: null,
       lastWarnings: loaded.warnings,
       get state() {
         return this.selected.state;
@@ -1359,27 +1343,36 @@ export class RenderCache<
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
     makeObservable(entry, {
+      revision: observableRef,
       selected: observableRef,
       lastError: observable,
+      fault: observable,
+      lastWarnings: observableRef,
     });
-    this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
-    // From the moment the entry is in the map it is reachable for eviction
-    // and dispose, so a throwing observer cannot strand a registry outside
-    // it, and a reentrant getOrCreate for this key finds the entry rather
-    // than building a duplicate. The hold precedes the bound: an eviction
-    // there releases another state's folders, which this one may name too.
-    // The bound is a fact about the MAP, complete at insertion: nothing later
-    // (including an observer throwing) can skip it.
+    // [LAW:single-enforcer] Hold, insert, then bound and notify. From the
+    // moment the entry is in the map it is reachable for eviction and
+    // dispose, so no later step can strand a registry outside it, and a
+    // reentrant getOrCreate for this key finds the entry rather than building
+    // a duplicate. The hold precedes the bound: an eviction there releases
+    // another state's folders, which this one may name too. Every step after
+    // the insertion runs whatever another throws, so a throwing log line
+    // cannot skip the bound.
     // [LAW:dataflow-not-control-flow]
     runInAction(() => this.entries.set(key, entry));
-    this.fit(entry);
-    this.log(
-      "info",
-      `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
-    );
-    // An entry just created was drawn by no session.
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    runEach([
+      () => {
+        if (loaded.state !== null)
+          this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      },
+      () => this.fit(entry),
+      () =>
+        this.log(
+          "info",
+          `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+        ),
+      // An entry just created was drawn by no session.
+      () => this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind),
+    ]);
 
     return entry;
   }
@@ -1457,7 +1450,7 @@ export class RenderCache<
     // different owner needs another opening here.
     if (entry !== previous.entry)
       this.viewOf(entry, entry.state, requested, "reload");
-    if (this.deps.editSnapshot?.(origin, sessionId) == null)
+    if (this.deps.editRevision(origin, sessionId) === null)
       this.dropDraft(sessionId);
     this.observers.onViewChanged?.(sessionId);
   }
@@ -1642,17 +1635,18 @@ export class RenderCache<
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   private accessTo(entry: CacheEntry, state: DslRenderState): ConfigAccess {
-    const held = this.configDelivery(entry.origin);
-    if (held.kind === "failed")
-      return { kind: "unavailable", error: held.failure.message };
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(entry.origin));
+    if (held === undefined)
       return {
         kind: "unavailable",
         error: "No current config is held for this session",
       };
-    const key = originKey(entry.origin);
-    const error = entry.lastError ?? this.entries.get(key)?.lastError;
-    if (error != null) return { kind: "unavailable", error };
+    // [LAW:one-source-of-truth] The load of the entry the view draws gates
+    // its writes: a draft that loads can save over a committed file that
+    // does not. An entry whose latest load threw holds no load of what it
+    // was offered, whatever it last loaded.
+    const error = entry.fault ?? entry.lastError;
+    if (error !== null) return { kind: "unavailable", error };
     for (const { role, path, content } of held.snapshot.chain)
       if (content.kind === "unreadable")
         return {
@@ -1778,7 +1772,7 @@ export class RenderCache<
   // built after would hold timers and watchers nothing tears down.
   private selectState(
     origin: RenderOrigin,
-    { snapshot, digest }: HeldSnapshot,
+    { snapshot, digest }: ConfigRevision,
     previous: SelectedState | null,
   ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
     if (this.closed) throw new Error("render cache used after close");
@@ -1824,11 +1818,10 @@ export class RenderCache<
     return this.held(origin).snapshot;
   }
 
-  private held(origin: RenderOrigin): HeldSnapshot {
+  private held(origin: RenderOrigin): ConfigRevision {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.configDelivery(origin);
-    if (held.kind === "failed") throw new CrossedFailure(held.failure);
-    if (held.kind === "pending")
+    const held = this.configDeliveries.get(originKey(origin));
+    if (held === undefined)
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
       );
@@ -1907,8 +1900,29 @@ export class RenderCache<
       );
   }
 
+  // [LAW:single-enforcer] `selectState`, entered: a state the selection built
+  // is served, or disposed when serving it throws, so no build is left with
+  // no owner to tear down its watchers and timers.
+  private enter(
+    origin: RenderOrigin,
+    revision: ConfigRevision,
+    previous: SelectedState | null,
+  ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
+    const chosen = this.selectState(origin, revision, previous);
+    const { state } = chosen.selected;
+    if (state === previous?.state) return chosen;
+    try {
+      this.serve(state);
+    } catch (error) {
+      state.registry.dispose();
+      throw error;
+    }
+    return chosen;
+  }
+
   // The cache starts serving `state`: unheld, and not yet retired — and the
-  // compile it carries is the table's for its key.
+  // compile it carries is the table's for its key. Whatever can throw runs
+  // before the cache holds it, so a throw leaves nothing entered.
   private serve(state: DslRenderState): void {
     const held = this.compiles.get(state.compileKey);
     // [LAW:no-silent-failure] compileOf hands a build the table's compile for
@@ -1918,13 +1932,13 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
-    this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
-        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
+        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size + 1}`,
       );
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
+    this.compiles.set(state.compileKey, state.compiled);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -2015,7 +2029,7 @@ export class RenderCache<
   // arm the load took.
   private reloadInto(
     entry: CacheEntry,
-    held: HeldSnapshot,
+    revision: ConfigRevision,
     cause: LoadCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] Retry only the failures held before
@@ -2029,31 +2043,58 @@ export class RenderCache<
     ];
     // A reload whose build inputs did not move keeps its state and live views.
     const served = entry.state;
-    const { loaded, selected } = this.selectState(
-      entry.origin,
-      held,
-      entry.selected,
-    );
-    entry.snapshot = held.snapshot;
-    entry.digest = held.digest;
-    entry.lastWarnings = loaded.warnings;
-    runInAction(() => {
-      entry.lastError = loaded.error;
-      entry.selected = selected;
-    });
-    if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (selected.state !== served) {
-      this.serve(selected.state);
-      this.retire(served, "reload", entry);
+    // [LAW:no-ambient-temporal-coupling] The entry takes the load once the
+    // cache serves its build. A throw before leaves the entry on the revision
+    // it had, holding the throw as its fault, and the next use loads again
+    // (`reconcile`).
+    let chosen: ReturnType<typeof this.enter>;
+    try {
+      chosen = this.enter(entry.origin, revision, entry.selected);
+    } catch (error) {
+      // [LAW:one-source-of-truth] The bar says what the turn's failure says.
+      const fault = rendererFailureOf(error).message;
+      runInAction(() => {
+        entry.fault = fault;
+      });
+      // [LAW:nothing-unseen] Every attempt that throws is a line, so a fault
+      // that persists shows how often it was retried and when it cleared.
+      this.log(
+        "error",
+        `config load threw projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${cause.kind} error=${JSON.stringify(fault)}`,
+      );
+      throw error;
     }
-    if (selected.state !== served || loaded.state !== null)
-      for (const [session, failure] of retry)
-        this.reopen(entry, session, failure.requestOf);
-    // A reload can move the entry onto a compile no other entry carries, and
-    // charges the views it reopened, once their predecessors are retired.
-    this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
+    const { loaded, selected } = chosen;
+    const replaced = selected.state !== served;
+    runInAction(() => {
+      entry.revision = revision;
+      entry.selected = selected;
+      entry.lastError = loaded.error;
+      entry.fault = null;
+      entry.lastWarnings = loaded.warnings;
+    });
+    // Every step after the take runs whatever another throws, and their
+    // throws are raised together: a step one throw skipped would stay
+    // skipped, since the entry's revision says the load is done.
+    runEach([
+      () => {
+        if (loaded.state !== null)
+          this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      },
+      () => {
+        if (replaced) this.retire(served, "reload", entry);
+      },
+      ...(replaced || loaded.state !== null ? retry : []).map(
+        ([session, failure]) =>
+          () =>
+            this.reopen(entry, session, failure.requestOf),
+      ),
+      // A reload can move the entry onto a compile no other entry carries,
+      // and charges the views it reopened, once their predecessors are
+      // retired.
+      () => this.fit(entry),
+      () => this.observers.onReload?.(entry, sessions, cause, loaded.kind),
+    ]);
   }
 
   get size(): number {

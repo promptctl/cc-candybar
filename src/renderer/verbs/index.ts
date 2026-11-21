@@ -1298,7 +1298,7 @@ function journaled<C extends DaemonContext>(
       proveLoadsAsLayer(ctx, origin, file, text, read),
   };
   const draft =
-    origin === null || ctx.edits.snapshot(origin, sid) === null
+    origin === null || ctx.edits.revision(origin, sid) === null
       ? null
       : ctx.edits.draft(sid);
   const scoped =
@@ -1307,7 +1307,7 @@ function journaled<C extends DaemonContext>(
       : {
           ...ctx,
           snapshotFor: (of: RenderOrigin) =>
-            ctx.edits.snapshot(of, sid) ?? ctx.snapshotFor(of),
+            ctx.edits.revision(of, sid)?.snapshot ?? ctx.snapshotFor(of),
           configFor: (of: RenderOrigin) => ctx.configFor(of, sid),
         };
   const edit = draft?.begin((file, text, read) =>

@@ -7,6 +7,7 @@ import type { LayerRole } from "./layer-role.js";
 import type { PluginScope } from "./loader/plugin-scope.js";
 import type { Checkout } from "../utils/git-root.js";
 import type { ConfigTarget } from "../config-hint.js";
+import { digestOf } from "../utils/plain.js";
 
 export type { LayerRole } from "./layer-role.js";
 export type { Checkout } from "../utils/git-root.js";
@@ -23,6 +24,17 @@ export interface ConfigSnapshot {
   readonly checkout: Checkout | null;
   readonly notices: readonly string[]; // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null; // what the config's watch cannot hear, or null
+}
+
+// [LAW:one-source-of-truth] A snapshot with its digest, taken once. Two
+// revisions are the same config exactly when their digests are equal.
+export interface ConfigRevision {
+  readonly snapshot: ConfigSnapshot;
+  readonly digest: string;
+}
+
+export function revisionOf(snapshot: ConfigSnapshot): ConfigRevision {
+  return { snapshot, digest: digestOf(snapshot) };
 }
 
 // A chain is user, project, local. The file `--config` names is the user

@@ -23,6 +23,7 @@ import type { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import type { Locations } from "../../src/config/loader/chain-places";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { systemTimekeeper } from "./system-clock";
 import {
   loadOrigin,
@@ -176,10 +177,10 @@ export class DiscoveringCache<
     });
   }
 
-  override getOrCreate(origin: RenderOrigin): CacheEntry {
+  override getOrCreate(origin: RenderOrigin, editing?: SessionId): CacheEntry {
     // A test driving the actual renderer turn has already chosen its input.
     if (!this.shut && !this.holdsConfig(origin)) this.configs.follow(origin);
-    return super.getOrCreate(origin);
+    return super.getOrCreate(origin, editing);
   }
 
   override close(): void {
