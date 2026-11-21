@@ -536,6 +536,9 @@ export function mainRenderer(
           const state = parts.renderCache.committedState(requested);
           if (!delivered || state === null) {
             if (delivered) unprepared.set(originKey(requested), requested);
+            // [LAW:one-source-of-truth] Read untracked: the last returned
+            // plan changes only to what this derivation produced, so
+            // tracking it would change no output.
             const held = subscriptions.lanes[session];
             if (held !== undefined) lanes[session] = held;
             continue;

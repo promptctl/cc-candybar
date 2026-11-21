@@ -308,8 +308,8 @@ export function setUpRender(
   // session's `view` of it, are what this render resolves its payload from and
   // draws with after the payload await below. An eviction, a reload, or the
   // session's own render from another entry meanwhile retires them, and the
-  // cache disposes them when this hold is released — never under the render
-  // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
+  // cache disposes them when this hold is released — never under the render.
+  // The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
   // of the render that disposes it. Its facts and its world state came with
   // its `context`.
