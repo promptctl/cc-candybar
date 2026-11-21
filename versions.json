@@ -4,39 +4,39 @@
     {
       "version": "pr-931",
       "ref": "refs/pull/931/merge",
-      "sha": "820b10d0e780e76f2fb283f47636c9cfdd06d3d3",
-      "timestamp": "2026-11-21T06:11:22.897Z",
+      "sha": "766e348c07f547050c4aa6b105800ae4bb576068",
+      "timestamp": "2026-11-21T06:12:32.426Z",
       "commits": [
         {
-          "sha": "820b10d0e780e76f2fb283f47636c9cfdd06d3d3",
+          "sha": "766e348c07f547050c4aa6b105800ae4bb576068",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T06:10:15Z",
-          "message": "Merge a61d157a7cefd7be5037d9f8ee0928c33794b0f5 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+          "timestamp": "2026-11-21T06:10:54Z",
+          "message": "Merge b1089b4de4ee63472f436e9943b1b7bb40537c54 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
         },
         {
-          "sha": "a61d157a7cefd7be5037d9f8ee0928c33794b0f5",
+          "sha": "b1089b4de4ee63472f436e9943b1b7bb40537c54",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-20T23:10:00-07:00",
           "message": "test(config): drop an unused import\n"
         },
         {
-          "sha": "3d7b65a8510ec4b71a69d3d01693410432292e9b",
+          "sha": "5f54f000d38b7b60ec3409951363bae3aae3e5e9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-20T23:03:38-07:00",
           "message": "test(config): the shared-root test runs in its own data home through the production read path\n"
         },
         {
-          "sha": "488bfacb7541c21d9399121b2a2c2f9f43d182b6",
+          "sha": "5103846f21198206281cbf6a5c7ac9d0bc2b40a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-20T22:52:11-07:00",
           "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n\nThe absence proof for a plugin root behind a dangling link moves to its\nown ticket, where one classifier serves the listing, the layer search\nand the watch.\n"
         },
         {
-          "sha": "d43164afc29796cd815a4c610d26b93c5ac7a128",
+          "sha": "9bd2aef2e449d2117bfcbd7d1d820e5e7b4c1545",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-20T22:43:55-07:00",
