@@ -91542,25 +91542,8 @@ function listFolders(root) {
     }
     return { folders, files };
   } catch (e) {
-    const error = e.message;
-    if (e.code !== "ENOENT")
-      return { path: root, error };
-    try {
-      const nowhere = linkToNothing(root);
-      return nowhere === null ? { folders: [], files: [] } : { path: root, error: `${error} (${nowhere} is a link to nothing)` };
-    } catch (probe2) {
-      return { path: root, error: probe2.message };
-    }
+    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
   }
-}
-function linkToNothing(root) {
-  let at = root;
-  while (fs_default.lstatSync(at, { throwIfNoEntry: false }) === void 0) {
-    const parent = import_node_path31.default.dirname(at);
-    if (parent === at) return null;
-    at = parent;
-  }
-  return fs_default.statSync(at, { throwIfNoEntry: false })?.isDirectory() ? null : at;
 }
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;

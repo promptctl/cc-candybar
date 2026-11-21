@@ -4,15 +4,22 @@
     {
       "version": "pr-931",
       "ref": "refs/pull/931/merge",
-      "sha": "19b791b309386cbfd13d08ae799de982719ff128",
-      "timestamp": "2026-11-21T05:45:30.418Z",
+      "sha": "9a5b6c8685ee80d737ef338ef28d934d52153258",
+      "timestamp": "2026-11-21T05:53:43.429Z",
       "commits": [
         {
-          "sha": "19b791b309386cbfd13d08ae799de982719ff128",
+          "sha": "9a5b6c8685ee80d737ef338ef28d934d52153258",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:44:15-07:00",
-          "message": "Merge d43164afc29796cd815a4c610d26b93c5ac7a128 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+          "timestamp": "2026-11-20T22:52:36-07:00",
+          "message": "Merge 488bfacb7541c21d9399121b2a2c2f9f43d182b6 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
+        },
+        {
+          "sha": "488bfacb7541c21d9399121b2a2c2f9f43d182b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T22:52:11-07:00",
+          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n\nThe absence proof for a plugin root behind a dangling link moves to its\nown ticket, where one classifier serves the listing, the layer search\nand the watch.\n"
         },
         {
           "sha": "d43164afc29796cd815a4c610d26b93c5ac7a128",
