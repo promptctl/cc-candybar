@@ -522,12 +522,15 @@ export class GitDataProvider {
       reading: unread(),
       inFlight: null,
     };
+    // [LAW:one-source-of-truth] A repo's refresh is one task, whether its
+    // period ticked or a change triggered it, so its failures are one error.
+    const refreshTask = `git refresh ${root}`;
     const state: RepoState = {
       root,
-      refresh: new TrailingEdge(this.clock, () => `git refresh ${root}`),
+      refresh: new TrailingEdge(this.clock, () => refreshTask),
       watch: this.followWatch(root, null).watch,
       period: new Period(
-        `git refresh ${root}`,
+        refreshTask,
         () => state.refresh.share(PASS, () => this.refreshPass(state)),
         this.clock,
       ),

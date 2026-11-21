@@ -29,7 +29,6 @@ import { readingsAt } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import type { DaemonLogger, LogLine } from "../../src/utils/logger";
 import { heldClock } from "../helpers/held-clock";
-import { clockOver } from "../../src/time";
 import { NO_LAYERS } from "../helpers/history-step";
 import { rendererParts } from "../helpers/renderer-parts";
 import { NO_ACTS } from "../helpers/renderers";
@@ -49,12 +48,7 @@ function rig(
     readonly rendererClock?: () => number;
   } = {},
 ) {
-  // The daemon's clock takes what its tasks throw: a failed due turn's work
-  // is one of them.
-  const reported: Array<{ task: string; thrown: unknown }> = [];
-  const clock = heldClock(new Date(0), (source) =>
-    clockOver(source, (task, thrown) => reported.push({ task, thrown })),
-  );
+  const clock = heldClock(new Date(0));
   const state = new SessionState();
   const history = new SettingsHistory(state, () => {});
   const cache = new (class extends RenderCache {
@@ -158,7 +152,6 @@ function rig(
   return {
     cache,
     clock,
-    reported,
     due,
     host,
     journalTheme,
@@ -203,14 +196,6 @@ test("a failed body keeps its classification and the writes already drained", as
       fieldsOf(line).get("finalize.settings-history"),
     ),
   ).toEqual([expect.stringContaining("history drain failed")]);
-  // No request waits on a due turn, so its failure is the clock's, on every bar.
-  await Promise.resolve();
-  expect(fixture.reported).toEqual([
-    {
-      task: "renderer main due work",
-      thrown: expect.objectContaining({ message: "invalid menu choice" }),
-    },
-  ]);
   historyFailed = false;
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   expect(fixture.stored).toEqual([

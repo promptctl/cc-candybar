@@ -66,8 +66,8 @@ export class TurnTime {
   // lets go of it.
   // [LAW:nothing-unseen] exception: the name is not kept. A deferral runs
   // inside the renderer's due turn, so what it throws is that turn's failure,
-  // in its own words: the daemon logs it with the turn and holds it on every
-  // bar as the renderer's due work.
+  // in its own words: the daemon logs it with the turn, and the wake says a
+  // run of failed due turns on every bar.
   after(_task: string, ms: number, run: () => void): () => void {
     const deferral = { until: (this.tick + ms / 1000) as Tick, run };
     this.held.add(deferral);

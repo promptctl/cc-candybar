@@ -149,13 +149,7 @@ export function runDaemon(world: World<ReportingClock>): void {
   startup = boot().catch(refuseBoot);
 }
 
-// [LAW:no-silent-failure] What the clock's tasks threw before a daemon could
-// take it is said beside the refusal, since it may be the refusal's cause, and
-// what they throw on the way out is logged as it comes.
 function refuseBoot(err: unknown): void {
-  daemonProcess().world.clock.throws.close((reported) =>
-    serverLog("error", thrownText(reported).logged),
-  );
   serverLog("error", `refusing to boot: ${inspect(err)}`);
   shutdown(1);
 }
@@ -502,6 +496,13 @@ function shutdown(code: number): void {
   // load-bearing for the observed failure pattern.
   daemonProcess().world.clock.after("exit backstop", 500, () =>
     process.kill(process.pid, "SIGKILL"),
+  );
+  // [LAW:no-silent-failure] Every exit comes through here, so what the
+  // clock's tasks threw before a daemon could take it is said here, whichever
+  // refusal it may have caused, and what they throw on the way out is logged
+  // as it comes.
+  daemonProcess().world.clock.throws.close((reported) =>
+    serverLog("error", thrownText(reported).logged),
   );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
   // ONLY mutex preventing duplicate daemons. The previous shape unlinked
