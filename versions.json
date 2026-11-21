@@ -4,15 +4,22 @@
     {
       "version": "pr-934",
       "ref": "refs/pull/934/merge",
-      "sha": "00c3572b5313454a52ea1c7ae89169c4d528edd1",
-      "timestamp": "2026-11-21T08:59:40.475Z",
+      "sha": "645c1c0cab181959a589f10b3d9efaf5f92194b3",
+      "timestamp": "2026-11-21T09:16:32.818Z",
       "commits": [
         {
-          "sha": "00c3572b5313454a52ea1c7ae89169c4d528edd1",
+          "sha": "645c1c0cab181959a589f10b3d9efaf5f92194b3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:58:39-07:00",
-          "message": "Merge 147fe5aec46955709da0adfe01413a424ee0020b into 4639261509c048460769c3b12b325bc86a5ff100\n"
+          "timestamp": "2026-11-21T09:15:29Z",
+          "message": "Merge 923a72dea31ea9b840f21acb2529b9ae331b3aba into 4639261509c048460769c3b12b325bc86a5ff100\n"
+        },
+        {
+          "sha": "923a72dea31ea9b840f21acb2529b9ae331b3aba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T02:15:10-07:00",
+          "message": "fix(daemon): each pipe event is held and counted on its own\n\nA pipe event that recurred while another was held used to be folded into\nthe held one, so a different event was misnamed or never reached a bar.\nPipe events and task throws are now one family of recurring events, held\nper subject: an occurrence while its subject is held is counted, and the\nlatest is held afresh with its count when the slot lets go.\n\nThe daemon's facts carry its held events as one list the renderer judges\nby the one hold, the launcher's lifeline warning is a single value, the\nlauncher's unused instant is gone, and both kinds say how often they\nrecurred in the same words.\n"
         },
         {
           "sha": "147fe5aec46955709da0adfe01413a424ee0020b",
