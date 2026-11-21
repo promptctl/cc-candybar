@@ -588,8 +588,13 @@ describe("WatcherRegistry", () => {
             },
           ]);
           expect(reg.dirWatches()).toBe(3);
-          fs.writeFileSync(path.join(root, "team", "open", "ref"), "x");
-          await until(() => seen.length > 0, "the sibling's event");
+          // fs.watch has no ready signal: the sibling's file is rewritten
+          // until its watch delivers.
+          await untilHeard(
+            () => fs.writeFileSync(path.join(root, "team", "open", "ref"), "x"),
+            () => seen.length > 0,
+            "the sibling's event",
+          );
         } finally {
           fs.chmodSync(locked, 0o700);
         }
@@ -604,8 +609,10 @@ describe("WatcherRegistry", () => {
       fs.mkdirSync(feature);
       await until(() => reg.dirWatches() === 2, "the new directory's watch");
       seen.length = 0;
-      fs.writeFileSync(path.join(feature, "x"), "x");
-      await until(
+      // The new watch has no ready signal: its file is rewritten until it
+      // delivers.
+      await untilHeard(
+        () => fs.writeFileSync(path.join(feature, "x"), "x"),
         () =>
           seen.some(
             (inv) =>

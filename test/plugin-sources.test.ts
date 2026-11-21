@@ -230,7 +230,9 @@ function rig(): Rig {
     }),
   );
   const sessionState = new SessionState();
-  const warnings = observable.box<DaemonFacts["fileEvents"]>([], { deep: false });
+  const warnings = observable.box<DaemonFacts["fileEvents"]>([], {
+    deep: false,
+  });
   const reloads = new ReloadSignal();
   const hints = { claudeConfigDir: path.join(dir, "claude") };
   const served = collected(
@@ -246,6 +248,7 @@ function rig(): Rig {
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,
+      editRevision: () => null,
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -466,11 +469,7 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await renderConfig(
-          world,
-          listing(`{ status: ${source} }`),
-          dir,
-        ),
+        await renderConfig(world, listing(`{ status: ${source} }`), dir),
       );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
@@ -550,11 +549,7 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await renderConfig(
-        world,
-        listing(`{ "a.b": ${SOURCE} }`),
-        dir,
-      ),
+      await renderConfig(world, listing(`{ "a.b": ${SOURCE} }`), dir),
     );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
@@ -829,7 +824,7 @@ function statusline(r: Rig, configFile: string) {
       sessionState: r.sessionState,
       worldStates: r.worldStates,
     }),
-      NOTHING_STORED,
+    NOTHING_STORED,
   );
   const host = rendererHost(
     MAIN_RENDERER,
@@ -1240,7 +1235,10 @@ describe("a storage folder's watch", () => {
 
     jest.restoreAllMocks();
     const opened = fakeWatches();
-    fs.appendFileSync(path.join(dir, "selected-0.json5"), "\n// physical edit\n");
+    fs.appendFileSync(
+      path.join(dir, "selected-0.json5"),
+      "\n// physical edit\n",
+    );
     r.configs.again();
     expect(opened.map((watch) => watch.path)).toEqual([folders[0]]);
   });

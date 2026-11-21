@@ -159,14 +159,15 @@ export class DiscoveringCache<
       watchers,
       reloaded,
       ...deps
-    }: RenderDeps<S, F> & {
+    }: Omit<RenderDeps<S, F>, "editRevision"> & {
       readonly stateDir: string;
       readonly watchers: Pick<WatcherRegistry, "batch">;
       readonly reloaded?: ConfigDiscoveryDeps["reloaded"];
     },
     opts: ConstructorParameters<typeof RenderCache<S, F>>[1],
   ) {
-    super(deps, opts);
+    // Its getOrCreate takes no editing session, so it holds no draft.
+    super({ ...deps, editRevision: () => null }, opts);
     this.configs = configHost(this, {
       locations: deps.locations,
       stateDir,

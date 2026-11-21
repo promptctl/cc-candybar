@@ -805,7 +805,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       locations: inputs.locations,
       region: inputs.region,
       sessionState: edits.view,
-      editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
+      editRevision: (origin, sid) => edits.configRevision(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       gates,

@@ -180,8 +180,9 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const base = testVerbContext(sessionState, history, undefined, durable.host);
   const context = bookedContext(sessionState, sessionId)!;
   const draftText = () =>
-    base.edits.snapshot(context.durable.origin, sessionId)?.chain
-      .find((layer) => layer.role === "user")?.content;
+    base.edits
+      .configRevision(context.durable.origin, sessionId)
+      ?.snapshot.chain.find((layer) => layer.role === "user")?.content;
   let loaded = src;
   let authored = config;
   let registry = new SourceRegistry(store, "", base.edits.view);
@@ -190,7 +191,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
   });
   const effective = () => {
     const draft = draftText();
-    const text = draft?.kind === "text" ? draft.text : durable.text() ?? "{}";
+    const text = draft?.kind === "text" ? draft.text : (durable.text() ?? "{}");
     if (text !== loaded) {
       loaded = text;
       authored = parseAndValidate("<test>", text, ALLOWED);
@@ -646,7 +647,9 @@ describe("edit chrome names follow their placement, not the walk", () => {
       };
       const leading = named(at - 2).filter((n) => n.includes(".insertSeg."));
       const calls = [cell.lead, cell.trail].flatMap((t) =>
-        t === undefined ? [] : templateActionRefs(t, {}).map(({ name }) => name),
+        t === undefined
+          ? []
+          : templateActionRefs(t, {}).map(({ name }) => name),
       );
       return [
         ...leading,
@@ -667,7 +670,10 @@ describe("edit chrome names follow their placement, not the walk", () => {
 
   test.each([
     ["in its row", "[ { h: ['directory', 'gitPr', 'git'] }, 'trigger' ]"],
-    ["in an earlier row", "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]"],
+    [
+      "in an earlier row",
+      "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]",
+    ],
   ])("an add %s renames no other placement's chrome", (_where, rows) => {
     const before = parseAndValidate("<test>", BASE, ALLOWED);
     const after = parseAndValidate("<test>", withRows(rows), ALLOWED);
@@ -790,7 +796,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    await CLICK_VERBS.get("set-state")!(`${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`, ctx);
+    await CLICK_VERBS.get("set-state")!(
+      `${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`,
+      ctx,
+    );
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -866,9 +875,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const original = durable.text()!;
     const placed = (target: string) =>
       ownUrls(render()).some((url) =>
-        effectsOf(url).some((effect) =>
-          effect.verb === "apply-layout-op" &&
-          effect.args[3] === encodeLayoutOp({ op: "remove", target }),
+        effectsOf(url).some(
+          (effect) =>
+            effect.verb === "apply-layout-op" &&
+            effect.args[3] === encodeLayoutOp({ op: "remove", target }),
         ),
       );
 
@@ -1112,8 +1122,6 @@ describe("edit mode's save and cancel", () => {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });
-    expect(logs.join("\n")).toMatch(
-      /rewind: discarded draft \(session=s1\)/,
-    );
+    expect(logs.join("\n")).toMatch(/rewind: discarded draft \(session=s1\)/);
   });
 });

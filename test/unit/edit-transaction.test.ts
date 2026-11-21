@@ -38,7 +38,12 @@ function snapshot(standing: Standing): ConfigSnapshot {
           {
             scope: "repo",
             path: "/checkout/sample.json5",
-            definition: { kind: "text", text: "{}", dir: origin.cwd, storage: `${origin.cwd}/session` },
+            definition: {
+              kind: "text",
+              text: "{}",
+              dir: origin.cwd,
+              storage: `${origin.cwd}/session`,
+            },
           },
         ]
       : [],
@@ -60,13 +65,13 @@ test("the draft keeps its edits but follows live repository trust", () => {
 
   const refused = snapshot("declined");
   expect(edits.configured(origin, refused)).toEqual([sid]);
-  const preview = edits.snapshot(origin, sid)!;
+  const preview = edits.configRevision(origin, sid)!.snapshot;
   expect(preview.repo).toEqual(refused.repo);
   expect(preview.plugins).toEqual([]);
   expect(preview.chain).toEqual([
     { ...user, content: { kind: "text", text: edited } },
   ]);
-  expect(edits.snapshot(origin, other)).toBeNull();
+  expect(edits.configRevision(origin, other)).toBeNull();
   expect(edits.view.get(sid, "theme")).toBe("nord");
   expect(committed.get(sid, "theme")).toBeNull();
 });

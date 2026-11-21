@@ -28,6 +28,7 @@ import {
   type LoadCause,
   type Hold,
   type RenderCacheObservers,
+  type RenderDeps,
   type SessionView,
   SOURCES_NOTHING,
   openView,
@@ -60,13 +61,15 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  repoConfigsPath,
-} from "../src/daemon/config-discovery/repo-configs";
+import { repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
-import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import {
+  revisionOf,
+  type ConfigRevision,
+  type ConfigSnapshot,
+} from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
@@ -95,6 +98,7 @@ const oneRow = (...segments: string[]): LayoutNode => ({
 function makeCache(
   observers?: RenderCacheObservers,
   log?: DaemonLogger,
+  editRevision: RenderDeps["editRevision"] = () => null,
 ): {
   cache: RenderCache;
   originAt: ConfigHost["at"];
@@ -127,6 +131,7 @@ function makeCache(
       locations: locations(host),
       gates: bareGates(),
       sessionState,
+      editRevision,
       log,
       source: SOURCES_NOTHING,
     },
@@ -1113,6 +1118,161 @@ describe("RenderCache", () => {
     }
   });
 
+  // A copy of the project layer whose text loads something new.
+  const movedOn = (snapshot: ConfigSnapshot): ConfigSnapshot => ({
+    ...snapshot,
+    chain: snapshot.chain.map((layer) =>
+      layer.role === "project"
+        ? {
+            ...layer,
+            content: {
+              kind: "text",
+              text: `{ variables: { edition: { kind: "literal", value: "moved" } } }\n`,
+            },
+          }
+        : layer,
+    ),
+  });
+
+  test("a delivery that digests as the one its entry loaded loads nothing", () => {
+    const causes: string[] = [];
+    const { cache, originAt, cleanups } = makeCache({
+      onReload: (_entry, _sessions, cause) => causes.push(cause.kind),
+    });
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const origin = originAt(dir, dir, undefined);
+      cache.getOrCreate(origin);
+      cache.configure(origin, { ...cache.snapshotFor(origin) });
+      expect(causes).toEqual(["open"]);
+    } finally {
+      for (const c of cleanups) c();
+      cleanup();
+    }
+  });
+
+  test("a draft that digests as the one its entry loaded loads nothing", () => {
+    const causes: string[] = [];
+    let draft: ConfigRevision | null = null;
+    const { cache, originAt, cleanups } = makeCache(
+      { onReload: (_entry, _sessions, cause) => causes.push(cause.kind) },
+      undefined,
+      (_origin, session) => (session === S1 ? draft : null),
+    );
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const origin = originAt(dir, dir, undefined);
+      draft = revisionOf({ ...cache.snapshotFor(origin) });
+      const entry = cache.getOrCreate(origin, S1);
+      // A host delivery while editing hands the draft an equal snapshot.
+      draft = revisionOf({ ...draft.snapshot });
+      expect(cache.getOrCreate(origin, S1)).toBe(entry);
+      expect(causes).toEqual(["open"]);
+    } finally {
+      for (const c of cleanups) c();
+      cleanup();
+    }
+  });
+
+  test("a load that threw before its entry took it loads when the same config comes again", () => {
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
+    const causes: string[] = [];
+    const real = locations(host);
+    let unreadable = false;
+    const cache = new RenderCache(
+      {
+        clock: systemTimekeeper,
+        // A home that cannot be read once: the load throws before the entry
+        // takes it, as only a daemon bug would.
+        locations: {
+          ...real,
+          get home() {
+            if (unreadable) {
+              unreadable = false;
+              throw new Error("home unreadable");
+            }
+            return real.home;
+          },
+        },
+        gates: bareGates(),
+        sessionState: new SessionState(),
+        editRevision: () => null,
+        source: SOURCES_NOTHING,
+      },
+      {
+        budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
+        observers: {
+          onReload: (_entry, _sessions, cause) => causes.push(cause.kind),
+        },
+      },
+    );
+    const configs = configHost(cache, {
+      locations: real,
+      stateDir: stateDir(host),
+      watchers,
+    });
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      editProjectConfig(dir);
+      const origin = configs.at(dir, dir, undefined);
+      const entry = cache.getOrCreate(origin);
+      const before = entry.snapshot;
+      const moved = movedOn(before);
+      unreadable = true;
+      expect(() => cache.configure(origin, moved)).toThrow("home unreadable");
+      expect(entry.snapshot).toBe(before);
+      cache.configure(origin, { ...moved });
+      expect(causes).toEqual(["open", "config"]);
+      expect(entry.snapshot).toEqual(moved);
+    } finally {
+      cache.close();
+      configs.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
+  test("a step that throws after the entry took its load leaves every other step run", () => {
+    const causes: string[] = [];
+    const lines: string[] = [];
+    let broken = false;
+    const { cache, originAt, cleanups } = makeCache(
+      { onReload: (_entry, _sessions, cause) => causes.push(cause.kind) },
+      (_level, line) => {
+        lines.push(line);
+        // The reload's first step after the take is its load line.
+        if (broken && line.startsWith("config load ")) {
+          broken = false;
+          throw new Error("the log broke");
+        }
+      },
+    );
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      editProjectConfig(dir);
+      const origin = originAt(dir, dir, undefined);
+      const entry = cache.getOrCreate(origin);
+      const served = entry.state;
+      const moved = movedOn(entry.snapshot);
+      broken = true;
+      expect(() => cache.configure(origin, moved)).toThrow("the log broke");
+      expect(entry.state).not.toBe(served);
+      expect(lines).toContainEqual(
+        expect.stringMatching(/^config disposed reason=reload /),
+      );
+      expect(causes).toEqual(["open", "config"]);
+      // The entry is whole on what it took: the same config loads nothing.
+      cache.configure(origin, { ...moved });
+      expect(causes).toEqual(["open", "config"]);
+    } finally {
+      for (const c of cleanups) c();
+      cleanup();
+    }
+  });
+
   // The host polls the decision file only for interested origins. Watching
   // its directory would also wake the bar for unrelated state and log writes.
   test("a layered entry follows the decision file without watching its state directory", async () => {
@@ -1140,9 +1300,7 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(book, declined),
-      );
+      await reloads.after(entry, () => writeFileSync(book, declined));
       expect(entry.configLayers).toEqual([]);
       expect(entry.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");
@@ -1450,6 +1608,7 @@ describe("RenderCache close", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         source: SOURCES_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1506,6 +1665,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         log: (_level, line) => logs.push(line),
         source,
       },
@@ -1619,7 +1779,7 @@ describe("RenderCache frames and pins", () => {
       const { dir, cleanup } = mkConfigDir();
       const other = mkConfigDir();
       let latest = viewFacts(dir, "s1");
-      let draft: ConfigSnapshot | null = null;
+      let draft: ConfigRevision | null = null;
       let opens = 0;
       const cache = new RenderCache(
         {
@@ -1628,7 +1788,7 @@ describe("RenderCache frames and pins", () => {
           gates: bareGates(),
           sessionState: new SessionState(),
           currentRequest: () => latest,
-          editSnapshot: (_origin, session) => (session === S1 ? draft : null),
+          editRevision: (_origin, session) => (session === S1 ? draft : null),
           log: (_level, line) => logs.push(line),
           // The second view built over the entry, the reload's successor, fails.
           source: (view) => {
@@ -1650,13 +1810,13 @@ describe("RenderCache frames and pins", () => {
       const edit = () => {
         configs.again();
         if (which === "draft") {
-          draft = cache.snapshotFor(originAt(dir, dir, undefined));
+          draft = revisionOf(cache.snapshotFor(originAt(dir, dir, undefined)));
           cache.refreshEditedView(S1);
         }
       };
       try {
         const origin = originAt(dir, dir, undefined);
-        if (which === "draft") draft = cache.snapshotFor(origin);
+        if (which === "draft") draft = revisionOf(cache.snapshotFor(origin));
         {
           using _request = cache.holdSession(origin, latest);
         }
@@ -1732,6 +1892,7 @@ describe("RenderCache frames and pins", () => {
         locations: locations(host),
         gates: bareGates(),
         sessionState: new SessionState(),
+        editRevision: () => null,
         log: () => {},
         source: (view) => {
           opens++;
