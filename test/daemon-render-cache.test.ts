@@ -66,7 +66,10 @@ import {
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
-import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import {
+  revisionOf,
+  type ConfigSnapshot,
+} from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
@@ -712,16 +715,16 @@ describe("RenderCache", () => {
     try {
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       const refused = `cannot watch ${at} — EMFILE: too many open files`;
-      expect(entry.snapshot.watch).toContain(refused);
+      expect(entry.revision.snapshot.watch).toContain(refused);
       watchers.judge();
       configs.again();
-      expect(entry.snapshot.watch).toContain(refused);
+      expect(entry.revision.snapshot.watch).toContain(refused);
       refuse = false;
       configs.again();
-      expect(entry.snapshot.watch).toContain(refused);
+      expect(entry.revision.snapshot.watch).toContain(refused);
       watchers.judge();
       configs.again();
-      expect(entry.snapshot.watch).toBeNull();
+      expect(entry.revision.snapshot.watch).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
       spy.mockRestore();
@@ -1093,6 +1096,49 @@ describe("RenderCache", () => {
     }
   });
 
+  test("an observer that throws on a reload leaves the entry on the load it took and its previous build retired", () => {
+    const { dir, cleanup } = mkConfigDir();
+    let boom = false;
+    const { cache, originAt, cleanups } = makeCache({
+      onReload: () => {
+        if (boom) throw new Error("observer boom");
+      },
+    });
+    try {
+      const file = join(dir, ".cc-candybar.json5");
+      writeFileSync(file, `{ segments: { t: { template: "one" } } }`);
+      const origin = originAt(dir, dir, undefined);
+      const entry = cache.getOrCreate(origin);
+      const before = entry.state;
+      const snapshot = cache.snapshotFor(origin);
+      const edited = {
+        ...snapshot,
+        chain: snapshot.chain.map((layer) =>
+          layer.path === file
+            ? {
+                ...layer,
+                content: {
+                  kind: "text" as const,
+                  text: `{ segments: { t: { template: "two" } } }`,
+                },
+              }
+            : layer,
+        ),
+      };
+      boom = true;
+      expect(() => cache.configure(origin, edited)).toThrow("observer boom");
+      boom = false;
+      expect(entry.revision.snapshot).toBe(edited);
+      expect(entry.state).not.toBe(before);
+      // The build it replaced was unheld, so it is already disposed.
+      expect(cache.stats.retired).toBe(0);
+      expect(cache.getOrCreate(origin).state).toBe(entry.state);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test("a reentrant getOrCreate from inside onReload returns the entry under construction", () => {
     const { dir, cleanup } = mkConfigDir();
     let inner: CacheEntry | undefined;
@@ -1144,7 +1190,7 @@ describe("RenderCache", () => {
         writeFileSync(book, declined),
       );
       expect(entry.configLayers).toEqual([]);
-      expect(entry.snapshot.repo?.standing).toBe("declined");
+      expect(entry.revision.snapshot.repo?.standing).toBe("declined");
       expect(causes).toContain("config");
     } finally {
       for (const fn of cleanups) fn();
@@ -1628,7 +1674,8 @@ describe("RenderCache frames and pins", () => {
           gates: bareGates(),
           sessionState: new SessionState(),
           currentRequest: () => latest,
-          editSnapshot: (_origin, session) => (session === S1 ? draft : null),
+          editRevision: (_origin, session) =>
+            session === S1 && draft !== null ? revisionOf(draft) : null,
           log: (_level, line) => logs.push(line),
           // The second view built over the entry, the reload's successor, fails.
           source: (view) => {

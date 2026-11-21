@@ -461,7 +461,7 @@ export function drawRender(
       : null;
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.snapshot.repo, sessionId);
+  const questions = repoQuestions(entry.revision.snapshot.repo, sessionId);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -521,7 +521,7 @@ export function drawRender(
   // walk, or whose folder the OS will not watch, may miss an edit: the bar
   // says so, as discovery found it. A stall is no reason of this watch's: it
   // has the bar's own row.
-  const configWatch = entry.snapshot.watch;
+  const configWatch = entry.revision.snapshot.watch;
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);

@@ -1642,7 +1642,7 @@ describe("an installed plugin", () => {
       expect(
         cache
           .getOrCreate(originOf(repo, repo, p))
-          .snapshot.plugins.map((d) => d.path),
+          .revision.snapshot.plugins.map((d) => d.path),
       ).toContain(dropped);
     } finally {
       cache.close();

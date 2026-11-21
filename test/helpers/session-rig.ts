@@ -30,6 +30,7 @@ import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
 import { locs } from "./host";
+import type { Locations } from "../../src/config/loader/chain-places";
 import {
   absentOwners,
   withTranscriptLanes,
@@ -134,6 +135,7 @@ export type SessionRig = ReturnType<typeof sessionRig>;
 // of the daemon itself, `source` overrides what the session source reads beyond the world
 // state (the depths), `log` is the daemon's log, and `observers` hear what the
 // cache tells the daemon. `owners` replaces the fixed owners it names.
+// `locations` are where a load finds the user's home and folders.
 export function sessionRig(
   dir: string,
   cleanups: Array<() => void>,
@@ -143,12 +145,14 @@ export function sessionRig(
     source = {},
     log = () => {},
     observers = {},
+    locations = locs(),
   }: {
     readonly daemon?: () => DaemonFacts;
     readonly owners?: Partial<ReturnType<typeof fixedOwners>>;
     readonly source?: Partial<SessionSourceDeps>;
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
+    readonly locations?: Locations;
   } = {},
 ) {
   const providers = withTranscriptLanes({ ...fixedOwners(log), ...owners });
@@ -165,7 +169,7 @@ export function sessionRig(
     {
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
-      locations: locs(),
+      locations,
       sessionState,
       watchers,
       gates: bareGates(),

@@ -68,6 +68,8 @@ import {
   type SessionRig,
 } from "./helpers/session-rig";
 import { ok } from "../src/utils/outcome";
+import { locs } from "./helpers/host";
+import type { Locations } from "../src/config/loader/chain-places";
 import { fakeTmux } from "./helpers/payload-owners";
 import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
 import type {
@@ -111,6 +113,7 @@ afterEach(() => {
 function renderer(
   verbs?: RendererVerbs,
   daemon?: () => DaemonFacts,
+  locations?: Locations,
 ): {
   readonly r: Renderer;
   readonly parts: MainRendererParts;
@@ -126,6 +129,7 @@ function renderer(
     log: (level, message) => logged.push(`${level} ${message}`),
     observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
     ...(daemon === undefined ? {} : { daemon }),
+    ...(locations === undefined ? {} : { locations }),
   });
   const parts: MainRendererParts = {
     ...rendererParts({
@@ -159,6 +163,22 @@ function renderer(
     logged,
     rig,
   };
+}
+
+// Where a load finds the user's home, unreadable while `unreadable` is set:
+// a load that throws before any entry takes it.
+const UNREADABLE_HOME = "the user's home could not be read";
+function unreadableHome(): { unreadable: boolean; readonly locations: Locations } {
+  const real = locs();
+  const state = { unreadable: false };
+  const locations: Locations = {
+    ...real,
+    get home() {
+      if (state.unreadable) throw new Error(UNREADABLE_HOME);
+      return real.home;
+    },
+  };
+  return Object.assign(state, { locations });
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
@@ -1372,7 +1392,11 @@ describe("the session's config, ahead of its request", () => {
 
   test("a failed config ends the original cold render before it waits or draws", async () => {
     const t = renderer();
-    t.rig.cache.configure = () => {
+    const apply = t.rig.cache.configure.bind(t.rig.cache);
+    let broken = true;
+    t.rig.cache.configure = (origin, snapshot) => {
+      if (!broken) return apply(origin, snapshot);
+      broken = false;
       throw new Error("config load broke");
     };
     const waits = jest.spyOn(t.rig.served.collector, "settled");
@@ -1850,9 +1874,9 @@ describe("a click", () => {
     expect(seen).toEqual([heardContextOf(current)]);
   });
 
-  test("a failed config delivery reaches the live frame, request, and click, and a later delivery restores them", async () => {
-    const acted = jest.fn();
-    const t = renderer({ ...NO_VERBS, click: acted });
+  test("a load that throws fails the request that needs it, and the next one loads the same delivery once it can", async () => {
+    const home = unreadableHome();
+    const t = renderer(undefined, undefined, home.locations);
     const context = checked(undefined, "availability.json5");
     fs.writeFileSync(
       path.join(dir, "availability.json5"),
@@ -1880,79 +1904,65 @@ describe("a click", () => {
     const ordinary = () => handIn(t.r, event);
     const first = presentOf(answered(await ordinary()).effects);
     expect(textOf(first.frame)).toContain("WRITABLE");
-    const live = viewOf(t.rig);
-    expect(live?.configAccess()).toEqual({
-      kind: "available",
-      roles: ["user"],
-    });
     answered(await done(t.r, first, true));
-    answered(await followFeed(t.r));
-    const ready = await dueFrame(t.r);
-    expect(textOf(parseFrame(ready.bar))).toContain("WRITABLE");
-    answered(await done(t.r, { session: SESSION, id: ready.receipt }, true));
 
+    // The host discovered an edit: the same layers, the user's text moved.
     const origin = context.requested;
     const config = t.rig.cache.configs.discovery.snapshotOf(origin)!;
-    const delivery = { kind: "config", origin, config } as const;
-    const apply = t.rig.cache.configure.bind(t.rig.cache);
-    t.rig.cache.configure = () => {
-      throw new Error("config stream interrupted");
+    const edited = {
+      ...config,
+      chain: config.chain.map((layer) =>
+        layer.content.kind === "text"
+          ? {
+              ...layer,
+              content: {
+                kind: "text" as const,
+                text: `${layer.content.text}\n`,
+              },
+            }
+          : layer,
+      ),
     };
-    const { failure } = threw(await handIn(t.r, delivery));
-    expect(failure.message).toBe("config stream interrupted");
-    expect(threw(await ordinary()).failure).toEqual(failure);
-    expect(threw(await handIn(t.r, click("act", context))).failure).toEqual(
-      failure,
-    );
-    expect(() => t.rig.cache.snapshotFor(origin)).toThrow(failure.message);
-    expect(acted).not.toHaveBeenCalled();
+    home.unreadable = true;
+    expect(
+      threw(await handIn(t.r, { kind: "config", origin, config: edited }))
+        .failure.message,
+    ).toContain(UNREADABLE_HOME);
+    expect(threw(await ordinary()).failure.message).toContain(UNREADABLE_HOME);
 
-    const frame = await dueFrame(t.r, 1);
-    expect(textOf(parseFrame(frame.bar))).toContain("UNAVAILABLE");
-    expect(viewOf(t.rig)?.configAccess()).toEqual({
-      kind: "unavailable",
-      error: "config stream interrupted",
-    });
-    answered(await done(t.r, { session: SESSION, id: frame.receipt }, true));
-
-    t.rig.cache.configure = apply;
-    answered(await handIn(t.r, delivery));
-    expect(viewOf(t.rig)).toBe(live);
-    const next = await dueFrame(t.r, 2);
-    expect(textOf(parseFrame(next.bar))).toContain("WRITABLE");
-    answered(await done(t.r, { session: SESSION, id: next.receipt }, true));
+    // No second config turn: the next request loads what the host offered.
+    home.unreadable = false;
     const recovered = presentOf(answered(await ordinary()).effects);
     expect(textOf(recovered.frame)).toContain("WRITABLE");
     answered(await done(t.r, recovered, true));
-    expect(acted).not.toHaveBeenCalled();
-    answered(await handIn(t.r, click("act", context)));
-    expect(acted).toHaveBeenCalledTimes(1);
+    expect(t.rig.cache.getOrCreate(origin).revision.snapshot).toBe(edited);
   });
 
-  test("retiring an origin with no view releases its rejected config delivery", async () => {
-    const t = renderer();
+  test("a config turn whose load threw keeps the host's offer until its session retires", async () => {
+    const home = unreadableHome();
+    const t = renderer(undefined, undefined, home.locations);
     const context = checked();
     answered(await contextTurn(t, context));
     const origin = context.requested;
     t.rig.cache.configs.follow(origin);
     const config = t.rig.cache.configs.discovery.snapshotOf(origin);
     if (config === null) throw new Error("expected the followed config");
-    t.rig.cache.configure = () => {
-      throw new Error("the origin's delivery failed");
-    };
-    await expect(
-      handIn(t.r, { kind: "config", origin, config }),
-    ).resolves.toMatchObject({
-      kind: "threw",
-    });
-    expect(t.rig.cache.configDelivery(origin).kind).toBe("failed");
+    home.unreadable = true;
+    expect(
+      threw(await handIn(t.r, { kind: "config", origin, config })).failure
+        .message,
+    ).toContain(UNREADABLE_HOME);
+    expect(viewOf(t.rig)).toBeNull();
+    expect(t.rig.cache.holdsConfig(origin)).toBe(true);
+    home.unreadable = false;
     answered(await handIn(t.r, { kind: "retire", session: SESSION }));
-    expect(t.rig.cache.configDelivery(origin).kind).toBe("pending");
+    expect(t.rig.cache.holdsConfig(origin)).toBe(false);
   });
 
-  test("failed config settles parked clicks and a later config does not replay them", async () => {
+  test("a session whose opening threw opens on its origin's next config, and a parked click resumes once", async () => {
     const acted = jest.fn();
-    const t = renderer({ ...NO_VERBS, click: acted });
+    const home = unreadableHome();
+    const t = renderer({ ...NO_VERBS, click: acted }, undefined, home.locations);
     const context = checked();
     answered(await contextTurn(t, context));
     answered(await handIn(t.r, click("act", context)));
@@ -1966,26 +1976,18 @@ describe("a click", () => {
       config,
     } as const;
 
-    const configureCache = t.rig.cache.configure.bind(t.rig.cache);
-    t.rig.cache.configure = () => {
-      throw new Error("config turn failed");
-    };
-    const failure = threw(await handIn(t.r, configEvent));
-    expect(failure.failure.message).toBe("config turn failed");
-    expect(failure.record).toEqual([]);
-    expect(t.parts.sessionState.get(SESSION, "click.error")).toContain(
-      "config turn failed",
+    // The opening's load throws. The click, which reads no config, still
+    // resumes in the same turn.
+    home.unreadable = true;
+    expect(threw(await handIn(t.r, configEvent)).failure.message).toContain(
+      UNREADABLE_HOME,
     );
-    expect(
-      threw(await handIn(t.r, click("act", context))).failure.message,
-    ).toBe("config turn failed");
-    expect(acted).not.toHaveBeenCalled();
+    expect(viewOf(t.rig)).toBeNull();
+    expect(acted).toHaveBeenCalledTimes(1);
 
-    t.rig.cache.configure = configureCache;
+    home.unreadable = false;
     answered(await handIn(t.r, configEvent));
     expect(viewOf(t.rig)?.facts()).toBe(context);
-    expect(acted).not.toHaveBeenCalled();
-    answered(await handIn(t.r, click("act", context)));
     expect(acted).toHaveBeenCalledTimes(1);
   });
 

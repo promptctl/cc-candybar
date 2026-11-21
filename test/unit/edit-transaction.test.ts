@@ -60,13 +60,13 @@ test("the draft keeps its edits but follows live repository trust", () => {
 
   const refused = snapshot("declined");
   expect(edits.configured(origin, refused)).toEqual([sid]);
-  const preview = edits.snapshot(origin, sid)!;
+  const preview = edits.revision(origin, sid)!.snapshot;
   expect(preview.repo).toEqual(refused.repo);
   expect(preview.plugins).toEqual([]);
   expect(preview.chain).toEqual([
     { ...user, content: { kind: "text", text: edited } },
   ]);
-  expect(edits.snapshot(origin, other)).toBeNull();
+  expect(edits.revision(origin, other)).toBeNull();
   expect(edits.view.get(sid, "theme")).toBe("nord");
   expect(committed.get(sid, "theme")).toBeNull();
 });

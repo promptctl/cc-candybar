@@ -37,7 +37,10 @@ import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { loadDiscovered, originOf } from "./helpers/config-host";
-import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import {
+  revisionOf,
+  type ConfigSnapshot,
+} from "../src/config/config-snapshot";
 
 const SID_1 = sessionIdOf("sid-1");
 
@@ -257,7 +260,7 @@ const NO_SNAPSHOT: ConfigSnapshot = {
 const loadedEntry: ReloadedEntry = {
   origin: originOf("/p", "/p", undefined),
   configLayers: [],
-  snapshot: NO_SNAPSHOT,
+  revision: revisionOf(NO_SNAPSHOT),
   lastError: null,
   lastWarnings: [],
   state: undefined as never,
@@ -276,10 +279,10 @@ test("the config loaded event names the repository's standing, and why its workt
   const entry: ReloadedEntry = {
     ...loadedEntry,
     origin: originOf(project, project, undefined),
-    snapshot: {
+    revision: revisionOf({
       ...NO_SNAPSHOT,
       repo: { dir: "/a", standing: "awaiting", unproven: "/x is not there" },
-    },
+    }),
   };
   const line = configLoadedLine(entry, { kind: "open" }, "built");
   expect(line).toContain(` repo=awaiting:/a unproven="/x is not there" `);

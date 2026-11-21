@@ -30,7 +30,6 @@ import type { SessionBook } from "../../src/daemon/session-book";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { HOST } from "./host";
 import { stateDir } from "../../src/daemon/paths";
-import { digestOf } from "../../src/utils/plain";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 
 export function clickParts(
@@ -87,10 +86,7 @@ export function clickParts(
       configSelections: () => [],
       managedFolders: () => [],
       holdView: () => null,
-      configDelivery: (origin) => {
-        const snapshot = verbCtx.snapshotFor(origin);
-        return { kind: "received", snapshot, digest: digestOf(snapshot) };
-      },
+      holdsConfig: () => true,
       prune: () => {},
     } satisfies Pick<
       MainRendererParts["renderCache"],
@@ -99,7 +95,7 @@ export function clickParts(
       | "configSelections"
       | "managedFolders"
       | "holdView"
-      | "configDelivery"
+      | "holdsConfig"
       | "prune"
     >,
     // No session renders here: no world state is held, and a session's
