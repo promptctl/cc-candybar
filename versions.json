@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-932",
+      "ref": "refs/pull/932/merge",
+      "sha": "16da26e081fa42d0eaf6ce53d4f53afb1445897e",
+      "timestamp": "2026-11-21T07:48:21.613Z",
+      "commits": [
+        {
+          "sha": "16da26e081fa42d0eaf6ce53d4f53afb1445897e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:47:11-07:00",
+          "message": "Merge cef1a8973488b6c6b65ef42069a2d0a07b256a74 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+        },
+        {
+          "sha": "cef1a8973488b6c6b65ef42069a2d0a07b256a74",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:46:56-07:00",
+          "message": "test(renderer): a still feed frame holds only the view it draws (ibyq.l7z)\n\nAcross two still due frames with two live sessions, the only view held\nis the drawn session's. The lane declaration's walk over every session's\nview stays cached, so a still bar does no per-session walk per frame.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1c4ae7403a7b27557867f286571f4d2fe4159694",
