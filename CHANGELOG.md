@@ -1,3 +1,9 @@
+## [1.236.3](https://github.com/promptctl/cc-candybar/compare/v1.236.2...v1.236.3) (2026-11-21)
+
+### Bug Fixes
+
+* **daemon:** every clock task's throw reaches the bar ([#925](https://github.com/promptctl/cc-candybar/issues/925)) ([1c9001a](https://github.com/promptctl/cc-candybar/commit/1c9001abf07cdf49706032b66a888807190c0a6b))
+
 ## [1.236.2](https://github.com/promptctl/cc-candybar/compare/v1.236.1...v1.236.2) (2026-11-20)
 
 ### Bug Fixes
