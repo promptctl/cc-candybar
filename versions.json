@@ -4,15 +4,22 @@
     {
       "version": "pr-933",
       "ref": "refs/pull/933/merge",
-      "sha": "8f71130c469d74f1e979a02990641f870e64df48",
-      "timestamp": "2026-11-21T08:19:26.041Z",
+      "sha": "070588e7a1a3d8adf73c1120ca7298ff975c8c31",
+      "timestamp": "2026-11-21T08:27:20.190Z",
       "commits": [
         {
-          "sha": "8f71130c469d74f1e979a02990641f870e64df48",
+          "sha": "070588e7a1a3d8adf73c1120ca7298ff975c8c31",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T08:18:25Z",
-          "message": "Merge 9ba51a653f3638c684f3fcb151eb49156b46d806 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+          "timestamp": "2026-11-21T08:26:28Z",
+          "message": "Merge ae933c609e6300394c948105ad68e960bd315747 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+        },
+        {
+          "sha": "ae933c609e6300394c948105ad68e960bd315747",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T01:26:16-07:00",
+          "message": "fix(renderer): a frame's hold is released when its view's request throws (ibyq.at1)\n\nA frame's setup reads the held view's request inside the scope that\nreleases the hold, so a throw from that read no longer strands it and\nkeeps a retired state from being reclaimed.\n\nThe lane derivation's read of the last returned plan is marked as the\nexception it is: an input MobX cannot see, written only by the\ndeclaration that returns this derivation's output. Its header says where\neach switch comes from. The frame path's files (render cache, draw,\nsession source and state, feeds, render payload) carry reasons in place\nof ticket ids.\n"
         },
         {
           "sha": "9ba51a653f3638c684f3fcb151eb49156b46d806",

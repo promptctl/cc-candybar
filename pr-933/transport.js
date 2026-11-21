@@ -72750,9 +72750,10 @@ function setUpFrame(parts, sessionId2, readings, facts) {
     if (failed3 !== null) throw failed3.error;
     return null;
   }
-  const req = hold2.view.facts();
+  let req;
   let hintsError;
   try {
+    req = hold2.view.facts();
     contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
@@ -74778,8 +74779,8 @@ var SessionState = class {
   // How many derivations are subscribed to this store right now — every
   // computed that read session state and has not been released. Live configs
   // keep a bounded number; a count that climbs while the render cache does not
-  // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
-  // heap snapshot because nothing reported this). [LAW:nothing-unseen]
+  // is a disposed store still held, which nothing else would show short of a
+  // heap snapshot. [LAW:nothing-unseen]
   // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
   // dependency-tree API reads), `null` once nothing observes it. The other
   // public view, `getObserverTree`, materialises the whole recursive tree —
