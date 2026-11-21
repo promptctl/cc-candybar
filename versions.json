@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-933",
-      "ref": "refs/pull/933/merge",
-      "sha": "070588e7a1a3d8adf73c1120ca7298ff975c8c31",
-      "timestamp": "2026-11-21T08:27:20.190Z",
-      "commits": [
-        {
-          "sha": "070588e7a1a3d8adf73c1120ca7298ff975c8c31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T08:26:28Z",
-          "message": "Merge ae933c609e6300394c948105ad68e960bd315747 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
-        },
-        {
-          "sha": "ae933c609e6300394c948105ad68e960bd315747",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:26:16-07:00",
-          "message": "fix(renderer): a frame's hold is released when its view's request throws (ibyq.at1)\n\nA frame's setup reads the held view's request inside the scope that\nreleases the hold, so a throw from that read no longer strands it and\nkeeps a retired state from being reclaimed.\n\nThe lane derivation's read of the last returned plan is marked as the\nexception it is: an input MobX cannot see, written only by the\ndeclaration that returns this derivation's output. Its header says where\neach switch comes from. The frame path's files (render cache, draw,\nsession source and state, feeds, render payload) carry reasons in place\nof ticket ids.\n"
-        },
-        {
-          "sha": "9ba51a653f3638c684f3fcb151eb49156b46d806",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:18:13-07:00",
-          "message": "test(renderer): a still frame hands back the declaration the host follows (ibyq.at1)\n\nAcross still due frames, the renderer returns the very subscriptions\nobject the host already follows. The view-hold spy now has a positive\ncontrol: the drawn session is held, and the other session never is.\n\nThe frame path's comments give reasons, not ticket ids. The view door's\ncomment names both of its readers, and the reload comment says that the\nnext frame draws the successor or its opening's failure. The lane\nderivation's untracked read of the last returned plan states why it\nneeds no tracking.\n"
-        },
-        {
-          "sha": "8c8526903024087460ea603ff2881f39e0935772",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:07:08-07:00",
-          "message": "test(renderer): a still frame touches only the view it draws (ibyq.at1)\n\nAcross still due frames with two live sessions, the session that is not\ndrawn has its view held by nothing, beside the existing checks that the\nsubscription, origin and session reads are not repeated. A walk over\nevery view's hold injected into the per-turn declaration fails it.\n\nThe render cache's frame-path comments give their reasons without\nticket ids.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1c4ae7403a7b27557867f286571f4d2fe4159694",
-      "timestamp": "2026-11-21T07:41:49.263Z",
+      "sha": "14deeab12b857259c13fcd5b6ce31034774a8f0b",
+      "timestamp": "2026-11-21T08:37:17.141Z",
       "commits": [
         {
-          "sha": "1c4ae7403a7b27557867f286571f4d2fe4159694",
+          "sha": "14deeab12b857259c13fcd5b6ce31034774a8f0b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:40:41-07:00",
-          "message": "test(renderer): use explicit session inputs and bind samples once (#905)\n\nHost and renderer tests run on the production daemon with explicit session inputs, and fixture draws bind their sample once, as a session binds its view.\n\n- Sessions report only what they declare: the worker's PATH and an empty Claude directory.\n- A test file's fixture launchers belong to its runtime, and the test environment ends them after the file's last hook. An integration test checks this across two files in one process. The runner's global teardown reads the process table through its own probe.\n- Prepared configs resolve their globals over their own user file's authored preset roots, through the daemon's derivation.\n- The pane-subscribe hang-up, the click's mailbox wait and the absent user layer are each pinned against real behaviour.\n\nFour law-review passes; triage is recorded on the PR and on candybar-law-review-ibyq.xrv. Follow-ups are filed in the epic as .s4k (watch join window) and .6zj (launcher lifetime required)."
+          "timestamp": "2026-11-21T01:36:06-07:00",
+          "message": "fix(renderer): a still frame touches only the view it draws (#933)\n\nA still bar with N live sessions does no per-session walk per frame. Across still due frames, the renderer hands back the very subscriptions object the host already follows. The drawn session's view is held, and the other session's never is.\n\nA frame's setup reads the held view's request inside the scope that releases the hold, so a throw from that read can't strand it. The lane derivation's read of the last returned plan is marked as the exception it is. The frame path's comments give reasons instead of ticket ids.\n\nTicket: candybar-law-review-ibyq.at1"
         }
       ]
     },
