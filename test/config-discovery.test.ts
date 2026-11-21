@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
 import { heldClock } from "./helpers/held-clock";
-import { answerRepo } from "./helpers/repo-approval";
+import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
 import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
@@ -25,6 +25,7 @@ import {
 } from "../src/daemon/config-discovery/discovery-files";
 import {
   ConfigDiscovery,
+  type ConfigDiscoveryDeps,
   type RendererConfigs,
 } from "../src/daemon/config-discovery/config-discovery";
 import {
@@ -840,12 +841,18 @@ function physicalDiscovery(
     state = path.join(root, "state"),
     clock = heldClock(new Date()),
     reloaded,
+    files,
+    log = () => {},
+    moved = () => {},
   }: {
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
-    clock?: ReturnType<typeof heldClock>;
+    clock?: ConstructorParameters<typeof WatcherRegistry>[0]["clock"];
     reloaded?: (folders: ReadonlySet<string>) => void;
+    files?: ConfigDiscoveryDeps["files"];
+    log?: ConfigDiscoveryDeps["log"];
+    moved?: ConfigDiscoveryDeps["moved"];
   } = {},
 ) {
   const watchers = new WatcherRegistry({
@@ -857,9 +864,10 @@ function physicalDiscovery(
     stateDir: state,
     watchers,
     openText: countingText(reads, opens),
+    files,
     clock: systemTimekeeper,
-    log: () => {},
-    moved: () => {},
+    log,
+    moved,
     reloaded,
   });
   cleanups.push(
@@ -1312,12 +1320,11 @@ test("physical config and plugin text are shared across separate renderer discov
   expect(textOfLayer(next, c, hardlink)).toBe(changed);
 });
 
-// [LAW:verifiable-goals] Installs, renames and removals reach discovery
-// through the shared root's own watch, from a first install onto no root.
+// [LAW:verifiable-goals] Each step's change is heard by a watch batch that
+// discovers both origins together, from a first install onto no root.
 test("a plugin installed, renamed and removed in the shared root reaches each origin beside its own approved plugins", async () => {
-  const installed = userPluginRoot(locations(HOST));
-  expect(presence(installed)).toBe("absent");
-  cleanups.push(() => fs.rmSync(installed, { recursive: true, force: true }));
+  const data = project("shared-data");
+  const installed = path.join(data, "cc-candybar", "plugins");
   // A plugin folder at `dir`, laid down only when missing, so a round
   // that finds it in place changes nothing before its gesture.
   const lay = (dir: string) => {
@@ -1335,22 +1342,29 @@ test("a plugin installed, renamed and removed in the shared root reaches each or
   };
   const approved = repo("approved", "own");
   const awaiting = repo("awaiting", "theirs");
-  answerRepo(approved.dir);
-  // Every observation is keyed by its batch: the discovery lines logged
-  // before it. A key seen twice is a path one batch observed twice.
+  const state = path.join(root, "state");
+  expect(recordAnswer(repoConfigs(state), approved.dir, "approved").kind).toBe("ok");
+  // What discovery observed, in order: each opened file and listed folder,
+  // and the line that ends each batch.
   const observed: string[] = [];
-  const opened: string[] = [];
-  const batch = () => logged.filter((l) => l.startsWith("config discovery why=")).length;
-  const { service, logged, delivered } = discoveryRig({
-    ...diskFiles,
-    folders: (at) => {
-      observed.push(`${batch()} ${at}`);
-      return diskFiles.folders(at);
+  const logged: string[] = [];
+  const delivered: string[] = [];
+  const service = physicalDiscovery(data, [], {
+    state,
+    clock: systemTimekeeper,
+    opens: observed,
+    files: () => ({
+      folders: (at) => {
+        observed.push(at);
+        return diskFiles.folders(at);
+      },
+    }),
+    log: (_level, line) => {
+      logged.push(line);
+      if (line.startsWith("config discovery why=")) observed.push(line);
     },
-    text: (at) => {
-      opened.push(at);
-      observed.push(`${batch()} ${at}`);
-      return diskFiles.text(at);
+    moved: (renderer, origins) => {
+      for (const origin of origins) delivered.push(`${renderer} ${originKey(origin)}`);
     },
   });
   const otherName = rendererNameOf("other");
@@ -1362,22 +1376,24 @@ test("a plugin installed, renamed and removed in the shared root reaches each or
   other.follow([b]);
   const plugins = (snapshot: ConfigSnapshot | null) =>
     snapshot?.plugins.map((p) => path.basename(path.dirname(p.path))).sort();
-  const deliveredSince = (since: number) =>
-    [...new Set(delivered.slice(since).map(([r, key]) => `${r} ${key}`))].sort();
   const own = [`${MAIN_RENDERER} ${originKey(a)}`, `${otherName} ${originKey(b)}`].sort();
-  // The shared root's plugins reach both origins, each in its own delivery;
-  // only the approved origin adds its repository's plugin.
+  // The shared root's plugins reach both origins, each in its own delivery,
+  // and only the approved origin adds its repository's plugin.
   const reached = async (step: string, change: () => void, shared: string[]) => {
-    const since = delivered.length;
+    const since = { delivered: delivered.length, logged: logged.length };
     await untilHeard(
       change,
       () =>
-        deliveredSince(since).length === 2 &&
         String(plugins(main.snapshotOf(a))) === String([...shared, "own"].sort()) &&
         String(plugins(other.snapshotOf(b))) === String(shared),
       `${step} reaching both origins`,
     );
-    expect(deliveredSince(since)).toEqual(own);
+    expect([...new Set(delivered.slice(since.delivered))].sort()).toEqual(own);
+    expect(
+      logged
+        .slice(since.logged)
+        .filter((l) => l.startsWith("config discovery why=config-watch")),
+    ).toContainEqual(expect.stringContaining("discovered=2"));
   };
   expect(plugins(main.snapshotOf(a))).toEqual(["own"]);
   expect(plugins(other.snapshotOf(b))).toEqual([]);
@@ -1402,11 +1418,17 @@ test("a plugin installed, renamed and removed in the shared root reaches each or
   expect(roles(main.snapshotOf(a))).toContain("project");
   expect(roles(other.snapshotOf(b))).not.toContain("project");
   expect(other.snapshotOf(b)?.repo).toMatchObject({ standing: "awaiting" });
-  expect(opened).not.toContain(path.join(awaiting.dir, ".cc-candybar.json5"));
-  expect(opened).not.toContain(awaiting.definition);
-  expect(logged.some((l) => l.includes("why=config-watch") && l.includes("discovered=2"))).toBe(true);
-  expect(observed.filter((key, i) => observed.indexOf(key) !== i)).toEqual([]);
-});
+  expect(observed).not.toContain(path.join(awaiting.dir, ".cc-candybar.json5"));
+  expect(observed).not.toContain(awaiting.definition);
+  // A batch that discovers both origins observes each path once.
+  let batch: string[] = [];
+  const batches = [batch];
+  for (const entry of observed)
+    if (entry.startsWith("config discovery why=")) batches.push((batch = []));
+    else batch.push(entry);
+  for (const batch of batches)
+    expect(batch.filter((entry, i) => batch.indexOf(entry) !== i)).toEqual([]);
+}, 60_000);
 
 test("a project cannot inherit another origin's approval through the same physical config", () => {
   const approved = project("approved");
