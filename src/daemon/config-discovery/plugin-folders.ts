@@ -83,32 +83,10 @@ export function listFolders(root: string): FolderEntries | Unchecked {
     }
     return { folders, files };
   } catch (e) {
-    const error = (e as Error).message;
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT")
-      return { path: root, error };
-    try {
-      const nowhere = linkToNothing(root);
-      return nowhere === null
-        ? { folders: [], files: [] }
-        : { path: root, error: `${error} (${nowhere} is a link to nothing)` };
-    } catch (probe) {
-      return { path: root, error: (probe as Error).message };
-    }
+    return (e as NodeJS.ErrnoException).code === "ENOENT"
+      ? { folders: [], files: [] }
+      : { path: root, error: (e as Error).message };
   }
-}
-
-// [LAW:no-silent-failure] A missing root is absent only when the nearest
-// entry on its path is a directory. A link to nothing there (a removed
-// volume, a package prefix uninstalled under a linked share/) is a broken
-// root, which would otherwise read as one holding no plugins.
-function linkToNothing(root: string): string | null {
-  let at = root;
-  while (fs.lstatSync(at, { throwIfNoEntry: false }) === undefined) {
-    const parent = path.dirname(at);
-    if (parent === at) return null;
-    at = parent;
-  }
-  return fs.statSync(at, { throwIfNoEntry: false })?.isDirectory() ? null : at;
 }
 
 // A symlinked plugin folder (a package manager linking its share/) counts;

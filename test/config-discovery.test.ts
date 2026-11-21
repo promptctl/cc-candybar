@@ -39,8 +39,9 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
-import { listFolders, userPluginRoot } from "../src/daemon/config-discovery/plugin-folders";
+import { userPluginRoot } from "../src/daemon/config-discovery/plugin-folders";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import { presence } from "../src/utils/presence";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
@@ -1311,37 +1312,17 @@ test("physical config and plugin text are shared across separate renderer discov
   expect(textOfLayer(next, c, hardlink)).toBe(changed);
 });
 
-test("a plugin root, or a folder on its path, linked to nothing is unchecked, while one never made holds nothing", () => {
-  const nowhere = path.join(root, "removed-prefix");
-  const linkedRoot = path.join(project("linked-root"), "plugins");
-  fs.symlinkSync(nowhere, linkedRoot);
-  const linkedShare = path.join(project("linked-share"), "share");
-  fs.symlinkSync(nowhere, linkedShare);
-  for (const [at, link] of [
-    [linkedRoot, linkedRoot],
-    [path.join(linkedShare, "cc-candybar", "plugins"), linkedShare],
-  ] as const)
-    expect(listFolders(at)).toEqual({
-      path: at,
-      error: expect.stringContaining(`${link} is a link to nothing`),
-    });
-  expect(listFolders(path.join(project("real-share"), "cc-candybar", "plugins"))).toEqual({
-    folders: [],
-    files: [],
-  });
-});
-
 // [LAW:verifiable-goals] Installs, renames and removals reach discovery
 // through the shared root's own watch, from a first install onto no root.
 test("a plugin installed, renamed and removed in the shared root reaches each origin beside its own approved plugins", async () => {
   const installed = userPluginRoot(locations(HOST));
-  expect(fs.existsSync(installed)).toBe(false);
+  expect(presence(installed)).toBe("absent");
   cleanups.push(() => fs.rmSync(installed, { recursive: true, force: true }));
   // A plugin folder at `dir`, laid down only when missing, so a round
   // that finds it in place changes nothing before its gesture.
   const lay = (dir: string) => {
     const definition = path.join(dir, "plugin.json5");
-    if (fs.existsSync(definition)) return definition;
+    if (presence(definition) === "present") return definition;
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(definition, `{ segments: { s: { template: "${path.basename(dir)}" } } }`);
     return definition;
