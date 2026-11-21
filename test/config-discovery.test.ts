@@ -39,6 +39,8 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
+import { listFolders, userPluginRoot } from "../src/daemon/config-discovery/plugin-folders";
+import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
@@ -1307,6 +1309,122 @@ test("physical config and plugin text are shared across separate renderer discov
     content: { kind: "unreadable", error: "not a file" },
   });
   expect(textOfLayer(next, c, hardlink)).toBe(changed);
+});
+
+test("a plugin root, or a folder on its path, linked to nothing is unchecked, while one never made holds nothing", () => {
+  const nowhere = path.join(root, "removed-prefix");
+  const linkedRoot = path.join(project("linked-root"), "plugins");
+  fs.symlinkSync(nowhere, linkedRoot);
+  const linkedShare = path.join(project("linked-share"), "share");
+  fs.symlinkSync(nowhere, linkedShare);
+  for (const [at, link] of [
+    [linkedRoot, linkedRoot],
+    [path.join(linkedShare, "cc-candybar", "plugins"), linkedShare],
+  ] as const)
+    expect(listFolders(at)).toEqual({
+      path: at,
+      error: expect.stringContaining(`${link} is a link to nothing`),
+    });
+  expect(listFolders(path.join(project("real-share"), "cc-candybar", "plugins"))).toEqual({
+    folders: [],
+    files: [],
+  });
+});
+
+// [LAW:verifiable-goals] Installs, renames and removals reach discovery
+// through the shared root's own watch, from a first install onto no root.
+test("a plugin installed, renamed and removed in the shared root reaches each origin beside its own approved plugins", async () => {
+  const installed = userPluginRoot(locations(HOST));
+  expect(fs.existsSync(installed)).toBe(false);
+  cleanups.push(() => fs.rmSync(installed, { recursive: true, force: true }));
+  // A plugin folder at `dir`, laid down only when missing, so a round
+  // that finds it in place changes nothing before its gesture.
+  const lay = (dir: string) => {
+    const definition = path.join(dir, "plugin.json5");
+    if (fs.existsSync(definition)) return definition;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(definition, `{ segments: { s: { template: "${path.basename(dir)}" } } }`);
+    return definition;
+  };
+  const repo = (name: string, plugin: string) => {
+    const dir = project(name);
+    fs.mkdirSync(path.join(dir, ".git"));
+    fs.writeFileSync(path.join(dir, ".cc-candybar.json5"), "{}");
+    return { dir, definition: lay(path.join(dir, ".cc-candybar", "plugins", plugin)) };
+  };
+  const approved = repo("approved", "own");
+  const awaiting = repo("awaiting", "theirs");
+  answerRepo(approved.dir);
+  // Every observation is keyed by its batch: the discovery lines logged
+  // before it. A key seen twice is a path one batch observed twice.
+  const observed: string[] = [];
+  const opened: string[] = [];
+  const batch = () => logged.filter((l) => l.startsWith("config discovery why=")).length;
+  const { service, logged, delivered } = discoveryRig({
+    ...diskFiles,
+    folders: (at) => {
+      observed.push(`${batch()} ${at}`);
+      return diskFiles.folders(at);
+    },
+    text: (at) => {
+      opened.push(at);
+      observed.push(`${batch()} ${at}`);
+      return diskFiles.text(at);
+    },
+  });
+  const otherName = rendererNameOf("other");
+  const main = service.forRenderer(MAIN_RENDERER);
+  const other = service.forRenderer(otherName);
+  const a = originOf(approved.dir, approved.dir);
+  const b = originOf(awaiting.dir, awaiting.dir);
+  main.follow([a]);
+  other.follow([b]);
+  const plugins = (snapshot: ConfigSnapshot | null) =>
+    snapshot?.plugins.map((p) => path.basename(path.dirname(p.path))).sort();
+  const deliveredSince = (since: number) =>
+    [...new Set(delivered.slice(since).map(([r, key]) => `${r} ${key}`))].sort();
+  const own = [`${MAIN_RENDERER} ${originKey(a)}`, `${otherName} ${originKey(b)}`].sort();
+  // The shared root's plugins reach both origins, each in its own delivery;
+  // only the approved origin adds its repository's plugin.
+  const reached = async (step: string, change: () => void, shared: string[]) => {
+    const since = delivered.length;
+    await untilHeard(
+      change,
+      () =>
+        deliveredSince(since).length === 2 &&
+        String(plugins(main.snapshotOf(a))) === String([...shared, "own"].sort()) &&
+        String(plugins(other.snapshotOf(b))) === String(shared),
+      `${step} reaching both origins`,
+    );
+    expect(deliveredSince(since)).toEqual(own);
+  };
+  expect(plugins(main.snapshotOf(a))).toEqual(["own"]);
+  expect(plugins(other.snapshotOf(b))).toEqual([]);
+
+  const widget = path.join(installed, "widget");
+  const gadget = path.join(installed, "gadget");
+  await reached("an install", () => {
+    fs.rmSync(widget, { recursive: true, force: true });
+    lay(widget);
+  }, ["widget"]);
+  await reached("a rename", () => {
+    fs.rmSync(gadget, { recursive: true, force: true });
+    lay(widget);
+    fs.renameSync(widget, gadget);
+  }, ["gadget"]);
+  await reached("a removal", () => {
+    lay(gadget);
+    fs.rmSync(gadget, { recursive: true });
+  }, []);
+
+  const roles = (snapshot: ConfigSnapshot | null) => snapshot?.chain.map((l) => l.role);
+  expect(roles(main.snapshotOf(a))).toContain("project");
+  expect(roles(other.snapshotOf(b))).not.toContain("project");
+  expect(other.snapshotOf(b)?.repo).toMatchObject({ standing: "awaiting" });
+  expect(opened).not.toContain(path.join(awaiting.dir, ".cc-candybar.json5"));
+  expect(opened).not.toContain(awaiting.definition);
+  expect(logged.some((l) => l.includes("why=config-watch") && l.includes("discovered=2"))).toBe(true);
+  expect(observed.filter((key, i) => observed.indexOf(key) !== i)).toEqual([]);
 });
 
 test("a project cannot inherit another origin's approval through the same physical config", () => {
