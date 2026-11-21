@@ -71032,7 +71032,7 @@ var RenderCache = class {
   // session's first render can evict its entry and a saved file can reload
   // it. Either retires the state; the cache disposes it when this hold is
   // released, so the render finishes on the state it resolved its payload
-  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
+  // from. `using` at the call site releases on
   // every exit, a throw included.
   hold(origin) {
     const entry = this.getOrCreate(origin);
@@ -71096,10 +71096,11 @@ var RenderCache = class {
     const entry = this.entries.get(key);
     if (entry !== void 0) this.drop(key, entry, "evict");
   }
-  // [LAW:single-enforcer] A frame's door: the session's current view, held
-  // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O;
-  // only an event opens a view (ViewOpening).
+  // [LAW:single-enforcer] The door to a session's current view, held for a
+  // synchronous read as `holdSession` holds one, or none: a frame's draw and
+  // the lane declaration's read of each view. It creates nothing — no entry,
+  // no view, no declaration — so a frame performs no I/O; only an event opens
+  // a view (ViewOpening).
   holdView(sessionId2) {
     const view = this.views.get(sessionId2);
     if (view === void 0) return null;

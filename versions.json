@@ -4,15 +4,22 @@
     {
       "version": "pr-933",
       "ref": "refs/pull/933/merge",
-      "sha": "6903927bc82438868e26c687fbdf2bf1967071bf",
-      "timestamp": "2026-11-21T08:10:03.911Z",
+      "sha": "8f71130c469d74f1e979a02990641f870e64df48",
+      "timestamp": "2026-11-21T08:19:26.041Z",
       "commits": [
         {
-          "sha": "6903927bc82438868e26c687fbdf2bf1967071bf",
+          "sha": "8f71130c469d74f1e979a02990641f870e64df48",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T01:08:59-07:00",
-          "message": "Merge 8c8526903024087460ea603ff2881f39e0935772 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+          "timestamp": "2026-11-21T08:18:25Z",
+          "message": "Merge 9ba51a653f3638c684f3fcb151eb49156b46d806 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+        },
+        {
+          "sha": "9ba51a653f3638c684f3fcb151eb49156b46d806",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T01:18:13-07:00",
+          "message": "test(renderer): a still frame hands back the declaration the host follows (ibyq.at1)\n\nAcross still due frames, the renderer returns the very subscriptions\nobject the host already follows. The view-hold spy now has a positive\ncontrol: the drawn session is held, and the other session never is.\n\nThe frame path's comments give reasons, not ticket ids. The view door's\ncomment names both of its readers, and the reload comment says that the\nnext frame draws the successor or its opening's failure. The lane\nderivation's untracked read of the last returned plan states why it\nneeds no tracking.\n"
         },
         {
           "sha": "8c8526903024087460ea603ff2881f39e0935772",
