@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-934",
+      "ref": "refs/pull/934/merge",
+      "sha": "00c3572b5313454a52ea1c7ae89169c4d528edd1",
+      "timestamp": "2026-11-21T08:59:40.475Z",
+      "commits": [
+        {
+          "sha": "00c3572b5313454a52ea1c7ae89169c4d528edd1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T01:58:39-07:00",
+          "message": "Merge 147fe5aec46955709da0adfe01413a424ee0020b into 4639261509c048460769c3b12b325bc86a5ff100\n"
+        },
+        {
+          "sha": "147fe5aec46955709da0adfe01413a424ee0020b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T01:57:48-07:00",
+          "message": "fix(daemon): a launcher pipe event leaves the daemon's facts once no bar can show it\n\nThe launcher reports each pipe event to its observer and keeps none of it.\nThe daemon holds the latest in a held slot, as it holds a renderer's end and\nan act's failure: shown by the one event hold, answered by a confirmed write,\nand let go once no bar can show it. A pipe event that recurs while one is\nheld is counted, and what recurred is held afresh when the slot lets go, so\na flood moves no bar.\n\nThe daemon's facts carry the pipe event as its own field, so the private\nrenderer wire moves to version 15.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4639261509c048460769c3b12b325bc86a5ff100",
