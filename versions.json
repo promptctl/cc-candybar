@@ -4,15 +4,22 @@
     {
       "version": "pr-925",
       "ref": "refs/pull/925/merge",
-      "sha": "f1151498a5cdf90d9408fc7ee72cb725513c6593",
-      "timestamp": "2026-11-20T22:41:12.759Z",
+      "sha": "c8d16d4fc00f2ee25b9c959af1e1f13d43884ffd",
+      "timestamp": "2026-11-21T01:20:27.547Z",
       "commits": [
         {
-          "sha": "f1151498a5cdf90d9408fc7ee72cb725513c6593",
+          "sha": "c8d16d4fc00f2ee25b9c959af1e1f13d43884ffd",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T15:39:59-07:00",
-          "message": "Merge 1e71b2851f8bdf1abfd12c1691bb02091565b1a5 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-21T01:19:21Z",
+          "message": "Merge 94b09e0d27ba58e2066e6df9c56f8f3c0bbf155b into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "94b09e0d27ba58e2066e6df9c56f8f3c0bbf155b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T18:19:06-07:00",
+          "message": "fix(daemon): every unawaited settle is a named clock task\n\nThe daemon takes only a reporting clock, which carries the inbox its task\nthrows land in, so the clock and the bar's error list cannot be wired apart.\nA throw repeated with the same message stays quiet, and a new message is\nlogged once and joins the held error.\n\nWork that settled through a bare promise chain now runs as a named clock\ntask: a bar pane's effect, each keyed queue's drain, a wait whose work fails\nafter its deadline, and a launch's after-exit steps. A throw past their own\nhandlers reaches every bar instead of vanishing.\n\nEach keyed source's refresh event names how many holders share it.\n"
         },
         {
           "sha": "1e71b2851f8bdf1abfd12c1691bb02091565b1a5",
