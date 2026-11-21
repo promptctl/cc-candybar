@@ -1475,9 +1475,8 @@ export class RenderCache<
 
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O;
+  // only an event opens a view (ViewOpening).
   holdView(sessionId: SessionId): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
@@ -1747,6 +1746,15 @@ export class RenderCache<
         origin,
         digest: selected.kind === "authored" ? selected.digest : null,
       }));
+  }
+
+  // [LAW:effects-at-boundaries] Each live view's source, for a derivation
+  // over the views. It takes no hold: a hold's release can reclaim a retired
+  // state, and a derivation disposes nothing.
+  viewSources(): ReadonlyMap<SessionId, S> {
+    return new Map(
+      [...this.views].map(([session, view]) => [session, view.source]),
+    );
   }
 
   subscriptions(): Pick<Subscriptions, "sources"> {

@@ -143,13 +143,18 @@ export function mainRenderer(
     return id;
   };
   // The subscriptions this renderer last returned: none before its first turn.
-  let subscriptions: Subscriptions = {
-    sources: {},
-    managedFolders: [],
-    configSelections: [],
-    lanes: {},
-    configs: [],
-  };
+  // [LAW:no-ambient-temporal-coupling] Observable, so the lane derivation that
+  // keeps a draft's last returned switches tracks the plan it reads them from.
+  const subscriptions = observable.box<Subscriptions>(
+    {
+      sources: {},
+      managedFolders: [],
+      configSelections: [],
+      lanes: {},
+      configs: [],
+    },
+    { deep: false },
+  );
   let wake: Tick | null = null;
   // [LAW:no-ambient-temporal-coupling] Waiting work carries its intent and
   // session. Its origin and live request are read when it resumes.
@@ -524,26 +529,25 @@ export function mainRenderer(
       // view closes stops being named, so its switches go.
       const lanes: Record<SessionId, LaneSwitches> = {};
       const unprepared = new Map<string, RenderOrigin>();
-      for (const session of Object.keys(sources.get()) as SessionId[]) {
+      for (const [session, source] of parts.renderCache.viewSources()) {
         const editing = parts.edits.draft(session) !== null;
         let committed = null;
         if (editing) {
           const { requested } = parts.worldStates.requestOf(session);
-          // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
-          // while its committed config is not held. Keep its last committed
-          // lane switches until the host supplies that config again.
+          // A draft's preview is alive while its committed config is not
+          // held. Keep its last returned lane switches until the host
+          // supplies that config again.
           const delivered = parts.renderCache.holdsConfig(requested);
           const state = parts.renderCache.committedState(requested);
           if (!delivered || state === null) {
             if (delivered) unprepared.set(originKey(requested), requested);
-            const held = subscriptions.lanes[session];
+            const held = subscriptions.get().lanes[session];
             if (held !== undefined) lanes[session] = held;
             continue;
           }
           committed = { settings: parts.edits.committed, state };
         }
-        const switches = viewLanes(parts, session, committed);
-        if (switches !== null) lanes[session] = switches;
+        lanes[session] = viewLanes(session, source, committed);
       }
       return { lanes, unprepared: [...unprepared.values()] };
     },
@@ -608,12 +612,12 @@ export function mainRenderer(
         parts.renderCache.getOrCreate(origin);
       next = declaration.read();
     }
-    if (pruneOwed || subscriptions.configs !== next.plan.configs) {
+    if (pruneOwed || subscriptions.get().configs !== next.plan.configs) {
       parts.renderCache.prune(new Set(next.plan.configs.map(originKey)));
       pruneOwed = false;
     }
     observed = next;
-    subscriptions = next.plan;
+    runInAction(() => subscriptions.set(next.plan));
   };
 
   // [LAW:one-source-of-truth] The exhaustive drain record supplies both
@@ -674,7 +678,7 @@ export function mainRenderer(
         runInAction(() => declaration.release()),
       );
 
-    return { outcome, subscriptions, wake, stored };
+    return { outcome, subscriptions: subscriptions.get(), wake, stored };
   };
 
   return {

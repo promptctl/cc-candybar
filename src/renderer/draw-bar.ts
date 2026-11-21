@@ -177,20 +177,18 @@ export function renderFrame(
   }
 }
 
-// The committed lane settings for a session with a live view. The draft
-// can replace what the view draws while the host follows committed config.
+// The committed lane settings for a session's live view, drawn from `source`.
+// The draft can replace what the view draws while the host follows committed
+// config.
 export function viewLanes(
-  parts: RendererParts,
   sessionId: SessionId,
+  source: SessionSource,
   committed: {
     readonly settings: SessionStateRW;
     readonly state: DslRenderState;
   } | null,
-): LaneSwitches | null {
-  const { renderCache } = parts;
-  using hold = renderCache.holdView(sessionId);
-  if (hold === null) return null;
-  if (committed === null) return laneSwitches(hold.view.source.effective());
+): LaneSwitches {
+  if (committed === null) return laneSwitches(source.effective());
 
   // [LAW:effects-at-boundaries] Only committed settings declare a live
   // host surface. A draft changes the bar's preview until Save lands.
