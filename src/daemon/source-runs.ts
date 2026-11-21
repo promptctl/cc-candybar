@@ -386,8 +386,8 @@ export class SourceRuns {
         keyOf: (run) => run.digest,
         // [LAW:nothing-unseen] Its declaration's digest beside its own, so
         // the entry is found from the session's subscriptions that name it.
-        fields: ({ digest, run }, holders) =>
-          `digest=${shortDigest(digest)} declared=${shortDigest(run.digest)} where=${valueOf(whereOf(run.identity.read))} sharedBy=${holders}`,
+        fields: ({ digest, run }) =>
+          `digest=${shortDigest(digest)} declared=${shortDigest(run.digest)} where=${valueOf(whereOf(run.identity.read))}`,
         // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
         // readers through this one function; text/regex/json are three
         // parsers through it.

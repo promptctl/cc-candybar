@@ -1,3 +1,4 @@
+import { reportingClock } from "../../../src/daemon/task-throws";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -77,7 +78,7 @@ test.each(["restored", "unrestored"] as const)(
       fs.writeFileSync(bundle, "// in-process renderer entry");
       answerRepo(project, "approved", env);
       const writes: string[] = [];
-      const clock = heldClock(new Date());
+      const clock = heldClock(new Date(), reportingClock);
       const running = startDaemon(env, {
         clock,
         writeConfigFile(file, text) {

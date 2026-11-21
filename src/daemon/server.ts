@@ -24,7 +24,7 @@ import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
 import type { World } from "../host";
-import type { TaskThrowInbox } from "./task-throws.js";
+import type { ReportingClock } from "./task-throws.js";
 import {
   createDaemon,
   type PreparedDaemon,
@@ -70,9 +70,7 @@ let startup: Promise<void> | null = null;
 // handed it, every path it touches (parsed from that world's host here and
 // nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
 interface DaemonProcess {
-  readonly world: World;
-  // What the world's clock reports its tasks' throws into.
-  readonly taskThrows: TaskThrowInbox;
+  readonly world: World<ReportingClock>;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
@@ -114,11 +112,10 @@ function processEntry(): string {
   return entry;
 }
 
-export function runDaemon(world: World, taskThrows: TaskThrowInbox): void {
+export function runDaemon(world: World<ReportingClock>): void {
   const paths = daemonPaths(world.host);
   thisProcess = {
     world,
-    taskThrows,
     paths,
     log: new DaemonLog(paths.log, world.clock),
   };
@@ -152,7 +149,11 @@ export function runDaemon(world: World, taskThrows: TaskThrowInbox): void {
   startup = boot().catch(refuseBoot);
 }
 
+// [LAW:no-silent-failure] What the clock's tasks threw before a daemon could
+// take it is said beside the refusal, since it may be the refusal's cause.
 function refuseBoot(err: unknown): void {
+  for (const { task, thrown } of daemonProcess().world.clock.throws.untaken())
+    serverLog("error", `${task} threw: ${inspect(thrown)}`);
   serverLog("error", `refusing to boot: ${inspect(err)}`);
   shutdown(1);
 }
@@ -163,7 +164,7 @@ async function boot(): Promise<void> {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const { world, taskThrows, paths, log: daemonLog } = daemonProcess();
+  const { world, paths, log: daemonLog } = daemonProcess();
   const { host } = world;
   const memoryLimit = memoryLimitBytes(host.env);
 
@@ -225,7 +226,6 @@ async function boot(): Promise<void> {
     paths,
     memoryLimitBytes: memoryLimit,
     clock: world.clock,
-    taskThrows,
     exit: shutdown,
   });
   prepared = daemon;
@@ -524,9 +524,9 @@ function shutdown(code: number): void {
 async function closeThenExit(code: number): Promise<void> {
   // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every step runs,
   // in order, and one that throws is said by name without skipping the rest:
-  // a close that failed still gives up the registry slot. An unhandled
-  // rejection here would only reach a shutdown already under way, and the
-  // backstop's SIGKILL would end the process in place of the exit below.
+  // a close that failed still gives up the registry slot. A throw past the
+  // daemon's close is the clock's to report, which says it in daemon.log, and
+  // the backstop's SIGKILL ends a close that never settles.
   await runTeardown(
     [
       ["finish admission", () => startup ?? undefined],

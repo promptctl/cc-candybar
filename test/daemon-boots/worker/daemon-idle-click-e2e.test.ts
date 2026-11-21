@@ -5,6 +5,7 @@
 // file. Measured on the daemon's own request handling, the click a link the
 // bar drew.
 
+import { reportingClock } from "../../../src/daemon/task-throws";
 import fs from "node:fs";
 import JSON5 from "json5";
 import os from "node:os";
@@ -47,7 +48,7 @@ test("a click on a session the sweep retired lands its write without waiting for
       root: { h: ["pin"] },
     }`,
   );
-  const clock = heldClock(new Date());
+  const clock = heldClock(new Date(), reportingClock);
   const daemon = startDaemon(env, { clock });
   try {
     const bar = await render(daemon, SID, project, {}, [

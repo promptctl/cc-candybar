@@ -3,7 +3,7 @@
 // the clock goes on. The held clock is built over its timers as the process's
 // is over the machine's (src/time.ts), so this is the process's clock.
 
-import type { ReportThrow } from "../../src/time";
+import { clockOver, rethrowing, type ReportThrow } from "../../src/time";
 import { heldClock } from "../helpers/held-clock";
 
 const START = new Date("2026-01-01T00:00:00Z");
@@ -12,7 +12,10 @@ function rig() {
   const reported: Array<{ task: string; thrown: unknown; at: number }> = [];
   const report: ReportThrow = (task, thrown, at) =>
     reported.push({ task, thrown, at });
-  return { clock: heldClock(START, report), reported };
+  return {
+    clock: heldClock(START, (source) => clockOver(source, report)),
+    reported,
+  };
 }
 
 const broke = new Error("it broke");
@@ -88,6 +91,31 @@ test("a detached task runs now; its throw and its later rejection are reported, 
     "daemon log flush",
     "url click landing",
   ]);
+});
+
+test("a task's rejecting thenable is reported as a promise's rejection is", async () => {
+  const { clock, reported } = rig();
+  const thenable: PromiseLike<never> = {
+    then: (_ok, fail) => {
+      fail?.(broke);
+      return thenable;
+    },
+  };
+  clock.detach("forge lookup", () => thenable);
+  await drained();
+  expect(reported).toEqual([
+    { task: "forge lookup", thrown: broke, at: START.getTime() },
+  ]);
+});
+
+test("a command's clock ends on a task's throw, naming the task, with the throw as its cause", () => {
+  const clock = heldClock(START, (source) => clockOver(source, rethrowing));
+  clock.after("install currency", 10, () => {
+    throw broke;
+  });
+  expect(() => clock.advance(10)).toThrow(
+    expect.objectContaining({ message: "install currency threw", cause: broke }),
+  );
 });
 
 test("a task that settles cleanly reports nothing, whatever it returns", async () => {

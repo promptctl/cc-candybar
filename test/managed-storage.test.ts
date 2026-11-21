@@ -184,7 +184,7 @@ describe("ManagedStorage reads", () => {
     expect(refreshes(r, "first")).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} by=first outcome=ok took=\\d+ms$`,
+          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} sharedBy=\\d+ by=first outcome=ok took=\\d+ms$`,
         ),
       ),
     );

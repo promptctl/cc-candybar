@@ -11,7 +11,6 @@
 
 import fs from "node:fs";
 import { processWorld } from "../../../src/host.js";
-import { rethrowing } from "../../../src/time.js";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire.js";
 import { linksOf } from "../../../src/click/read.js";
@@ -33,9 +32,19 @@ import {
 } from "../world.js";
 
 // A working checkout: a few hundred files, a dirty tree, an upstream.
-const CHECKOUT: RepoShape = { files: 200, commits: 20, modified: 8, untracked: 4 };
+const CHECKOUT: RepoShape = {
+  files: 200,
+  commits: 20,
+  modified: 8,
+  untracked: 4,
+};
 // A small one, for the benchmarks that need many.
-const SMALL_CHECKOUT: RepoShape = { files: 50, commits: 3, modified: 2, untracked: 1 };
+const SMALL_CHECKOUT: RepoShape = {
+  files: 50,
+  commits: 3,
+  modified: 2,
+  untracked: 1,
+};
 // A session of a few hours.
 const TURNS = 1_700;
 const WARMUP_TICKS = 10;
@@ -61,16 +70,22 @@ function warmVouched(
   const moved: string[] = [];
   for (const key of ["size", "views", "compiles"] as const) {
     if (after.renderCache[key] !== before.renderCache[key]) {
-      moved.push(`renderCache.${key} ${before.renderCache[key]} -> ${after.renderCache[key]}`);
+      moved.push(
+        `renderCache.${key} ${before.renderCache[key]} -> ${after.renderCache[key]}`,
+      );
     }
   }
   for (const key of ["errored", "timedOut"] as const) {
     if (after.requests[key] !== before.requests[key]) {
-      moved.push(`requests.${key} ${before.requests[key]} -> ${after.requests[key]}`);
+      moved.push(
+        `requests.${key} ${before.requests[key]} -> ${after.requests[key]}`,
+      );
     }
   }
   if (moved.length > 0) {
-    throw new Error(`${what}: the daemon changed while it was measured: ${moved.join(", ")}`);
+    throw new Error(
+      `${what}: the daemon changed while it was measured: ${moved.join(", ")}`,
+    );
   }
 }
 
@@ -80,7 +95,9 @@ function warmVouched(
 function answered(ticks: readonly Tick[], what: string): number {
   const unanswered = ticks.filter((t) => !t.ok).length;
   if (unanswered * 2 > ticks.length) {
-    throw new Error(`${what}: ${unanswered} of ${ticks.length} ticks went unanswered`);
+    throw new Error(
+      `${what}: ${unanswered} of ${ticks.length} ticks went unanswered`,
+    );
   }
   return unanswered;
 }
@@ -179,7 +196,9 @@ const concurrentTicks = (sessions: number): Benchmark => ({
           for (let n = 0; n < plan.samples; n++) {
             const due = started + offset + n * PERIOD_MS;
             await sleep(Math.max(0, due - performance.now()));
-            perSession[i]!.push(await world.tick(session, DEFAULT_COLUMNS, 1000 + n));
+            perSession[i]!.push(
+              await world.tick(session, DEFAULT_COLUMNS, 1000 + n),
+            );
           }
         }),
       );
@@ -279,7 +298,10 @@ const coldDirectory: Benchmark = {
   samples: 12,
   async run(plan) {
     return inWorld(async (world) => {
-      await world.settle(world.session("base", CHECKOUT, TURNS), DEFAULT_COLUMNS);
+      await world.settle(
+        world.session("base", CHECKOUT, TURNS),
+        DEFAULT_COLUMNS,
+      );
       const cold: Cold = { firstTick: [], firstBar: [] };
       for (let i = 0; i < plan.samples; i++) {
         const settled = await world.settle(
@@ -309,7 +331,12 @@ async function untilChanged(
   before: string,
   n0: number,
   change: () => Promise<void>,
-): Promise<{ visibleMs: number; stallMs: number; unanswered: number; output: string }> {
+): Promise<{
+  visibleMs: number;
+  stallMs: number;
+  unanswered: number;
+  output: string;
+}> {
   const started = performance.now();
   await change();
   let stallMs = 0;
@@ -319,11 +346,18 @@ async function untilChanged(
     stallMs = Math.max(stallMs, tick.ms);
     if (!tick.ok) unanswered++;
     else if (tick.output !== before) {
-      return { visibleMs: performance.now() - started, stallMs, unanswered, output: tick.output };
+      return {
+        visibleMs: performance.now() - started,
+        stallMs,
+        unanswered,
+        output: tick.output,
+      };
     }
     await sleep(PROBE_PACE_MS);
   }
-  throw new Error(`the bar did not change within ${LOOK_BUDGET_MS} ms of the change`);
+  throw new Error(
+    `the bar did not change within ${LOOK_BUDGET_MS} ms of the change`,
+  );
 }
 
 const PRESETS = ["compact", "zen"] as const;
@@ -340,18 +374,27 @@ const configReload = (entries: number): Benchmark => ({
       );
       const probe = sessions[0]!;
       for (const s of sessions) await world.settle(s, DEFAULT_COLUMNS);
-      let previous = drawn(await world.tick(probe, DEFAULT_COLUMNS, 1), "probe").output;
+      let previous = drawn(
+        await world.tick(probe, DEFAULT_COLUMNS, 1),
+        "probe",
+      ).output;
       const visible: number[] = [];
       const stall: number[] = [];
       let unanswered = 0;
       for (let i = 0; i < plan.samples; i++) {
         const preset = PRESETS[i % PRESETS.length]!;
-        const changed = await untilChanged(world, probe, previous, 10, async () => {
-          // Renamed into place, so the watcher never reads a truncated file.
-          const staged = `${world.configFile}.next`;
-          fs.writeFileSync(staged, `{ globals: { preset: "${preset}" } }\n`);
-          fs.renameSync(staged, world.configFile);
-        });
+        const changed = await untilChanged(
+          world,
+          probe,
+          previous,
+          10,
+          async () => {
+            // Renamed into place, so the watcher never reads a truncated file.
+            const staged = `${world.configFile}.next`;
+            fs.writeFileSync(staged, `{ globals: { preset: "${preset}" } }\n`);
+            fs.renameSync(staged, world.configFile);
+          },
+        );
         visible.push(changed.visibleMs);
         stall.push(changed.stallMs);
         unanswered += changed.unanswered;
@@ -375,7 +418,7 @@ const configReload = (entries: number): Benchmark => ({
 
 async function click(url: string): Promise<number> {
   const started = performance.now();
-  const outcome = await tryClickViaDaemon(processWorld(rethrowing), url);
+  const outcome = await tryClickViaDaemon(processWorld(), url);
   const ms = performance.now() - started;
   // [LAW:no-silent-failure] A click the daemon refused did nothing; its round
   // trip is not a click's.
@@ -396,27 +439,41 @@ const menuClicks: Benchmark = {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
       const menu = (state: string): string =>
-        effectsUrl([{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] }]);
-      const series: Record<"click-open" | "draw-open" | "click-close" | "draw-close", number[]> = {
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", state] },
+        ]);
+      const series: Record<
+        "click-open" | "draw-open" | "click-close" | "draw-close",
+        number[]
+      > = {
         "click-open": [],
         "draw-open": [],
         "click-close": [],
         "draw-close": [],
       };
       let n = 100;
-      const closedLines = drawn(await world.tick(session, DEFAULT_COLUMNS, n++), "closed").output.split("\n").length;
+      const closedLines = drawn(
+        await world.tick(session, DEFAULT_COLUMNS, n++),
+        "closed",
+      ).output.split("\n").length;
       // One round before the first sample: what an open menu builds on its
       // first draw it holds from then on.
       for (let i = -1; i < plan.samples; i++) {
         const recorded = i >= 0;
         const open = await click(menu("open"));
-        const drawOpen = drawn(await world.tick(session, DEFAULT_COLUMNS, n++), "menu open");
+        const drawOpen = drawn(
+          await world.tick(session, DEFAULT_COLUMNS, n++),
+          "menu open",
+        );
         // [LAW:no-silent-failure] An open menu draws more than the closed bar.
         if (drawOpen.output.split("\n").length <= closedLines) {
           throw new Error("the settings menu did not draw when clicked open");
         }
         const close = await click(menu(DISCLOSURE_CLOSED));
-        const drawClose = drawn(await world.tick(session, DEFAULT_COLUMNS, n++), "menu closed");
+        const drawClose = drawn(
+          await world.tick(session, DEFAULT_COLUMNS, n++),
+          "menu closed",
+        );
         if (recorded) {
           series["click-open"].push(open);
           series["draw-open"].push(drawOpen.ms);
@@ -442,7 +499,9 @@ const settingClick: Benchmark = {
       const session = world.session("a", CHECKOUT, TURNS);
       await world.settle(session, DEFAULT_COLUMNS);
       await click(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] }]),
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [session.id, "candybar.menu", "open"] },
+        ]),
       );
       const clicks: number[] = [];
       const visible: number[] = [];
@@ -456,9 +515,15 @@ const settingClick: Benchmark = {
           throw new Error("the open menu drew no ▶ preset stepper to click");
         }
         let clickMs = 0;
-        const changed = await untilChanged(world, session, composeBar(menu), n, async () => {
-          clickMs = await click(step.url);
-        });
+        const changed = await untilChanged(
+          world,
+          session,
+          composeBar(menu),
+          n,
+          async () => {
+            clickMs = await click(step.url);
+          },
+        );
         n += 1000;
         clicks.push(clickMs);
         visible.push(changed.visibleMs);

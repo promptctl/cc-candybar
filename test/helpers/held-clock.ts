@@ -3,7 +3,6 @@ import {
   clockOver,
   rethrowing,
   type Monotonic,
-  type ReportThrow,
   type Timekeeper,
   type TimerSource,
 } from "../../src/time";
@@ -40,11 +39,18 @@ export interface HeldClock extends Timekeeper {
 // `start` is the wall time it stands at. A test with no reason to pick one names
 // the real now itself (`new Date()`), so the choice is in the test and the unit
 // project, which refuses the real clock, can still build one.
-// What its tasks throw goes to `report`: a case that expects none lets it
-// throw (`rethrowing`), and one that asserts a throw collects it.
+// Its clock is built over its timers as `over` builds one: a case that
+// expects no throw lets it throw (`rethrowing`), and a daemon's case builds
+// the daemon's (`reportingClock`), so its throws reach the bar.
+export function heldClock(start: Date): HeldClock;
+export function heldClock<C extends Timekeeper>(
+  start: Date,
+  over: (source: TimerSource) => C,
+): HeldClock & C;
 export function heldClock(
   start: Date,
-  report: ReportThrow = rethrowing,
+  over: (source: TimerSource) => Timekeeper = (source) =>
+    clockOver(source, rethrowing),
 ): HeldClock {
   let elapsed = 0;
   // A repeating timer keeps its record and re-arms a period from where it fired,
@@ -107,7 +113,7 @@ export function heldClock(
     turn: (fire) => arm(0, fire),
   };
   return {
-    ...clockOver(source, report),
+    ...over(source),
     advance: (ms) => fireThrough(elapsed + span(ms)),
     settle: (ms) => settleThrough(elapsed + span(ms)),
     burn: (ms) => {

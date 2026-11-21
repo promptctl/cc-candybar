@@ -82,8 +82,12 @@ export function clockOver(
       report(task, thrown, source.now());
       return;
     }
-    if (settled instanceof Promise)
-      settled.catch((thrown: unknown) => report(task, thrown, source.now()));
+    // [LAW:dataflow-not-control-flow] Whatever it returned is settled: a
+    // thenable, or a promise of another realm, rejects here as a native
+    // promise does, and any other value settles at once.
+    Promise.resolve(settled).catch((thrown: unknown) =>
+      report(task, thrown, source.now()),
+    );
   };
   return {
     now: () => source.now(),

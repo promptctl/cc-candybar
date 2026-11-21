@@ -51,8 +51,9 @@ export class Period {
 
   constructor(
     // [LAW:nothing-unseen] The tick's name, with its subject, as a person
-    // reads it if the tick throws.
-    private readonly task: string,
+    // reads it if the tick throws. [LAW:one-source-of-truth] The owner starts
+    // the same read off the period under this name too.
+    readonly task: string,
     // Starts a read, and returns it to the clock, which reports its throw.
     // The owner calls `landed` when that read (or any other) lands, which is
     // what schedules the next tick.

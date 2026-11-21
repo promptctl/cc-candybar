@@ -125,7 +125,8 @@ interface PrSource extends Readable<PullRequest> {
   missed: boolean;
   key: string;
   remote: Outcome<string>;
-  inFlight: { readonly key: string; readonly done: Promise<void> } | null;
+  // The key whose lookup is out, which a read of the same key shares.
+  inFlight: string | null;
 }
 
 interface PrAnswer {
@@ -439,10 +440,10 @@ export class GitDataProvider {
   // pending on its own while its key is not answered, so the rest of the value
   // draws as it stands.
   //
-  // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
-  // refresh, a resolution's by the resolution — so its caller logs none. A
-  // declaration that THROWS is a bug none of those saw, reported by the view's
-  // declaration (declareLanes).
+  // [LAW:no-silent-failure] A refresh or a lookup that fails is a reading its
+  // lane carries; one that throws past that is its clock task's, which every
+  // bar shows. So its caller reports none. A declaration that THROWS is a bug
+  // neither saw, reported by the view's declaration (declareLanes).
   declare(
     holds: Holds,
     workingDir: string,
@@ -524,7 +525,10 @@ export class GitDataProvider {
       watch: this.followWatch(root, null).watch,
       period: new Period(
         `git refresh ${root}`,
-        () => state.refresh.share(PASS, () => this.refreshPass(state)),
+        () => {
+          const ask = state.refresh.share(PASS, () => this.refreshPass(state));
+          return ask.kind === "started" ? ask.done : undefined;
+        },
         this.clock,
       ),
       value: { reading: unread(), missed: false },
@@ -574,7 +578,7 @@ export class GitDataProvider {
   private runPass(state: RepoState): void {
     const trigger = state.refresh.run(PASS, () => this.refreshPass(state));
     if (trigger.kind === "started")
-      this.clock.detach(`git refresh ${state.root}`, () => trigger.done);
+      this.clock.detach(state.period.task, () => trigger.done);
   }
 
   // The loop's work, whose throw reaches the clock that started it.
@@ -726,9 +730,7 @@ export class GitDataProvider {
     }
     renew(pr, "unread");
     pr.missed = false;
-    this.clock.detach(`PR lookup ${state.root}`, () =>
-      this.readPr(state, pr, "first"),
-    );
+    this.clock.detach(pr.period.task, () => this.readPr(state, pr, "first"));
     return "looked-up";
   }
 
@@ -739,9 +741,11 @@ export class GitDataProvider {
     state: RepoState,
     pr: PrSource,
     by: "first" | "period",
-  ): Promise<void> {
+  ): Promise<void> | undefined {
     const key = pr.key;
-    if (pr.inFlight?.key === key) return pr.inFlight.done;
+    // [LAW:one-source-of-truth] A lookup in flight is its starter's to
+    // report: one that shares it hands back nothing to report twice.
+    if (pr.inFlight === key) return undefined;
     const remote = pr.remote;
     // The lookup's own time: taken when it gets its slot, since the logged
     // duration is the forge's, not the wait behind other repos' lookups.
@@ -756,7 +760,7 @@ export class GitDataProvider {
             .catch(threw("PR lookup"))
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
-      if (pr.inFlight?.key === key) pr.inFlight = null;
+      if (pr.inFlight === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
       const took = elapsedMs(this.clock, startedAt);
       // Kept under its own key whether or not the PR has moved on since.
@@ -786,7 +790,7 @@ export class GitDataProvider {
         took,
       );
     });
-    pr.inFlight = { key, done };
+    pr.inFlight = key;
     return done;
   }
 

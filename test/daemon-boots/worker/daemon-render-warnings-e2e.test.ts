@@ -9,6 +9,7 @@
 // walk, so the bar counts it from the frame after the one that met it, and a
 // renderer records every frame's warnings by value.
 
+import { reportingClock } from "../../../src/daemon/task-throws";
 import {
   mkdirSync,
   mkdtempSync,
@@ -206,7 +207,9 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(indicatorOf(bar)).toBe("⚠ 2");
       const pages = await readDiagnostics(daemon, sid, dir, bar, {}, []);
       expect(pages.map((p) => p.text)).toEqual([
-        expect.stringContaining(`config watch: cannot follow a link chain — ${link}`),
+        expect.stringContaining(
+          `config watch: cannot follow a link chain — ${link}`,
+        ),
         expect.stringContaining(`could not be checked: ${link}`),
       ]);
       const events = (await renderLines(env, sid, 1)).map(fieldOf("warn"));
@@ -223,7 +226,8 @@ describe("a daemon render's event names every warning, and the indicator offers 
           rmSync(link, { force: true });
           writeFileSync(link, `{ segments: {} }`);
         },
-        async () => indicatorOf((healed = await render(daemon, sid, dir))) === "ℹ 1",
+        async () =>
+          indicatorOf((healed = await render(daemon, sid, dir))) === "ℹ 1",
         "the bar once the loop is broken",
       );
       const left = await readDiagnostics(daemon, sid, dir, healed, {}, []);
@@ -272,7 +276,14 @@ describe("a daemon render's event names every warning, and the indicator offers 
       await everyRenderReads(failedSid, 1, "warn", "config-watch");
       await everyRenderReads(failedSid, 1, "err", "Y");
       await everyRenderReads(failedSid, 1, "diag", "2");
-      const both = await readDiagnostics(daemon, failedSid, dir, failed, {}, args);
+      const both = await readDiagnostics(
+        daemon,
+        failedSid,
+        dir,
+        failed,
+        {},
+        args,
+      );
       expect(both.map((p) => p.text)).toEqual([
         expect.stringContaining(`Invalid config in ${broken}`),
         expect.stringContaining(refusal),
@@ -308,7 +319,7 @@ describe("a warning a rule over the clock starts and stops", () => {
     writeFileSync(config, CONFIGS.clock);
     // The palette rule names no theme for two seconds of every four: the
     // config, the session's state and the width stay the same throughout.
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     const daemon = startDaemon(env, { clock });
     try {
       const sid = "record-clock";

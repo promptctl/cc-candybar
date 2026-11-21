@@ -37,8 +37,8 @@ import {
   type Request,
 } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "./system-clock";
-import { clockOver, systemTimers } from "../../src/time";
-import { TaskThrowInbox } from "../../src/daemon/task-throws";
+import { systemTimers } from "../../src/time";
+import { reportingClock } from "../../src/daemon/task-throws";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
@@ -104,8 +104,7 @@ export function prepareDaemon(
   // [LAW:single-enforcer] The daemon's clock as the process builds it: what
   // its tasks throw goes to its inbox, so a case sees a throw where a user
   // does, on the bar.
-  const taskThrows = overrides.taskThrows ?? new TaskThrowInbox();
-  const clock = overrides.clock ?? clockOver(systemTimers, taskThrows.report);
+  const clock = overrides.clock ?? reportingClock(systemTimers);
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, clock);
   try {
     const daemon = createDaemon({
@@ -116,7 +115,6 @@ export function prepareDaemon(
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
       clock,
-      taskThrows,
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {

@@ -556,7 +556,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     phase = {
       kind: "down",
       why: how,
-      cancelRetry: clock.after("renderer respawn", delay, () => {
+      cancelRetry: clock.after(`renderer ${name} respawn`, delay, () => {
         if (phase.kind === "down") spawn();
       }),
     };
@@ -615,8 +615,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // and one that has not ended after the grace is signalled.
   const ending = async (link: Link): Promise<void> => {
     link.channel.end();
-    const grace = clock.after("renderer close grace", CLOSE_GRACE_MS, () =>
-      link.kill.abort(new Error("the daemon closed")),
+    const grace = clock.after(
+      `renderer ${name} close grace`,
+      CLOSE_GRACE_MS,
+      () => link.kill.abort(new Error("the daemon closed")),
     );
     await link.channel.ended;
     grace();
@@ -767,7 +769,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     arm: () => {
       if (phase.kind !== "idle") return;
       spawn();
-      stopPings = clock.every("renderer ping", PING_PERIOD_MS, pinged, {
+      stopPings = clock.every(`renderer ${name} ping`, PING_PERIOD_MS, pinged, {
         unref: true,
       });
     },

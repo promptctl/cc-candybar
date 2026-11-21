@@ -1,3 +1,5 @@
+import { inspect } from "node:util";
+
 // [LAW:dataflow-not-control-flow] [LAW:no-silent-failure] Every step runs, in
 // order, whatever a step before it threw: each is its own error boundary. What
 // they threw is thrown once they all have run (`throwAll`).
@@ -22,7 +24,7 @@ export function throwAll(thrown: readonly unknown[]): void {
     throw new AggregateError(
       thrown,
       thrown
-        .map((each) => (each instanceof Error ? each.message : String(each)))
+        .map((each) => (each instanceof Error ? each.message : inspect(each)))
         .join("; "),
     );
 }

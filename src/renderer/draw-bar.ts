@@ -480,9 +480,9 @@ export function drawRender(
   // an error on every bar by the same event hold as a renderer's end. Each
   // task is one message about itself, however often it threw.
   const tasksThrew = daemon.taskThrows.flatMap(({ task, event }) =>
-    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, drawing.by) === "over"
-      ? []
-      : [{ kind: "task-threw" as const, task, event }],
+    daemonEventShows(event, at, drawing.by)
+      ? [{ kind: "task-threw" as const, task, event }]
+      : [],
   );
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
@@ -535,11 +535,9 @@ export function drawRender(
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
   const eventsShown: readonly DisplayedEvent[] = [
-    ...[...launchEvents, ...held].flatMap(({ kind, event }) =>
-      event.answered ? [] : [{ kind, event }],
-    ),
-    ...tasksThrew.filter(({ event }) => !event.answered),
-  ];
+    ...[...launchEvents, ...held].map(({ kind, event }) => ({ kind, event })),
+    ...tasksThrew,
+  ].filter(({ event }) => !event.answered);
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
@@ -877,10 +875,19 @@ function daemonEventAt(
   at: Instant,
   render: Drawing["by"],
 ): DaemonEventWarning | undefined {
-  return event === null ||
-    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
-    ? undefined
-    : { kind, message: event.text, event };
+  return event !== null && daemonEventShows(event, at, render)
+    ? { kind, message: event.text, event }
+    : undefined;
+}
+
+// [LAW:single-enforcer] Whether a render shows a daemon event: by the one
+// hold every event of the daemon's own is held by.
+function daemonEventShows(
+  event: HeldEvent,
+  at: Instant,
+  render: Drawing["by"],
+): boolean {
+  return eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) !== "over";
 }
 
 // What stands before a draw, whatever the draw then meets.

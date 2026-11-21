@@ -1,3 +1,7 @@
+import {
+  reportingClock,
+  type ReportingClock,
+} from "../../../src/daemon/task-throws";
 import { decodeAnsi } from "@promptctl/rich-js";
 // [LAW:verifiable-goals] A connection to a daemon built in this jest worker, over
 // a stream with no socket: its own handling answers a render, feeds a subscriber
@@ -9,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { type Monotonic, type Timekeeper } from "../../../src/time";
+import { systemDaemonClock } from "../../helpers/daemon-clock";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import {
   PROTOCOL_VERSION,
@@ -31,7 +36,6 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
-import { TaskThrowInbox } from "../../../src/daemon/task-throws";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { fakeLauncher } from "../../helpers/fake-launcher";
@@ -53,7 +57,9 @@ describe("a connection to a daemon built in this worker", () => {
   let started: InWorkerDaemon | null = null;
   const exit = jest.fn();
 
-  const start = (clock: Timekeeper = systemTimekeeper): InWorkerDaemon => {
+  const start = (
+    clock: ReportingClock = systemDaemonClock(),
+  ): InWorkerDaemon => {
     started = startDaemon(process.env, { clock, exit });
     return started;
   };
@@ -276,9 +282,11 @@ describe("a connection to a daemon built in this worker", () => {
     expect(standingReads()).toBe(before + 1);
   });
 
-  test("a task its clock reports draws on every bar, once per task, and every throw is counted", async () => {
-    const taskThrows = new TaskThrowInbox();
-    const running = startDaemon(process.env, { taskThrows });
+  test("a task its clock reports draws on every bar, once per task; a new message joins it, a repeat moves nothing, and every throw is counted", async () => {
+    const clock = systemDaemonClock();
+    // Thrown before the daemon exists: the inbox holds it for the daemon.
+    clock.throws.report("daemon boot", new Error("too early"), clock.now());
+    const running = startDaemon(process.env, { clock });
     started = running;
     const reply = async (session: string) => {
       const result = await running.daemon.reply(
@@ -290,14 +298,27 @@ describe("a connection to a daemon built in this worker", () => {
       result.settled(false);
       return drawn(result.resp);
     };
-    expect(await reply("task-throw-a")).not.toMatch(/⚠/);
-
-    const now = running.daemon.clock.now();
-    taskThrows.report("session sweep", new Error("it broke"), now);
-    taskThrows.report("session sweep", new Error("it broke again"), now);
     expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
-    expect(await reply("task-throw-b")).toMatch(/⚠\s+1/);
-    expect(running.daemon.stats.tasksThrew).toBe(2);
+
+    const now = clock.now();
+    clock.throws.report("session sweep", new Error("it broke"), now);
+    clock.throws.report("session sweep", new Error("it broke"), now);
+    clock.throws.report("session sweep", new Error("it broke again"), now);
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+2/);
+    expect(await reply("task-throw-b")).toMatch(/⚠\s+2/);
+    expect(running.daemon.stats.tasksThrew).toBe(4);
+    // Each new message is logged once in full; the repeat writes nothing.
+    const logged = await loggedLines(
+      process.env,
+      (lines) =>
+        lines.filter((line) => line.includes("[error] session sweep threw")),
+      (picked) => picked.length >= 2,
+      "the sweep's throws logged",
+    );
+    expect(logged).toEqual([
+      expect.stringMatching(/session sweep threw: Error: it broke$/),
+      expect.stringMatching(/session sweep threw: Error: it broke again$/),
+    ]);
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {
@@ -313,7 +334,7 @@ describe("a connection to a daemon built in this worker", () => {
     const at = new Date();
     const opened = openedOn(
       start({
-        ...systemTimekeeper,
+        ...systemDaemonClock(),
         now: () => at.getTime(),
         monotonic: () => monotonic as Monotonic,
       }).connect(),
@@ -334,7 +355,7 @@ describe("a connection to a daemon built in this worker", () => {
   // [LAW:verifiable-goals] Hold a real render at the renderer boundary so the
   // connection's backstop can win without blocking the process or waiting.
   test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     let entered = (): void => {};
     const drawing = new Promise<void>((resolve) => {
       entered = resolve;
@@ -379,7 +400,7 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   test("an embedded client with no deadline can still take a draw", async () => {
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     const entered = Promise.withResolvers<void>();
     let draws = 0;
     let release = () => {};
@@ -421,7 +442,7 @@ describe("a connection to a daemon built in this worker", () => {
   ])(
     "drops abandoned draws at $cause and still updates the pane",
     async ({ budget, expiry }) => {
-      const clock = heldClock(new Date());
+      const clock = heldClock(new Date(), reportingClock);
       const occupied = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
       const draws: string[] = [];

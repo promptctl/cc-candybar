@@ -354,6 +354,7 @@ export function testActs(
     read: missing("claude input read"), type: missing("claude input type"),
   }, ...rest } = deps;
   return new Acts({
+    detach: systemTimekeeper.detach,
     programsFor: () => ({ launch, claudeInput }),
     run: missing("run"),
     barPane: {

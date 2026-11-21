@@ -80,3 +80,36 @@ test("a disposed slot arms nothing", () => {
   slot.dispose();
   expect(clock.pending()).toBe(0);
 });
+
+test("a hold end the wall reading has not reached arms again for what is left, so the slot still leaves", () => {
+  const timers = heldClock(new Date("2026-01-01T00:00:00Z"));
+  // The wall reading steps back while the hold's timer runs on.
+  let skew = 0;
+  const clock = { ...timers, now: () => timers.now() - skew };
+  let left = 0;
+  const slot = new HeldSlot(clock, "test hold", () => left++);
+  const shown: HeldEvent = {
+    text: "it broke",
+    at: instantAt(clock),
+    revision: 1,
+    answered: false,
+  };
+  slot.hold(shown);
+  slot.answer(shown);
+  skew = 2_000;
+  timers.advance(HOLD_MS);
+  expect(slot.event()).toEqual({ ...shown, answered: true });
+  expect(timers.pending()).toBe(1);
+  timers.advance(2_000);
+  expect(slot.event()).toBeNull();
+  expect(left).toBe(1);
+});
+
+test("an event that leaves at an answer past its hold arms nothing more", () => {
+  const { clock, slot, event } = rig();
+  const shown = event("it broke");
+  slot.hold(shown);
+  clock.advance(HOLD_MS);
+  slot.answer(shown);
+  expect(clock.pending()).toBe(0);
+});

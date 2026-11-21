@@ -48,9 +48,9 @@ export interface KeyedSourceSpec<I, T> {
   readonly scope: SourceScope;
   // The read's identity: two inputs with one key are one reading.
   readonly keyOf: (input: I) => string;
-  // The entry's logfmt fields on a refresh event, handed how many homes hold
-  // it, for a source whose event says what it is shared by.
-  readonly fields: (input: I, holders: number) => string;
+  // The entry's logfmt fields: what it reads, which names its refresh task
+  // and its refresh events. An event adds how many homes share the entry.
+  readonly fields: (input: I) => string;
   // [LAW:no-ambient-temporal-coupling] The read is handed its flight's
   // signal, aborted when the flight is abandoned (a supersede, a drop), so
   // a program a read started does not outlive the entry that asked for it.
@@ -86,6 +86,9 @@ export interface KeyedSourceSpec<I, T> {
 interface Entry<I, T> extends Readable<T> {
   readonly key: string;
   readonly input: I;
+  // [LAW:one-source-of-truth] The name its refresh runs under, from its period's
+  // tick or any other trigger: one entry's throws are one error.
+  readonly task: string;
   readonly revisit: Revisit;
   // Ends the entry's watch, with the entry.
   unwatch: Release;
@@ -139,9 +142,10 @@ export class KeyedSource<I, T> {
   // reads it as it stands, never awaited and taking nothing. A key never read
   // is created pending and read once, its first refresh.
   //
-  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the session's declaration (declareLanes).
+  // [LAW:no-silent-failure] A read that fails is the reading its lane carries,
+  // and a refresh that throws past it is its clock task's, which every bar
+  // shows, so its caller reports none. A declaration that THROWS is a bug
+  // neither saw, reported by the session's declaration (declareLanes).
   declare(holds: Holds, input: I): Lane<T> {
     // [LAW:single-enforcer] A closed source builds no entry: one declared
     // after close (a render that was mid-wait) would be held, and its period
@@ -248,16 +252,18 @@ export class KeyedSource<I, T> {
 
   // In place before any read, so a read's answer finds its entry stored.
   private created(key: string, input: I): Entry<I, T> {
+    const task = `${this.spec.name} refresh ${this.spec.fields(input)}`;
     const entry: Entry<I, T> = {
       key,
       input,
+      task,
       reading: unread(),
       holders: 0,
       flight: null,
       changed: false,
       superseding: 0,
       revisit: revisitOf(this.spec.every(input), this.spec.clock, {
-        task: `${this.spec.name} period ${this.spec.fields(input, 0)}`,
+        task,
         period: () => this.refresh(entry, "period"),
         holdReturned: () => this.refresh(entry, "change"),
       }),
@@ -294,40 +300,32 @@ export class KeyedSource<I, T> {
     const startedAt = this.spec.clock.monotonic();
     // [LAW:no-silent-failure] What the refresh throws past its read is the
     // clock's to report, on every bar.
-    this.spec.clock.detach(
-      `${this.spec.name} refresh ${this.spec.fields(entry.input, entry.holders)}`,
-      async () => {
-        const outcome = await attempt(() =>
-          this.spec.read(entry.input, flight.signal, by),
-        );
-        const ms = elapsedMs(this.spec.clock, startedAt);
-        // [LAW:no-silent-failure] A read the owner abandoned (a supersede, a
-        // drop) was told to stop, so what it answers is the owner's doing,
-        // never a failure the source met: it is an event and a count of its
-        // own, not a refresh.
-        if (flight.signal.aborted) {
-          this.refreshes.abandoned(
-            this.spec.fields(entry.input, entry.holders),
-            by,
-            ms,
-          );
-          return;
-        }
-        // The flight that answered is the entry's: every path that replaces
-        // one (a supersede, a drop) aborts it first, so a read not aborted
-        // is the one whose answer is stored, however its record ends.
-        try {
-          this.refreshes.recorded(
-            this.spec.fields(entry.input, entry.holders),
-            by,
-            outcome,
-            ms,
-          );
-        } finally {
-          this.store(entry, outcome);
-        }
-      },
-    );
+    this.spec.clock.detach(entry.task, async () => {
+      const outcome = await attempt(() =>
+        this.spec.read(entry.input, flight.signal, by),
+      );
+      const ms = elapsedMs(this.spec.clock, startedAt);
+      // [LAW:no-silent-failure] A read the owner abandoned (a supersede, a
+      // drop) was told to stop, so what it answers is the owner's doing,
+      // never a failure the source met: it is an event and a count of its
+      // own, not a refresh, and it stores nothing.
+      if (flight.signal.aborted) {
+        this.refreshes.abandoned(this.eventFields(entry), by, ms);
+        return;
+      }
+      // The flight that answered is the entry's: every path that replaces
+      // one (a supersede, a drop) aborts it first, so a read not aborted
+      // is the one whose answer is stored, however its record ends.
+      try {
+        this.refreshes.recorded(this.eventFields(entry), by, outcome, ms);
+      } finally {
+        this.store(entry, outcome);
+      }
+    });
+  }
+
+  private eventFields(entry: Entry<I, T>): string {
+    return `${this.spec.fields(entry.input)} sharedBy=${entry.holders}`;
   }
 
   private store(entry: Entry<I, T>, outcome: Outcome<T>): void {

@@ -251,7 +251,10 @@ export function rendererHost(
   },
   world: HostWorld,
 ): RendererHost {
-  const mailbox = new KeyedSerialQueue<RendererName>();
+  const mailbox = new KeyedSerialQueue<RendererName>(
+    clock.detach,
+    (name) => `renderer ${name} mailbox`,
+  );
   let generation = 0;
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
@@ -1072,12 +1075,10 @@ export function rendererHost(
     };
   const deliver = recorded("last");
   // [LAW:no-silent-failure] A turn's settling nothing awaits is the clock's,
-  // whose report puts what it threw on every bar. Started inside the task, so
-  // what throws while it is made is reported too.
+  // whose report puts what it threw on every bar: one made by `settling`, or
+  // one already running that it hands over.
   const unawaited = (what: string, settling: () => Promise<unknown>): void =>
-    clock.detach(`renderer ${name} ${what}`, async () => {
-      await settling();
-    });
+    clock.detach(`renderer ${name} ${what}`, settling);
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(

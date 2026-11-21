@@ -9,7 +9,11 @@
 // sleep and no tick count: a mechanism whose whole purpose is to stop losing
 // races cannot be tested by winning one.
 
-import { TrailingEdge, type Trigger } from "../../src/utils/trailing-edge";
+import {
+  TrailingEdge,
+  type Ask,
+  type Trigger,
+} from "../../src/utils/trailing-edge";
 
 // A pass whose completion the test decides, and which records that it ran.
 function controllable() {
@@ -35,7 +39,7 @@ function controllable() {
   };
 }
 
-function started(trigger: Trigger): Promise<void> {
+function started(trigger: Trigger | Ask): Promise<void> {
   if (trigger.kind !== "started") throw new Error("expected a started trigger");
   return trigger.done;
 }
@@ -83,11 +87,12 @@ describe("TrailingEdge", () => {
     const done = started(edge.run("k", w.work));
     // An ask (a period's tick) carries no news that the answer changed: the
     // pass already out answers it.
-    const shared = edge.share("k", w.work);
+    // Its end is the starter's to hear, so the share hands back nothing.
+    expect(edge.share("k", w.work)).toEqual({ kind: "shared" });
     expect(w.passes).toBe(1);
 
     await w.finish(0);
-    await Promise.all([done, shared]);
+    await done;
     expect(w.passes).toBe(1);
     expect(edge.size).toBe(0);
   });
@@ -96,7 +101,7 @@ describe("TrailingEdge", () => {
     const edge = new TrailingEdge();
     const w = controllable();
 
-    const shared = edge.share("k", w.work);
+    const shared = started(edge.share("k", w.work));
     expect(w.passes).toBe(1);
     expect(edge.run("k", w.work)).toEqual({ kind: "queued" });
 
@@ -157,6 +162,30 @@ describe("TrailingEdge", () => {
     // The pass that was out still ran to completion — clear() cannot cancel an
     // await it does not own — but the queued one never happened.
     expect(w.passes).toBe(1);
+    expect(edge.size).toBe(0);
+  });
+
+  it("a loop clear() let go leaves the key's next loop its own: it takes none of its queued passes and ends none of its records", async () => {
+    const edge = new TrailingEdge();
+    const old = controllable();
+    const next = controllable();
+
+    const oldDone = started(edge.run("k", old.work));
+    edge.clear();
+    const nextDone = started(edge.run("k", next.work));
+    expect(edge.run("k", next.work)).toEqual({ kind: "queued" });
+
+    await old.finish(0);
+    await oldDone;
+    // The orphan ran its one pass and left the next loop's queued one to it.
+    expect(old.passes).toBe(1);
+    expect(edge.size).toBe(1);
+    expect(edge.run("k", next.work)).toEqual({ kind: "queued" });
+
+    await next.finish(0);
+    expect(next.passes).toBe(2);
+    await next.finish(1);
+    await nextDone;
     expect(edge.size).toBe(0);
   });
 

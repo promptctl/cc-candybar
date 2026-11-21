@@ -1,3 +1,4 @@
+import { reportingClock } from "../../../src/daemon/task-throws";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +34,7 @@ const SECOND = "source-after-ttl";
 test("a moving pane reads the same source until its host period refreshes it", async () => {
   const isolated = prepareIsolatedDaemonEnv("ccb-reads-only");
   const projectDir = mkdtempSync(path.join(os.tmpdir(), "ccb-reads-only-"));
-  const clock = heldClock(new Date());
+  const clock = heldClock(new Date(), reportingClock);
   let daemon: InWorkerDaemon | undefined;
   let stream: FrameStream | undefined;
   try {

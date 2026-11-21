@@ -831,15 +831,26 @@ async function launchPiped(
     // the child changed its real uid) is this run's result like any other
     // failure — a `LaunchResult` arm, never a rejection or a throw out of a
     // timer callback, so the single-enforcer primitive stays total.
+    // [LAW:one-source-of-truth] The launch's task names, each its category's,
+    // so one launch's throws are one error per task on every bar.
+    const tasks = {
+      reap: `${opts.category} reap`,
+      conclude: `${opts.category} launch conclude`,
+      groupEnd: `${opts.category} group end poll`,
+      killGrace: `${opts.category} kill grace`,
+    };
+    // A step that follows the child's exit, which `exited` only ever resolves.
+    const afterExit = (task: string, then: () => void): void =>
+      clock.detach(task, async () => {
+        await exited;
+        then();
+      });
     const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
         spawner.signalGroup(pid, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
-        clock.detach(`${opts.category} reap`, async () => {
-          await exited;
-          state.unreaped.delete(child);
-        });
+        afterExit(tasks.reap, () => state.unreaped.delete(child));
         settle({
           ok: false,
           reason: "signal-refused",
@@ -854,6 +865,8 @@ async function launchPiped(
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
     // what was written before it is read. It concludes on the child's exit.
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
+    const concludeNextTurn = () =>
+      clock.defer(tasks.conclude, concludeWithGroup);
     // While a member of the group lives the launch waits for it, guarded, so
     // SIGKILL still reaches it. The OS has no event for a group's end, so it is
     // polled, with exponential backoff.
@@ -861,21 +874,16 @@ async function launchPiped(
       const awaitGroupEnd = (delayMs: number) => {
         if (settled) return;
         if (spawner.groupGone(group)) {
-          clock.defer(`${opts.category} launch conclude`, concludeWithGroup);
+          concludeNextTurn();
           return;
         }
-        groupEndTimer = clock.after(
-          `${opts.category} group end poll`,
-          delayMs,
-          () => awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
+        groupEndTimer = clock.after(tasks.groupEnd, delayMs, () =>
+          awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      clock.detach(`${opts.category} group end poll`, async () => {
-        await exited;
-        clock.defer(`${opts.category} group end poll`, () =>
-          awaitGroupEnd(GROUP_END_POLL_MIN_MS),
-        );
-      });
+      afterExit(tasks.groupEnd, () =>
+        clock.defer(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+      );
     }
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let
@@ -898,7 +906,7 @@ async function launchPiped(
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== undefined && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
-        clock.defer(`${opts.category} launch conclude`, concludeWithGroup);
+        concludeNextTurn();
         return;
       }
       terminated = cause;
@@ -909,20 +917,10 @@ async function launchPiped(
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
-        killTimer = clock.after(
-          `${opts.category} kill grace`,
-          TIMEOUT_KILL_GRACE_MS,
-          () => {
-            signal(pid, "SIGKILL");
-            clock.detach(`${opts.category} launch conclude`, async () => {
-              await exited;
-              clock.defer(
-                `${opts.category} launch conclude`,
-                concludeWithGroup,
-              );
-            });
-          },
-        );
+        killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
+          signal(pid, "SIGKILL");
+          afterExit(tasks.conclude, concludeNextTurn);
+        });
         signal(pid, "SIGTERM");
       }
     };

@@ -38,7 +38,7 @@ export class DeclaredBarPanes {
   constructor(
     private readonly paneOf: (session: SessionId) => ReportedPane | undefined,
     private readonly setPane: (pane: TmuxHint, on: boolean) => Promise<string>,
-    private readonly clock: Pick<Timekeeper, "monotonic">,
+    private readonly clock: Pick<Timekeeper, "monotonic" | "detach">,
     private readonly log: DaemonLogger,
   ) {}
 
@@ -121,28 +121,32 @@ export class DeclaredBarPanes {
     held.application = { kind: "running" };
     // [LAW:single-enforcer] An effect must settle before this pane's next
     // one begins. A change of demand while it ran is applied after settlement.
-    void this.setPane(pane, on).then(
-      (said) => {
-        held.application = { kind: "applied", on };
-        this.log("info", `${event} — ${said}`);
-        this.reconcile(key, held);
-      },
-      (error: unknown) => {
-        const failure = failureOf(error);
-        if (failure.kind === "closing") {
-          this.held.delete(key);
-          this.log("info", `${event} — ${failure.message}`);
-          return;
-        }
-        held.application = {
-          kind: "retry",
-          on,
-          after: this.clock.monotonic() + RETRY_MS,
-        };
-        this.log("warn", `${event} — ${failure.detail}`);
-        if (!held.listed && !on) this.held.delete(key);
-        else this.reconcile(key, held);
-      },
+    // [LAW:no-silent-failure] Its settling is a clock task, so a throw past
+    // its own failure arm reaches every bar.
+    this.clock.detach(event, () =>
+      this.setPane(pane, on).then(
+        (said) => {
+          held.application = { kind: "applied", on };
+          this.log("info", `${event} — ${said}`);
+          this.reconcile(key, held);
+        },
+        (error: unknown) => {
+          const failure = failureOf(error);
+          if (failure.kind === "closing") {
+            this.held.delete(key);
+            this.log("info", `${event} — ${failure.message}`);
+            return;
+          }
+          held.application = {
+            kind: "retry",
+            on,
+            after: this.clock.monotonic() + RETRY_MS,
+          };
+          this.log("warn", `${event} — ${failure.detail}`);
+          if (!held.listed && !on) this.held.delete(key);
+          else this.reconcile(key, held);
+        },
+      ),
     );
   }
 }

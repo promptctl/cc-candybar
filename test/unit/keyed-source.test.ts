@@ -219,10 +219,10 @@ describe("KeyedSource", () => {
     expect(await waiting).toEqual(ok("after"));
     expect(lines.map((l) => `${l.level} ${l.msg}`)).toEqual([
       expect.stringMatching(
-        /^info fake refresh key=a by=first abandoned took=\d+ms$/,
+        /^info fake refresh key=a sharedBy=\d+ by=first abandoned took=\d+ms$/,
       ),
       expect.stringMatching(
-        /^info fake refresh key=a by=supersede outcome=ok took=\d+ms$/,
+        /^info fake refresh key=a sharedBy=\d+ by=supersede outcome=ok took=\d+ms$/,
       ),
     ]);
     expect(source.stats()).toMatchObject({
@@ -486,7 +486,7 @@ describe("KeyedSource", () => {
       {
         level: "warn",
         msg: expect.stringMatching(
-          /^fake refresh key=a by=first outcome=failed reason="no server" took=\d+ms$/,
+          /^fake refresh key=a sharedBy=\d+ by=first outcome=failed reason="no server" took=\d+ms$/,
         ),
       },
     ]);

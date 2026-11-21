@@ -831,7 +831,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
         expect.arrayContaining([
           expect.stringMatching(
             new RegExp(
-              `^info today refresh dirs=${escaped(tree)} by=period outcome=ok took=\\d+ms$`,
+              `^info today refresh dirs=${escaped(tree)} sharedBy=\\d+ by=period outcome=ok took=\\d+ms$`,
             ),
           ),
         ]),
@@ -895,7 +895,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
         expect.arrayContaining([
           expect.stringMatching(
             new RegExp(
-              `^warn today refresh dirs=${escaped(tree)} by=first outcome=failed reason="usage scan: scan broke" took=\\d+ms$`,
+              `^warn today refresh dirs=${escaped(tree)} sharedBy=\\d+ by=first outcome=failed reason="usage scan: scan broke" took=\\d+ms$`,
             ),
           ),
         ]),
@@ -996,7 +996,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
         expect.arrayContaining([
           expect.stringMatching(
             new RegExp(
-              `^warn today refresh dirs=${escaped(JSON.stringify(tree))} by=first outcome=failed `,
+              `^warn today refresh dirs=${escaped(JSON.stringify(tree))} sharedBy=\\d+ by=first outcome=failed `,
             ),
           ),
         ]),

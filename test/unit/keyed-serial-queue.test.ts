@@ -1,4 +1,8 @@
-import { FOREGROUND_BURST, KeyedSerialQueue } from "../../src/utils/keyed-serial-queue";
+import {
+  FOREGROUND_BURST,
+  KeyedSerialQueue,
+} from "../../src/utils/keyed-serial-queue";
+import { systemTimekeeper } from "../helpers/system-clock";
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};
@@ -8,7 +12,10 @@ function gate(): { wait: Promise<void>; open: () => void } {
 
 describe("KeyedSerialQueue", () => {
   test("a key's tasks run first in, first out, each returning its own result", async () => {
-    const queue = new KeyedSerialQueue<string>();
+    const queue = new KeyedSerialQueue<string>(
+      systemTimekeeper.detach,
+      (k) => `queue ${k}`,
+    );
     const first = gate();
     const ran: string[] = [];
     const a = queue.run("k", async () => {
@@ -28,7 +35,10 @@ describe("KeyedSerialQueue", () => {
   });
 
   test("a rejection reaches its caller, and the task behind it still runs", async () => {
-    const queue = new KeyedSerialQueue<string>();
+    const queue = new KeyedSerialQueue<string>(
+      systemTimekeeper.detach,
+      (k) => `queue ${k}`,
+    );
     const a = queue.run("k", async () => {
       throw new Error("no");
     });
@@ -38,7 +48,10 @@ describe("KeyedSerialQueue", () => {
   });
 
   test("scheduled work behind a short burst leaves ordinary work in order", async () => {
-    const queue = new KeyedSerialQueue<string>();
+    const queue = new KeyedSerialQueue<string>(
+      systemTimekeeper.detach,
+      (k) => `queue ${k}`,
+    );
     const held = gate();
     const ran: string[] = [];
     const task = (name: string) => async (): Promise<void> => {
@@ -54,20 +67,29 @@ describe("KeyedSerialQueue", () => {
   });
 
   test("one scheduled slot runs after a burst even while each ordinary slot replenishes the queue", async () => {
-    const queue = new KeyedSerialQueue<string>();
+    const queue = new KeyedSerialQueue<string>(
+      systemTimekeeper.detach,
+      (k) => `queue ${k}`,
+    );
     const held = gate();
     const running = queue.run("k", () => held.wait);
     const turns: Array<number | string> = [];
     const finished = gate();
-    const submit = (i: number): Promise<void> => queue.run("k", async () => {
-      turns.push(i);
-      if (i < FOREGROUND_BURST * 3) void submit(i + 1);
-      else finished.open();
-    });
+    const submit = (i: number): Promise<void> =>
+      queue.run("k", async () => {
+        turns.push(i);
+        if (i < FOREGROUND_BURST * 3) void submit(i + 1);
+        else finished.open();
+      });
     const first = submit(1);
-    const due = (name: string): Promise<void> => queue.run("k", async () => {
-      turns.push(name);
-    }, "scheduled");
+    const due = (name: string): Promise<void> =>
+      queue.run(
+        "k",
+        async () => {
+          turns.push(name);
+        },
+        "scheduled",
+      );
     const a = due("a");
     const b = due("b");
     held.open();
@@ -80,7 +102,10 @@ describe("KeyedSerialQueue", () => {
   });
 
   test("another key does not wait", async () => {
-    const queue = new KeyedSerialQueue<string>();
+    const queue = new KeyedSerialQueue<string>(
+      systemTimekeeper.detach,
+      (k) => `queue ${k}`,
+    );
     const held = gate();
     const a = queue.run("a", () => held.wait);
     await expect(queue.run("b", async () => "free")).resolves.toBe("free");

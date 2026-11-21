@@ -121,35 +121,39 @@ export type WaitEnd = "answered" | "deadline" | "closed";
 // when the wait ends on any arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
 // nothing behind. What it does not, a run it started, goes on, and a failure
-// of it after the wait ended is no one's answer: it goes to `late`, its
-// owner's report, with how the wait ended.
+// of it after the wait ended is no one's answer: it is the clock's, under the
+// wait's name, with how the wait ended.
 export function waitWithin(
-  // The deadline's task name.
+  // The wait's task name: its deadline's, and its work's past the wait.
   task: string,
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
-  late: (e: unknown, ended: "deadline" | "closed") => void,
-  after: Timekeeper["after"],
+  clock: Pick<Timekeeper, "after" | "detach">,
   closing: AbortSignal,
 ): Promise<WaitEnd> {
   const wait = new AbortController();
   const end = (why: "deadline" | "closed") => () => wait.abort(why);
-  const clear = after(task, Math.max(0, ms), end("deadline"));
+  const clear = clock.after(task, Math.max(0, ms), end("deadline"));
   const ended = new Promise<WaitEnd>((resolve, reject) => {
     wait.signal.addEventListener("abort", () =>
       resolve(wait.signal.reason as WaitEnd),
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    work(wait.signal).then(
-      () => resolve("answered"),
-      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-      // while it listens, its owner's after. Work that answered never
-      // rejects, so a wait aborted before it ended at its deadline or close.
-      (e: unknown) =>
-        wait.signal.aborted
-          ? late(e, wait.signal.reason as "deadline" | "closed")
-          : reject(e),
+    // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+    // while it listens, the clock's after. Work that answered never rejects,
+    // so a wait aborted before it ended at its deadline or close.
+    clock.detach(task, () =>
+      work(wait.signal).then(
+        () => resolve("answered"),
+        (e: unknown) => {
+          if (!wait.signal.aborted) return reject(e);
+          throw new Error(
+            `failed after its wait ended at its ${String(wait.signal.reason)}`,
+            { cause: e },
+          );
+        },
+      ),
     );
   });
   return ended.finally(() => {

@@ -3,6 +3,10 @@
 // the socket uses, closed with nothing left running, and built again over the
 // same storage to see a restart.
 
+import {
+  reportingClock,
+  type ReportingClock,
+} from "../../../src/daemon/task-throws";
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
 import { hostOf } from "../../helpers/host";
@@ -39,6 +43,7 @@ import {
 } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
+import { systemDaemonClock } from "../../helpers/daemon-clock";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import { processProbe } from "../../helpers/host";
 import {
@@ -180,7 +185,7 @@ describe("the daemon is a value", () => {
 
   const construct = (
     inputs: {
-      clock?: Timekeeper;
+      clock?: ReportingClock;
       checkout?: string;
       digest?: string;
       profile?: () => never;
@@ -398,7 +403,7 @@ describe("the daemon is a value", () => {
 
   test("shutdown drains a live primary and cancels the restart of a down named renderer", async () => {
     writeConfig(PADDED);
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     const renderer = waitingRenderer(WORKTREE);
     const daemon = construct({ clock, renderer: renderer.port });
     daemon.arm();
@@ -699,7 +704,7 @@ describe("the daemon is a value", () => {
       `{ segments: { at: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['at'] } }`,
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
-    const clock = { ...systemTimekeeper, now: () => frozen.getTime() };
+    const clock = { ...systemDaemonClock(), now: () => frozen.getTime() };
     const daemon = construct({ clock });
 
     const bar = await answer(

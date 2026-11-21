@@ -199,7 +199,7 @@ describe("TmuxService", () => {
     expect(starts).toEqual(["tmux"]);
     expect(lines).toEqual([
       expect.stringMatching(
-        /^warn tmux refresh pane=%1 socket=\/client\/refuse.sock by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/,
+        /^warn tmux refresh pane=%1 socket=\/client\/refuse.sock sharedBy=\d+ by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/,
       ),
     ]);
 

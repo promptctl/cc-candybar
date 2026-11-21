@@ -18,7 +18,6 @@
 import { plainEnvironment } from "../../src/daemon/foundations/session-env.js";
 import { spawn } from "node:child_process";
 import { processWorld } from "../../src/host.js";
-import { rethrowing } from "../../src/time.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -196,7 +195,7 @@ export async function startWorld(
   };
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
-  const machine = processWorld(rethrowing);
+  const machine = processWorld();
   const host = { env, home: dirs.home, tmp: machine.host.tmp };
   // What its clients ask the daemon with: this world's host, the machine's clock.
   const client = { host, clock: machine.clock };
@@ -308,10 +307,14 @@ export async function startWorld(
     COLUMNS: String(columns),
   });
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints({ env: clientEnv(columns), home: dirs.home }, session.cwd, {
-      columns,
-      rows: 48,
-    }),
+    ...detectClientHints(
+      { env: clientEnv(columns), home: dirs.home },
+      session.cwd,
+      {
+        columns,
+        rows: 48,
+      },
+    ),
     client: CLIENT,
   });
 

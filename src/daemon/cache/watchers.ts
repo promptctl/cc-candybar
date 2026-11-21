@@ -686,6 +686,31 @@ export class WatcherRegistry {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
   }
 
+  // [LAW:no-ambient-temporal-coupling] A window's steps, each made as it is
+  // reached, so a slot an earlier holder closed or a holder it released
+  // hears nothing: a slot is judged when its turn comes, and its holders are
+  // walked as they stand. A holder's throw names the watch it held.
+  private *delivery(
+    changes: ReadonlyMap<WatcherSlot, Gathering>,
+    completed: (() => void) | undefined,
+  ): Generator<() => void> {
+    for (const [changed, gathered] of changes) {
+      if (this.slots.get(changed.key) !== changed) continue;
+      const heard = heardOf(gathered);
+      for (const holder of changed.holders)
+        yield () => {
+          try {
+            holder.onInvalidate(heard);
+          } catch (thrown) {
+            throw new Error(`watch ${changed.key} holder threw`, {
+              cause: thrown,
+            });
+          }
+        };
+    }
+    if (completed !== undefined) yield completed;
+  }
+
   private fire(slot: WatcherSlot, invalidation: Gathering): void {
     const { window } = slot;
     if (window.pending === null) {
@@ -699,16 +724,7 @@ export class WatcherRegistry {
             window.pending = null;
             // [LAW:no-silent-failure] Every holder hears the window, whatever
             // one before it threw; what they threw reaches the clock.
-            runEach([
-              ...[...changes].flatMap(([changed, gathered]) => {
-                if (this.slots.get(changed.key) !== changed) return [];
-                const heard = heardOf(gathered);
-                return [...changed.holders].map(
-                  (holder) => () => holder.onInvalidate(heard),
-                );
-              }),
-              ...(window.completed === undefined ? [] : [window.completed]),
-            ]);
+            runEach(this.delivery(changes, window.completed));
           },
           { unref: true },
         ),

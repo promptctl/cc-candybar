@@ -1,4 +1,5 @@
 import { waitWithin } from "../src/utils/reading";
+import { clockOver, systemTimers } from "../src/time";
 import { systemTimekeeper } from "./helpers/system-clock";
 
 const after = (ms: number): Promise<void> =>
@@ -6,10 +7,6 @@ const after = (ms: number): Promise<void> =>
 
 // The owner of a wait that never closes.
 const OPEN = new AbortController().signal;
-
-const unexpected = (e: unknown): void => {
-  throw new Error(`no late failure was expected: ${String(e)}`);
-};
 
 test("work that ends inside the time answers, and its signal is aborted once the wait ends", async () => {
   let seen: AbortSignal | undefined;
@@ -20,8 +17,7 @@ test("work that ends inside the time answers, and its signal is aborted once the
       await after(10);
     },
     1000,
-    unexpected,
-    systemTimekeeper.after,
+    systemTimekeeper,
     OPEN,
   );
   expect(end).toBe("answered");
@@ -37,8 +33,7 @@ test("work still out at the deadline ends the wait there, and its signal aborts"
       return after(1000);
     },
     20,
-    unexpected,
-    systemTimekeeper.after,
+    systemTimekeeper,
     OPEN,
   );
   expect(end).toBe("deadline");
@@ -53,8 +48,7 @@ test("a wait ends when its time does, and not before", async () => {
       "test wait",
       () => new Promise(() => {}),
       110,
-      unexpected,
-      systemTimekeeper.after,
+      systemTimekeeper,
       OPEN,
     ).then((e) => {
       end = e;
@@ -74,15 +68,17 @@ test("a rejection inside the time is the wait's", async () => {
       "test wait",
       () => Promise.reject(new Error("bug")),
       1000,
-      unexpected,
-      systemTimekeeper.after,
+      systemTimekeeper,
       OPEN,
     ),
   ).rejects.toThrow("bug");
 });
 
-test("a rejection after the deadline goes to its owner's report, never dropped", async () => {
-  const late: unknown[] = [];
+test("a rejection after the deadline is the clock's, under the wait's name, never dropped", async () => {
+  const reported: Array<{ task: string; thrown: unknown }> = [];
+  const clock = clockOver(systemTimers, (task, thrown) =>
+    reported.push({ task, thrown }),
+  );
   const end = await waitWithin(
     "test wait",
     async () => {
@@ -90,13 +86,18 @@ test("a rejection after the deadline goes to its owner's report, never dropped",
       throw new Error("late bug");
     },
     5,
-    (e, ended) => late.push([e, ended]),
-    systemTimekeeper.after,
+    clock,
     OPEN,
   );
   expect(end).toBe("deadline");
   await after(60);
-  expect(late).toEqual([[new Error("late bug"), "deadline"]]);
+  expect(reported).toEqual([
+    {
+      task: "test wait",
+      thrown: new Error("failed after its wait ended at its deadline"),
+    },
+  ]);
+  expect((reported[0]?.thrown as Error).cause).toEqual(new Error("late bug"));
 });
 
 test("its owner closing ends the wait there, with its timer cleared and its work's signal aborted", async () => {
@@ -110,13 +111,15 @@ test("its owner closing ends the wait there, with its timer cleared and its work
       return new Promise(() => {});
     },
     60_000,
-    unexpected,
-    (task, ms, fire) => {
-      const clear = systemTimekeeper.after(task, ms, fire);
-      return () => {
-        cleared.push("timer");
-        clear();
-      };
+    {
+      ...systemTimekeeper,
+      after: (task, ms, fire) => {
+        const clear = systemTimekeeper.after(task, ms, fire);
+        return () => {
+          cleared.push("timer");
+          clear();
+        };
+      },
     },
     owner.signal,
   );
@@ -134,8 +137,7 @@ test("a wait begun after its owner closed ends at once", async () => {
       "test wait",
       () => new Promise(() => {}),
       60_000,
-      unexpected,
-      systemTimekeeper.after,
+      systemTimekeeper,
       owner.signal,
     ),
   ).toBe("closed");

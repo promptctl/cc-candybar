@@ -25,6 +25,7 @@ import {
   type BarPaneHost,
 } from "./lane-setup.js";
 import type { RunAct, RunEnd } from "./runs.js";
+import type { Timekeeper } from "../time.js";
 
 // An act the landing performs with the config files, not here.
 export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
@@ -37,6 +38,8 @@ export interface ActPrograms {
 }
 
 export interface ActDeps {
+  // Runs each pane's queue of acts as a clock task of its own.
+  readonly detach: Timekeeper["detach"];
   // [LAW:effects-at-boundaries] The host selects the launch environment for
   // the session that drew this click. Both tmux operations share the selection.
   readonly programsFor: (session: SessionId | null) => ActPrograms;
@@ -76,12 +79,16 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
 export class Acts {
   // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
   // time, in the order asked: a slash line or a bar pane change.
-  private readonly inPane = new KeyedSerialQueue<string>();
+  private readonly inPane: KeyedSerialQueue<string>;
   private readonly performers: {
     readonly [K in HostAct["kind"]]: (act: Of<K>) => Promise<Done>;
   };
 
   constructor(private readonly deps: ActDeps) {
+    this.inPane = new KeyedSerialQueue(
+      deps.detach,
+      (pane) => `acts in ${pane}`,
+    );
     this.performers = {
       copy: (act) =>
         clickLaunch(
