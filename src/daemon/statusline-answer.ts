@@ -128,7 +128,7 @@ export async function answerStatusline(
     Collector<CheckedRenderRequest>,
     "requested" | "holding" | "settled"
   >,
-  clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "detach">,
+  clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
   log: DaemonLogger,

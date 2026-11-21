@@ -3,7 +3,7 @@
 // for a request, whether its hold ends after an answer or an answer lands
 // after its hold.
 
-import { HeldSlot } from "../../src/daemon/held-slot";
+import { HeldSlot, type Recurred } from "../../src/daemon/held-slot";
 import {
   DAEMON_EVENT_HOLD_S,
   type HeldEvent,
@@ -115,4 +115,33 @@ test("an event that leaves at an answer past its hold arms nothing more", () => 
   clock.advance(HOLD_MS);
   slot.answer(shown);
   expect(clock.pending()).toBe(0);
+});
+
+test("what recurs while an event is held is counted, and handed over when the slot lets it go", () => {
+  const clock = heldClock(new Date("2026-01-01T00:00:00Z"));
+  const heard: Array<Recurred<string> | null> = [];
+  const slot = new HeldSlot<string>(clock, "test hold", (recurred) =>
+    heard.push(recurred),
+  );
+  expect(slot.recur("before")).toBe(false);
+  const shown: HeldEvent = {
+    text: "it broke",
+    at: instantAt(clock),
+    revision: 1,
+    answered: false,
+  };
+  slot.hold(shown);
+  expect(slot.recur("again")).toBe(true);
+  expect(slot.recur("latest")).toBe(true);
+  slot.answer(shown);
+  clock.advance(HOLD_MS);
+  expect(heard).toEqual([{ count: 2, latest: "latest" }]);
+  // A disposed slot lets go of what it holds the same way.
+  slot.hold({ ...shown, revision: 2 });
+  slot.recur("at the close");
+  slot.dispose();
+  expect(heard).toEqual([
+    { count: 2, latest: "latest" },
+    { count: 1, latest: "at the close" },
+  ]);
 });

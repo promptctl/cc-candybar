@@ -96,6 +96,30 @@ test("a rejection after the deadline is the clock's, as the wait's task after it
   ]);
 });
 
+test("work that throws before it returns, in a wait begun closed, is the clock's", async () => {
+  const closed = new AbortController();
+  closed.abort();
+  const reported: Array<{ task: string; thrown: unknown }> = [];
+  const clock = clockOver(systemTimers, (task, thrown) =>
+    reported.push({ task, thrown }),
+  );
+  const broke = new Error("bad input");
+  const end = await waitWithin(
+    "test wait",
+    () => {
+      throw broke;
+    },
+    60_000,
+    clock,
+    closed.signal,
+  );
+  expect(end).toBe("closed");
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(reported).toEqual([
+    { task: "test wait after its wait", thrown: broke },
+  ]);
+});
+
 test("work that throws before it returns fails the wait at once", async () => {
   const broke = new Error("bad input");
   await expect(

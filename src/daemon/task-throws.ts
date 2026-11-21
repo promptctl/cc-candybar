@@ -4,6 +4,7 @@ import {
   type Timekeeper,
   type TimerSource,
 } from "../time.js";
+import { failureOf } from "./foundations/verb-error.js";
 
 // A throw as the clock reported it: the task's name, what it threw, and the
 // wall reading when it was caught.
@@ -14,6 +15,21 @@ export interface ReportedThrow {
 }
 
 export type TakeThrow = (reported: ReportedThrow) => void;
+
+// [LAW:single-enforcer] What a task's throw says, `more` times since its
+// error was last shown: its words for a bar, and its detail for the log.
+export function thrownText(
+  reported: ReportedThrow,
+  more = 0,
+): { readonly shown: string; readonly logged: string } {
+  const failure = failureOf(reported.thrown);
+  const again = more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
+  const threw = `${reported.task} threw${again}`;
+  return {
+    shown: `${threw}: ${failure.message}`,
+    logged: `${threw}: ${failure.detail}`,
+  };
+}
 
 // [LAW:types-are-the-program] Who takes the process's throws, as a state:
 // none yet, so they wait; the daemon, once it is built; and a log alone once

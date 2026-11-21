@@ -96,7 +96,7 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly openText?: typeof withRegularTextFile;
   // [LAW:effects-at-boundaries] Where an origin's observation runs, so what
   // it throws is reported without costing its siblings theirs.
-  readonly clock: Pick<Timekeeper, "detach">;
+  readonly clock: Pick<Timekeeper, "failed">;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
@@ -354,9 +354,9 @@ export class ConfigDiscovery {
 
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
   // an origin that cannot be observed keeps its last snapshot for a retry,
-  // and what it threw is its own task's, reported once the batch has
-  // published what its siblings observed: a failure is a value until then,
-  // so no reporter can cut the batch short.
+  // and what it threw is its own task's, handed to the clock before the batch
+  // publishes: a failure is a value the batch carries, so neither a reporter
+  // nor a publish that throws can cut the batch short or lose it.
   private refreshed(
     keys: readonly string[],
     why: string,
@@ -364,12 +364,9 @@ export class ConfigDiscovery {
     writer: RendererName | null,
   ): readonly RenderOrigin[] {
     const { moved, failed } = this.rediscovered(keys, why, recover);
-    const answered = this.publish(moved, writer);
     for (const { key, thrown } of failed)
-      this.deps.clock.detach(`config discovery ${key}`, () => {
-        throw thrown;
-      });
-    return answered;
+      this.deps.clock.failed(`config discovery ${key}`, thrown);
+    return this.publish(moved, writer);
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients

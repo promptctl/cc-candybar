@@ -225,7 +225,7 @@ export function rendererHost(
   name: RendererName,
   // The clock every input's readings are made on, a hop is timed on, and the
   // renderer's wake is armed on.
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach" | "failed">,
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
@@ -972,6 +972,13 @@ export function rendererHost(
             ["error", delivered.failure.detail],
           ]),
         );
+        // A due turn runs the renderer's held work and no request waits on
+        // it, so its failure reaches every bar as the renderer's task's.
+        if (event?.kind === "due")
+          clock.failed(
+            `renderer ${name} due work`,
+            new CrossedFailure(delivered.failure),
+          );
     }
   };
 

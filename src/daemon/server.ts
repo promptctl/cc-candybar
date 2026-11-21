@@ -24,7 +24,7 @@ import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
 import type { World } from "../host";
-import type { ReportingClock } from "./task-throws.js";
+import { thrownText, type ReportingClock } from "./task-throws.js";
 import {
   createDaemon,
   type PreparedDaemon,
@@ -153,8 +153,8 @@ export function runDaemon(world: World<ReportingClock>): void {
 // take it is said beside the refusal, since it may be the refusal's cause, and
 // what they throw on the way out is logged as it comes.
 function refuseBoot(err: unknown): void {
-  daemonProcess().world.clock.throws.close(({ task, thrown }) =>
-    serverLog("error", `${task} threw: ${inspect(thrown)}`),
+  daemonProcess().world.clock.throws.close((reported) =>
+    serverLog("error", thrownText(reported).logged),
   );
   serverLog("error", `refusing to boot: ${inspect(err)}`);
   shutdown(1);

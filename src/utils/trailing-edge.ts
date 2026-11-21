@@ -32,13 +32,21 @@
 // records itself and hands back nothing, because the loop already in flight is
 // the one that will honour it. A caller that must await the work folds over
 // these two arms rather than asking a second question about which happened.
-import { throwAll } from "./run-each.js";
+import type { Timekeeper } from "../time.js";
 
 export type Trigger =
   | { readonly kind: "started"; readonly done: Promise<void> }
   | { readonly kind: "queued" };
 
 export class TrailingEdge {
+  constructor(
+    // [LAW:no-silent-failure] Where a pass's throw goes as it happens, as its
+    // key's task: a loop that triggers keep alive may never end.
+    private readonly clock: Pick<Timekeeper, "failed">,
+    // A key's pass task name, with the key's subject.
+    private readonly passOf: (key: string) => string,
+  ) {}
+
   // The keys whose loop is currently executing, each with the token its loop
   // compares itself against, so a loop a `clear` let go touches only its own.
   private readonly running = new Map<string, symbol>();
@@ -81,9 +89,8 @@ export class TrailingEdge {
     running: symbol,
   ): Promise<void> {
     const own = (): boolean => this.running.get(key) === running;
-    // [LAW:no-silent-failure] A pass that throws does not cost the pass queued
-    // behind it: the loop goes on, and what each threw is thrown at its end.
-    const threw: unknown[] = [];
+    // A pass that throws does not cost the pass queued behind it: its throw
+    // is the clock's, and the loop goes on. So the loop's end never rejects.
     try {
       do {
         // Cleared BEFORE the pass, never after: a trigger that lands while
@@ -93,7 +100,7 @@ export class TrailingEdge {
         try {
           await work();
         } catch (thrown) {
-          threw.push(thrown);
+          this.clock.failed(this.passOf(key), thrown);
         }
       } while (own() && this.again.has(key));
     } finally {
@@ -102,7 +109,6 @@ export class TrailingEdge {
         this.again.delete(key);
       }
     }
-    throwAll(threw);
   }
 
   // Drop every record of running and pending work — the teardown path of an

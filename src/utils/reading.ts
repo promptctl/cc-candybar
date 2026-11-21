@@ -128,7 +128,7 @@ export function waitWithin(
   task: string,
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
-  clock: Pick<Timekeeper, "after" | "detach">,
+  clock: Pick<Timekeeper, "after" | "failed">,
   closing: AbortSignal,
 ): Promise<WaitEnd> {
   const wait = new AbortController();
@@ -140,17 +140,22 @@ export function waitWithin(
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    // [LAW:no-silent-failure] Every failure is reported: the wait's own while
-    // it listens, a throw before `work` returns included, and the clock's
-    // after, as a task of its own. Work that answered never rejects, so a
-    // wait aborted before it ended at its deadline or close.
-    work(wait.signal).then(
+    // [LAW:no-silent-failure] Every failure is reported, a throw before `work`
+    // returns as its rejection is: the wait's own while it listens, and the
+    // clock's after, as a task of its own, a wait begun closed included. Work
+    // that answered never rejects, so a wait aborted before it ended at its
+    // deadline or close.
+    let working: Promise<unknown>;
+    try {
+      working = work(wait.signal);
+    } catch (thrown) {
+      working = Promise.reject(thrown);
+    }
+    working.then(
       () => resolve("answered"),
       (e: unknown) => {
-        if (!wait.signal.aborted) return reject(e);
-        clock.detach(`${task} after its wait`, () => {
-          throw e;
-        });
+        if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
+        else reject(e);
       },
     );
   });

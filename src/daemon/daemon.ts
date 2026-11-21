@@ -15,7 +15,11 @@ import {
   DaemonClosing,
   failureOf,
 } from "./foundations/verb-error.js";
-import type { ReportedThrow, ReportingClock } from "./task-throws.js";
+import {
+  thrownText,
+  type ReportedThrow,
+  type ReportingClock,
+} from "./task-throws.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -302,13 +306,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // daemon's tasks threw, each held until no bar can show it.
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  // [LAW:one-source-of-truth] Each task's error: its slot, whose event is what
-  // every bar shows, and the throws counted since that event was held.
-  interface TaskError {
-    readonly slot: HeldSlot;
-    since: { readonly count: number; readonly latest: ReportedThrow } | null;
-  }
-  const taskErrors = new Map<string, TaskError>();
+  // [LAW:one-source-of-truth] Each task's error, as the slot that holds it.
+  const taskErrors = new Map<string, HeldSlot<ReportedThrow>>();
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
@@ -316,7 +315,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         launcher: launcher.standing(),
         rendererEnded: rendererEnded.event(),
         actFailed: actFailed.event(),
-        taskThrows: [...taskErrors].flatMap(([task, { slot }]) => {
+        taskThrows: [...taskErrors].flatMap(([task, slot]) => {
           const event = slot.event();
           return event === null ? [] : [{ task, event }];
         }),
@@ -370,7 +369,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         // A frame can carry a throw whose slot has since left: nothing
         // holds it to mark.
         case "task-threw":
-          if (taskErrors.get(shownEvent.task)?.slot.answer(shownEvent.event))
+          if (taskErrors.get(shownEvent.task)?.answer(shownEvent.event))
             changed = true;
           break;
         default:
@@ -381,31 +380,39 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // publish new facts only when the first confirmation changes an owner.
     if (changed) restateFaults();
   };
-  // What a task threw, and how many times more since its error was last
-  // shown: its words on every bar, and its detail in the log.
-  const threwText = ({ task }: ReportedThrow, more: number): string =>
-    `${task} threw${more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`}`;
+  // A task's throw logged in full and held on every bar.
   const showThrow = (
-    slot: HeldSlot,
+    slot: HeldSlot<ReportedThrow>,
     reported: ReportedThrow,
     more: number,
   ): void => {
-    const failure = failureOf(reported.thrown);
-    const threw = threwText(reported, more);
-    log("error", `${threw}: ${failure.detail}`);
+    const { shown, logged } = thrownText(reported, more);
+    log("error", logged);
     // A thrown message can carry a launched command's output, and nothing
     // here can tell which do, so each refuses a recording while it shows.
     slot.hold(
       environmentOutput(
-        joinedEvent(
-          null,
-          `${threw}: ${failure.message}`,
-          instantOf(new Date(reported.at)),
-        ),
+        joinedEvent(null, shown, instantOf(new Date(reported.at))),
         true,
       ),
     );
     restateFaults();
+  };
+  // A task's slot: what recurred while it held the error is held afresh
+  // when it lets go, and with nothing recurred the error leaves every bar.
+  const taskErrorOf = (task: string): HeldSlot<ReportedThrow> => {
+    const slot = new HeldSlot<ReportedThrow>(
+      clock,
+      `task throw hold ${task}`,
+      (recurred) => {
+        if (recurred !== null)
+          return showThrow(slot, recurred.latest, recurred.count);
+        taskErrors.delete(task);
+        restateFaults();
+      },
+    );
+    taskErrors.set(task, slot);
+    return slot;
   };
   // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
   // those thrown before this daemon was built included. A task's first throw
@@ -416,24 +423,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // logs once a hold.
   const taken = (reported: ReportedThrow): void => {
     stats.tasksThrew++;
-    const known = taskErrors.get(reported.task);
-    if (known !== undefined) {
-      known.since = { count: (known.since?.count ?? 0) + 1, latest: reported };
-      return;
-    }
-    const slot = new HeldSlot(clock, `task throw hold ${reported.task}`, () => {
-      const { since } = error;
-      if (since === null) {
-        taskErrors.delete(reported.task);
-        restateFaults();
-        return;
-      }
-      error.since = null;
-      showThrow(slot, since.latest, since.count);
-    });
-    const error: TaskError = { slot, since: null };
-    taskErrors.set(reported.task, error);
-    showThrow(slot, reported, 0);
+    const slot = taskErrors.get(reported.task) ?? taskErrorOf(reported.task);
+    if (!slot.recur(reported)) showThrow(slot, reported, 0);
   };
   // [LAW:no-silent-failure] Taking a throw cannot throw back into the task
   // that threw it: a failure here is logged beside the throw it was taking.
@@ -1180,24 +1171,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
       // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
-      // throw counted and not yet shown is logged now, and one from here on
-      // is logged as it comes.
+      // throw from here on is logged as it comes, and each slot lets go as it
+      // would at its hold's end, so a throw counted and not yet shown is
+      // logged now.
       [
         "held events close",
         () => {
-          const logged = (reported: ReportedThrow, more: number): void =>
-            log(
-              "error",
-              `${threwText(reported, more)}: ${failureOf(reported.thrown).detail}`,
-            );
-          clock.throws.close((reported) => logged(reported, 0));
-          for (const { since } of taskErrors.values())
-            if (since !== null) logged(since.latest, since.count);
-          for (const slot of [
-            rendererEnded,
-            actFailed,
-            ...[...taskErrors.values()].map(({ slot }) => slot),
-          ])
+          clock.throws.close((reported) =>
+            log("error", thrownText(reported).logged),
+          );
+          for (const slot of [rendererEnded, actFailed, ...taskErrors.values()])
             slot.dispose();
         },
       ],

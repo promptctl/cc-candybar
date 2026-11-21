@@ -63,17 +63,30 @@ export interface Timekeeper {
   // Runs `fire` on the loop's next turn, after the work now running.
   defer(task: string, fire: Task): () => void;
   // Runs `fire` now, and nothing awaits it: the one way to start work whose
-  // end no caller waits on.
+  // end no caller waits on. Its throw, sync or not, is settled as a rejection
+  // is, so it never reaches the caller, whatever the clock reports to.
   detach(task: string, fire: Task): void;
+  // Reports `thrown` as `task`'s throw, as a detached task's rejection is: the
+  // one way an owner hands the clock a failure it holds as a value.
+  failed(task: string, thrown: unknown): void;
 }
 
 // [LAW:single-enforcer] The one builder of a clock's task methods, so every
 // task any clock runs reports what it throws: a sync throw or a rejection goes
-// to `report`, and the task is otherwise run as the source runs it.
+// to `report`, and the task is otherwise run as the source runs it. A timer's
+// sync throw is reported where it is caught, since only the loop is beneath
+// it; a detached task's, as its rejection is, since its caller is.
 export function clockOver(
   source: TimerSource,
   report: ReportThrow,
 ): Timekeeper {
+  // [LAW:dataflow-not-control-flow] Whatever a task returned is settled: a
+  // thenable, or a promise of another realm, rejects here as a native
+  // promise does, and any other value settles at once.
+  const settle = (task: string, settled: unknown): void =>
+    void Promise.resolve(settled).catch((thrown: unknown) =>
+      report(task, thrown, source.now()),
+    );
   const run = (task: string, fire: Task) => (): void => {
     let settled: unknown;
     try {
@@ -82,12 +95,7 @@ export function clockOver(
       report(task, thrown, source.now());
       return;
     }
-    // [LAW:dataflow-not-control-flow] Whatever it returned is settled: a
-    // thenable, or a promise of another realm, rejects here as a native
-    // promise does, and any other value settles at once.
-    Promise.resolve(settled).catch((thrown: unknown) =>
-      report(task, thrown, source.now()),
-    );
+    settle(task, settled);
   };
   return {
     now: () => source.now(),
@@ -97,7 +105,16 @@ export function clockOver(
     every: (task, ms, fire, options) =>
       source.interval(ms, run(task, fire), options),
     defer: (task, fire) => source.turn(run(task, fire)),
-    detach: (task, fire) => run(task, fire)(),
+    detach: (task, fire) => {
+      let settled: unknown;
+      try {
+        settled = fire();
+      } catch (thrown) {
+        settled = Promise.reject(thrown);
+      }
+      settle(task, settled);
+    },
+    failed: (task, thrown) => settle(task, Promise.reject(thrown)),
   };
 }
 
@@ -125,8 +142,8 @@ export function elapsedMs(
 // or waits for a loop turn. It holds no state; `timer` and `interval` read the
 // timer globals when they are called, so jest's fake timers still drive a
 // clock over it. `turn` is `node:timers`' own, which jest's fakes leave alone.
-// The eslint config lets only the process world (src/host.ts) and test helpers
-// import it.
+// In src, the eslint config lets only the process world (src/host.ts) import
+// it.
 export const systemTimers: TimerSource = {
   now: () => Date.now(),
   monotonic: () => performance.now() as Monotonic,

@@ -313,14 +313,17 @@ export class GitDataProvider {
   private readonly logger: GitProviderLogger;
   private readonly clock: Pick<
     Timekeeper,
-    "monotonic" | "after" | "every" | "detach"
+    "monotonic" | "after" | "every" | "detach" | "failed"
   >;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The daemon's clock: every period, and the
     // times the reads are stamped and timed with, and the lookups and passes
     // nothing awaits.
-    clock: Pick<Timekeeper, "monotonic" | "after" | "every" | "detach">;
+    clock: Pick<
+      Timekeeper,
+      "monotonic" | "after" | "every" | "detach" | "failed"
+    >;
     periodMs?: number;
     maxRepos?: number;
     // How many forge lookups may be out at once, across every repo.
@@ -521,7 +524,7 @@ export class GitDataProvider {
     };
     const state: RepoState = {
       root,
-      refresh: new TrailingEdge(),
+      refresh: new TrailingEdge(this.clock, () => `git refresh ${root}`),
       watch: this.followWatch(root, null).watch,
       period: new Period(
         `git refresh ${root}`,

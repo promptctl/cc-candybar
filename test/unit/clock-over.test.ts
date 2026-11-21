@@ -114,8 +114,33 @@ test("a command's clock ends on a task's throw, naming the task, with the throw 
     throw broke;
   });
   expect(() => clock.advance(10)).toThrow(
-    expect.objectContaining({ message: "install currency threw", cause: broke }),
+    expect.objectContaining({
+      message: "install currency threw",
+      cause: broke,
+    }),
   );
+});
+
+test("a detached task's sync throw is reported as its rejection is, after its starter returns, so no reporter throws into the starter", async () => {
+  const { clock, reported } = rig();
+  clock.detach("daemon log flush", () => {
+    throw broke;
+  });
+  expect(reported).toEqual([]);
+  await drained();
+  expect(reported).toEqual([
+    { task: "daemon log flush", thrown: broke, at: START.getTime() },
+  ]);
+});
+
+test("a failure an owner holds as a value is reported as its task's", async () => {
+  const { clock, reported } = rig();
+  clock.failed("config discovery /repo", broke);
+  expect(reported).toEqual([]);
+  await drained();
+  expect(reported).toEqual([
+    { task: "config discovery /repo", thrown: broke, at: START.getTime() },
+  ]);
 });
 
 test("a task that settles cleanly reports nothing, whatever it returns", async () => {

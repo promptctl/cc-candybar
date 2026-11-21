@@ -40,7 +40,7 @@ import {
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "./helpers/system-clock";
-import { clockOver, rethrowing, systemTimers } from "../src/time";
+import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
@@ -600,7 +600,7 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("one failed rediscovery leaves the writer and another holder the successful change and can retry", async () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
@@ -632,6 +632,8 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  // Reported as the origin's task's throw, once the batch has returned.
+  await Promise.resolve();
   expect(threw).toEqual([
     {
       task: expect.stringMatching(/^config discovery .*failed-once/),
@@ -647,30 +649,6 @@ test("one failed rediscovery leaves the writer and another holder the successful
     [name, originKey(b.origin)],
   ]);
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
-});
-
-test("under a clock that rethrows, a failed rediscovery ends the run only after its siblings' change is published", () => {
-  const a = named("published-first");
-  const b = named("refused");
-  const name = rendererNameOf("next");
-  const { service, discovery: writer, delivered } = discoveryRig(
-    {
-      ...diskFiles,
-      text(read) {
-        if (read === b.file && fs.readFileSync(read, "utf8") !== "{}")
-          throw new Error("rediscovery failed");
-        return diskFiles.text(read);
-      },
-    },
-    clockOver(systemTimers, rethrowing),
-  );
-  service.forRenderer(name).follow([a.origin, b.origin]);
-  writer.follow([a.origin, b.origin]);
-  for (const { file } of [a, b]) fs.writeFileSync(file, "{ globals: { padding: 1 } }");
-  expect(() => writer.landed([a.file, b.file])).toThrow(
-    expect.objectContaining({ cause: new Error("rediscovery failed") }),
-  );
-  expect(delivered).toEqual([[name, originKey(a.origin)]]);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {
