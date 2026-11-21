@@ -1,3 +1,7 @@
+import {
+  reportingClock,
+  type ReportingClock,
+} from "../../../src/daemon/task-throws";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +16,7 @@ import {
   renderBody,
 } from "../../helpers/daemon-e2e";
 import { loggedLines, renderLines } from "../../helpers/daemon-log";
-import { heldClock } from "../../helpers/held-clock";
+import { heldClock, type HeldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
   type InWorkerDaemon,
@@ -31,14 +35,14 @@ let root: string;
 let isolated: IsolatedDaemonEnv;
 let daemon: InWorkerDaemon | undefined;
 let config: string;
-let clock: ReturnType<typeof heldClock>;
+let clock: HeldClock & ReportingClock;
 
 beforeEach(() => {
   root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-checkout-")),
   );
   isolated = prepareIsolatedDaemonEnv("ccb-checkout");
-  clock = heldClock(new Date());
+  clock = heldClock(new Date(), reportingClock);
   config = path.join(root, "bar.json5");
   writeConfig(["location"]);
 });

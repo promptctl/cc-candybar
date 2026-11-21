@@ -16,6 +16,7 @@ import { eventLine } from "../utils/logfmt.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RecordingFile } from "./recording-file.js";
 import type { RecordingCommand } from "./foundations/recording-command.js";
+import type { Timekeeper } from "../time.js";
 import {
   recordingBootProblem,
   recordingInputProblem,
@@ -226,14 +227,20 @@ export class RendererRecording {
 
 export class RendererRecordings {
   private readonly selected = new Map<RendererName, RendererRecording>();
-  private readonly control = new KeyedSerialQueue<RendererName>();
+  private readonly control: KeyedSerialQueue<RendererName>;
   private readonly requests = new Set<Promise<string>>();
   private closing = false;
 
   constructor(
     private readonly open: (file: string) => Promise<RecordingFile>,
     private readonly log: DaemonLogger,
-  ) {}
+    detach: Timekeeper["detach"],
+  ) {
+    this.control = new KeyedSerialQueue(
+      detach,
+      (name) => `renderer ${name} recording control`,
+    );
+  }
 
   generation(name: RendererName): RendererRecording | undefined {
     return this.selected.get(name)?.claim();

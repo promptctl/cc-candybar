@@ -49,7 +49,7 @@ import {
   requestPayload,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 

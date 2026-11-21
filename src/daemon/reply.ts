@@ -524,7 +524,10 @@ export async function replyTo(
             checked.registration ?? checked.environment,
           );
         const tmux = checked.req.hints.tmux;
-        if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
+        if (tmux != null)
+          clock.detach(`tmux status observe ${tmux.socket}`, () =>
+            parts.retiredTmuxStatus.observe(tmux.socket),
+          );
         const { waitEndsAt, clientEndsAt } = renderDeadlines(
           checked.req.deadline,
           accepted.at,

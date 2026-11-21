@@ -22,7 +22,8 @@ import {
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
-import type { Monotonic } from "../../src/time";
+import type { Monotonic, TimerSource } from "../../src/time";
+import { handClock } from "../helpers/hand-clock";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS } from "../helpers/renderers";
@@ -37,15 +38,17 @@ const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
 const NONE: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] };
 
-// A clock that reads `wall` and `mono` as they stand, and sets no timer: no
-// output here declares a wake.
-const clockAt = (read: { wall: number; mono: number }) => ({
-  now: () => read.wall,
-  monotonic: () => read.mono as Monotonic,
-  after: (): (() => void) => {
-    throw new Error("this rig sets no timer");
-  },
-});
+// A clock that reads `wall` and `mono` as they stand, and arms its timers
+// with `timer`: by default none, as no output here declares a wake.
+const clockAt = (
+  read: { wall: number; mono: number },
+  timer?: TimerSource["timer"],
+) =>
+  handClock({
+    now: () => read.wall,
+    monotonic: () => read.mono as Monotonic,
+    ...(timer === undefined ? {} : { timer }),
+  });
 
 type Ended =
   | { readonly kind: "answered"; readonly reply?: CommandReply }
@@ -876,13 +879,10 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
   const read = { wall: 0, mono: 0 };
   const host = rendererHost(
     MAIN_RENDERER,
-    {
-      ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
-        fire.push(run);
-        return () => {};
-      },
-    },
+    clockAt(read, (_ms, run) => {
+      fire.push(run);
+      return () => {};
+    }),
     held(
       {
         answer: async (input) => {
@@ -931,13 +931,10 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
   const acted = new Promise<void>((resolve) => (finish = resolve));
   const host = rendererHost(
     MAIN_RENDERER,
-    {
-      ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
-        fire.push(run);
-        return () => {};
-      },
-    },
+    clockAt(read, (_ms, run) => {
+      fire.push(run);
+      return () => {};
+    }),
     held(
       {
         answer: async (input) => ({
@@ -989,13 +986,10 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
     event.kind === "retire" ? `retire:${String(event.session)}` : event.kind;
   const host = rendererHost(
     MAIN_RENDERER,
-    {
-      ...clockAt(read),
-      after: (_ms: number, run: () => void) => {
-        fire.push(run);
-        return () => {};
-      },
-    },
+    clockAt(read, (_ms, run) => {
+      fire.push(run);
+      return () => {};
+    }),
     held(
       {
         answer: async (input) => {
@@ -1052,13 +1046,10 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
   const session = sessionIdOf("frame-viewer");
   const host = rendererHost(
     MAIN_RENDERER,
-    {
-      ...clockAt(read),
-      after: (_ms, run) => {
-        fire.push(run);
-        return () => {};
-      },
-    },
+    clockAt(read, (_ms, run) => {
+      fire.push(run);
+      return () => {};
+    }),
     held({
       answer: async ({ event }) => {
         if (event.kind === "due")

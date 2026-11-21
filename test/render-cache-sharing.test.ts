@@ -43,7 +43,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per

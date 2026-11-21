@@ -39,7 +39,8 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
+import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
@@ -108,6 +109,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = state
     stateDir: state,
     watchers,
     files: () => files,
+    clock,
     log: (_level, line) => logged.push(line),
     moved: (renderer, origins) => {
       for (const origin of origins) {
@@ -166,7 +168,7 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
+  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1 failed=0$/);
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -598,23 +600,26 @@ test("a shared file's watch window reads it once for different held origins and 
   expect(delivered).toHaveLength(2);
 });
 
-test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+test("one failed rediscovery leaves the writer and another holder the successful change and can retry", async () => {
   const a = named("published");
   const b = named("failed-once");
   const name = rendererNameOf("next");
   let refuse = false;
+  const threw: Array<{ task: string; thrown: unknown }> = [];
   const {
     service,
     discovery: writer,
     delivered,
-    logged,
-  } = discoveryRig({
-    ...diskFiles,
-    text(read) {
-      if (refuse && read === b.file) throw new Error("rediscovery failed");
-      return diskFiles.text(read);
+  } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (refuse && read === b.file) throw new Error("rediscovery failed");
+        return diskFiles.text(read);
+      },
     },
-  });
+    clockOver(systemTimers, (task, thrown) => threw.push({ task, thrown })),
+  );
   const second = service.forRenderer(name);
   const origins = [a.origin, b.origin];
   writer.follow(origins);
@@ -627,11 +632,14 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
-  expect(logged).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
-    ]),
-  );
+  // Reported as the origin's task's throw, once the batch has returned.
+  await Promise.resolve();
+  expect(threw).toEqual([
+    {
+      task: expect.stringMatching(/^config discovery .*failed-once/),
+      thrown: new Error("rediscovery failed"),
+    },
+  ]);
 
   refuse = false;
   service.again("events-resumed");
@@ -846,6 +854,7 @@ function physicalDiscovery(
     stateDir: state,
     watchers,
     openText: countingText(reads, opens),
+    clock: systemTimekeeper,
     log: () => {},
     moved: () => {},
     reloaded,
@@ -1096,7 +1105,7 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2 failed=0");
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {
@@ -1367,6 +1376,7 @@ test("a deleted layer heard through its descriptor revision retires on the first
       if (at === file) fs.unlinkSync(file);
       return result;
     },
+    clock,
     log: () => {},
     moved: (_renderer, origins) => moved.push(...origins),
   });

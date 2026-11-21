@@ -178,7 +178,7 @@ export async function renderEffective(
     sessionOfPayload(payload),
     runs.readings,
   );
-  const pending = await runs.settled(timeoutSignal(store.clock, SETTLE_MS));
+  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
   const { frame, warnings } = drawPayload(
     config,
     compiled,

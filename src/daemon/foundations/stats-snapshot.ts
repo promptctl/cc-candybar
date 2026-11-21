@@ -134,6 +134,9 @@ export interface StatsSnapshot {
     // included.
     took: Durations;
   };
+  // [LAW:nothing-unseen] Throws the daemon's own tasks reported, every
+  // recurrence counted, where a bar shows each task once while it is held.
+  tasksThrew: number;
   // Hook-data fields this daemon has been sent that its schema does not know:
   // what Anthropic has added since the schema was written.
   unknownHookFields: string[];

@@ -36,20 +36,16 @@ import type {
   EventInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
-import { systemTimekeeper, type Monotonic } from "../src/time";
+import { type Monotonic } from "../src/time";
+import { handClock } from "./helpers/hand-clock";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
 
 const S = sessionIdOf("s");
-const CLOCK = {
-  now: () => 0,
-  monotonic: () => 0 as Monotonic,
-  after: (): (() => void) => {
-    throw new Error("this rig sets no timer");
-  },
-};
+const CLOCK = handClock({ now: () => 0, monotonic: () => 0 as Monotonic });
 const ORIGIN: RenderOrigin = {
   projectDir: "/p",
   cwd: "/p",
@@ -345,6 +341,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,
+    clock: systemTimekeeper,
     log: () => {},
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });

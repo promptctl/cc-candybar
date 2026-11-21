@@ -25,7 +25,7 @@ import { dropEditChrome } from "./helpers/narrow-to-segment";
 import { linksOf, effectsOf } from "../src/click/read";
 import { VERB_COPY } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the

@@ -23,7 +23,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // [LAW:single-enforcer] One strip-opts shape across the file; Infinity width keeps
 // each render a single line so substring assertions are stable.

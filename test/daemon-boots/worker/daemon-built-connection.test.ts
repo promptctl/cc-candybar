@@ -1,3 +1,7 @@
+import {
+  reportingClock,
+  type ReportingClock,
+} from "../../../src/daemon/task-throws";
 import { decodeAnsi } from "@promptctl/rich-js";
 // [LAW:verifiable-goals] A connection to a daemon built in this jest worker, over
 // a stream with no socket: its own handling answers a render, feeds a subscriber
@@ -8,11 +12,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  systemTimekeeper,
-  type Monotonic,
-  type Timekeeper,
-} from "../../../src/time";
+import { type Monotonic, type Timekeeper } from "../../../src/time";
+import { daemonClock } from "../../../src/host";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import {
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -24,7 +26,10 @@ import { inProcessRenderer } from "../../../src/in-process-renderer";
 import type { LinkOwner } from "../../../src/daemon/renderer-process";
 import { textOf } from "../../../src/render/frame";
 import { instantAt } from "../../../src/utils/instant";
-import type { HeldEvent } from "../../../src/utils/event-hold";
+import {
+  DAEMON_EVENT_HOLD_S,
+  type HeldEvent,
+} from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
@@ -55,7 +60,7 @@ describe("a connection to a daemon built in this worker", () => {
   let started: InWorkerDaemon | null = null;
   const exit = jest.fn();
 
-  const start = (clock: Timekeeper = systemTimekeeper): InWorkerDaemon => {
+  const start = (clock: ReportingClock = daemonClock()): InWorkerDaemon => {
     started = startDaemon(process.env, { clock, exit });
     return started;
   };
@@ -278,6 +283,60 @@ describe("a connection to a daemon built in this worker", () => {
     expect(standingReads()).toBe(before + 1);
   });
 
+  test("a task's throw draws on every bar, once per task; what follows while it is held is counted, and its hold's end shows the latest with the count", async () => {
+    const clock = heldClock(new Date(), reportingClock);
+    // Thrown before the daemon exists: the inbox holds it for the daemon.
+    clock.throws.report("daemon boot", new Error("too early"), clock.now());
+    const running = startDaemon(process.env, { clock });
+    started = running;
+    const reply = async (session: string) => {
+      const result = await running.daemon.reply(
+        renderRequest(session, undefined),
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      result.settled(true);
+      return drawn(result.resp);
+    };
+    const sweepLines = (count: number) =>
+      loggedLines(
+        process.env,
+        (lines) =>
+          lines.filter((line) => line.includes("[error] session sweep threw")),
+        (picked) => picked.length >= count,
+        "the sweep's throws logged",
+      );
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
+
+    clock.throws.report("session sweep", new Error("it broke"), clock.now());
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+2/);
+    // While it is held, a throw is counted, whatever it says.
+    clock.throws.report("session sweep", new Error("it broke"), clock.now());
+    clock.throws.report(
+      "session sweep",
+      new Error("it broke again"),
+      clock.now(),
+    );
+    expect(await reply("task-throw-b")).toMatch(/⚠\s+2/);
+    expect(running.daemon.stats.tasksThrew).toBe(4);
+
+    // Its hold ends with throws counted: the latest is held, and logged once
+    // with their count. The boot's, answered with nothing since, leaves.
+    clock.advance(DAEMON_EVENT_HOLD_S * 1000);
+    expect(await sweepLines(2)).toEqual([
+      expect.stringMatching(/session sweep threw: Error: it broke$/),
+      expect.stringMatching(
+        /session sweep threw 2 more times: Error: it broke again$/,
+      ),
+    ]);
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
+
+    // With nothing counted since, the next hold's end lets it go.
+    clock.advance(DAEMON_EVENT_HOLD_S * 1000);
+    expect(await reply("task-throw-a")).not.toMatch(/⚠/);
+  });
+
   test("a shutdown request reaches the exit the daemon was built with", async () => {
     const opened = openedOn(start().connect());
     opened.send({ v: PROTOCOL_VERSION, kind: "shutdown" });
@@ -291,7 +350,7 @@ describe("a connection to a daemon built in this worker", () => {
     const at = new Date();
     const opened = openedOn(
       start({
-        ...systemTimekeeper,
+        ...daemonClock(),
         now: () => at.getTime(),
         monotonic: () => monotonic as Monotonic,
       }).connect(),
@@ -312,7 +371,7 @@ describe("a connection to a daemon built in this worker", () => {
   // [LAW:verifiable-goals] Hold a real render at the renderer boundary so the
   // connection's backstop can win without blocking the process or waiting.
   test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     let entered = (): void => {};
     const drawing = new Promise<void>((resolve) => {
       entered = resolve;
@@ -357,7 +416,7 @@ describe("a connection to a daemon built in this worker", () => {
   });
 
   test("an embedded client with no deadline can still take a draw", async () => {
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     const entered = Promise.withResolvers<void>();
     let draws = 0;
     let release = () => {};
@@ -399,7 +458,7 @@ describe("a connection to a daemon built in this worker", () => {
   ])(
     "drops abandoned draws at $cause and still updates the pane",
     async ({ budget, expiry }) => {
-      const clock = heldClock(new Date());
+      const clock = heldClock(new Date(), reportingClock);
       const occupied = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
       const draws: string[] = [];

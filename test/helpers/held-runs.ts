@@ -29,7 +29,7 @@ import {
   type WorldState,
 } from "../../src/facts/world-state";
 import type { Launcher } from "../../src/proc/launcher";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { ownValue } from "../../src/utils/plain";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import { daemonFactsOf } from "./daemon-facts";

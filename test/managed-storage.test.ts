@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -184,7 +184,7 @@ describe("ManagedStorage reads", () => {
     expect(refreshes(r, "first")).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} by=first outcome=ok took=\\d+ms$`,
+          `^info plugin storage refresh file=${path.join(r.folder, "session-a.json")} sharedBy=\\d+ by=first outcome=ok took=\\d+ms$`,
         ),
       ),
     );

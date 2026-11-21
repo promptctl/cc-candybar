@@ -9,7 +9,7 @@
 
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { heldClock } from "./helpers/held-clock";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";

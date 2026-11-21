@@ -28,8 +28,8 @@ test("held work runs in the first due turn whose tick has reached it, earliest f
   const time = new TurnTime();
   const ran: string[] = [];
   time.during(at(100, 0), () => {
-    time.after(2000, () => ran.push("two"));
-    time.clock.after(1000, () => ran.push("one"));
+    time.after("test task", 2000, () => ran.push("two"));
+    time.clock.after("test task", 1000, () => ran.push("one"));
   });
   expect(time.next()).toBe(1);
   // The wall stepped back an hour: the ticks still say one second on.
@@ -46,11 +46,11 @@ test("work let go never runs, even by work due before it in the same turn", () =
   const ran: string[] = [];
   time.during(at(0, 0), () => {
     let release = (): void => {};
-    time.after(0, () => {
+    time.after("test task", 0, () => {
       ran.push("first");
       release();
     });
-    release = time.after(10, () => ran.push("second"));
+    release = time.after("test task", 10, () => ran.push("second"));
   });
   time.during(at(0, 1), () => time.runDue());
   expect(ran).toEqual(["first"]);
@@ -62,9 +62,9 @@ test("work held while due work runs waits for the next due turn, so a chain spre
   let runs = 0;
   const again = (): void => {
     runs++;
-    time.after(0, again);
+    time.after("test task", 0, again);
   };
-  time.during(at(0, 0), () => time.after(0, again));
+  time.during(at(0, 0), () => time.after("test task", 0, again));
   time.during(at(0, 0), () => time.runDue());
   expect(runs).toBe(1);
   expect(time.next()).toBe(0);
@@ -76,10 +76,10 @@ test("held work that throws keeps none due after it from running, is not held ag
   const time = new TurnTime();
   const ran: string[] = [];
   time.during(at(0, 0), () => {
-    time.after(0, () => {
+    time.after("test task", 0, () => {
       throw new Error("the walk broke");
     });
-    time.after(10, () => ran.push("after"));
+    time.after("test task", 10, () => ran.push("after"));
   });
   expect(() => time.during(at(0, 1), () => time.runDue())).toThrow(
     "the walk broke",

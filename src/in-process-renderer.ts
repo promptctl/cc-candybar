@@ -51,10 +51,7 @@ export function inProcessRenderer(
                 : core.answer(event),
           };
         },
-        () =>
-          void start().catch((error: unknown) =>
-            log("error", `renderer ${name} restart: ${String(error)}`),
-          ),
+        () => clock.detach(`renderer ${name} restart`, start),
         async (previous) => {
           // [LAW:no-ambient-temporal-coupling] No old turn remains in flight
           // in the recording slot. Close its local ownership before building

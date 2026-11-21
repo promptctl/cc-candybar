@@ -12,7 +12,7 @@ import {
   rendererNameOf,
 } from "../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
 // over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory

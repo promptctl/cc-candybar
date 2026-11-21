@@ -24,7 +24,7 @@ import {
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
@@ -412,6 +412,7 @@ describe("formatStats", () => {
           stddevMs: 15.6,
         },
       },
+      tasksThrew: 3,
       unknownHookFields: ["fast_mode", "x\n  inFlight      9"],
       gitCache: {
         size: 5,
@@ -574,6 +575,7 @@ describe("formatStats", () => {
         inFlight: 0,
         took: NO_DURATIONS,
       },
+      tasksThrew: 0,
       unknownHookFields: [],
       gitCache: {
         size: 0,

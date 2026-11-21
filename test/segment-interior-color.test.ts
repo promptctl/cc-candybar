@@ -18,7 +18,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // Fires every interior-colored branch: staged→green "S", unstaged→red "U",
 // ahead→green "+1", behind→red "-1".

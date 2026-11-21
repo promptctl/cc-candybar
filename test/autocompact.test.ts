@@ -39,7 +39,7 @@ import { readAutoCompactWindow } from "../src/daemon/cache/autocompact";
 import { projectAutoCompact } from "../src/renderer/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 

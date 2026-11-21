@@ -10,7 +10,7 @@ import {
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
@@ -60,7 +60,6 @@ function sourceOf(
     watch: NO_WATCH,
     maxEntries: opts.maxEntries ?? 64,
     lines: REFRESH_TRIGGERS,
-    logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
     clock: opts.clock ?? systemTimekeeper,
   });
@@ -220,10 +219,10 @@ describe("KeyedSource", () => {
     expect(await waiting).toEqual(ok("after"));
     expect(lines.map((l) => `${l.level} ${l.msg}`)).toEqual([
       expect.stringMatching(
-        /^info fake refresh key=a by=first abandoned took=\d+ms$/,
+        /^info fake refresh key=a sharedBy=\d+ by=first abandoned took=\d+ms$/,
       ),
       expect.stringMatching(
-        /^info fake refresh key=a by=supersede outcome=ok took=\d+ms$/,
+        /^info fake refresh key=a sharedBy=\d+ by=supersede outcome=ok took=\d+ms$/,
       ),
     ]);
     expect(source.stats()).toMatchObject({
@@ -382,7 +381,6 @@ describe("KeyedSource", () => {
         watch: NO_WATCH,
         maxEntries: 64,
         lines: REFRESH_TRIGGERS,
-        logger: () => {},
         ledger: new RefreshLedger(),
         clock: systemTimekeeper,
       });
@@ -488,7 +486,7 @@ describe("KeyedSource", () => {
       {
         level: "warn",
         msg: expect.stringMatching(
-          /^fake refresh key=a by=first outcome=failed reason="no server" took=\d+ms$/,
+          /^fake refresh key=a sharedBy=\d+ by=first outcome=failed reason="no server" took=\d+ms$/,
         ),
       },
     ]);

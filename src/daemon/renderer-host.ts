@@ -225,7 +225,7 @@ export function rendererHost(
   name: RendererName,
   // The clock every input's readings are made on, a hop is timed on, and the
   // renderer's wake is armed on.
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">,
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
@@ -251,7 +251,10 @@ export function rendererHost(
   },
   world: HostWorld,
 ): RendererHost {
-  const mailbox = new KeyedSerialQueue<RendererName>();
+  const mailbox = new KeyedSerialQueue<RendererName>(
+    clock.detach,
+    (name) => `renderer ${name} mailbox`,
+  );
   let generation = 0;
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
@@ -600,7 +603,7 @@ export function rendererHost(
                   },
             );
       const settled = acted.then((outcome) => settle(act, outcome));
-      if (outlives(act)) unawaited("act", settled);
+      if (outlives(act)) unawaited("act", () => settled);
       else {
         owed.push(settled);
         before = acted;
@@ -882,8 +885,7 @@ export function rendererHost(
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       const retired = "the renderer that drew the frame has ended";
-      unawaited(
-        "frame receipt",
+      unawaited("frame receipt", () =>
         deliver(
           () =>
             issuer === generation
@@ -1072,14 +1074,11 @@ export function rendererHost(
       return turn;
     };
   const deliver = recorded("last");
-  // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
-  // is the daemon's, on every bar.
-  const unawaited = (what: string, settling: Promise<unknown>): void =>
-    void settling.catch((thrown: unknown) => {
-      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
-    });
+  // [LAW:no-silent-failure] A turn's settling nothing awaits is the clock's,
+  // whose report puts what it threw on every bar: one made by `settling`, or
+  // one already running that it hands over.
+  const unawaited = (what: string, settling: () => Promise<unknown>): void =>
+    clock.detach(`renderer ${name} ${what}`, settling);
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(
@@ -1103,8 +1102,7 @@ export function rendererHost(
   };
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
-      unawaited(
-        "config",
+      unawaited("config", () =>
         deliver(configMade(origin), [["why", "config-moved"]]),
       );
   };
@@ -1121,6 +1119,7 @@ export function rendererHost(
   // can leave those sessions' menus alone. Its acts settle outside the slot.
   const wake: RendererWake = new RendererWake({
     clock,
+    task: `renderer ${name} wake`,
     due: async () => {
       const {
         event,
@@ -1142,7 +1141,7 @@ export function rendererHost(
               },
         "scheduled",
       );
-      unawaited("due acts", settled);
+      unawaited("due acts", () => settled);
       record(event, [], turn);
       return turn;
     },

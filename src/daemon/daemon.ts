@@ -13,7 +13,13 @@ import {
   BadVerbArgs,
   CrossedFailure,
   DaemonClosing,
+  failureOf,
 } from "./foundations/verb-error.js";
+import {
+  thrownText,
+  type ReportedThrow,
+  type ReportingClock,
+} from "./task-throws.js";
 import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
@@ -58,7 +64,7 @@ import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import { instantAt, instantOf, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
@@ -83,12 +89,8 @@ import {
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
-import {
-  answeredBy,
-  joinedEvent,
-  type DisplayedEvent,
-  type HeldEvent,
-} from "../utils/event-hold.js";
+import { joinedEvent, type DisplayedEvent } from "../utils/event-hold.js";
+import { HeldSlot } from "./held-slot.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -179,7 +181,8 @@ export interface DaemonInputs extends DaemonAdapters {
   // requests by, and every timer its pieces set. A test holds it by hand.
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
-  readonly clock: Timekeeper;
+  // What its tasks throw lands in the inbox it carries, which every bar shows.
+  readonly clock: ReportingClock;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -264,7 +267,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
   const recordings =
-    inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
+    inputs.openRecording &&
+    new RendererRecordings(inputs.openRecording, log, clock.detach);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -288,21 +292,33 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+      taskThrows: [],
+    },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, and the
-  // acts that failed with no session's bar to hold them, each held for the
-  // bar until an answer has carried it.
-  let rendererEnded: HeldEvent | null = null;
-  let actFailed: HeldEvent | null = null;
+  // [LAW:one-source-of-truth] How the last renderer process ended, the acts
+  // that failed with no session's bar to hold them, and what each of the
+  // daemon's tasks threw, each held until no bar can show it.
+  const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
+  const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
+  // [LAW:one-source-of-truth] Each task's error, as the slot that holds it.
+  const taskErrors = new Map<string, HeldSlot<ReportedThrow>>();
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded,
-        actFailed,
+        rendererEnded: rendererEnded.event(),
+        actFailed: actFailed.event(),
+        taskThrows: [...taskErrors].flatMap(([task, slot]) => {
+          const event = slot.event();
+          return event === null ? [] : [{ task, event }];
+        }),
       }),
     );
   }
@@ -339,29 +355,89 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // owner of the daemon's latest occurrences, independent of their renderer.
   const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
     let changed = false;
-    for (const { kind, event } of shown) {
-      switch (kind) {
+    for (const shownEvent of shown) {
+      switch (shownEvent.kind) {
         case "launch-pipes":
-          if (launcher.answeredPipeEvent(event)) changed = true;
+          if (launcher.answeredPipeEvent(shownEvent.event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
-            rendererEnded = { ...rendererEnded, answered: true };
-            changed = true;
-          }
+          if (rendererEnded.answer(shownEvent.event)) changed = true;
           break;
         case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event)) {
-            actFailed = { ...actFailed, answered: true };
-            changed = true;
-          }
+          if (actFailed.answer(shownEvent.event)) changed = true;
           break;
+        // A frame can carry a throw whose slot has since left: nothing
+        // holds it to mark.
+        case "task-threw":
+          if (taskErrors.get(shownEvent.task)?.answer(shownEvent.event))
+            changed = true;
+          break;
+        default:
+          shownEvent satisfies never;
       }
     }
     // [LAW:dataflow-not-control-flow] Writers can confirm independently;
     // publish new facts only when the first confirmation changes an owner.
     if (changed) restateFaults();
   };
+  // A task's throw logged in full and held on every bar.
+  const showThrow = (
+    slot: HeldSlot<ReportedThrow>,
+    reported: ReportedThrow,
+    more: number,
+  ): void => {
+    const { shown, logged } = thrownText(reported, more);
+    log("error", logged);
+    // A thrown message can carry a launched command's output, and nothing
+    // here can tell which do, so each refuses a recording while it shows.
+    slot.hold(
+      environmentOutput(
+        joinedEvent(null, shown, instantOf(new Date(reported.at))),
+        true,
+      ),
+    );
+    restateFaults();
+  };
+  // A task's slot: what recurred while it held the error is held afresh
+  // when it lets go, and with nothing recurred the error leaves every bar.
+  const taskErrorOf = (task: string): HeldSlot<ReportedThrow> => {
+    const slot = new HeldSlot<ReportedThrow>(
+      clock,
+      `task throw hold ${task}`,
+      (recurred) => {
+        if (recurred !== null)
+          return showThrow(slot, recurred.latest, recurred.count);
+        taskErrors.delete(task);
+        restateFaults();
+      },
+    );
+    taskErrors.set(task, slot);
+    return slot;
+  };
+  // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
+  // those thrown before this daemon was built included. A task's first throw
+  // is logged in full and held on every bar. One while its error is held is
+  // counted, whatever it says, so a task failing on every tick moves no bar
+  // and writes no line. When the hold ends with throws counted, the latest
+  // is held and logged with their count, so a still-failing task shows and
+  // logs once a hold.
+  const taken = (reported: ReportedThrow): void => {
+    stats.tasksThrew++;
+    const slot = taskErrors.get(reported.task) ?? taskErrorOf(reported.task);
+    if (!slot.recur(reported)) showThrow(slot, reported, 0);
+  };
+  // [LAW:no-silent-failure] Taking a throw cannot throw back into the task
+  // that threw it: a failure here is logged beside the throw it was taking.
+  clock.throws.attach((reported) => {
+    try {
+      taken(reported);
+    } catch (failure) {
+      log(
+        "error",
+        `taking what ${reported.task} threw failed: ${failureOf(failure).detail}; it threw: ${failureOf(reported.thrown).detail}`,
+      );
+    }
+  });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -450,6 +526,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const desktopPrograms = programs(launcher);
   const acts = new Acts({
+    detach: clock.detach,
     programsFor: (session) => {
       // Fixed desktop tools also serve sessionless links, old clients and
       // links opened before a restarted host hears from the session again.
@@ -596,6 +673,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     stateDir: paths.state,
     watchers: watcherRegistry,
     files: checkouts.discovery,
+    clock,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
     reloaded: (folders) => managedStorage.recheck(folders),
@@ -705,10 +783,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ended: (event) => {
         // [LAW:types-are-the-program] A later exit can have the same text and
         // instant as an earlier one, even as an old reply is still writing.
-        rendererEnded = {
+        rendererEnded.hold({
           ...event,
-          revision: (rendererEnded?.revision ?? 0) + 1,
-        };
+          revision: (rendererEnded.event()?.revision ?? 0) + 1,
+        });
         restateFaults();
       },
     });
@@ -754,11 +832,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         acknowledgeDisplayed,
         unheard: (text, fromEnvironment) => {
           // The unacknowledged text is included in the next warning.
-          const prior = actFailed;
-          actFailed = environmentOutput(
-            joinedEvent(prior, text, instant()),
-            fromEnvironment === true ||
-              (prior !== null && !prior.answered && isEnvironmentOutput(prior)),
+          const prior = actFailed.event();
+          actFailed.hold(
+            environmentOutput(
+              joinedEvent(prior, text, instant()),
+              fromEnvironment === true ||
+                (prior !== null &&
+                  !prior.answered &&
+                  isEnvironmentOutput(prior)),
+            ),
           );
           restateFaults();
         },
@@ -848,20 +930,17 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
-          void former.renderer
-            .deliver(
-              () => ({
-                kind: "event",
-                event: { kind: "retire", session },
-              }),
-              [["why", "renderer-moved"]],
-            )
-            .catch((error: unknown) => {
-              log(
-                "error",
-                `renderer ${former.renderer.name} retire ${session}: ${String(error)}`,
-              );
-            });
+          clock.detach(
+            `renderer ${former.renderer.name} retire ${session}`,
+            () =>
+              former.renderer.deliver(
+                () => ({
+                  kind: "event",
+                  event: { kind: "retire", session },
+                }),
+                [["why", "renderer-moved"]],
+              ),
+          );
         frameFeeds.handedIn(null);
         frameFeeds.announce();
       }
@@ -1091,6 +1170,20 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ),
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
+      // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
+      // throw from here on is logged as it comes, and each slot lets go as it
+      // would at its hold's end, so a throw counted and not yet shown is
+      // logged now.
+      [
+        "held events close",
+        () => {
+          clock.throws.close((reported) =>
+            log("error", thrownText(reported).logged),
+          );
+          for (const slot of [rendererEnded, actFailed, ...taskErrors.values()])
+            slot.dispose();
+        },
+      ],
       ...attached.map(
         ({ renderer, link }): TeardownStep => [
           `${renderer.name} renderer close`,

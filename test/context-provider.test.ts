@@ -14,7 +14,7 @@ import { ContextProvider } from "../src/daemon/cache/context-provider";
 import { contextOver } from "../src/segments/context";
 import { failed, ok, pendingOf } from "../src/utils/outcome";
 import type { ClaudeHookData } from "../src/utils/claude";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 function baseHook(overrides: Partial<ClaudeHookData> = {}): ClaudeHookData {
   return {

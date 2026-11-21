@@ -704,12 +704,16 @@ export function sendOne(
       sock.off("close", onClose);
       fn();
     };
-    const clearTimer = clock.after(deadline - clock.now(), () => {
-      finish(() => {
-        sock.destroy();
-        reject(new ClientTimeoutError("deadline"));
-      });
-    });
+    const clearTimer = clock.after(
+      "reply deadline",
+      deadline - clock.now(),
+      () => {
+        finish(() => {
+          sock.destroy();
+          reject(new ClientTimeoutError("deadline"));
+        });
+      },
+    );
 
     const reader = makeFrameReader(
       (frame) => {

@@ -78,6 +78,14 @@ export interface DaemonFacts {
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;
+  // What the daemon's own tasks threw, one held event per task while some bar
+  // can show it: an error, where the others are warnings.
+  readonly taskThrows: readonly TaskThrew[];
+}
+
+export interface TaskThrew {
+  readonly task: string;
+  readonly event: HeldEvent;
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

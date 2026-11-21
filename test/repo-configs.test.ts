@@ -32,7 +32,7 @@ import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
 import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";

@@ -20,7 +20,7 @@ import {
   HeldStores,
 } from "../src/daemon/held-stores";
 import { throughout, until } from "./helpers/until";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");

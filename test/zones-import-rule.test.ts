@@ -16,7 +16,18 @@ const ROOT = path.resolve(__dirname, "..");
 const SCRIPT = `
 import { ESLint } from "eslint";
 const [root, cwd, casesJson] = process.argv.slice(1);
-const eslint = new ESLint({ cwd });
+// The probes are files the project does not hold, which the typed rules
+// cannot read; those rules have their own fixture (promise-lint-rule.test.ts).
+const eslint = new ESLint({
+  cwd,
+  overrideConfig: {
+    languageOptions: { parserOptions: { projectService: false } },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-misused-promises": "off",
+    },
+  },
+});
 const out = {};
 for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
   const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });
@@ -45,8 +56,14 @@ const REFUSED = {
   },
   rendererToRestDotted: { file: IN_RENDERER, code: imp("./../daemon/x") },
   rendererToRestTypeOnly: { file: IN_RENDERER, code: typeImp("../daemon/x") },
-  rendererToAbsoluteHostType: { file: IN_RENDERER, code: typeImp(path.join(ROOT, "src/host")) },
-  rendererToHostIdentity: { file: IN_RENDERER, code: imp("../daemon/cache/host-identity") },
+  rendererToAbsoluteHostType: {
+    file: IN_RENDERER,
+    code: typeImp(path.join(ROOT, "src/host")),
+  },
+  rendererToHostIdentity: {
+    file: IN_RENDERER,
+    code: imp("../daemon/cache/host-identity"),
+  },
   rendererToOperatingSystem: { file: IN_RENDERER, code: imp("node:os") },
   rendererToProcess: { file: IN_RENDERER, code: imp("node:process") },
   rendererToRestReexport: {
@@ -135,7 +152,10 @@ const ALLOWED = {
     file: IN_START,
     code: imp("../renderer-interface/interface"),
   },
-  restToContract: { file: IN_REST, code: imp("../renderer-interface/interface") },
+  restToContract: {
+    file: IN_REST,
+    code: imp("../renderer-interface/interface"),
+  },
   restToShared: { file: IN_REST, code: imp("../utils/outcome") },
   processToRenderer: {
     file: IN_PROCESS,

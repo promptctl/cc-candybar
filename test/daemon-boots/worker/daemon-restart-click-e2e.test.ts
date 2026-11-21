@@ -29,7 +29,7 @@ import { environmentKey } from "../../../src/daemon/foundations/session-env";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
 import { fakeLauncher } from "../../helpers/fake-launcher";
-import { systemTimekeeper } from "../../../src/time";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 

@@ -6,8 +6,14 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld, type Host, type World } from "./host";
-import { systemTimekeeper } from "./time";
+import {
+  daemonWorld,
+  machineReadings,
+  processWorld,
+  type Host,
+  type World,
+} from "./host";
+import type { Timekeeper } from "./time";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -46,11 +52,11 @@ const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 
 // [LAW:effects-at-boundaries] Commands that act on the machine assemble its
 // world as they run and configure their debug channel from that environment.
-function commandWorld(): World {
-  const world = processWorld();
+function debugged<C extends Timekeeper>(world: World<C>): World<C> {
   setDebug(Boolean(world.host.env.CC_CANDYBAR_DEBUG));
   return world;
 }
+const commandWorld = (): World => debugged(processWorld());
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
@@ -92,14 +98,15 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   "url-handle": async (args) => {
     await runUrlHandle(args[0], commandWorld());
   },
-  // The daemon owns its own lifecycle.
+  // The daemon owns its own lifecycle. What any of its tasks throws shows on
+  // every bar; every other command's world ends on a throw.
   daemon: async () => {
-    runDaemon(commandWorld());
+    runDaemon(debugged(daemonWorld()));
   },
   // A renderer's own process, which its daemon starts and talks to over its
   // stdio; it ends when its stdin does.
   renderer: async () => {
-    runRenderer(systemTimekeeper.monotonic);
+    runRenderer(() => machineReadings.monotonic());
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(commandWorld(), args));
@@ -249,4 +256,4 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
   }
 }
 
-main();
+await main();

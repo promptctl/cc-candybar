@@ -3,23 +3,21 @@
 // the effect's own clock, and whether each row's effect was made or reused —
 // and (brandon-effects-2gka.bm1) each placement wearing its own, on its clock.
 
+import {
+  reportingClock,
+  type ReportingClock,
+} from "../../../src/daemon/task-throws";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  hookData,
-  render,
-  renderRequest,
-} from "../../helpers/daemon-e2e";
+import { hookData, render, renderRequest } from "../../helpers/daemon-e2e";
 import {
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { heldClock, type HeldClock } from "../../helpers/held-clock";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 
 jest.setTimeout(30_000);
@@ -30,7 +28,7 @@ describe("a daemon render's event names the effect it wore", () => {
   let projectDir: string;
   let config: string;
   let daemon: InWorkerDaemon;
-  let clock: HeldClock;
+  let clock: HeldClock & ReportingClock;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-effect-e2e");
@@ -41,7 +39,7 @@ describe("a daemon render's event names the effect it wore", () => {
       config,
       `{ globals: { effect: "shimmer" }, segments: { a: { template: 'steady' }, b: { template: 'own' } }, root: { h: ['a', { seg: 'b', settings: { effect: 'pulse' } }] } }`,
     );
-    clock = heldClock(new Date());
+    clock = heldClock(new Date(), reportingClock);
     daemon = startDaemon(prepared.env, { clock });
   });
 

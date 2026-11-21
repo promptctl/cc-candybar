@@ -10,6 +10,7 @@ import {
   type DueEnded,
 } from "../../src/daemon/renderer-wake";
 import type { Monotonic } from "../../src/time";
+import { handClock } from "../helpers/hand-clock";
 import type { Tick } from "../../src/utils/instant";
 import type { Failure } from "../../src/daemon/foundations/verb-error";
 
@@ -35,15 +36,22 @@ function rig(
   const dues: number[] = [];
   const said: string[] = [];
   const logged: string[] = [];
+  // What the wake's tasks threw, as the daemon's clock reports them.
+  const threw: Array<{ task: string; thrown: unknown }> = [];
   const wake = new RendererWake({
-    clock: {
-      monotonic: () => clock.ms as Monotonic,
-      after: (ms, run) => {
-        const timer = { at: clock.ms + ms, run, cancelled: false };
-        timers.push(timer);
-        return () => void (timer.cancelled = true);
+    task: "renderer wake",
+    clock: handClock(
+      {
+        now: () => 0,
+        monotonic: () => clock.ms as Monotonic,
+        timer: (ms, run) => {
+          const timer = { at: clock.ms + ms, run, cancelled: false };
+          timers.push(timer);
+          return () => void (timer.cancelled = true);
+        },
       },
-    },
+      (task, thrown) => threw.push({ task, thrown }),
+    ),
     due: async () => {
       clock.ms += waits;
       dues.push(clock.ms / 1000);
@@ -65,7 +73,7 @@ function rig(
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { wake, clock, timers, live, dues, said, logged, fire };
+  return { wake, clock, timers, live, dues, said, logged, threw, fire };
 }
 
 const tick = (s: number) => s as Tick;
@@ -96,14 +104,16 @@ test("what is declared while a `due` is out is armed once it has answered", asyn
   let answer: (ended: DueEnded) => void = () => {};
   const r = rig();
   const wake = new RendererWake({
-    clock: {
+    task: "renderer wake",
+    clock: handClock({
+      now: () => 0,
       monotonic: () => r.clock.ms as Monotonic,
-      after: (ms, run) => {
+      timer: (ms, run) => {
         const timer = { at: r.clock.ms + ms, run, cancelled: false };
         r.timers.push(timer);
         return () => void (timer.cancelled = true);
       },
-    },
+    }),
     due: () => new Promise<DueEnded>((resolve) => (answer = resolve)),
     said: () => {},
     log: () => {},
@@ -208,7 +218,7 @@ test("a closed wake cancels its timer and summarizes the due's turn and mailbox 
   ]);
 });
 
-test("a failing wake summary leaves the next due armed", async () => {
+test("a failing wake summary leaves the next due armed, and reaches the clock", async () => {
   const r: ReturnType<typeof rig> = rig(
     () => {
       r.wake.declare(tick(61));
@@ -222,5 +232,7 @@ test("a failing wake summary leaves the next due armed", async () => {
   r.wake.declare(tick(60));
   await r.fire();
   expect(r.live().map((timer) => timer.at)).toEqual([61_000]);
-  expect(r.logged).toContainEqual(expect.stringContaining("summary failed"));
+  expect(r.threw).toEqual([
+    { task: "renderer wake", thrown: new Error("summary failed") },
+  ]);
 });

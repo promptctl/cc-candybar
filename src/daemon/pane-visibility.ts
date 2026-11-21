@@ -10,7 +10,6 @@
 // `tmux` hint: socket and pane, src/tmux-hint.ts); whether that pane is shown
 // comes from its tmux server, asked once a second per server.
 
-import { inspect } from "node:util";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { Timekeeper } from "../time";
@@ -74,7 +73,7 @@ type ServerView =
 
 export interface VisibilityDeps {
   // The daemon's clock, which the loop's pace runs on.
-  clock: Pick<Timekeeper, "after">;
+  clock: Pick<Timekeeper, "after" | "detach">;
   // `tmux list-panes -a` and `tmux list-clients` of the server at `socket`,
   // in LIST_PANES_FORMAT and LIST_CLIENTS_FORMAT.
   listPanes(socket: string): Promise<TmuxRun>;
@@ -144,27 +143,25 @@ export class PaneVisibility {
     const loop: Loop = { kind: "asking", following: true };
     this.loop = loop;
     // [LAW:no-ambient-temporal-coupling] Reading which servers to ask is part
-    // of the refresh: a throw from it takes the same catch, and the loop goes
-    // on rather than staying "asking" with nothing in flight.
-    void Promise.resolve()
-      .then(() => this.refresh(this.deps.sockets()))
-      .catch((err: unknown) =>
-        this.deps.log("error", `visibility refresh threw: ${inspect(err)}`),
-      )
-      .then(() => {
-        if (loop.following) {
+    // of the refresh: a throw from it reaches the clock as the refresh's, and
+    // the loop goes on rather than staying "asking" with nothing in flight.
+    this.deps.clock.detach("pane visibility refresh", async () => {
+      try {
+        await this.refresh(this.deps.sockets());
+      } finally {
+        if (loop.following)
           this.loop = {
             kind: "due",
             clear: this.deps.clock.after(
+              "pane visibility refresh",
               this.deps.intervalMs,
               () => this.ask(),
               { unref: true },
             ),
           };
-          return;
-        }
-        this.end();
-      });
+        else this.end();
+      }
+    });
   }
 
   // [LAW:nothing-unseen] The loop's end, said once, with the answers it drops.

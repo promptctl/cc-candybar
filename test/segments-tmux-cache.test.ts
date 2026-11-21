@@ -10,7 +10,7 @@ import type { LaunchStatsHandle } from "../src/proc/stats-handle";
 import type { TmuxHint } from "../src/tmux-hint";
 import { laneOutcome } from "../src/utils/reading";
 import { until } from "./helpers/until";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // [LAW:behavior-not-structure] A stub `tmux` on PATH answers every invocation
 // with its own arguments, so the session name a lookup returns IS the server
@@ -199,7 +199,7 @@ describe("TmuxService", () => {
     expect(starts).toEqual(["tmux"]);
     expect(lines).toEqual([
       expect.stringMatching(
-        /^warn tmux refresh pane=%1 socket=\/client\/refuse.sock by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/,
+        /^warn tmux refresh pane=%1 socket=\/client\/refuse.sock sharedBy=\d+ by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/,
       ),
     ]);
 

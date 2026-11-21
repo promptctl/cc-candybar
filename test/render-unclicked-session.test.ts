@@ -16,7 +16,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // The first truecolor background a drawn bar paints.
 const bgOf = ({ rows }: Frame): string | undefined =>

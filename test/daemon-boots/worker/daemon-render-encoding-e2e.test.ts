@@ -4,13 +4,17 @@
 // depth. The daemon's clock is held, so the two draws are one instant and a bar
 // reading the instant cannot tell them apart.
 
+import { reportingClock } from "../../../src/daemon/task-throws";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { linksOf } from "../../../src/click/read";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
-import { PROTOCOL_VERSION, type Response } from "../../../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type Response,
+} from "../../../src/daemon/foundations/protocol";
 import { composeBar, parseFrame } from "../../../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
@@ -51,15 +55,15 @@ describe("a render answers in the encoding it asks for", () => {
   };
   // A daemon's refused request names no session, so it is found by its words.
   const refusedLines = (word: string): string[] =>
-    logLines(env).filter(
-      (l) => / \[\w+\] render /.test(l) && l.includes(word),
-    );
+    logLines(env).filter((l) => / \[\w+\] render /.test(l) && l.includes(word));
 
   beforeAll(() => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-encoding-e2e");
     ({ env, removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-encoding-"));
-    daemon = startDaemon(prepared.env, { clock: heldClock(new Date()) });
+    daemon = startDaemon(prepared.env, {
+      clock: heldClock(new Date(), reportingClock),
+    });
   });
 
   afterAll(async () => {

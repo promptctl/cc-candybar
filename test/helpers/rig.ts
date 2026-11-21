@@ -39,7 +39,7 @@ import type { Host } from "../../src/host";
 import type { BuildLineOptions } from "../../src/render/strip";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Instant } from "../../src/utils/instant";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import {

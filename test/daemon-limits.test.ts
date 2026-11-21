@@ -20,7 +20,7 @@ import type {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 interface Recorder {
   shutdownCalls: number[];
@@ -53,7 +53,11 @@ function makeDeps(
   overrides: Partial<LimitsDeps & RendererMemory> = {},
 ): LimitsDeps & RendererMemory {
   return {
-    clock: { now: () => rec.fakeNow, after: systemTimekeeper.after },
+    clock: {
+      now: () => rec.fakeNow,
+      after: systemTimekeeper.after,
+      detach: systemTimekeeper.detach,
+    },
     pid: rec.pid,
     snapshotDir: rec.snapshotDir,
     log: (level, msg) => rec.logs.push({ level, msg }),

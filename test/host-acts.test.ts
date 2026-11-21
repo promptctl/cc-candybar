@@ -23,6 +23,7 @@ import type {
   RendererOutput,
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
+import { handClock } from "./helpers/hand-clock";
 import { eventRenderer, hostHeld } from "./helpers/renderers";
 import { NO_CONFIGS } from "./helpers/renderers";
 import { authorizeRun } from "../src/daemon/foundations/run-authorization";
@@ -32,13 +33,7 @@ import { readTextIfPresent } from "../src/utils/regular-text";
 
 const S = sessionIdOf("s");
 // No wake is declared, so no timer is set.
-const CLOCK = {
-  now: () => 0,
-  monotonic: () => 0 as Monotonic,
-  after: (): (() => void) => {
-    throw new Error("this rig sets no timer");
-  },
-};
+const CLOCK = handClock({ now: () => 0, monotonic: () => 0 as Monotonic });
 const FILE = `{ globals: { theme: "dusk" } }\n`;
 const RUN_INPUT = JSON.stringify({ run: ["/bin/true"], env: {} });
 const RUN_DECLARATION = "the run's declaration";

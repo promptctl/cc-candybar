@@ -18,7 +18,7 @@ import {
   makeFrameReader,
   TOTAL_BUDGET_MS,
 } from "../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // A daemon that hands every request it reads to `seen`, and answers it with
 // `reply` — or, given none, never answers.

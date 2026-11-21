@@ -10,7 +10,6 @@ import type {
   TurnOutcome,
 } from "../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import { inspect } from "node:util";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -129,7 +128,7 @@ export async function answerStatusline(
     Collector<CheckedRenderRequest>,
     "requested" | "holding" | "settled"
   >,
-  clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
+  clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
   log: DaemonLogger,
@@ -197,15 +196,10 @@ export async function answerStatusline(
         deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
       });
       const ended = await waitWithin(
+        `render wait ${session}`,
         (signal) => collector.settled(session, signal),
         budget,
-        // [LAW:no-silent-failure] A late failure belongs to the session.
-        (e, how) =>
-          log(
-            "error",
-            `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`,
-          ),
-        clock.after,
+        clock,
         closing,
       );
       noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });

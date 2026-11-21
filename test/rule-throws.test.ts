@@ -18,7 +18,7 @@ import { registerDslConfig, type RenderWarning } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { EFFECT_FLOOR, STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,

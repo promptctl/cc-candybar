@@ -24,6 +24,7 @@ import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
 import type { World } from "../host";
+import { thrownText, type ReportingClock } from "./task-throws.js";
 import {
   createDaemon,
   type PreparedDaemon,
@@ -69,7 +70,7 @@ let startup: Promise<void> | null = null;
 // handed it, every path it touches (parsed from that world's host here and
 // nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
 interface DaemonProcess {
-  readonly world: World;
+  readonly world: World<ReportingClock>;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
@@ -111,9 +112,13 @@ function processEntry(): string {
   return entry;
 }
 
-export function runDaemon(world: World): void {
+export function runDaemon(world: World<ReportingClock>): void {
   const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
+  thisProcess = {
+    world,
+    paths,
+    log: new DaemonLog(paths.log, world.clock),
+  };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -489,8 +494,15 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  daemonProcess().world.clock.after(500, () =>
+  daemonProcess().world.clock.after("exit backstop", 500, () =>
     process.kill(process.pid, "SIGKILL"),
+  );
+  // [LAW:no-silent-failure] Every exit comes through here, so what the
+  // clock's tasks threw before a daemon could take it is said here, whichever
+  // refusal it may have caused, and what they throw on the way out is logged
+  // as it comes.
+  daemonProcess().world.clock.throws.close((reported) =>
+    serverLog("error", thrownText(reported).logged),
   );
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
   // ONLY mutex preventing duplicate daemons. The previous shape unlinked
@@ -505,7 +517,7 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  void closeThenExit(code);
+  daemonProcess().world.clock.detach("daemon close", () => closeThenExit(code));
 }
 
 // [LAW:no-ambient-temporal-coupling] The daemon's close awaits the renderer's
@@ -515,9 +527,9 @@ function shutdown(code: number): void {
 async function closeThenExit(code: number): Promise<void> {
   // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every step runs,
   // in order, and one that throws is said by name without skipping the rest:
-  // a close that failed still gives up the registry slot. An unhandled
-  // rejection here would only reach a shutdown already under way, and the
-  // backstop's SIGKILL would end the process in place of the exit below.
+  // a close that failed still gives up the registry slot. A throw past the
+  // daemon's close is the clock's to report, which says it in daemon.log, and
+  // the backstop's SIGKILL ends a close that never settles.
   await runTeardown(
     [
       ["finish admission", () => startup ?? undefined],

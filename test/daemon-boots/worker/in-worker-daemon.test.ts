@@ -3,6 +3,7 @@
 // gets, stopped with nothing of it left serving, and started again over the same
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
+import { reportingClock } from "../../../src/daemon/task-throws";
 import type { RequestId } from "../../../src/renderer-interface/interface";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +14,8 @@ import { PassThrough } from "node:stream";
 
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
-import { systemTimekeeper } from "../../../src/time";
+import { daemonClock } from "../../../src/host";
+import { systemTimekeeper } from "../../helpers/system-clock";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
 import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";
@@ -150,7 +152,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-delivered";
     let now = Date.now();
     daemon = startDaemon(env, {
-      clock: { ...systemTimekeeper, now: () => now },
+      clock: { ...daemonClock(), now: () => now },
     });
     await render(daemon, sid, projectDir);
     await refusedClick(
@@ -181,7 +183,7 @@ describe("a daemon in this worker", () => {
     const pipe = Object.assign(new PassThrough(), { unref() {} });
     let now = Date.now();
     const running = startDaemon(env, {
-      clock: { ...systemTimekeeper, now: () => now },
+      clock: { ...daemonClock(), now: () => now },
       launcher: (owner) =>
         createLauncher(owner, systemTimekeeper, {
           ...spawner,
@@ -261,7 +263,7 @@ describe("a daemon in this worker", () => {
   // deadline's and nothing else's.
   test("a client of a held daemon states its deadline on that daemon's clock", async () => {
     const sid = "in-worker-held";
-    const clock = heldClock(new Date(Date.now() - 60_000));
+    const clock = heldClock(new Date(Date.now() - 60_000), reportingClock);
     daemon = startDaemon(env, { clock });
     clock.advance(5_000);
     await renderRequest(daemon, {
@@ -389,7 +391,7 @@ describe("a daemon in this worker", () => {
   test("a stop ends a subscriber's stream and a request's backstop, lands the log, and gives the env back", async () => {
     const sid = "in-worker-stop";
     const stateHome = process.env.XDG_STATE_HOME;
-    const clock = heldClock(new Date());
+    const clock = heldClock(new Date(), reportingClock);
     daemon = startDaemon(env, { clock });
     expect(process.env.XDG_STATE_HOME).toBe(env.XDG_STATE_HOME);
     expect(daemon.log).toBe(logPath(hostOf(env)));

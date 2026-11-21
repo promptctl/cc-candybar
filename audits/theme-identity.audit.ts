@@ -56,7 +56,7 @@ import {
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "../test/helpers/system-clock";
 
 // About one just-noticeable step: how near a drawn background must sit to a
 // colour its palette names (the ticket's own bound).
