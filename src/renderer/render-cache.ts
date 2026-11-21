@@ -96,8 +96,8 @@ import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
 // [LAW:one-source-of-truth] Bounded by bytes, out of the daemon's one memory
 // budget: an entry is a new one per directory a session renders from (every
 // worktree, every `cd`), so a count sized for watchers (it was 256, ~2.4 GB of
-// states) let the memory backstop trip long before anything was evicted
-// (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
+// states) let the memory backstop trip long before anything was evicted.
+// The heap a state holds beside its compile, and
 // the heap one compile holds — measured, and held to by
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
 // Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
@@ -244,7 +244,7 @@ export type ReloadedEntry = Readonly<
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // bundle, never null: an entry can ALWAYS render. It is seeded with the
-// bundled default's state at creation (candybar-settings-ui-0gz) and
+// bundled default's state at creation and
 // replaced by each config that loads; a config that fails to load leaves it
 // as it was. So the bar under a load error is the best config the entry has
 // — the last one that loaded, or the bundled default before any has — and
@@ -273,8 +273,7 @@ export interface DslRenderState {
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
-  // FILE authors at the path presetRoot() reports for them (candybar-config-
-  // dqe): `root` for a preset staging the config's own root, `presets.<n>.
+  // FILE authors at the path presetRoot() reports for them: `root` for a preset staging the config's own root, `presets.<n>.
   // root` otherwise. This is what `.preset.customized` means now — the file
   // declares that tree, whether a hand wrote it or a `+`/`-` click did; the
   // two are indistinguishable by design. Computed from the SAME raw parse
@@ -375,11 +374,11 @@ export function pluginLoadLine(
 }
 
 // [LAW:nothing-unseen] A config's teardown releases every computed's MobX
-// subscriptions (brandon-unfiled-3248.t14 was a teardown that released none,
-// found in a heap snapshot because nothing said so). Why it was torn down,
+// subscriptions, and says so: a teardown that released none would otherwise
+// show only in a heap snapshot. Why it was torn down,
 // how many it released, and how many renders were still drawing with it when
 // the cache retired it — those deferred the teardown to the last one's return
-// (brandon-unfiled-3248.6rc) — beside the load line of what replaced it.
+// — beside the load line of what replaced it.
 export interface Teardown {
   readonly reason: "reload" | "evict" | "close";
   // Renders holding the state when it was retired: 0 is a teardown at
@@ -468,7 +467,7 @@ type SelectedState =
   | { readonly kind: "bundled"; readonly state: DslRenderState };
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
-// owns (brandon-unfiled-3248.6rc): the renders holding it across their
+// owns: the renders holding it across their
 // payload await, and the teardown it is due once the cache stopped serving
 // it — evicted, or replaced by a reload. Deferred reclamation, RCU-style:
 // the map moves at once (the cap stays a bound, a reload swaps at once) and
@@ -755,7 +754,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // [LAW:one-source-of-truth] The compile holds no store: each render binds
     // its own (drawDsl), so the entry's registry is the store its renders read
     // — and the compile can be one shared by every entry whose config
-    // compiles alike (brandon-unfiled-3248.8yp).
+    // compiles alike.
     registration = registerCompiled(
       config,
       registry,
@@ -941,12 +940,12 @@ export function writableRoles(access: ConfigAccess): readonly LayerRole[] {
   return access.kind === "available" ? access.roles : NO_WRITABLE_LAYERS;
 }
 
-// [LAW:one-source-of-truth] A session's view of one entry's state
-// (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
-// its state reads, its derivations, the sources keyed on them — in a store
-// over the entry's directory store, which it reads through to. Each session
-// renders through its own, so a request writes only its own session's values
-// and no other session's render re-runs, reads, or reports them.
+// [LAW:one-source-of-truth] A session's view of one entry's state: the
+// session's own values — its inputs, its state reads, its derivations, the
+// sources keyed on them — in a store over the entry's directory store, which
+// it reads through to. Each session renders through its own, so a request
+// writes only its own session's values and no other session's render re-runs,
+// reads, or reports them.
 //
 // What the session reads of the daemon's shared entries (a repo, a pane, a
 // plugin's session file) is held by the host's collector at the session's
@@ -1394,7 +1393,7 @@ export class RenderCache<
   // session's first render can evict its entry and a saved file can reload
   // it. Either retires the state; the cache disposes it when this hold is
   // released, so the render finishes on the state it resolved its payload
-  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
+  // from. `using` at the call site releases on
   // every exit, a throw included.
   hold(origin: RenderOrigin): Hold {
     const entry = this.getOrCreate(origin);
@@ -1473,11 +1472,11 @@ export class RenderCache<
     if (entry !== undefined) this.drop(key, entry, "evict");
   }
 
-  // [LAW:single-enforcer] A frame's door: the session's current view, held
-  // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
+  // [LAW:single-enforcer] The door to a session's current view, held for a
+  // synchronous read as `holdSession` holds one, or none: a frame's draw and
+  // the lane declaration's read of each view. It creates nothing — no entry,
+  // no view, no declaration — so a frame performs no I/O; only an event opens
+  // a view (ViewOpening).
   holdView(sessionId: SessionId): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
@@ -1973,7 +1972,8 @@ export class RenderCache<
     // retires every view of it first, so each is disposed before or with it.
     // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
     // over the new state first, drawn by the request the old one drew by, so
-    // the next frame draws a view (brandon-unfiled-3248.8ro6, 4a).
+    // the next frame draws the successor or its opening's failure, never the
+    // retired view.
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
       if (successor !== null)

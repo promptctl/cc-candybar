@@ -379,8 +379,8 @@ const followFeed = (r: Renderer) =>
     },
   });
 
-async function dueFrame(r: Renderer, elapsed = 0) {
-  const { frames } = answered(
+async function dueTurn(r: Renderer, elapsed = 0) {
+  return answered(
     await r.answer({
       kind: "event",
       at: (READ.at + elapsed) as Instant,
@@ -388,6 +388,10 @@ async function dueFrame(r: Renderer, elapsed = 0) {
       event: { kind: "due" },
     }),
   );
+}
+
+async function dueFrame(r: Renderer, elapsed = 0) {
+  const { frames } = await dueTurn(r, elapsed);
   expect(frames).toHaveLength(1);
   const pushed = frames[0];
   if (pushed?.frame.kind !== "drawn") throw new Error("the feed drew no bar");
@@ -754,11 +758,18 @@ describe("a statusline request", () => {
     const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
     const origins = jest.spyOn(t.parts.renderCache, "origins");
     const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    const holds = jest.spyOn(t.parts.renderCache, "holdView");
     await dueFrame(t.r);
     await dueFrame(t.r, 1_000);
+    const still = await dueTurn(t.r, 2_000);
+    // The host gets back the very declaration it already follows.
+    expect(still.subscriptions).toBe(subscribed.subscriptions);
     expect(declarations).toHaveBeenCalledTimes(0);
     expect(origins).toHaveBeenCalledTimes(0);
     expect(sessions).toHaveBeenCalledTimes(0);
+    // The drawn session's view is held, and the other session's never is.
+    expect(holds).toHaveBeenCalledWith(SESSION);
+    expect(holds).not.toHaveBeenCalledWith(second);
     const retired = answered(
       await handIn(t.r, { kind: "retire", session: second }),
     );

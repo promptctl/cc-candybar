@@ -87,7 +87,7 @@ import type { LayerRole } from "../config/layer-role.js";
 // selection takes its config values from the same resolution).
 // [LAW:one-source-of-truth] Shared options let a field added to EffectiveGlobals reach every
 // renderer at once and no caller can leave one out — a hand copy of this
-// projection had already dropped `separator` (brandon-menu-ia-zyf).
+// projection drops whichever field it forgets.
 export function renderOptionsOf(
   effective: EffectiveGlobals,
   width: number,
@@ -156,8 +156,8 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // (ClientHints.tmux) — the same hint a `slash` click types into, so a
   // control gated on `tmux.pane` shows exactly where its click has a pane to
   // reach. Missing when the client reported "not in tmux" or is too old to
-  // say; the detached daemon's own environment is never consulted
-  // (brandon-tmux-tk7). `session` is that pane's session name.
+  // say; the detached daemon's own environment is never consulted.
+  // `session` is that pane's session name.
   readonly tmux?: { readonly pane: string; readonly session?: string | P };
   // [LAW:types-are-the-program] REQUIRED: every payload carries the object,
   // and the fields INSIDE it carry the real optionality — the name and the
@@ -166,8 +166,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
-  // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
-  // brandon-effects-2gka.d2i), so each fold finishes in the view, whose slots
+  // hold an EXPRESSION, so each fold finishes in the view, whose slots
   // answer `theme`, `style` and `effect: { effective }` from the selections
   // it was bound with. ONE producer per field, so the name a label displays and
   // the palette the bar actually wears cannot disagree
@@ -178,7 +177,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // and style's twin one level up: the SAME name that selected the layout this
   // render walked and the globals it rendered with, surfaced so a preset
   // trigger's label can never claim an arrangement the bar is not in.
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — `customized` rides
+  // [LAW:one-source-of-truth] `customized` rides
   // alongside `effective` rather than as a sibling top-level field, mirroring
   // the shape a `when`-gated status segment reads (`.preset.customized`)
   // beside the trigger's own `.preset.effective` label. Required for the
@@ -186,15 +185,14 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // the render cache's authoredRoots, never absent.
   // `bundled` says whether the bundled default declares that preset — false
   // exactly for a preset the user authored, the only kind the settings menu's
-  // `🚮` deletes (brandon-save-undo-bwi.o6u).
+  // `🚮` deletes.
   readonly preset: {
     readonly effective: string;
     readonly customized: boolean;
     readonly bundled: boolean;
   };
   // The valued globals (ValuedInputs, which this interface extends) are
-  // theme/style's twins over the remaining persistable globals
-  // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
+  // theme/style's twins over the remaining persistable globals, each REQUIRED and unconditionally
   // present for the same reason: the daemon already resolves the value for
   // BuildLineOptions every render, and this is that exact value, so a
   // trigger's "current selection" highlight and the render it describes
@@ -265,7 +263,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly cache?: CachePayload | P;
   readonly context?: ContextPayload | P;
   readonly metrics?: MetricsPayload | P;
-  // The one non-quantity family (brandon-activity-ue7): what Claude is DOING.
+  // The one non-quantity family: what Claude is DOING.
   readonly activity?: ActivityPayload | P;
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
