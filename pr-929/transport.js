@@ -70921,10 +70921,12 @@ var RenderCache = class {
   // [LAW:single-enforcer] The one test of whether an entry loads: the
   // revision offered to it (its session's draft, or else the host's
   // delivery) is not the one it holds a load of: it digests differently, or
-  // the entry's latest load threw. Every use of an entry offers it, so an
-  // entry a throwing load left behind catches up on the next event, with no
-  // resend from the host. A reload whose load inputs did not move keeps the
-  // state it serves (`loadOrigin`).
+  // the entry's latest load threw. Every event that draws or reads config
+  // through an entry (`getOrCreate`) offers it, so an entry a throwing load
+  // left behind catches up on the next such event, with no resend from the
+  // host. Frames and the lane declaration read what the entry holds and
+  // offer nothing. A reload whose load inputs did not move keeps the state
+  // it serves (`loadOrigin`).
   reconcile(entry, offered, cause) {
     if (entry.fault !== null || entry.revision.digest !== offered.digest)
       this.reloadInto(entry, offered, cause);
@@ -70935,15 +70937,13 @@ var RenderCache = class {
     return this.configDeliveries.has(originKey(origin));
   }
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
-  // `originKey`: every other one goes, as the host lets its origin go.
-  // [LAW:single-enforcer] An entry offers itself its origin's delivery on
-  // every use, so the delivery of every origin an entry loads from stays.
+  // `originKey`: every other one goes, as the host lets its origin go. The
+  // renderer's declaration names every origin an entry loads from
+  // (`origins`), so an entry is never left without its delivery.
   prune(keep) {
-    const loading = new Set(this.origins().map(originKey));
     runInAction(() => {
       for (const key of [...this.configDeliveries.keys()])
-        if (!keep.has(key) && !loading.has(key))
-          this.configDeliveries.delete(key);
+        if (!keep.has(key)) this.configDeliveries.delete(key);
     });
   }
   // The compile a served state carries for `key`, else a new one — which the
@@ -71551,9 +71551,14 @@ var RenderCache = class {
     try {
       chosen = this.enter(entry.origin, revision, entry.selected);
     } catch (error) {
+      const fault = rendererFailureOf(error).message;
       runInAction(() => {
-        entry.fault = thrown(error);
+        entry.fault = fault;
       });
+      this.log(
+        "error",
+        `config load threw projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${cause.kind} error=${JSON.stringify(fault)}`
+      );
       throw error;
     }
     const { loaded, selected } = chosen;
@@ -76948,15 +76953,18 @@ function mainRenderer(parts, drains) {
         };
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(({ context, worldState }) => () => {
-            offered(context.requested);
-            notify2(
+          // A session's offer and its opening are steps of their own: an
+          // offer that throws still records the latest config, and the
+          // session's context still opens over it.
+          ...event.sessions.flatMap(({ context, worldState }) => [
+            () => offered(context.requested),
+            () => notify2(
               { kind: "context", context, worldState },
               record2,
               effects,
               frames
-            );
-          }),
+            )
+          ]),
           // A live session gets its cache entry before idle entries warm,
           // so they cannot take the budget a pinned view needs.
           () => runEach(

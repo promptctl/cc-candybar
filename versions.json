@@ -4,15 +4,22 @@
     {
       "version": "pr-929",
       "ref": "refs/pull/929/merge",
-      "sha": "8874fffc692d93e0233b8747fec39fea76234f47",
-      "timestamp": "2026-11-21T04:42:39.252Z",
+      "sha": "26aa2a09a502cda8d9e080400a3fc328d965ed64",
+      "timestamp": "2026-11-21T04:57:06.663Z",
       "commits": [
         {
-          "sha": "8874fffc692d93e0233b8747fec39fea76234f47",
+          "sha": "26aa2a09a502cda8d9e080400a3fc328d965ed64",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T04:41:25Z",
-          "message": "Merge 5373a1a85bab4f580a03b4a8d758b9eeeb73d203 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+          "timestamp": "2026-11-21T04:55:56Z",
+          "message": "Merge 43746fea4a2db353fe95971c2c8579d8553c6119 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+        },
+        {
+          "sha": "43746fea4a2db353fe95971c2c8579d8553c6119",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T21:55:44-07:00",
+          "message": "fix(renderer): a start whose offer throws still opens its session\n\nThe start turn opened each session in the same step as its offer, so\nan offer that threw skipped the session's context. Each is a step of\nits own now.\n\nA load that throws is a line in the log on every attempt, and the bar\nrenders its fault with the renderer's one failure text. Pruning trusts\nthe declaration, which already names every origin an entry loads from.\nComments now say which uses offer an entry its config and which only\nread what it holds.\n"
         },
         {
           "sha": "5373a1a85bab4f580a03b4a8d758b9eeeb73d203",
