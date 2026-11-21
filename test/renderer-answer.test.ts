@@ -754,11 +754,15 @@ describe("a statusline request", () => {
     const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
     const origins = jest.spyOn(t.parts.renderCache, "origins");
     const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    // Each frame holds the one view it draws: the lane declaration does not
+    // walk the other session's view again.
+    const holds = jest.spyOn(t.parts.renderCache, "holdView");
     await dueFrame(t.r);
     await dueFrame(t.r, 1_000);
     expect(declarations).toHaveBeenCalledTimes(0);
     expect(origins).toHaveBeenCalledTimes(0);
     expect(sessions).toHaveBeenCalledTimes(0);
+    expect(holds.mock.calls).toEqual([[SESSION], [SESSION]]);
     const retired = answered(
       await handIn(t.r, { kind: "retire", session: second }),
     );
