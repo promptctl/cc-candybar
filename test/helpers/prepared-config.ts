@@ -24,7 +24,6 @@ import {
 import { plainEnvironment } from "../../src/daemon/foundations/session-env";
 import { SourceRuns } from "../../src/daemon/source-runs";
 import {
-  bindPayload,
   registerDslConfig,
   type CompiledConfig,
 } from "../../src/dsl/render";
@@ -32,13 +31,13 @@ import type { World } from "../../src/host";
 import type { Frame } from "../../src/render/frame";
 import { renderOptionsOf } from "../../src/renderer/render-payload";
 import { SessionState } from "../../src/renderer/session-state";
+import { configFiles, userAuthoredRoots } from "../../src/renderer/render-cache";
 import { timeoutSignal } from "../../src/time";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import { samplePayload } from "./sample-payload";
-import { drawPayload } from "./draw-payload";
-import { sessionOfPayload } from "./payload-session";
+import { bindSample } from "./draw-payload";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
 
 // How long a prepare waits for its sources' first runs.
@@ -50,6 +49,10 @@ export interface PreparedConfig {
   readonly droppedPlugins: readonly DroppedPlugin[];
   readonly droppedPlacements: readonly string[];
   readonly config: ValidatedConfig;
+  // [LAW:one-source-of-truth] The globals a session with these picks (none by
+  // default) resolves over this load, its user file's authored preset roots
+  // read as the daemon reads them.
+  effective(sessionPick?: (key: string) => string | null): EffectiveGlobals;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
@@ -76,16 +79,7 @@ export async function prepareConfig(
   );
   const prepared = prepareSnapshot(world, snapshot, cwd, warnings);
   try {
-    await renderEffective(
-      prepared,
-      resolveEffectiveGlobals(
-        prepared.config,
-        () => null,
-        () => false,
-      ),
-      200,
-      at,
-    );
+    await renderEffective(prepared, prepared.effective(), 200, at);
     return prepared;
   } catch (error) {
     prepared[Symbol.dispose]();
@@ -107,6 +101,10 @@ export function prepareSnapshot(
     warned: (w) => warnings.push(...w),
   });
   const { config } = loaded;
+  const authored = userAuthoredRoots(
+    loaded.layers,
+    configFiles(snapshot.chain).user,
+  );
   deriveActionGates(createGates(), config);
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
@@ -143,6 +141,10 @@ export function prepareSnapshot(
         ...loaded.layers.flatMap((l) => l.plugins.dropped),
       ],
       config,
+      effective: (sessionPick = () => null) =>
+        resolveEffectiveGlobals(config, sessionPick, (preset) =>
+          authored.has(preset),
+        ),
       compiled,
       store,
       registry,
@@ -166,30 +168,19 @@ export async function renderEffective(
   const { config, compiled, store, registry, runs, layers } = prepared;
   const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);
-  // A source keyed on an input the payload moved runs once it is bound, so
-  // it is bound before the wait.
-  bindPayload(
-    compiled,
-    store,
-    registry,
-    payload,
-    opts,
-    effective,
-    sessionOfPayload(payload),
-    runs.readings,
-  );
-  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
-  const { frame, warnings } = drawPayload(
+  // Binding tells the collector which runs this sample needs before it waits.
+  const draw = bindSample(
     config,
     compiled,
     store,
     registry,
     payload,
-    at,
     opts,
     effective,
     runs.readings,
   );
+  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
+  const { frame, warnings } = draw(at);
   return {
     rendered: frame,
     failures: [...prepared.droppedPlacements, ...warnings.map((warning) => warning.message)],

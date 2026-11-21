@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { sweepJestTmp } from "./global-teardown";
+import { processProbe } from "./helpers/host";
 import { JEST_TMP_PREFIX, jestTmpDir, jestTmpOwner } from "./helpers/jest-tmp";
 
 describe("the sweep over jest's directories", () => {
@@ -45,7 +46,7 @@ describe("the sweep over jest's directories", () => {
     const unnamed = dirNamed(`${JEST_TMP_PREFIX}a-uuid`);
     const unrelated = dirNamed("something-else");
 
-    sweepJestTmp(root, process.pid);
+    sweepJestTmp(root, process.pid, processProbe);
 
     expect(readdirSync(root).sort()).toEqual([another, unrelated].sort());
     for (const gone of [dead, own, unnamed])

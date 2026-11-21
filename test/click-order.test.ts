@@ -175,15 +175,17 @@ describe("the mailbox's order", () => {
   });
 
   test("a click's event says how long it waited in the mailbox", async () => {
-    const { park, write, events } = setup();
+    const clock = heldClock(new Date(0));
+    clock.advance(1_000);
+    const { park, write, events, renderer } = setup({ clock });
     const parked = park();
     const sent = write("nord");
-    await new Promise((r) => setTimeout(r, 20));
+    await clock.settle(0);
+    expect(renderer.stats()).toMatchObject({ holder: "start", queued: 1 });
+    clock.advance(37);
     parked.open();
     await Promise.all([parked.holding, sent]);
-    expect(
-      Number(fieldOf(events[0]!, "mailbox")!.replace("ms", "")),
-    ).toBeGreaterThan(0);
+    expect(events.map((event) => fieldOf(event, "mailbox"))).toEqual(["37ms"]);
   });
 
   test("stats name the input in the renderer's turn and what waits behind it", async () => {

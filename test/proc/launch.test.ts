@@ -987,7 +987,7 @@ describe("a launcher's scope", () => {
 
   it("a daemon's launcher has no blocking launch to reach", () => {
     const daemons = systemLauncher(
-      { inherited: process.env },
+      { inherited: process.env, signal: ending.signal },
       systemTimekeeper,
     );
     // @ts-expect-error A Launcher offers no launchSync.

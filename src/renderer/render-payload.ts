@@ -1,6 +1,6 @@
 // [LAW:single-enforcer] The single place where the daemon assembles every
 // data field the DSL templates can read. The output of this function — the
-// view's payload (`projectPayload`) — is what a session view's inputs derive from
+// view's payload (`composePayload`) — is what a session view's inputs derive from
 // (`bindView`, src/dsl/parts.ts), and every `kind: "input"` variable in the
 // default DSL config resolves its `path` against exactly this shape.
 //
@@ -84,7 +84,7 @@ import type { ViewFacts } from "../renderer-interface/request-context";
 import type { LayerRole } from "../config/layer-role.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
-// selection is the resolution itself — RenderSelection is a Pick of it).
+// selection takes its config values from the same resolution).
 // [LAW:one-source-of-truth] Shared options let a field added to EffectiveGlobals reach every
 // renderer at once and no caller can leave one out — a hand copy of this
 // projection had already dropped `separator` (brandon-menu-ia-zyf).
@@ -851,8 +851,9 @@ export function composePayload(
   }));
 
   // home is always available — the host's value, no I/O cost.
-  // [LAW:single-enforcer] All path-shaped payload fields are normalized
-  // to forward-slash separators at this boundary. The DSL's directory
+  // [LAW:single-enforcer] The directory fields templates do path math on
+  // (home, the workspace's directories, location.main) are normalized to
+  // forward-slash separators at this boundary. The DSL's directory
   // template (and any user template that does prefix/relative-path math)
   // assumes POSIX separators; without normalization, Windows hookData
   // (current_dir = "C:\Users\Alice") would never match a forward-slash

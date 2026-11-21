@@ -315,6 +315,30 @@ describe("a daemon in this worker", () => {
     expect(asked).toBeGreaterThan(1);
   });
 
+  test("session fixtures report only their declared environment to the daemon", async () => {
+    writeFileSync(userConfig, `{
+      variables: {
+        worker: { kind: "env", name: "JEST_WORKER_ID", default: "unset" },
+      },
+      segments: { probe: { template: 'session worker={{ .worker }}' } },
+      root: "probe",
+    }`);
+    // The daemon's own process has the variable, so `unset` is the session's.
+    expect(process.env.JEST_WORKER_ID).toBeDefined();
+    daemon = startDaemon(env);
+    const request = renderBody("fixture-environment", projectDir);
+    expect(textOf(await frameRequest(daemon, request))).toContain(
+      "session worker=unset",
+    );
+    const explicitlyReported = {
+      ...request,
+      env: { ...TEST_ENV, JEST_WORKER_ID: "reported-by-session" },
+    };
+    expect(textOf(await frameRequest(daemon, explicitlyReported))).toContain(
+      "session worker=reported-by-session",
+    );
+  });
+
   test("a named copy uses its drawing session and an earlier desktop link keeps fallback", async () => {
     const session = "desktop-worktree";
     const bundle = path.join(projectDir, "worktree.mjs");

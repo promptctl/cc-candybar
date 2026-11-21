@@ -1,27 +1,66 @@
-// One frame of a fixed payload: bound, drawn and kept in one call, the seam a
-// session's view reads, given a constant. A test draws by this as a turn
-// draws: what the frame leaves is kept — its record by the store it was drawn
-// over, the motion in the selection's effects when it hands some — so the
-// next call draws on from it. The daemon binds a view of their own
-// and calls `drawDsl`.
+// Draw a sample through the same view binding and draw as a session.
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import {
-  bindPayload,
   drawDsl,
   type CompiledConfig,
   type DrawnFrame,
-  type RenderSelection,
   type RenderWarning,
 } from "../../src/dsl/render";
+import { bindView } from "../../src/dsl/parts";
 import type { BuildLineOptions } from "../../src/render/strip";
 import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
 import type { FrameRecord } from "../../src/render/frame-memory";
 import type { RenderedLine } from "../../src/dsl/node-registry";
-import { globalsFor } from "./selection";
+import { globalsFor, type RenderSelection } from "./selection";
 import { sessionOfPayload } from "./payload-session";
-import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
+import {
+  fixedSource,
+  NOTHING_READ,
+  type HostReadings,
+} from "../../src/dsl/view-source";
+
+// The view drawing from `store` bound to a fixed `payload` and `selection`.
+// [LAW:one-source-of-truth] A sample's `opts` are its source: the payload is
+// made to agree with them, at the width it is drawn at, `term.cols`, and the
+// depth they name, so the writer and every contrast floor read one depth. A
+// sample is drawn at its payload's width, so it never takes the daemon's
+// resize path. [LAW:no-ambient-temporal-coupling] A source keyed on an input
+// starts its run inside this bind, so a caller that waits on that run before
+// drawing draws the payload its key read.
+export function bindSample(
+  config: ValidatedConfig,
+  compiled: CompiledConfig,
+  store: VariableStore,
+  registry: SourceRegistry,
+  payload: unknown,
+  opts: BuildLineOptions,
+  selection: RenderSelection,
+  readings: HostReadings,
+): (at: Instant) => DrawnFrame {
+  const projected = {
+    ...(payload as object),
+    term: { cols: opts.width },
+    colorCompatibility: { effective: opts.colorCompatibility },
+  };
+  const source = fixedSource(
+    projected,
+    selection,
+    sessionOfPayload(payload),
+    readings,
+  );
+  bindView(compiled, store, registry, source);
+  return (at) => {
+    const frame = drawDsl(config, compiled, store, registry, projected, at, opts, {
+      ...selection,
+      record: selection.record ?? records.get(store),
+    });
+    records.set(store, frame.memory.record);
+    selection.effects?.keep(frame.memory.motion);
+    return frame;
+  };
+}
 
 export function drawPayload(
   config: ValidatedConfig,
@@ -31,36 +70,22 @@ export function drawPayload(
   payload: unknown,
   at: Instant,
   opts: BuildLineOptions,
-  // [LAW:one-source-of-truth] A caller naming no selection renders as a session that has
-  // never clicked: the daemon's own resolution with no picks, so a config
-  // declaring globals.preset or globals.style draws the preset, theme and look
-  // the bar does.
+  // [LAW:one-source-of-truth] With no picks, fixtures use the defaults the
+  // daemon resolves for a new session.
   selection: RenderSelection = globalsFor(config),
   readings: HostReadings = NOTHING_READ,
 ): DrawnFrame {
-  const drawn = bindPayload(
+  const draw = bindSample(
+    config,
     compiled,
     store,
     registry,
     payload,
     opts,
     selection,
-    sessionOfPayload(payload),
     readings,
   );
-  const frame = drawDsl(
-    config,
-    compiled,
-    store,
-    registry,
-    drawn,
-    at,
-    opts,
-    { ...selection, record: selection.record ?? records.get(store) },
-  );
-  records.set(store, frame.memory.record);
-  selection.effects?.keep(frame.memory.motion);
-  return frame;
+  return draw(at);
 }
 
 // The record of the last frame drawn over each store, as a view keeps its

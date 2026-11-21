@@ -1,6 +1,7 @@
-// [LAW:single-enforcer] registerDslConfig + drawDsl are THE two spine
-// functions the daemon calls verbatim. No parallel registration path, no
-// alternate render path. bzh.2 reuses these; it does not reimplement them.
+// [LAW:single-enforcer] registerCompiled + drawDsl are THE two spine
+// functions the daemon calls verbatim (through its render cache).
+// registerDslConfig is registerCompiled over a fresh compile, for tests and
+// one-shot draws. No parallel registration path, no alternate render path.
 //
 // [LAW:one-source-of-truth] registerDslConfig is the single JSON-shape →
 // runtime translation. Every VariableDecl kind maps to exactly one
@@ -91,7 +92,6 @@ import {
 } from "../render/action.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
-import type { SessionId } from "../daemon/foundations/session-id.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
@@ -108,7 +108,6 @@ import {
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { variableScopes, type VarScope } from "./variable-scope.js";
 import {
-  bindView,
   decideSlot,
   decoratedStyles,
   evaluateOnce,
@@ -118,11 +117,6 @@ import {
   type SlotState,
   type ViewParts,
 } from "./parts.js";
-import {
-  fixedSource,
-  type HostReadings,
-  type Selections,
-} from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
@@ -1281,44 +1275,9 @@ export type DrawSelection = Pick<
   // When the session's idle period began — its last click, or the draw that
   // first showed a menu (src/renderer/menu-idle.ts) — which the flash its open
   // menus wear before they close counts from. A caller with no such clock
-  // (check) never flashes.
+  // never flashes.
   readonly idleSince?: Instant;
 };
-
-// The whole resolution a caller drawing a fixed payload hands over: what the
-// draw reads, and the selections its view's slots settle.
-export type RenderSelection = DrawSelection & Selections;
-
-// The view drawing from `store` bound to a fixed `payload` and `selection` —
-// at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
-// writer and every contrast floor read one depth. Returns the payload as
-// bound, which is also the draw's projections (DRAW_PROJECTIONS read their
-// paths in it). [LAW:one-source-of-truth] The one composition of what a fixed
-// view reads: a source keyed on an input starts its run inside this bind, and
-// a caller that waits on that run draws the payload its key read.
-export function bindPayload(
-  compiled: CompiledConfig,
-  store: VariableStore,
-  registry: SourceRegistry,
-  payload: unknown,
-  opts: BuildLineOptions,
-  selection: RenderSelection,
-  session: SessionId,
-  readings: HostReadings,
-): unknown {
-  const drawn = {
-    ...(payload as object),
-    term: { cols: opts.width },
-    colorCompatibility: { effective: opts.colorCompatibility },
-  };
-  bindView(
-    compiled,
-    store,
-    registry,
-    fixedSource(drawn, selection, session, readings),
-  );
-  return drawn;
-}
 
 export function drawDsl(
   config: ValidatedConfig,

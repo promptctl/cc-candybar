@@ -9,9 +9,8 @@
 import { holdClickError } from "../src/daemon/foundations/click-error";
 import { isEnvironmentOutput } from "../src/daemon/environment-output";
 import { linkUrls } from "./helpers/frame";
-import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
-import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
+import { HOST, WORLD, fixtureLauncher, locs, processLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launcher";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
@@ -267,7 +266,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     environmentOf: () => ({
       kind: "ok",
       value: sessionEnvironment(
-        { PATH: TEST_ENV.PATH! },
+        TEST_ENV,
         { sessionId: SID, projectDir: dir, claudeConfigDir: "/u/.claude-x" },
       ),
     }),
@@ -792,10 +791,7 @@ describe("a click on a run link", () => {
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
-    const r = rig(
-      systemLauncher({ inherited: daemonSessionEnv() }, systemTimekeeper)
-        .launch,
-    );
+    const r = rig(fixtureLauncher({ inherited: daemonSessionEnv() }).launch);
     const { view, link } = await drawnLink(r);
 
     await clickActing(
@@ -1028,13 +1024,11 @@ describe("the session's process environment", () => {
       TMUX_PANE: "%5",
     };
     // What a child gets, asked of a real one: `env` prints it.
+    const launcher = fixtureLauncher({ inherited: daemon });
     const childSees = async (
       facts: SessionFacts,
     ): Promise<Record<string, string>> => {
-      const ran = await systemLauncher(
-        { inherited: daemon },
-        systemTimekeeper,
-      ).launch({
+      const ran = await launcher.launch({
         bin: "/usr/bin/env",
         environment: sessionEnvironment(reported, facts),
         category: "click.run",

@@ -7,7 +7,6 @@ import { diskFiles } from "../../src/daemon/config-discovery/discovery-files";
 import {
   loadConfigSource,
   loadSnapshot,
-  mergeWithDefault,
   type ChainTrace,
   type ConfigLayer,
   type LoadContext,
@@ -24,22 +23,13 @@ import type { Layer } from "../../src/config/config-snapshot";
 import type { DslConfig } from "../../src/config/dsl-types";
 import type { Locations } from "../../src/config/loader/chain-places";
 
-// One file as the user layer, over `ctx`'s beneath; null is no file — the
-// bundled default, under nothing.
+// One file as the user layer, over `ctx`'s beneath.
 export function loadFile(
-  file: string | null,
+  file: string,
   dflt: DslConfig,
   ctx: LoadContext,
   allowedPalettes?: ReadonlySet<string>,
 ) {
-  if (file === null) {
-    return {
-      raw: {},
-      source: "",
-      warnings: [] as readonly string[],
-      config: mergeWithDefault({}, dflt),
-    };
-  }
   const layer = layerOf("user", file, readLayer(file), ctx.home);
   if (layer.content.kind !== "text") throw new Error(layer.content.kind);
   return loadConfigSource(

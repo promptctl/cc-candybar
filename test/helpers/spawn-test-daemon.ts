@@ -9,10 +9,24 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { daemonArgs, daemonCommand } from "../../src/daemon/acquire";
-import { daemonPool, type DaemonPool } from "./daemon-pool";
+import {
+  createDaemonPool,
+  DEFAULT_POOL_DIR,
+  DEFAULT_POOL_SIZE,
+  type DaemonPool,
+} from "./daemon-pool";
+import { processProbe } from "./host";
 import type { ExitResult } from "./daemon-wire";
 
 const REPO_ROOT = process.cwd();
+
+// The shared, machine-global pool every real-daemon-spawning test file uses,
+// read through this worker's own probe.
+export const daemonPool: DaemonPool = createDaemonPool(
+  DEFAULT_POOL_DIR,
+  DEFAULT_POOL_SIZE,
+  processProbe,
+);
 
 // Enough of the end of a child's stderr to hold why it died.
 const STDERR_TAIL_BYTES = 4096;

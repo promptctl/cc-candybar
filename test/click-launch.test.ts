@@ -2,8 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
-import { systemLauncher } from "../src/proc/system-launcher";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { fixtureLauncher } from "./helpers/host";
 import {
   CLICK_PROGRAM_TIMEOUT_MS,
   clickLaunch,
@@ -18,7 +17,7 @@ describe("clickLaunch", () => {
     await expect(
       clickLaunch(
         clickLaunchVia(
-          systemLauncher({ inherited: process.env }, systemTimekeeper),
+          fixtureLauncher({ inherited: process.env }),
         ),
         {
           bin: "/nonexistent/cc-candybar-no-such-opener",

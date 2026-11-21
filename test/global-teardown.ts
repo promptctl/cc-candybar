@@ -12,18 +12,31 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { DEFAULT_POOL_DIR, daemonPool } from "./helpers/daemon-pool";
+import {
+  createDaemonPool,
+  DEFAULT_POOL_DIR,
+  DEFAULT_POOL_SIZE,
+} from "./helpers/daemon-pool";
 import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
-import { processProbe } from "./helpers/host";
+import { systemTimekeeper } from "./helpers/system-clock";
+import {
+  systemProbe,
+  type ProcessProbe,
+} from "../src/daemon/process-fingerprint";
+import { systemLauncher } from "../src/proc/system-launcher";
 
 // [LAW:one-source-of-truth] A directory under this prefix is in use while the
 // worker its name carries is alive: another run's daemons and in-worker cases
 // write there, a log among them. The sweeper's own pid is the exception. Run in
 // band, the worker is this process, whose tests have ended, and in a pool jest
 // ends every worker before this runs.
-function inUse(name: string, sweeper: number): boolean {
+function inUse(
+  name: string,
+  sweeper: number,
+  probe: Pick<ProcessProbe, "alive">,
+): boolean {
   const owner = jestTmpOwner(name);
-  return owner !== null && owner !== sweeper && processProbe.alive(owner);
+  return owner !== null && owner !== sweeper && probe.alive(owner);
 }
 
 // A single readdirSync + in-memory prefix filter, run once per full `pnpm test`
@@ -32,7 +45,11 @@ function inUse(name: string, sweeper: number): boolean {
 // this self-describing scan for a second, independently-maintained source of
 // truth that silently drifts the moment one caller forgets to register — worse
 // than the scan it would save microseconds against.
-export function sweepJestTmp(root: string, sweeper: number): void {
+export function sweepJestTmp(
+  root: string,
+  sweeper: number,
+  probe: Pick<ProcessProbe, "alive">,
+): void {
   let entries: string[];
   try {
     entries = fs.readdirSync(root);
@@ -43,7 +60,7 @@ export function sweepJestTmp(root: string, sweeper: number): void {
     if (!name.startsWith(JEST_TMP_PREFIX)) continue;
     const dir = path.join(root, name);
     if (dir === DEFAULT_POOL_DIR) continue; // the shared pool persists — swept by `sweepStale`, never removed
-    if (inUse(name, sweeper)) continue;
+    if (inUse(name, sweeper, probe)) continue;
     try {
       fs.rmSync(dir, { recursive: true, force: true });
     } catch {
@@ -53,9 +70,16 @@ export function sweepJestTmp(root: string, sweeper: number): void {
 }
 
 export default async function globalTeardown(): Promise<void> {
+  // [LAW:effects-at-boundaries] The runner's own process reads the process
+  // table through a launcher it holds for its whole life, as a process main
+  // does: its lifeline ends when the runner exits. A test file's launchers are
+  // its environment's (test/helpers/host.ts), which this process never loads.
+  const probe = systemProbe(
+    systemLauncher({ inherited: process.env }, systemTimekeeper),
+  );
   // The shared pool's own bookkeeping: drop slot files whose recorded owner
   // is provably dead.
-  await daemonPool.sweepStale();
+  await createDaemonPool(DEFAULT_POOL_DIR, DEFAULT_POOL_SIZE, probe).sweepStale();
 
-  sweepJestTmp(os.tmpdir(), process.pid);
+  sweepJestTmp(os.tmpdir(), process.pid, probe);
 }

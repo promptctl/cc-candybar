@@ -6,7 +6,6 @@ import {
   droppedPluginNotice,
   type ConfigLayer,
 } from "../../src/config/dsl-loader";
-import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
 import { configQuery } from "../../src/config/loader/chain-places";
 import { repoQuestionLines } from "../../src/config/loader/repo-gate";
 import {
@@ -76,11 +75,7 @@ export async function renderConfig(
   const { snapshot, layers, warnings } = discoverFixture(world, file, cwd);
   try {
     using prepared = prepareSnapshot(world, snapshot, cwd, warnings);
-    const effective = resolveEffectiveGlobals(
-      prepared.config,
-      () => null,
-      () => false,
-    );
+    const effective = prepared.effective();
     const { rendered, failures, pending } = await renderEffective(
       prepared,
       effective,

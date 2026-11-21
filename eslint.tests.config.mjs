@@ -43,6 +43,9 @@ const REAL_LAUNCHER_ADAPTERS = [
   "test/proc/**",
   "test/daemon-boots/process/**",
   "test/helpers/host.ts",
+  "test/global-teardown.ts",
+  "test/helpers/old-release.ts",
+  "test/helpers/launcher-fixtures/**",
   "test/helpers/daemon-pool.ts",
   "test/daemon-pool.test.ts",
 ];
@@ -97,8 +100,9 @@ export default [
         {
           patterns: [
             {
-              group: ["**/helpers/host"],
-              importNames: ["processLauncher"],
+              // Every spelling of the module: a sibling helper reaches it as ./host.
+              group: ["**/helpers/host", "./host", "../host"],
+              importNames: ["processLauncher", "fixtureLauncher"],
               message: REAL_LAUNCHER_MESSAGE,
             },
             {

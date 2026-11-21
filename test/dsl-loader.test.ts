@@ -20,6 +20,8 @@ import {
 } from "../src/config/dsl-loader";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { loadFile } from "./helpers/discovered-load";
+import { hostOf, worldOf } from "./helpers/host";
+import { discoverFixture } from "./helpers/config-fixture";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
 import {
@@ -2517,8 +2519,21 @@ describe("a file's load — editability advisory", () => {
     );
   });
 
-  test("no file earns no advisory", () => {
-    expect(loadFile(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
+  test("a search that finds no user file leaves the bundled config ready without an advisory", () => {
+    const { snapshot } = discoverFixture(
+      worldOf(hostOf({}, { home: dir })),
+      undefined,
+      dir,
+    );
+    const warnings: string[] = [];
+    const loaded = loadSnapshot(snapshot, dir, DEFAULT_DSL_CONFIG, {
+      warned: (lines) => warnings.push(...lines),
+    });
+    expect(loaded.layers).toEqual([]);
+    expect(loaded.config.segments.directory).toMatchObject({
+      template: expect.any(String),
+    });
+    expect(warnings).toEqual([]);
   });
 });
 

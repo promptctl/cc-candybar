@@ -52,6 +52,19 @@ class QuarantineEnvironment extends TestEnvironment {
     this.file = path.relative(rootDir, context.testPath);
     this.list = testEnvironmentOptions.quarantine ?? QUARANTINE_FILE;
     this.entries = readQuarantine(rootDir, this.list);
+    this.fixtureReleases = [];
+    this.global.releaseTestFixture = (release) => this.fixtureReleases.push(release);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The sandbox is per file, and this runs
+  // after its last test and hook, where an `afterAll` would run before the
+  // file's own: its fixtures end here, and the sandbox goes even when one fails.
+  async teardown() {
+    try {
+      await Promise.all(this.fixtureReleases.map((release) => release()));
+    } finally {
+      await super.teardown();
+    }
   }
 
   handleTestEvent(event, state) {

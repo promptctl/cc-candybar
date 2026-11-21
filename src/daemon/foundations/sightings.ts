@@ -14,7 +14,7 @@ export const SIGHTINGS_KEPT = 64;
 // windows. `unanswered` is a session with no API response to report on, so
 // its missing windows are no finding. A Claude Code too old to leave the mark
 // sends no windows either: `missing`. Carried means a window the payload
-// reads (`five_hour`, `seven_day` — projectPayload), so an empty or null
+// reads (`five_hour`, `seven_day` — composePayload), so an empty or null
 // `rate_limits` is `missing`.
 export const RATE_LIMITS_SEEN = ["carried", "missing", "unanswered"] as const;
 

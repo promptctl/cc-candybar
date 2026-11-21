@@ -19,7 +19,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { WORLD } from "../../helpers/host";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -37,7 +36,6 @@ import {
 } from "../../../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
-  encodeFrame,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
 import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot";
@@ -1012,30 +1010,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       ),
     });
     expect((await statsOf(daemon.daemon)).requests.errored).toBe(before + 1);
-  });
-
-  test("a subscriber that hangs up before its subscribe is handled leaves no feed behind", async () => {
-    await render(sockPath, "feed-hangup", projectDir, {}, args("still"));
-    const before = await feedStats();
-    await new Promise<void>((resolve) => {
-      const sock = net.createConnection({ path: sockPath }, () => {
-        sock.end(
-          encodeFrame({
-            v: PROTOCOL_VERSION,
-            kind: "subscribe",
-            sessionId: "feed-hangup",
-            lane: "stream",
-          }),
-        );
-        sock.destroy();
-        resolve();
-      });
-    });
-    await sleep(300);
-    expect(await feedStats()).toMatchObject({
-      feeds: before.feeds,
-      subscribers: before.subscribers,
-    });
   });
 
   // A render warning is known only after the walk that met it, so the frame

@@ -6,15 +6,13 @@
 // catch-and-substitute blocks made unrepresentable.
 
 import { execSync } from "node:child_process";
-import { processLauncher } from "./helpers/host";
+import { fixtureLauncher, processLauncher } from "./helpers/host";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/daemon/cache/git-service";
-import { systemLauncher } from "../src/proc/system-launcher";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { systemTimekeeper } from "./helpers/system-clock";
 
 function run(cmd: string, cwd: string): void {
   execSync(cmd, { cwd, stdio: "pipe" });
@@ -176,12 +174,9 @@ describe("GitService outcome classification", () => {
     );
     // The git the service launches inherits a global config of its own.
     const shadowed = new GitService(
-      systemLauncher(
-        {
-          inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
-        },
-        systemTimekeeper,
-      ),
+      fixtureLauncher({
+        inherited: { ...process.env, GIT_CONFIG_GLOBAL: fakeGlobal },
+      }),
     );
     try {
       const remotes = await shadowed.getRemotesAsync(repo);

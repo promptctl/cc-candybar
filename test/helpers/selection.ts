@@ -12,11 +12,17 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../../src/config/effective-globals";
-import type { RenderSelection } from "../../src/dsl/render";
+import type { DrawSelection } from "../../src/dsl/render";
+import type { Selections } from "../../src/dsl/view-source";
+
+export type RenderSelection = DrawSelection & Selections;
 
 // [LAW:one-source-of-truth] A config's globals as the daemon resolves them
 // for a session (none picked by default): what a fixture hands the payload
 // build, read the one way the bar reads it rather than spelled field by field.
+// The daemon reads which preset roots are authored from the user's own layer.
+// A config handed here alone has none, so it authors none; a draw of a
+// discovered load reads its user file's (test/helpers/prepared-config.ts).
 export const globalsFor = (
   config: DslConfig,
   sessionPick: (key: string) => string | null = () => null,
