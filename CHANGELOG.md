@@ -1,3 +1,9 @@
+## [1.236.5](https://github.com/promptctl/cc-candybar/compare/v1.236.4...v1.236.5) (2026-11-21)
+
+### Bug Fixes
+
+* **renderer:** a still frame touches only the view it draws ([#933](https://github.com/promptctl/cc-candybar/issues/933)) ([14deeab](https://github.com/promptctl/cc-candybar/commit/14deeab12b857259c13fcd5b6ce31034774a8f0b))
+
 ## [1.236.4](https://github.com/promptctl/cc-candybar/compare/v1.236.3...v1.236.4) (2026-11-21)
 
 ### Bug Fixes
