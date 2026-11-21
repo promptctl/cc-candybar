@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+
+import { jestTmpDir } from "../helpers/jest-tmp";
 
 import { LIFELINE_DIR_ENV } from "../helpers/launcher-fixtures/lifeline-across-files";
 
@@ -15,10 +16,10 @@ const ROOT = resolve(__dirname, "../..");
 const JEST = join(ROOT, "node_modules", "jest", "bin", "jest.js");
 
 test("a file's fixture launchers end after its last hook and before the next file", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "fixture-launchers-"));
+  const dir = jestTmpDir("fixtures");
   const lifelines = join(dir, "lifelines");
   const json = join(dir, "result.json");
-  mkdirSync(lifelines);
+  mkdirSync(lifelines, { recursive: true });
   try {
     const { exitCode, output } = await new Promise<{
       exitCode: number | null;
@@ -43,9 +44,9 @@ test("a file's fixture launchers end after its last hook and before the next fil
       child.on("close", (code) => resolveRun({ exitCode: code, output: text }));
     });
     const result = JSON.parse(readFileSync(json, "utf8"));
-    expect({ exitCode, passed: result.numPassedTests, output }).toMatchObject({
+    expect({ exitCode, failed: result.numFailedTests, output }).toMatchObject({
       exitCode: 0,
-      passed: 4,
+      failed: 0,
     });
     expect(readdirSync(lifelines).sort()).toEqual(["first", "second"]);
   } finally {

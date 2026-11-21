@@ -7,18 +7,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { fixtureLauncher } from "../host";
+import { fixtureLauncher, processProbe } from "../host";
 
 export const LIFELINE_DIR_ENV = "CC_CANDYBAR_LIFELINE_DIR";
-
-const running = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 export function lifelineAcrossFiles(file: string): void {
   const dir = process.env[LIFELINE_DIR_ENV];
@@ -29,7 +20,7 @@ export function lifelineAcrossFiles(file: string): void {
     const earlier = fs
       .readdirSync(dir)
       .map((name) => Number(fs.readFileSync(path.join(dir, name), "utf8")));
-    expect(earlier.filter(running)).toEqual([]);
+    expect(earlier.filter(processProbe.alive)).toEqual([]);
   });
 
   test("this file's launcher holds a lifeline", async () => {
@@ -44,6 +35,6 @@ export function lifelineAcrossFiles(file: string): void {
 
   // The file's own last hook still has its lifeline: the release comes after.
   afterAll(() => {
-    expect(pid !== undefined && running(pid)).toBe(true);
+    expect(pid !== undefined && processProbe.alive(pid)).toBe(true);
   });
 }

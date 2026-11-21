@@ -32,10 +32,10 @@ function heapUsed(): number {
 
 function registerStdlib() {
   const warnings: string[] = [];
-  const { config } = loadChain([], DEFAULT_DSL_CONFIG, {
+  const { config, dropped } = loadChain([], DEFAULT_DSL_CONFIG, {
     warned: (lines) => warnings.push(...lines),
   });
-  expect(warnings).toEqual([]);
+  expect({ warnings, dropped }).toEqual({ warnings: [], dropped: [] });
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   return {
