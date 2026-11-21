@@ -351,7 +351,6 @@ describe("a connection to a daemon built in this worker", () => {
     const { daemonEnd, client } = memoryConnection();
     const read = Promise.withResolvers<HandledRequest>();
     const release = Promise.withResolvers<void>();
-    const attempted: string[] = [];
     // Hold the real parser's reply where the connection will act on it, so
     // the daemon has read the frame but the peer can close before admission.
     handleConnection(
@@ -362,10 +361,6 @@ describe("a connection to a daemon built in this worker", () => {
           read.resolve(reply);
           await release.promise;
           return reply;
-        },
-        subscribe: (session, sub) => {
-          attempted.push(sub.lane);
-          return daemon.subscribe(session, sub);
         },
       },
       daemonEnd,
@@ -384,7 +379,6 @@ describe("a connection to a daemon built in this worker", () => {
       await peerClosed;
       release.resolve();
       await clock.settle(0);
-      expect(attempted).toEqual([]);
       expect((await statsOf(daemon)).frameFeeds).toMatchObject({
         feeds: 0,
         subscribers: 0,

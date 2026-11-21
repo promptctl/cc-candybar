@@ -2,12 +2,19 @@ import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
-import type { TestableLauncher } from "../../src/proc/launch";
+import type { LaunchOwner, TestableLauncher } from "../../src/proc/launch";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "./system-clock";
 
+// [LAW:types-are-the-program] A test file's environment
+// (test/helpers/quarantine-environment.cjs) hands its runtime this hook and
+// runs what it is given after the file's last hook. The runner's global
+// teardown has none: its launchers live as long as its process, as a process
+// main's do, and each lifeline ends when that process does.
 declare global {
-  function releaseTestFixture(release: () => Promise<void>): void;
+  var releaseTestFixture:
+    | ((release: () => Promise<void>) => void)
+    | undefined;
 }
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
@@ -34,12 +41,14 @@ const fixtureLaunchers: Array<{
   launcher: TestableLauncher;
 }> = [];
 
-// A real launcher belongs to this module's runtime. Async launches keep a
-// lifeline open until their owner ends, even after every child has returned.
-export function fixtureLauncher(inherited: NodeJS.ProcessEnv) {
+// [LAW:single-enforcer] The one way a test gets a real launcher it does not
+// end itself: it belongs to this module's runtime, which ends with its file.
+// Async launches keep a lifeline open until their owner ends, even after every
+// child has returned, and a worker runs many files.
+export function fixtureLauncher(scope: Omit<LaunchOwner, "signal">) {
   const owner = new AbortController();
   const launcher = systemOneShotLauncher(
-    { inherited, signal: owner.signal },
+    { ...scope, signal: owner.signal },
     systemTimekeeper,
   );
   fixtureLaunchers.push({ owner, launcher });
@@ -55,17 +64,13 @@ export async function releaseFixtureLaunchers(): Promise<void> {
     throw new Error(`Fixture launches still running: ${unreaped.join(", ")}`);
 }
 
-// Jest gives each file a separate runtime and releases it after the last
-// hook. The runner's global teardown imports this module in its own runtime
-// and calls releaseFixtureLaunchers itself.
-if (typeof releaseTestFixture === "function")
-  releaseTestFixture(releaseFixtureLaunchers);
+globalThis.releaseTestFixture?.(releaseFixtureLaunchers);
 
 // A process main's world over `host`: its launcher's children inherit `host.env`.
 export function worldOf(host: Host): World {
   return {
     host,
-    launcher: fixtureLauncher(host.env),
+    launcher: fixtureLauncher({ inherited: host.env }),
     clock: systemTimekeeper,
   };
 }

@@ -1,6 +1,7 @@
-// [LAW:single-enforcer] registerDslConfig + drawDsl are THE two spine
-// functions the daemon calls verbatim. No parallel registration path, no
-// alternate render path. bzh.2 reuses these; it does not reimplement them.
+// [LAW:single-enforcer] registerCompiled + drawDsl are THE two spine
+// functions the daemon calls verbatim (through its render cache).
+// registerDslConfig is registerCompiled over a fresh compile, for tests and
+// one-shot draws. No parallel registration path, no alternate render path.
 //
 // [LAW:one-source-of-truth] registerDslConfig is the single JSON-shape →
 // runtime translation. Every VariableDecl kind maps to exactly one

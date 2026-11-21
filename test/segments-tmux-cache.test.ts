@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { NAME_PERIOD_MS, TmuxService } from "../src/daemon/cache/tmux";
 import { Holds } from "../src/utils/holds";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { fixtureLauncher } from "./helpers/host";
 import type { Launcher } from "../src/proc/launcher";
 import type { LaunchCategory } from "../src/proc/launcher";
 import type { LaunchStatsHandle } from "../src/proc/stats-handle";
@@ -73,10 +73,7 @@ beforeEach(() => {
     onDrainRead: () => {},
     onPipeError: () => {},
   };
-  launcher = systemLauncher(
-    { inherited: INHERITED, stats: handle },
-    systemTimekeeper,
-  );
+  launcher = fixtureLauncher({ inherited: INHERITED, stats: handle });
   svc = new TmuxService({ launcher, clock: systemTimekeeper });
   holds = new Holds();
 });

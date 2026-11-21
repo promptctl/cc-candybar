@@ -44,6 +44,10 @@ function rmrf(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// Every path the registry said changed, in the order it said them.
+const changedPaths = (seen: readonly Invalidation[]): string[] =>
+  seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
+
 describe("WatcherRegistry", () => {
   // A polled path is read on the registry's sweep, which opens no OS watch:
   // each case moves a held clock past one sweep and its debounce window.
@@ -411,8 +415,7 @@ describe("WatcherRegistry", () => {
     );
     // FSEvents may also report the folder's own creation late, under its
     // name: the paths are what fired, whatever else did.
-    const paths = () =>
-      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
+    const paths = () => changedPaths(seen);
     const [a, b] = ["a.json", "b.json"].map((f) => path.join(dir, f));
     try {
       await untilHeard(
@@ -439,8 +442,7 @@ describe("WatcherRegistry", () => {
       { dirs: [{ path: dir, recursive: true }], polled: [] },
       (inv) => seen.push(inv),
     );
-    const paths = () =>
-      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
+    const paths = () => changedPaths(seen);
     const leaf = path.join(dir, "a", "b", "c");
     // The directories appear under the live watch, as a branch's `fix/`
     // directory appears under a repo's watch, and the leaf's write is
@@ -575,10 +577,7 @@ describe("WatcherRegistry", () => {
       const probe = path.join(dir, "probe");
       return untilHeard(
         () => fs.writeFileSync(probe, "probe"),
-        () =>
-          seen.some(
-            (inv) => inv.kind === "changed" && inv.paths.includes(probe),
-          ),
+        () => changedPaths(seen).includes(probe),
         `the watch on ${dir} live`,
       );
     };
@@ -610,7 +609,7 @@ describe("WatcherRegistry", () => {
       },
     );
 
-    test("a directory made under the root after the open is heard at once, and leaves with its removal", async () => {
+    test("a directory made under the root after the open is watched, and leaves with its removal", async () => {
       const seen: Invalidation[] = [];
       acquired(seen);
       expect(reg.dirWatches()).toBe(1);

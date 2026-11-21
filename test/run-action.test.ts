@@ -791,7 +791,7 @@ describe("a click on a run link", () => {
   });
 
   test("the program runs in its declaring file's directory and sees the session, never the daemon", async () => {
-    const r = rig(fixtureLauncher(daemonSessionEnv()).launch);
+    const r = rig(fixtureLauncher({ inherited: daemonSessionEnv() }).launch);
     const { view, link } = await drawnLink(r);
 
     await clickActing(
@@ -1024,7 +1024,7 @@ describe("the session's process environment", () => {
       TMUX_PANE: "%5",
     };
     // What a child gets, asked of a real one: `env` prints it.
-    const launcher = fixtureLauncher(daemon);
+    const launcher = fixtureLauncher({ inherited: daemon });
     const childSees = async (
       facts: SessionFacts,
     ): Promise<Record<string, string>> => {

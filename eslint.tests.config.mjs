@@ -98,7 +98,7 @@ export default [
           patterns: [
             {
               group: ["**/helpers/host"],
-              importNames: ["processLauncher"],
+              importNames: ["processLauncher", "fixtureLauncher"],
               message: REAL_LAUNCHER_MESSAGE,
             },
             {

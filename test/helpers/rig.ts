@@ -2,9 +2,10 @@
 // store and a registry, through the same registration used by the daemon.
 // Every field has a default, so a test states only what it varies.
 //
-// [LAW:one-source-of-truth] This is the one assembly. A test file keeps its own
-// vocabulary (which link to click, which cell to read) and no longer its own copy
-// of parse → store → registry → compile → draw.
+// [LAW:one-source-of-truth] This is the one assembly a test that draws and
+// clicks is meant to share. A test file keeps its own vocabulary (which link to
+// click, which cell to read), not its own copy of parse → store → registry →
+// compile → draw.
 //
 // [LAW:decomposition] What a test shares and what it owns follow the daemon's
 // split (src/dsl/render.ts registerCompiled): the parse of a source and its

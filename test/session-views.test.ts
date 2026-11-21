@@ -1,5 +1,5 @@
 import { drawPayload } from "./helpers/draw-payload";
-import { HOST, locs, processLauncher } from "./helpers/host";
+import { HOST, fixtureLauncher, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import fs from "node:fs";
 import os from "node:os";
@@ -26,7 +26,6 @@ import {
 } from "../src/renderer/presented-frames";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
-import { systemLauncher } from "../src/proc/system-launcher";
 import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";
@@ -479,23 +478,20 @@ test("a config load starts no view's source, and still names a session value tha
     }),
   );
   let shells = 0;
-  const launcher = systemLauncher(
-    {
-      inherited: process.env,
-      stats: {
-        onStart: (c) => {
-          if (c === "user-shell") shells++;
-        },
-        onEnd: () => {},
-        onRefused: () => {},
-        onDrainOpen: () => {},
-        onDrainClose: () => {},
-        onDrainRead: () => {},
-        onPipeError: () => {},
+  const launcher = fixtureLauncher({
+    inherited: process.env,
+    stats: {
+      onStart: (c) => {
+        if (c === "user-shell") shells++;
       },
+      onEnd: () => {},
+      onRefused: () => {},
+      onDrainOpen: () => {},
+      onDrainClose: () => {},
+      onDrainRead: () => {},
+      onPipeError: () => {},
     },
-    systemTimekeeper,
-  );
+  });
   const { cache } = makeCache({}, launcher);
 
   const entry = cache.getOrCreate(originOf(dir, dir, undefined));

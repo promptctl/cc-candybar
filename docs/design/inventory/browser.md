@@ -47,7 +47,7 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 **What is not keyed by `by`, and blocks a second width:**
 - A view holds one frame record, with its passages, per `by`, and `recordFrom` returns nothing when `source.width` differs (`src/render/frame-memory.ts`). Two widths drawn by one `by` would make each draw find no comparable last frame: appearing and leaving fades stop, and held loading cells are lost.
 - `SessionEffects` holds one anchor, effect in force and set of placement clocks per session (`src/render/effect.ts`).
-- `bindPayload` does override `term.cols` from `opts.width` (`src/dsl/render.ts`), so a draw at another width is possible by parameter. Its effect on keyed sources and on the view's wake reaction is **unknown**; I did not trace it.
+- A draw at another width is possible by parameter: the daemon draws a request that waited through a resize through `withTerminalWidth` (`src/renderer/draw-bar.ts`), which answers `term.cols` for that draw alone. Its effect on keyed sources and on the view's wake reaction is **unknown**; I did not trace it.
 
 **Rejected options:**
 - **Feed per (session, width, depth):** a second feed collides on `by: "feed"`, and closing either one calls `stopDrawing` for both. It also adds timers and draws, against the daemon's stated budget of 24 sessions at 30 fps on one thread (`src/daemon/pane-visibility.ts`).

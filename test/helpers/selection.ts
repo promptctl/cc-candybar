@@ -20,6 +20,8 @@ export type RenderSelection = DrawSelection & Selections;
 // [LAW:one-source-of-truth] A config's globals as the daemon resolves them
 // for a session (none picked by default): what a fixture hands the payload
 // build, read the one way the bar reads it rather than spelled field by field.
+// The daemon reads which preset roots are authored from the user's own layer;
+// a fixture config is one merged tree with no such layer, so it authors none.
 export const globalsFor = (
   config: DslConfig,
   sessionPick: (key: string) => string | null = () => null,

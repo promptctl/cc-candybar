@@ -6,7 +6,7 @@
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
 import { drawPayload } from "./helpers/draw-payload";
-import { processLauncher } from "./helpers/host";
+import { fixtureLauncher, processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
 import fs from "node:fs";
 import os from "node:os";
@@ -31,7 +31,6 @@ import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
-import { systemLauncher } from "../src/proc/system-launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";
@@ -44,7 +43,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 // edge per rig, since an edge remembers what it typed moments ago.
 const typing = () => ({
   claudeInput: productionClaudeInputEdge(
-    systemLauncher({ inherited: process.env }, systemTimekeeper),
+    fixtureLauncher({ inherited: process.env }),
   ),
 });
 const S1 = sessionIdOf("s1");

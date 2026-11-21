@@ -1,7 +1,7 @@
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import v8 from "node:v8";
 import vm from "node:vm";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { loadChain } from "./helpers/discovered-load";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -31,7 +31,11 @@ function heapUsed(): number {
 }
 
 function registerStdlib() {
-  const config = parseAndValidate("<default>", "{}", undefined, DEFAULT_DSL_CONFIG);
+  const warnings: string[] = [];
+  const { config } = loadChain([], DEFAULT_DSL_CONFIG, {
+    warned: (lines) => warnings.push(...lines),
+  });
+  expect(warnings).toEqual([]);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   return {

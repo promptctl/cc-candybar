@@ -56,18 +56,12 @@ class QuarantineEnvironment extends TestEnvironment {
     this.global.releaseTestFixture = (release) => this.fixtureReleases.push(release);
   }
 
-  // The sandbox is per file. Release its fixtures after every test and hook
-  // has finished, even when another fixture's cleanup fails.
+  // [LAW:no-ambient-temporal-coupling] The sandbox is per file, and this runs
+  // after its last test and hook, where an `afterAll` would run before the
+  // file's own: its fixtures end here, and the sandbox goes even when one fails.
   async teardown() {
     try {
-      const releases = await Promise.allSettled(
-        this.fixtureReleases.map(async (release) => release()),
-      );
-      const errors = releases.flatMap((result) =>
-        result.status === "rejected" ? [result.reason] : [],
-      );
-      if (errors.length > 0)
-        throw new AggregateError(errors, `Fixture teardown failed in ${this.file}`);
+      await Promise.all(this.fixtureReleases.map((release) => release()));
     } finally {
       await super.teardown();
     }

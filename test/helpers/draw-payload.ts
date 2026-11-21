@@ -21,9 +21,12 @@ import {
   type HostReadings,
 } from "../../src/dsl/view-source";
 
-// [LAW:locality-or-seam] Only the fixture supplies fixed payload facts. A
-// source keyed on them starts during bindView. Its reading accessors stay
-// live while the caller optionally waits to draw.
+// The view drawing from `store` bound to a fixed `payload` and `selection`,
+// at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
+// writer and every contrast floor read one depth. [LAW:one-source-of-truth]
+// The one composition of what a fixed view reads. [LAW:no-ambient-temporal-coupling]
+// A source keyed on an input starts its run inside this bind, so a caller that
+// waits on that run before drawing draws the payload its key read.
 export function bindSample(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -66,7 +69,7 @@ export function drawPayload(
   at: Instant,
   opts: BuildLineOptions,
   // [LAW:one-source-of-truth] With no picks, fixtures use the defaults the
-  // daemon resolves for a new session, including the authored preset.
+  // daemon resolves for a new session.
   selection: RenderSelection = globalsFor(config),
   readings: HostReadings = NOTHING_READ,
 ): DrawnFrame {

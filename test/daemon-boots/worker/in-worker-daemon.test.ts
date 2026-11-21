@@ -323,6 +323,8 @@ describe("a daemon in this worker", () => {
       segments: { probe: { template: 'session worker={{ .worker }}' } },
       root: "probe",
     }`);
+    // The daemon's own process has the variable, so `unset` is the session's.
+    expect(process.env.JEST_WORKER_ID).toBeDefined();
     daemon = startDaemon(env);
     const request = renderBody("fixture-environment", projectDir);
     expect(textOf(await frameRequest(daemon, request))).toContain(

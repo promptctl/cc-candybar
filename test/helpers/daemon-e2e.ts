@@ -274,10 +274,10 @@ export function renderBody(
     hookData: hookData(sessionId, cwd),
     args,
     cwd,
-    // What the real client always reports from its env: test/setup.ts
-    // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
-    // host's Claude Code settings. A case's own hints win.
-    claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
+    // What the real client always reports from the env it reports: its
+    // Claude directory is an empty one, so no test daemon reads the host's
+    // Claude Code settings. A case's own hints win.
+    claudeConfigDir: detectClaudeConfigDir(TEST_ENV, cwd),
     env: TEST_ENV,
     ...hints,
   };
