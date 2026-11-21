@@ -8,7 +8,7 @@ import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
-import type { LauncherFact } from "../proc/launcher";
+import type { LifelineWarning } from "../proc/launcher";
 import type { HeldEvent } from "../utils/event-hold";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
@@ -66,16 +66,17 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself: whether file events are heard,
-// and what the launcher stands behind (whether what it launches dies with it,
-// and the latest pipe event, whose hold each draw judges at its own instant
-// and for whom it draws, src/utils/event-hold.ts), how the last renderer
-// process ended, and the acts that failed with no session's bar to hold them
-// (one no session asked for, or one whose renderer had ended), each held the
-// same way: null while none has.
+// daemon itself: whether file events are heard, whether what the launcher
+// launches dies with it, and the events held while some bar can show them,
+// each judged by every draw at its own instant and for whom it draws
+// (src/utils/event-hold.ts): the latest pipe event of a launched program,
+// how the last renderer process ended, and the acts that failed with no
+// session's bar to hold them (one no session asked for, or one whose renderer
+// had ended), each null while none is held.
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
-  readonly launcher: readonly LauncherFact[];
+  readonly launcher: readonly LifelineWarning[];
+  readonly launchPipes: HeldEvent | null;
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;
   // What the daemon's own tasks threw, one held event per task while some bar

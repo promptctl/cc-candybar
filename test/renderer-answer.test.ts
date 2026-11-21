@@ -867,8 +867,8 @@ describe("a statusline request", () => {
           kind: "lifeline",
           message: "programs launched now would outlive their launcher",
         },
-        { kind: "launch-pipes", event },
       ],
+      launchPipes: event,
     }));
     const { effects, record } = answered(await request(t));
     const facts = new Map(record);

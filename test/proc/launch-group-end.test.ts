@@ -10,15 +10,12 @@ import {
   type TestableLauncher,
 } from "../../src/proc/launch";
 import {
-  launcherWarningsAt,
   type LaunchCategory,
   type WarningChange,
 } from "../../src/proc/launcher";
 import type { DrainEnd, LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../helpers/system-clock";
-import { instantOf, type Instant } from "../../src/utils/instant";
-import { DAEMON_EVENT_HOLD_S } from "../../src/utils/event-hold";
 
 // What these cases launch leaves its process group with setsid, which only
 // python reaches portably: macOS has no setsid command.
@@ -294,34 +291,14 @@ describe("the pipes a descendant holds past its launch", () => {
     expect(cut?.bytes).toBeGreaterThan(MAX_CAPTURED_BYTES);
     // The holder died writing to the cut pipe, so its stderr closed too.
     await until(() => drainsClosed.length === 2, "the holder's end");
-    // The cut is a pipe event: held for every render, owed to a request until
-    // an answer carries it.
-    expect(heard.some((c) => c.kind === "launch-pipes")).toBe(true);
-    // What a render at `t` seconds after the event shows of it.
-    // Found by kind, read now, inside its hold: a lifeline fault under load
-    // would list first.
-    const pipes = launcherWarningsAt(
-      launcher.standing(),
-      instantOf(new Date()),
-      "feed",
-    ).find((w) => w.kind === "launch-pipes");
-    if (pipes?.kind !== "launch-pipes")
-      throw new Error("no pipe event shown inside its hold");
-    const event = pipes.event;
-    const shown = (t: number, render: "feed" | "request") =>
-      launcherWarningsAt(
-        launcher.standing(),
-        (event.at + t) as Instant,
-        render,
-      ).filter((w) => w.kind === "launch-pipes");
-    expect(event.text).toContain("user-shell output cut at the");
-    expect(event.text).toContain("now fails its writes");
-    expect(shown(DAEMON_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
-    expect(shown(DAEMON_EVENT_HOLD_S + 1, "feed")).toEqual([]);
-    expect(shown(DAEMON_EVENT_HOLD_S + 600, "request")).toHaveLength(1);
-    launcher.answeredPipeEvent(event);
-    expect(shown(DAEMON_EVENT_HOLD_S - 1, "feed")).toHaveLength(1);
-    expect(shown(DAEMON_EVENT_HOLD_S + 1, "request")).toEqual([]);
+    // The cut is a pipe event, reported once to the launcher's observer,
+    // which holds it.
+    const pipes = heard.filter((c) => c.kind === "launch-pipes");
+    expect(pipes).toHaveLength(1);
+    const [cutEvent] = pipes;
+    if (cutEvent?.kind !== "launch-pipes") throw new Error("no pipe event");
+    expect(cutEvent.text).toContain("user-shell output cut at the");
+    expect(cutEvent.text).toContain("now fails its writes");
   });
 
   it("count only what the holder writes after the launch, against a bound of their own", async () => {

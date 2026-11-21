@@ -1,11 +1,12 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
-import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
+import type { LifelineWarning } from "../proc/launcher";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
   type DisplayedEvent,
+  type EventHold,
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -524,25 +525,22 @@ export function drawRender(
   // says so, as discovery found it. A stall is no reason of this watch's: it
   // has the bar's own row.
   const configWatch = entry.revision.snapshot.watch;
-  // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
+  // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
-  const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
-  const launchEvents = launched.flatMap((warning) =>
-    "event" in warning ? [warning] : [],
-  );
   const held = [
+    daemonEventAt("launch-pipes", daemon.launchPipes, at, drawing.by),
     daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
     daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
   ].flatMap((w) => (w === undefined ? [] : [w]));
   // [LAW:one-source-of-truth] Acknowledgement comes from world state. The
   // warning's display hold still runs after the host has confirmed it.
   const eventsShown: readonly DisplayedEvent[] = [
-    ...[...launchEvents, ...held].map(({ kind, event }) => ({ kind, event })),
+    ...held.map(({ kind, event }) => ({ kind, event })),
     ...tasksThrew,
   ].filter(({ event }) => !event.answered);
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
-    ...launched,
+    ...daemon.launcher,
     ...held,
     ...(configWatch === null
       ? []
@@ -761,7 +759,7 @@ export function drawRender(
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: launchEvents[0]?.hold ?? "-",
+    pipeEvent: held.find(({ kind }) => kind === "launch-pipes")?.hold ?? "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -861,14 +859,17 @@ interface FactsWarning {
   readonly message: string;
 }
 
-// [LAW:no-silent-failure] A renderer process that ended took its session
-// state that lives only in memory with it (open menus, armed confirms): the
-// bar the next one draws says so, by the same event hold as a pipe event. So
-// does an act that failed where no session's bar could hold it.
+// [LAW:no-silent-failure] The daemon's own events, each by the one event
+// hold: a launched program's pipe that outlived its launch; a renderer
+// process that ended, taking the session state that lives only in memory
+// with it (open menus, armed confirms), so the bar the next one draws says
+// so; and an act that failed where no session's bar could hold it.
 interface DaemonEventWarning {
-  readonly kind: "renderer-ended" | "act-failed";
+  readonly kind: "launch-pipes" | "renderer-ended" | "act-failed";
   readonly message: string;
   readonly event: HeldEvent;
+  // Why this render shows it: inside the hold, or owed past it.
+  readonly hold: Exclude<EventHold, "over">;
 }
 
 function daemonEventAt(
@@ -877,9 +878,11 @@ function daemonEventAt(
   at: Instant,
   render: Drawing["by"],
 ): DaemonEventWarning | undefined {
-  return event !== null && daemonEventShows(event, at, render)
-    ? { kind, message: event.text, event }
-    : undefined;
+  if (event === null) return undefined;
+  const hold = eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render);
+  return hold === "over"
+    ? undefined
+    : { kind, message: event.text, event, hold };
 }
 
 // [LAW:single-enforcer] Whether a render shows a daemon event: by the one
@@ -895,7 +898,7 @@ function daemonEventShows(
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
-  | LauncherWarning
+  | LifelineWarning
   | DaemonEventWarning
   | ConfigWatchWarning
   | LoadWarning
