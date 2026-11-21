@@ -1,3 +1,9 @@
+## [1.236.4](https://github.com/promptctl/cc-candybar/compare/v1.236.3...v1.236.4) (2026-11-21)
+
+### Bug Fixes
+
+* **renderer:** each render cache entry compares itself with its offered config wherever it is used ([#929](https://github.com/promptctl/cc-candybar/issues/929)) ([75d266a](https://github.com/promptctl/cc-candybar/commit/75d266afc00407c4ef75d5746c8e403b1348e78c))
+
 ## [1.236.3](https://github.com/promptctl/cc-candybar/compare/v1.236.2...v1.236.3) (2026-11-21)
 
 ### Bug Fixes
