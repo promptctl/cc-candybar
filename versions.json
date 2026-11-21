@@ -4,15 +4,22 @@
     {
       "version": "pr-932",
       "ref": "refs/pull/932/merge",
-      "sha": "16da26e081fa42d0eaf6ce53d4f53afb1445897e",
-      "timestamp": "2026-11-21T07:48:21.613Z",
+      "sha": "94dddf39d64b26082a1bd2e182940a5b7b41faa3",
+      "timestamp": "2026-11-21T07:57:59.720Z",
       "commits": [
         {
-          "sha": "16da26e081fa42d0eaf6ce53d4f53afb1445897e",
+          "sha": "94dddf39d64b26082a1bd2e182940a5b7b41faa3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T00:47:11-07:00",
-          "message": "Merge cef1a8973488b6c6b65ef42069a2d0a07b256a74 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+          "timestamp": "2026-11-21T07:56:56Z",
+          "message": "Merge 2d9a3b4a7479047ca7c4df4eb7d487c580308229 into 1c4ae7403a7b27557867f286571f4d2fe4159694\n"
+        },
+        {
+          "sha": "2d9a3b4a7479047ca7c4df4eb7d487c580308229",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:56:45-07:00",
+          "message": "refactor(renderer): the lane declaration walks views without a hold (ibyq.l7z)\n\nThe lane derivation reads each live view's source through one walk that\ntakes no hold, so it cannot dispose a retired state from inside a MobX\ncomputed and has no null arm for a view its own walk just found. The plan\nthe renderer last returned is an observable the derivation tracks, so a\ndraft that keeps its last returned lane switches no longer reads an\nuntracked variable. The still-frame test spies that walk, like its\nsibling spies, instead of pinning the exact holdView calls.\n"
         },
         {
           "sha": "cef1a8973488b6c6b65ef42069a2d0a07b256a74",

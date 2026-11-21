@@ -71098,9 +71098,8 @@ var RenderCache = class {
   }
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
-  // nothing — no entry, no view, no declaration — so a frame performs no I/O
-  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
-  // (ViewOpening).
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O;
+  // only an event opens a view (ViewOpening).
   holdView(sessionId2) {
     const view = this.views.get(sessionId2);
     if (view === void 0) return null;
@@ -71318,6 +71317,14 @@ var RenderCache = class {
       origin,
       digest: selected.kind === "authored" ? selected.digest : null
     }));
+  }
+  // [LAW:effects-at-boundaries] Each live view's source, for a derivation
+  // over the views. It takes no hold: a hold's release can reclaim a retired
+  // state, and a derivation disposes nothing.
+  viewSources() {
+    return new Map(
+      [...this.views].map(([session, view]) => [session, view.source])
+    );
   }
   subscriptions() {
     return {
@@ -72687,26 +72694,16 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
     };
   }
 }
-function viewLanes(parts, sessionId2, committed) {
-  var _stack = [];
-  try {
-    const { renderCache } = parts;
-    const hold2 = __using(_stack, renderCache.holdView(sessionId2));
-    if (hold2 === null) return null;
-    if (committed === null) return laneSwitches(hold2.view.source.effective());
-    const { config, authoredRoots: authoredRoots2 } = committed.state;
-    return laneSwitches(
-      resolveEffectiveGlobals(
-        config,
-        (key) => committed.settings.get(sessionId2, key),
-        (preset) => authoredRoots2.has(preset)
-      )
-    );
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
+function viewLanes(sessionId2, source, committed) {
+  if (committed === null) return laneSwitches(source.effective());
+  const { config, authoredRoots: authoredRoots2 } = committed.state;
+  return laneSwitches(
+    resolveEffectiveGlobals(
+      config,
+      (key) => committed.settings.get(sessionId2, key),
+      (preset) => authoredRoots2.has(preset)
+    )
+  );
 }
 function contextFacts(req, facts) {
   noteFacts(facts, { sid: req.hookData.session_id });
@@ -76845,13 +76842,16 @@ function mainRenderer(parts, drains) {
     deliveries.set(id2, delivery);
     return id2;
   };
-  let subscriptions = {
-    sources: {},
-    managedFolders: [],
-    configSelections: [],
-    lanes: {},
-    configs: []
-  };
+  const subscriptions = observable.box(
+    {
+      sources: {},
+      managedFolders: [],
+      configSelections: [],
+      lanes: {},
+      configs: []
+    },
+    { deep: false }
+  );
   let wake = null;
   const opening = /* @__PURE__ */ new Set();
   const parked = observable.box([], { deep: false });
@@ -77127,7 +77127,7 @@ function mainRenderer(parts, drains) {
     () => {
       const lanes = {};
       const unprepared = /* @__PURE__ */ new Map();
-      for (const session of Object.keys(sources.get())) {
+      for (const [session, source] of parts.renderCache.viewSources()) {
         const editing = parts.edits.draft(session) !== null;
         let committed = null;
         if (editing) {
@@ -77136,14 +77136,13 @@ function mainRenderer(parts, drains) {
           const state = parts.renderCache.committedState(requested);
           if (!delivered || state === null) {
             if (delivered) unprepared.set(originKey(requested), requested);
-            const held = subscriptions.lanes[session];
+            const held = subscriptions.get().lanes[session];
             if (held !== void 0) lanes[session] = held;
             continue;
           }
           committed = { settings: parts.edits.committed, state };
         }
-        const switches = viewLanes(parts, session, committed);
-        if (switches !== null) lanes[session] = switches;
+        lanes[session] = viewLanes(session, source, committed);
       }
       return { lanes, unprepared: [...unprepared.values()] };
     },
@@ -77194,12 +77193,12 @@ function mainRenderer(parts, drains) {
         parts.renderCache.getOrCreate(origin);
       next2 = declaration.read();
     }
-    if (pruneOwed || subscriptions.configs !== next2.plan.configs) {
+    if (pruneOwed || subscriptions.get().configs !== next2.plan.configs) {
       parts.renderCache.prune(new Set(next2.plan.configs.map(originKey)));
       pruneOwed = false;
     }
     observed2 = next2;
-    subscriptions = next2.plan;
+    runInAction(() => subscriptions.set(next2.plan));
   };
   const storeOrder = Object.keys(drains);
   const ending = (event, run2) => {
@@ -77242,7 +77241,7 @@ function mainRenderer(parts, drains) {
         "release-subscriptions",
         () => runInAction(() => declaration.release())
       );
-    return { outcome, subscriptions, wake, stored };
+    return { outcome, subscriptions: subscriptions.get(), wake, stored };
   };
   return {
     answer: async (input) => turnLog.during(
