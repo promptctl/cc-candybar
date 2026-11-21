@@ -37494,11 +37494,11 @@ var Animation = {
     return Animation.of({
       at: (t2) => animation.at(beat2.lastChange(t2)),
       nextChange(t2) {
-        const moved2 = animation.nextChange(beat2.lastChange(t2));
-        if (moved2 === Number.POSITIVE_INFINITY)
-          return moved2;
+        const moved3 = animation.nextChange(beat2.lastChange(t2));
+        if (moved3 === Number.POSITIVE_INFINITY)
+          return moved3;
         const end = beat2.nextChange(t2);
-        return moved2 <= end ? end : beat2.lastChange(moved2) === moved2 ? moved2 : beat2.nextChange(moved2);
+        return moved3 <= end ? end : beat2.lastChange(moved3) === moved3 ? moved3 : beat2.nextChange(moved3);
       },
       // The value held now began at this hold's start at the latest: an early
       // answer where the animation had not moved by it, which the contract allows.
@@ -37659,8 +37659,8 @@ var ColorRamp = class _ColorRamp {
     const last2 = this.stops[this.stops.length - 1].at;
     const span = last2 - first2;
     const inside = first2 <= value && value <= last2;
-    const moved2 = inside ? value - this.scroll * span : value;
-    const read2 = this.unmoved(inside && moved2 < first2 ? moved2 + span : moved2);
+    const moved3 = inside ? value - this.scroll * span : value;
+    const read2 = this.unmoved(inside && moved3 < first2 ? moved3 + span : moved3);
     return this.hue === 0 ? read2 : Oklch.fromRgba(read2).applyKey({ ...IDENTITY, hueShift: 360 * this.hue }).toRgba();
   }
   /** The colour at `value` with the ramp unmoved: the stops and the ease alone. */
@@ -38174,10 +38174,10 @@ var RichText = class _RichText {
         throw new Error("Style argument must not be provided when appending RichText");
       }
       const offset = this._text.get().length;
-      const moved2 = content._spans.get().map((span) => span.move(offset));
+      const moved3 = content._spans.get().map((span) => span.move(offset));
       this._text.set(this._text.get() + content._text.get());
       this._addSpan(offset, this._text.get().length, content._format.get().style);
-      for (const span of moved2)
+      for (const span of moved3)
         this._spans.push(span);
       return this;
     }
@@ -39086,8 +39086,8 @@ var JoinedCell = class _JoinedCell {
     const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
     if (!reaches("left") && !reaches("right"))
       return void 0;
-    const moved2 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
-    const edges = { left: moved2(this.edges.left, moves.left), right: moved2(this.edges.right, moves.right) };
+    const moved3 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved3(this.edges.left, moves.left), right: moved3(this.edges.right, moves.right) };
     const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
     const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp2(level.inner) });
     return { colors: next2.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
@@ -39306,11 +39306,11 @@ var Recolored = class {
     }
   }
   /** `segment`'s cells drawn in the looks the effect painted them. */
-  *_repainted(segment, look, glyphs, moved2, depth) {
+  *_repainted(segment, look, glyphs, moved3, depth) {
     const { style: base, wire, slots, pair, attributes } = look;
     const runs = [];
     for (const [k, { glyph }] of glyphs.entries()) {
-      const now2 = moved2[k];
+      const now2 = moved3[k];
       const colors = onScreen(now2, pair.reverse);
       const last2 = runs[runs.length - 1];
       const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
@@ -39356,7 +39356,7 @@ var Recolored = class {
       terminals.add(own2);
       return own2;
     };
-    const moved2 = (from, to) => {
+    const moved3 = (from, to) => {
       const specs = movedSpecs(from, to, depth, theme24);
       return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
     };
@@ -39364,14 +39364,14 @@ var Recolored = class {
       const wire2 = edge.drawnColors(depth);
       const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
       const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
-      return moved2(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+      return moved3(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
     };
     const moveOf = (side) => {
       const read2 = joined.reads[side];
       if (read2 === null)
         return void 0;
       const cell3 = beside2(cells, side, read2.owner);
-      return cell3 === void 0 ? unseen(read2.edge) : moved2(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+      return cell3 === void 0 ? unseen(read2.edge) : moved3(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
     };
     const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
     if (rederived === void 0)
@@ -39403,8 +39403,8 @@ var Recolored = class {
    * in, the rest as `wire` wrote them.
    */
   respec(wire, from, to, depth) {
-    const moved2 = movedSpecs(from, to, depth, this.theme);
-    return { color: moved2.fg ?? wire.color, bgcolor: moved2.bg ?? wire.bgcolor };
+    const moved3 = movedSpecs(from, to, depth, this.theme);
+    return { color: moved3.fg ?? wire.color, bgcolor: moved3.bg ?? wire.bgcolor };
   }
 };
 var Effected = class _Effected {
@@ -39450,8 +39450,8 @@ var Effected = class _Effected {
    */
   static shows(pair, to, depth, theme24) {
     const from = onScreen(pair, pair.reverse);
-    const moved2 = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
-    return onScreen({ fg: moved2.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved2.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
+    const moved3 = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
+    return onScreen({ fg: moved3.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved3.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
   }
 };
 function cellSeed(key, row, col) {
@@ -39502,12 +39502,12 @@ function edgesBeside(walked, drawings) {
       const drawing2 = drawings[i2];
       if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
         return;
-      const moved2 = drawing2.painted;
+      const moved3 = drawing2.painted;
       glyphs.forEach(({ cell: cell3 }, k) => {
         if (cell3 === void 0)
           return;
         const row = byRow.get(cell3.row) ?? [];
-        row.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved2[k] });
+        row.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved3[k] });
         byRow.set(cell3.row, row);
       });
     });
@@ -39986,8 +39986,8 @@ function atShares(loop, share) {
       const field = loop.field(t2, drawn);
       return (look, cell3) => {
         const w = Math.round(clamp013(field(cell3)) * LEVELS) / LEVELS;
-        const moved2 = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
-        return { ...look, fg: moved2(look.fg, cell3.terminal.fg), bg: moved2(look.bg, cell3.terminal.bg) };
+        const moved3 = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
+        return { ...look, fg: moved3(look.fg, cell3.terminal.fg), bg: moved3(look.bg, cell3.terminal.bg) };
       };
     });
   };
@@ -40488,7 +40488,7 @@ function rewritten(text4, glyphs, shown) {
     from.push(from[i2] + glyph.length);
     to.push(to[i2] + shown[i2].length);
   });
-  const moved2 = (offset) => {
+  const moved3 = (offset) => {
     let i2 = 0;
     while (i2 + 1 < from.length && from[i2 + 1] <= offset)
       i2++;
@@ -40496,7 +40496,7 @@ function rewritten(text4, glyphs, shown) {
   };
   const result = text4.blankCopy(shown.join(""));
   for (const span of text4.spans)
-    result.stylize(span.style, moved2(span.start), moved2(span.end));
+    result.stylize(span.style, moved3(span.start), moved3(span.end));
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
@@ -42217,7 +42217,7 @@ function together(parts) {
         ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
       )
     ),
-    (frames) => (colors, cell3) => frames.reduce((moved2, part) => part(moved2, cell3), colors)
+    (frames) => (colors, cell3) => frames.reduce((moved3, part) => part(moved3, cell3), colors)
   );
 }
 var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
@@ -70519,12 +70519,37 @@ function configLoadedLine(entry, cause, settled3) {
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
-function configAttempt(snapshot, previous2) {
-  if (previous2?.snapshot === snapshot) return previous2;
-  const digest2 = digestOf(snapshot);
-  return previous2?.digest === digest2 ? previous2 : { snapshot, digest: digest2 };
+function revisionOf(snapshot) {
+  return { snapshot, digest: digestOf(snapshot) };
 }
 var CONFIG_PENDING = { kind: "pending" };
+var LoadedEntry = class {
+  constructor(origin, applied3) {
+    this.origin = origin;
+    this.applied = applied3;
+    makeObservable(this, { applied: observableRef });
+  }
+  origin;
+  applied;
+  get configLayers() {
+    return this.applied.load.layers;
+  }
+  get snapshot() {
+    return this.applied.revision.snapshot;
+  }
+  get lastError() {
+    return this.applied.load.error;
+  }
+  get lastWarnings() {
+    return this.applied.load.warnings;
+  }
+  get state() {
+    return this.applied.selected.state;
+  }
+};
+function moved(entry, revision) {
+  return entry.applied.revision.digest !== revision.digest;
+}
 function authoredRoots(config, raw) {
   return new Set(
     presetNames(config.presets).filter(
@@ -70616,7 +70641,7 @@ function buildRenderState(load, deps) {
   const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     store,
-    config.globals.default_empty_value,
+    config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
     deps.region
@@ -70714,7 +70739,7 @@ function settle(snapshot, resolveWarnings, attempt4) {
       };
   }
 }
-function loadOrigin(cwd2, snapshot, deps, served) {
+function loadOrigin(cwd2, snapshot, deps, served = null) {
   const resolved = resolveLoad(cwd2, snapshot, deps.locations.home);
   if (resolved.kind === "failed") return settle(snapshot, [], resolved);
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
@@ -70816,10 +70841,9 @@ var registrySubscriptions = (registry) => [
 ];
 var draftKey = (sessionId2) => `edit:${sessionId2}`;
 var RenderCache = class {
-  entries = observable.map(
-    void 0,
-    { deep: false }
-  );
+  entries = observable.map(void 0, {
+    deep: false
+  });
   // [LAW:one-source-of-truth] The latest delivery of each retained origin
   // gates admission and writes, including controls on an already live view.
   configDeliveries = observable.map(
@@ -70890,15 +70914,13 @@ var RenderCache = class {
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const delivery = this.configDeliveries.get(key);
-    const entry = this.entries.get(key);
-    const previous2 = delivery?.kind === "received" ? delivery.attempt : entry?.applied.attempt;
-    const attempt4 = configAttempt(snapshot, previous2);
+    const revision = revisionOf(snapshot);
     runInAction(() => {
-      if (delivery?.kind !== "received" || delivery.attempt !== attempt4)
-        this.configDeliveries.set(key, { kind: "received", attempt: attempt4 });
-      if (entry !== void 0 && (delivery?.kind === "failed" || entry.applied.attempt !== attempt4))
-        this.reloadInto(entry, attempt4, { kind: "config" });
+      const recovering = this.configDeliveries.get(key)?.kind === "failed";
+      this.configDeliveries.set(key, { kind: "received", revision });
+      const entry = this.entries.get(key);
+      if (entry !== void 0 && (recovering || moved(entry, revision)))
+        this.reloadInto(entry, revision, { kind: "config" });
     });
   }
   rejectConfig(origin, failure2) {
@@ -70908,7 +70930,15 @@ var RenderCache = class {
     });
   }
   configDelivery(origin) {
+    return this.delivered(origin);
+  }
+  delivered(origin) {
     return this.configDeliveries.get(originKey(origin)) ?? CONFIG_PENDING;
+  }
+  // Whether the host handed in `origin`'s config and the renderer still
+  // names it: what an event that needs it waits for.
+  holdsConfig(origin) {
+    return this.configDelivery(origin).kind === "received";
   }
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
   // `originKey`: every other one goes, as the host lets its origin go.
@@ -70940,8 +70970,11 @@ var RenderCache = class {
     let key = originKey(origin);
     let draft = null;
     if (editing !== void 0) {
-      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
-      if (draft !== null) key = draftKey(editing);
+      const snapshot = this.deps.editSnapshot?.(origin, editing) ?? null;
+      if (snapshot !== null) {
+        draft = revisionOf(snapshot);
+        key = draftKey(editing);
+      }
     }
     const existing = this.entries.get(key);
     if (existing !== void 0 && originKey(existing.origin) === originKey(origin)) {
@@ -70949,48 +70982,17 @@ var RenderCache = class {
         this.entries.delete(key);
         this.entries.set(key, existing);
       });
-      if (draft !== null) {
-        const previous2 = existing.applied.attempt;
-        const attempt5 = configAttempt(draft, previous2);
-        if (attempt5 !== previous2)
-          this.reloadInto(existing, attempt5, { kind: "edit" });
-      }
+      if (draft !== null && moved(existing, draft))
+        this.reloadInto(existing, draft, { kind: "edit" });
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    let attempt4;
-    if (draft === null) {
-      attempt4 = this.held(origin);
-    } else {
-      const delivery = this.configDelivery(origin);
-      attempt4 = configAttempt(
-        draft,
-        delivery.kind === "received" ? delivery.attempt : void 0
-      );
-    }
     const { projectDir, cwd: cwd2 } = origin;
-    const applied3 = this.applyConfig(origin, attempt4, null);
-    this.logLoadedPlugins(applied3);
-    const entry = {
-      origin,
-      applied: applied3,
-      get configLayers() {
-        return configPaths(this.snapshot);
-      },
-      get snapshot() {
-        return this.applied.attempt.snapshot;
-      },
-      get lastError() {
-        return this.applied.error;
-      },
-      get lastWarnings() {
-        return this.applied.warnings;
-      },
-      get state() {
-        return this.applied.selected.state;
-      }
-    };
-    makeObservable(entry, { applied: observableRef });
+    const applied3 = this.applyConfig(origin, draft ?? this.held(origin), null);
+    const { load } = applied3;
+    if (load.state !== null)
+      this.log("info", pluginLoadLine(load.layers, load.state));
+    const entry = new LoadedEntry(origin, applied3);
     this.serve(entry.state);
     runInAction(() => this.entries.set(key, entry));
     this.fit(entry);
@@ -70998,7 +71000,7 @@ var RenderCache = class {
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
-    this.observers.onReload?.(entry, [], { kind: "open" }, applied3.outcome);
+    this.observers.onReload?.(entry, [], { kind: "open" }, load.kind);
     return entry;
   }
   // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
@@ -71206,7 +71208,7 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] A draft holds its original file content for
   // preview. Only the current host observation says if it can write through.
   accessTo(entry, state) {
-    const held = this.configDelivery(entry.origin);
+    const held = this.delivered(entry.origin);
     if (held.kind === "failed")
       return { kind: "unavailable", error: held.failure.message };
     if (held.kind === "pending")
@@ -71217,7 +71219,7 @@ var RenderCache = class {
     const key = originKey(entry.origin);
     const error = entry.lastError ?? this.entries.get(key)?.lastError;
     if (error != null) return { kind: "unavailable", error };
-    for (const { role, path: path31, content } of held.attempt.snapshot.chain)
+    for (const { role, path: path31, content } of held.revision.snapshot.chain)
       if (content.kind === "unreadable")
         return {
           kind: "unavailable",
@@ -71290,13 +71292,10 @@ var RenderCache = class {
     return [...folders].sort();
   }
   configSelections() {
-    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, applied: applied3 }]) => {
-      const { selected } = applied3;
-      return {
-        origin,
-        digest: selected.kind === "authored" ? selected.digest : null
-      };
-    });
+    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, applied: applied3 }]) => ({
+      origin,
+      digest: applied3.selected.kind === "authored" ? applied3.selected.revision.digest : null
+    }));
   }
   subscriptions() {
     return {
@@ -71327,39 +71326,39 @@ var RenderCache = class {
   // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  applyConfig(origin, attempt4, previous2) {
+  applyConfig(origin, revision, previous2) {
     if (this.closed) throw new Error("render cache used after close");
-    const { snapshot, digest: digest2 } = attempt4;
-    const retained = previous2?.kind === "authored" && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
+    const { snapshot } = revision;
+    const retained = previous2?.kind === "authored" && retainsConfig(
+      origin.target,
+      previous2.revision.snapshot.repo,
+      snapshot.repo
+    ) ? previous2 : null;
     const bundled = previous2?.kind === "bundled" ? previous2 : null;
     const { cwd: cwd2 } = origin;
-    const { repo: repo2 } = snapshot;
-    const loaded = loadOrigin(
+    const load = loadOrigin(
       cwd2,
       snapshot,
       this.deps,
       (retained ?? bundled)?.state ?? null
     );
-    let selected;
-    if (loaded.state !== null) {
-      selected = { kind: "authored", state: loaded.state, digest: digest2, repo: repo2 };
-    } else if (retained !== null) {
-      selected = retained;
-    } else {
-      const state = fallbackState(
-        cwd2,
-        snapshot,
-        this.deps,
-        bundled?.state ?? null
-      );
-      selected = bundled?.state === state ? bundled : { kind: "bundled", state };
-    }
+    if (load.state !== null)
+      return {
+        revision,
+        load,
+        selected: { kind: "authored", state: load.state, revision }
+      };
+    if (retained !== null) return { revision, load, selected: retained };
+    const state = fallbackState(
+      cwd2,
+      snapshot,
+      this.deps,
+      bundled?.state ?? null
+    );
     return {
-      attempt: attempt4,
-      selected,
-      error: loaded.error,
-      warnings: loaded.warnings,
-      outcome: loaded.kind
+      revision,
+      load,
+      selected: bundled?.state === state ? bundled : { kind: "bundled", state }
     };
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
@@ -71371,13 +71370,13 @@ var RenderCache = class {
   }
   held(origin) {
     if (this.closed) throw new Error("render cache used after close");
-    const held = this.configDelivery(origin);
+    const held = this.delivered(origin);
     if (held.kind === "failed") throw new CrossedFailure(held.failure);
     if (held.kind === "pending")
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
       );
-    return held.attempt;
+    return held.revision;
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
   // serving it, and its state is retired.
@@ -71513,7 +71512,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  reloadInto(entry, attempt4, cause) {
+  reloadInto(entry, revision, cause) {
     const retry = [...this.openFailures].filter(
       ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
     );
@@ -71524,31 +71523,24 @@ var RenderCache = class {
     const served = entry.state;
     const applied3 = this.applyConfig(
       entry.origin,
-      attempt4,
+      revision,
       entry.applied.selected
     );
     runInAction(() => {
       entry.applied = applied3;
     });
-    this.logLoadedPlugins(applied3);
-    const { selected, outcome } = applied3;
+    const { load, selected } = applied3;
+    if (load.state !== null)
+      this.log("info", pluginLoadLine(load.layers, load.state));
     if (selected.state !== served) {
       this.serve(selected.state);
       this.retire(served, "reload", entry);
     }
-    if (selected.state !== served || outcome !== "failed")
+    if (selected.state !== served || load.state !== null)
       for (const [session, failure2] of retry)
         this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, outcome);
-  }
-  logLoadedPlugins(applied3) {
-    const { outcome, selected, attempt: attempt4 } = applied3;
-    if (outcome !== "failed")
-      this.log(
-        "info",
-        pluginLoadLine(configPaths(attempt4.snapshot), selected.state)
-      );
+    this.observers.onReload?.(entry, sessions, cause, load.kind);
   }
   get size() {
     return this.entries.size;
@@ -75016,9 +75008,9 @@ var SettingsHistory = class {
       },
       commit: () => {
         step4();
-        const moved2 = new Map(working);
+        const moved3 = new Map(working);
         working.clear();
-        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
+        for (const [sessionId2, history] of moved3) this.put(sessionId2, history);
         held.flush();
       }
     };
@@ -75994,10 +75986,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     try {
       const writes = journal.writes(sid);
       const mode = writes?.get(EDIT_MODE_KEY);
-      let moved2 = false;
+      let moved3 = false;
       if (edit === void 0) journal.commit();
       else if (saved !== null) saved.commit();
-      else moved2 = edit.commit();
+      else moved3 = edit.commit();
       if (origin !== null) {
         if (edit !== void 0 && (saved !== null || mode !== void 0 && mode !== EDIT_MODE_ARRANGE)) {
           ctx.edits.close(sid);
@@ -76006,7 +75998,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
           ctx.sessionState.clear(sid, EDIT_MODE_KEY);
           ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
           ctx.editViewChanged(sid);
-        } else if (moved2) {
+        } else if (moved3) {
           ctx.edits.changed(sid);
           ctx.editViewChanged(sid);
         }
@@ -76146,7 +76138,6 @@ var EditDraft = class {
   // The host's current layer identities and plugin discovery still decide
   // what it can load, including when the user revokes repository trust.
   updated(latest) {
-    if (this.latest === latest) return;
     this.latest = latest;
     this.refreshSnapshot();
   }
@@ -77011,10 +77002,7 @@ function mainRenderer(parts, drains) {
         });
         runEach([
           () => runEach(
-            parts.edits.configured(
-              event.origin,
-              parts.renderCache.snapshotFor(event.origin)
-            ).map((sid) => () => parts.renderCache.refreshEditedView(sid))
+            parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
           ...sessions.map((session) => () => openSession(parts, session)),
           ...resume(ready, effects, record2)
@@ -86809,12 +86797,12 @@ var ManagedStorage = class {
   settle(folder) {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now2 = faultsOf(this.folders.get(folder));
-    let moved2 = false;
+    let moved3 = false;
     for (const source of SOURCES) {
       const before = was[source];
       const after = now2[source];
       if (sameFault(before, after)) continue;
-      moved2 = true;
+      moved3 = true;
       if (after === null) {
         this.logger(
           "info",
@@ -86831,7 +86819,7 @@ var ManagedStorage = class {
     if (SOURCES.every((source) => now2[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now2);
-    return moved2;
+    return moved3;
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -87162,7 +87150,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.236.2";
+var PACKAGE_VERSION = "1.236.3";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -88358,9 +88346,9 @@ var Collector = class {
   watch(session, stamped, reader) {
     const stop2 = reaction(
       () => reader.inputs.get(),
-      (moved2) => runInAction(() => {
-        if (moved2 === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved2))
+      (moved3) => runInAction(() => {
+        if (moved3 === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved3))
           this.deps.clock.detach(
             `world state delivery ${session}`,
             () => this.deps.deliver({
@@ -88436,9 +88424,9 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({ session, stamped }, moved2) {
+  stamp({ session, stamped }, moved3) {
     const prior = stamped.document;
-    const { owners, daemon: daemon2 } = moved2;
+    const { owners, daemon: daemon2 } = moved3;
     const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
       prior,
       owners.value,
@@ -88452,7 +88440,7 @@ var Collector = class {
         `world state sid=${JSON.stringify(session)}: ${failure2}`
       );
     stamped.document = next2;
-    stamped.from = moved2;
+    stamped.from = moved3;
     return next2 !== prior;
   }
   assembled(prior, readings, daemon2, at) {
@@ -90467,12 +90455,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         waited.push(config.settled);
       }
     }
-    const moved3 = "files" in landed && landed.files.length > 0 ? recordTaken(
+    const moved4 = "files" in landed && landed.files.length > 0 ? recordTaken(
       "landed config discovery",
       () => world.configs.landed(landed.files)
     ) ?? [] : [];
     const reloaded = [];
-    for (const origin of moved3)
+    for (const origin of moved4)
       reloaded.push((await configInSlot(origin, "config-landed")).settled);
     const owed = [];
     const acts = [];
@@ -90594,8 +90582,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (!adoptDemand) return { kind: "following", named: [] };
     const named2 = [];
-    const moved3 = origins !== subscriptions.configs;
-    if (moved3) {
+    const moved4 = origins !== subscriptions.configs;
+    if (moved4) {
       const next2 = /* @__PURE__ */ new Map();
       for (const origin of subscriptions.configs) {
         const key = originKey(origin);
@@ -90616,7 +90604,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       }
     }
     try {
-      if (moved3 || requested !== null && followFailure !== null) {
+      if (moved4 || requested !== null && followFailure !== null) {
         if (subscriptions.configs.length > 0 || followedOrigins.length > 0 || followFailure !== null)
           follow(subscriptions.configs);
         followFailure = null;
@@ -90842,7 +90830,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     return turn.reply;
   };
-  const moved2 = (origins2) => {
+  const moved3 = (origins2) => {
     for (const origin of origins2)
       unawaited(
         "config",
@@ -90895,7 +90883,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     deliver: deliver2,
     start: recorded2("first"),
     command,
-    moved: moved2,
+    moved: moved3,
     stats,
     closeWake: () => wake.close()
   };
@@ -90956,11 +90944,11 @@ var HeldStores = class {
     for (const write of writes)
       switch (write.store) {
         case "session-state":
-          moved(this.sessions, write.key, write.value);
+          moved2(this.sessions, write.key, write.value);
           sessions = true;
           break;
         case "settings-history":
-          moved(this.history, write.key, write.value);
+          moved2(this.history, write.key, write.value);
           history = true;
           break;
       }
@@ -90979,7 +90967,7 @@ var HeldStores = class {
     return this.storage.session.flush();
   }
 };
-function moved(store, key, value) {
+function moved2(store, key, value) {
   store.delete(key);
   if (value !== null) store.set(key, value);
 }
@@ -92129,16 +92117,16 @@ var ConfigDiscovery = class {
   // publishes: a failure is a value the batch carries, so neither a reporter
   // nor a publish that throws can cut the batch short or lose it.
   refreshed(keys2, why, recover, writer) {
-    const { moved: moved2, failed: failed3 } = this.rediscovered(keys2, why, recover);
+    const { moved: moved3, failed: failed3 } = this.rediscovered(keys2, why, recover);
     for (const { key, thrown: thrown2 } of failed3)
       this.deps.clock.failed(`config discovery ${key}`, thrown2);
-    return this.publish(moved2, writer);
+    return this.publish(moved3, writer);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
-  publish(moved2, writer) {
+  publish(moved3, writer) {
     const byRenderer = /* @__PURE__ */ new Map();
-    for (const { origin, renderers } of moved2)
+    for (const { origin, renderers } of moved3)
       for (const renderer of renderers) {
         const origins = byRenderer.get(renderer) ?? [];
         origins.push(origin);
@@ -92154,7 +92142,7 @@ var ConfigDiscovery = class {
   rediscovered(keys2, why, recover) {
     if (keys2.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
-    const moved2 = [];
+    const moved3 = [];
     const observed2 = [];
     const failed3 = [];
     for (const key of keys2) {
@@ -92175,14 +92163,14 @@ var ConfigDiscovery = class {
       };
       this.followed.set(key, now2);
       observed2.push(now2);
-      if (now2.digest !== was.digest) moved2.push(now2);
+      if (now2.digest !== was.digest) moved3.push(now2);
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length} failed=${failed3.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved3.length} failed=${failed3.length}`
     );
-    this.reloaded(recover === "observed" ? observed2 : moved2);
-    return { moved: moved2, failed: failed3 };
+    this.reloaded(recover === "observed" ? observed2 : moved3);
+    return { moved: moved3, failed: failed3 };
   }
   reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;

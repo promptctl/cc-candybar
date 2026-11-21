@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-927",
+      "ref": "refs/pull/927/merge",
+      "sha": "269822086795bf3fffddf5ef3f5ae718a7aa216c",
+      "timestamp": "2026-11-21T02:58:42.529Z",
+      "commits": [
+        {
+          "sha": "269822086795bf3fffddf5ef3f5ae718a7aa216c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:57:38-07:00",
+          "message": "Merge 11f0764e68affab0188a091d5c908716fb53b5d4 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+        },
+        {
+          "sha": "11f0764e68affab0188a091d5c908716fb53b5d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:57:20-07:00",
+          "message": "fix(renderer): the render cache stores each config fact once and compares revisions by digest\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "0b7b6935a6f829b85c5844fcbc580d013853719b",
@@ -13,42 +35,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-21T02:41:24Z",
           "message": "chore(release): set `package.json` to 1.236.3\n\n## [1.236.3](https://github.com/promptctl/cc-candybar/compare/v1.236.2...v1.236.3) (2026-11-21)\n\n### Bug Fixes\n\n* **daemon:** every clock task's throw reaches the bar ([#925](https://github.com/promptctl/cc-candybar/issues/925)) ([1c9001a](https://github.com/promptctl/cc-candybar/commit/1c9001abf07cdf49706032b66a888807190c0a6b))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-926",
-      "ref": "refs/pull/926/merge",
-      "sha": "6e34bc610f08820de40f8f06290c4f34bca406f3",
-      "timestamp": "2026-11-21T02:39:24.675Z",
-      "commits": [
-        {
-          "sha": "6e34bc610f08820de40f8f06290c4f34bca406f3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:38:11-07:00",
-          "message": "Merge c76353aa2930e47a5bd84ed1771c27a28ad81a9b into 1c9001abf07cdf49706032b66a888807190c0a6b\n"
-        },
-        {
-          "sha": "c76353aa2930e47a5bd84ed1771c27a28ad81a9b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:37:58-07:00",
-          "message": "fix(renderer): an entry's config facts are read off its one applied load\n\nAn entry's public face is its snapshot, diagnostics and state, all read off\nthe one applied load the cache alone replaces. The cache's comments keep each\nreason and drop the dated measurements, history and ticket ids beside it.\n"
-        },
-        {
-          "sha": "b8fd30355087a722b7a8d2f81e475cbf50f04867",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T19:34:20-07:00",
-          "message": "merge main into renderer-config-attempt\n"
-        },
-        {
-          "sha": "75a53dec3a38cc427f5259e6d6af487c399a2c64",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:46:32-07:00",
-          "message": "wip(renderer): checkpoint config attempt ownership for handoff\n"
         }
       ]
     },
