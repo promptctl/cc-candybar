@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-926",
+      "ref": "refs/pull/926/merge",
+      "sha": "6e34bc610f08820de40f8f06290c4f34bca406f3",
+      "timestamp": "2026-11-21T02:39:24.675Z",
+      "commits": [
+        {
+          "sha": "6e34bc610f08820de40f8f06290c4f34bca406f3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:38:11-07:00",
+          "message": "Merge c76353aa2930e47a5bd84ed1771c27a28ad81a9b into 1c9001abf07cdf49706032b66a888807190c0a6b\n"
+        },
+        {
+          "sha": "c76353aa2930e47a5bd84ed1771c27a28ad81a9b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:37:58-07:00",
+          "message": "fix(renderer): an entry's config facts are read off its one applied load\n\nAn entry's public face is its snapshot, diagnostics and state, all read off\nthe one applied load the cache alone replaces. The cache's comments keep each\nreason and drop the dated measurements, history and ticket ids beside it.\n"
+        },
+        {
+          "sha": "b8fd30355087a722b7a8d2f81e475cbf50f04867",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:34:20-07:00",
+          "message": "merge main into renderer-config-attempt\n"
+        },
+        {
+          "sha": "75a53dec3a38cc427f5259e6d6af487c399a2c64",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:46:32-07:00",
+          "message": "wip(renderer): checkpoint config attempt ownership for handoff\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1c9001abf07cdf49706032b66a888807190c0a6b",
