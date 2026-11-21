@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { type Monotonic, type Timekeeper } from "../../../src/time";
-import { systemDaemonClock } from "../../helpers/daemon-clock";
+import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import {
   PROTOCOL_VERSION,
@@ -26,7 +26,10 @@ import { inProcessRenderer } from "../../../src/in-process-renderer";
 import type { LinkOwner } from "../../../src/daemon/renderer-process";
 import { textOf } from "../../../src/render/frame";
 import { instantAt } from "../../../src/utils/instant";
-import type { HeldEvent } from "../../../src/utils/event-hold";
+import {
+  DAEMON_EVENT_HOLD_S,
+  type HeldEvent,
+} from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
@@ -57,9 +60,7 @@ describe("a connection to a daemon built in this worker", () => {
   let started: InWorkerDaemon | null = null;
   const exit = jest.fn();
 
-  const start = (
-    clock: ReportingClock = systemDaemonClock(),
-  ): InWorkerDaemon => {
+  const start = (clock: ReportingClock = daemonClock()): InWorkerDaemon => {
     started = startDaemon(process.env, { clock, exit });
     return started;
   };
@@ -282,8 +283,8 @@ describe("a connection to a daemon built in this worker", () => {
     expect(standingReads()).toBe(before + 1);
   });
 
-  test("a task its clock reports draws on every bar, once per task; a new message joins it, a repeat moves nothing, and every throw is counted", async () => {
-    const clock = systemDaemonClock();
+  test("a task's throw draws on every bar, once per task; what follows while it is held is counted, and its hold's end shows the latest with the count", async () => {
+    const clock = heldClock(new Date(), reportingClock);
     // Thrown before the daemon exists: the inbox holds it for the daemon.
     clock.throws.report("daemon boot", new Error("too early"), clock.now());
     const running = startDaemon(process.env, { clock });
@@ -295,30 +296,45 @@ describe("a connection to a daemon built in this worker", () => {
         running.daemon.stats.accept(),
         () => false,
       );
-      result.settled(false);
+      result.settled(true);
       return drawn(result.resp);
     };
+    const sweepLines = (count: number) =>
+      loggedLines(
+        process.env,
+        (lines) =>
+          lines.filter((line) => line.includes("[error] session sweep threw")),
+        (picked) => picked.length >= count,
+        "the sweep's throws logged",
+      );
     expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
 
-    const now = clock.now();
-    clock.throws.report("session sweep", new Error("it broke"), now);
-    clock.throws.report("session sweep", new Error("it broke"), now);
-    clock.throws.report("session sweep", new Error("it broke again"), now);
+    clock.throws.report("session sweep", new Error("it broke"), clock.now());
     expect(await reply("task-throw-a")).toMatch(/⚠\s+2/);
+    // While it is held, a throw is counted, whatever it says.
+    clock.throws.report("session sweep", new Error("it broke"), clock.now());
+    clock.throws.report(
+      "session sweep",
+      new Error("it broke again"),
+      clock.now(),
+    );
     expect(await reply("task-throw-b")).toMatch(/⚠\s+2/);
     expect(running.daemon.stats.tasksThrew).toBe(4);
-    // Each new message is logged once in full; the repeat writes nothing.
-    const logged = await loggedLines(
-      process.env,
-      (lines) =>
-        lines.filter((line) => line.includes("[error] session sweep threw")),
-      (picked) => picked.length >= 2,
-      "the sweep's throws logged",
-    );
-    expect(logged).toEqual([
+
+    // Its hold ends with throws counted: the latest is held, and logged once
+    // with their count. The boot's, answered with nothing since, leaves.
+    clock.advance(DAEMON_EVENT_HOLD_S * 1000);
+    expect(await sweepLines(2)).toEqual([
       expect.stringMatching(/session sweep threw: Error: it broke$/),
-      expect.stringMatching(/session sweep threw: Error: it broke again$/),
+      expect.stringMatching(
+        /session sweep threw 2 more times: Error: it broke again$/,
+      ),
     ]);
+    expect(await reply("task-throw-a")).toMatch(/⚠\s+1/);
+
+    // With nothing counted since, the next hold's end lets it go.
+    clock.advance(DAEMON_EVENT_HOLD_S * 1000);
+    expect(await reply("task-throw-a")).not.toMatch(/⚠/);
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {
@@ -334,7 +350,7 @@ describe("a connection to a daemon built in this worker", () => {
     const at = new Date();
     const opened = openedOn(
       start({
-        ...systemDaemonClock(),
+        ...daemonClock(),
         now: () => at.getTime(),
         monotonic: () => monotonic as Monotonic,
       }).connect(),

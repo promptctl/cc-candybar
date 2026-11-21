@@ -40,7 +40,7 @@ import {
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "./helpers/system-clock";
-import { clockOver, systemTimers } from "../src/time";
+import { clockOver, rethrowing, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";
 import { digestOf } from "../src/utils/plain";
@@ -168,7 +168,7 @@ test("a landing discovers again only the origins whose chain holds a written fil
   fs.writeFileSync(file, "{ globals: {} }");
   expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
-  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
+  expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1 failed=0$/);
   // A landing that moved nothing answers none.
   expect(discovery.landed([file])).toEqual([]);
 });
@@ -649,6 +649,30 @@ test("one failed rediscovery leaves the writer and another holder the successful
   expect(textOfLayer(second, b.origin, b.file)).toBe(next);
 });
 
+test("under a clock that rethrows, a failed rediscovery ends the run only after its siblings' change is published", () => {
+  const a = named("published-first");
+  const b = named("refused");
+  const name = rendererNameOf("next");
+  const { service, discovery: writer, delivered } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (read === b.file && fs.readFileSync(read, "utf8") !== "{}")
+          throw new Error("rediscovery failed");
+        return diskFiles.text(read);
+      },
+    },
+    clockOver(systemTimers, rethrowing),
+  );
+  service.forRenderer(name).follow([a.origin, b.origin]);
+  writer.follow([a.origin, b.origin]);
+  for (const { file } of [a, b]) fs.writeFileSync(file, "{ globals: { padding: 1 } }");
+  expect(() => writer.landed([a.file, b.file])).toThrow(
+    expect.objectContaining({ cause: new Error("rediscovery failed") }),
+  );
+  expect(delivered).toEqual([[name, originKey(a.origin)]]);
+});
+
 test("a batch reads shared layer, plugin root and definition paths once", () => {
   const dir = project("shared");
   const nested = project("shared/nested");
@@ -1103,7 +1127,7 @@ test("an unrestored write reaches a directory alias but leaves a different hardl
   expect(textOfLayer(observer, direct.origin, direct.file)).toBe(changePadding(initial));
   expect(textOfLayer(observer, hardlinkOrigin, hardlink)).toBe(initial);
   expect(fs.readFileSync(hardlink, "utf8")).toBe(initial);
-  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2");
+  expect(logged).toContain("config discovery why=landed followed=4 discovered=2 moved=2 failed=0");
 });
 
 test("a batch composes disjoint edits addressed through two names of one directory entry", () => {

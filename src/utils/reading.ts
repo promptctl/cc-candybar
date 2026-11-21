@@ -121,8 +121,8 @@ export type WaitEnd = "answered" | "deadline" | "closed";
 // when the wait ends on any arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
 // nothing behind. What it does not, a run it started, goes on, and a failure
-// of it after the wait ended is no one's answer: it is the clock's, under the
-// wait's name, with how the wait ended.
+// of it after the wait ended is no one's answer: it is the clock's, as the
+// wait's task after its wait, saying what the work threw.
 export function waitWithin(
   // The wait's task name: its deadline's, and its work's past the wait.
   task: string,
@@ -140,20 +140,18 @@ export function waitWithin(
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
-    // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-    // while it listens, the clock's after. Work that answered never rejects,
-    // so a wait aborted before it ended at its deadline or close.
-    clock.detach(task, () =>
-      work(wait.signal).then(
-        () => resolve("answered"),
-        (e: unknown) => {
-          if (!wait.signal.aborted) return reject(e);
-          throw new Error(
-            `failed after its wait ended at its ${String(wait.signal.reason)}`,
-            { cause: e },
-          );
-        },
-      ),
+    // [LAW:no-silent-failure] Every failure is reported: the wait's own while
+    // it listens, a throw before `work` returns included, and the clock's
+    // after, as a task of its own. Work that answered never rejects, so a
+    // wait aborted before it ended at its deadline or close.
+    work(wait.signal).then(
+      () => resolve("answered"),
+      (e: unknown) => {
+        if (!wait.signal.aborted) return reject(e);
+        clock.detach(`${task} after its wait`, () => {
+          throw e;
+        });
+      },
     );
   });
   return ended.finally(() => {

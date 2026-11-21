@@ -13,35 +13,52 @@ export interface ReportedThrow {
   readonly at: number;
 }
 
+export type TakeThrow = (reported: ReportedThrow) => void;
+
+// [LAW:types-are-the-program] Who takes the process's throws, as a state:
+// none yet, so they wait; the daemon, once it is built; and a log alone once
+// no daemon can show them, its close or a refused boot.
+type Taking =
+  | { readonly kind: "waiting"; readonly waiting: ReportedThrow[] }
+  | { readonly kind: "taken" | "closed"; readonly take: TakeThrow };
+
 // [LAW:no-ambient-temporal-coupling] What the daemon process's tasks threw,
-// kept until its one taker attaches, so a throw before the daemon exists
-// (boot, the launcher) still reaches every bar, then handed to that taker as
-// each comes. It needs no clock, so it cannot throw into the task it reports
-// on its own account.
+// kept until its taker attaches, so a throw before the daemon exists (boot,
+// the launcher) still reaches every bar, then handed to that taker as each
+// comes. The inbox is as total as its taker: the daemon's takes every throw
+// without throwing.
 export class TaskThrowInbox {
-  private readonly waiting: ReportedThrow[] = [];
-  private take: (reported: ReportedThrow) => void = (reported) =>
-    this.waiting.push(reported);
+  private taking: Taking = { kind: "waiting", waiting: [] };
 
-  readonly report: ReportThrow = (task, thrown, at) =>
-    this.take({ task, thrown, at });
+  readonly report: ReportThrow = (task, thrown, at) => {
+    const reported = { task, thrown, at };
+    if (this.taking.kind === "waiting") this.taking.waiting.push(reported);
+    else this.taking.take(reported);
+  };
 
-  // [LAW:single-enforcer] The one taker: every throw waiting, oldest first,
-  // then each as it is reported, the daemon's close notwithstanding.
-  // One reported while the waiting are taken waits behind them.
-  attach(take: (reported: ReportedThrow) => void): void {
-    for (
-      let reported = this.waiting.shift();
-      reported !== undefined;
-      reported = this.waiting.shift()
-    )
-      take(reported);
-    this.take = take;
+  // [LAW:single-enforcer] The daemon takes every throw, those waiting first,
+  // oldest first; one reported while they are taken waits behind them.
+  attach(take: TakeThrow): void {
+    if (this.taking.kind !== "waiting")
+      throw new Error(`a throw inbox is already ${this.taking.kind}`);
+    this.handOver({ kind: "taken", take });
   }
 
-  // What no taker took: a boot refused before the daemon attached.
-  untaken(): readonly ReportedThrow[] {
-    return this.waiting.splice(0);
+  // From here on a log takes them: whatever is waiting, then each as it comes.
+  close(take: TakeThrow): void {
+    this.handOver({ kind: "closed", take });
+  }
+
+  private handOver(to: Extract<Taking, { take: TakeThrow }>): void {
+    const { taking } = this;
+    if (taking.kind === "waiting")
+      for (
+        let reported = taking.waiting.shift();
+        reported !== undefined;
+        reported = taking.waiting.shift()
+      )
+        to.take(reported);
+    this.taking = to;
   }
 }
 

@@ -525,10 +525,7 @@ export class GitDataProvider {
       watch: this.followWatch(root, null).watch,
       period: new Period(
         `git refresh ${root}`,
-        () => {
-          const ask = state.refresh.share(PASS, () => this.refreshPass(state));
-          return ask.kind === "started" ? ask.done : undefined;
-        },
+        () => state.refresh.share(PASS, () => this.refreshPass(state)),
         this.clock,
       ),
       value: { reading: unread(), missed: false },

@@ -74,7 +74,7 @@ test("a rejection inside the time is the wait's", async () => {
   ).rejects.toThrow("bug");
 });
 
-test("a rejection after the deadline is the clock's, under the wait's name, never dropped", async () => {
+test("a rejection after the deadline is the clock's, as the wait's task after its wait, never dropped", async () => {
   const reported: Array<{ task: string; thrown: unknown }> = [];
   const clock = clockOver(systemTimers, (task, thrown) =>
     reported.push({ task, thrown }),
@@ -92,12 +92,23 @@ test("a rejection after the deadline is the clock's, under the wait's name, neve
   expect(end).toBe("deadline");
   await after(60);
   expect(reported).toEqual([
-    {
-      task: "test wait",
-      thrown: new Error("failed after its wait ended at its deadline"),
-    },
+    { task: "test wait after its wait", thrown: new Error("late bug") },
   ]);
-  expect((reported[0]?.thrown as Error).cause).toEqual(new Error("late bug"));
+});
+
+test("work that throws before it returns fails the wait at once", async () => {
+  const broke = new Error("bad input");
+  await expect(
+    waitWithin(
+      "test wait",
+      () => {
+        throw broke;
+      },
+      60_000,
+      systemTimekeeper,
+      OPEN,
+    ),
+  ).rejects.toBe(broke);
 });
 
 test("its owner closing ends the wait there, with its timer cleared and its work's signal aborted", async () => {

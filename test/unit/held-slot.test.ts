@@ -74,10 +74,13 @@ test("an answer that carried an older occurrence marks nothing", () => {
   expect(slot.answer(first)).toBe(false);
 });
 
-test("a disposed slot arms nothing", () => {
+test("a disposed slot arms nothing, and holds nothing after", () => {
   const { clock, slot, event } = rig();
   slot.hold(event("it broke"));
   slot.dispose();
+  expect(clock.pending()).toBe(0);
+  slot.hold(event("past the close"));
+  expect(slot.event()).toBeNull();
   expect(clock.pending()).toBe(0);
 });
 

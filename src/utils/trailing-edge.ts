@@ -38,22 +38,10 @@ export type Trigger =
   | { readonly kind: "started"; readonly done: Promise<void> }
   | { readonly kind: "queued" };
 
-// [LAW:one-source-of-truth] An ask's outcome: idle, it starts a loop as a
-// trigger does; running, it shares the loop in flight, whose end is its
-// starter's to hear, so it hands back nothing to report twice.
-export type Ask =
-  | { readonly kind: "started"; readonly done: Promise<void> }
-  | { readonly kind: "shared" };
-
-// A key's loop as it runs: its completion, and the record an orphaned loop
-// (one a `clear` let go) compares itself against, so it touches only its own.
-interface Running {
-  done: Promise<void>;
-}
-
 export class TrailingEdge {
-  // The keys whose loop is currently executing, each with its completion.
-  private readonly running = new Map<string, Running>();
+  // The keys whose loop is currently executing, each with the token its loop
+  // compares itself against, so a loop a `clear` let go touches only its own.
+  private readonly running = new Map<string, symbol>();
   // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
   // count: ten triggers during one pass mean the same thing as one — the work
   // must be done once more with current inputs.
@@ -72,24 +60,25 @@ export class TrailingEdge {
   // and carries no news that the answer changed: the loop in flight already
   // answers it, so it shares that loop rather than queueing a
   // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
-  // does mid-read). Idle, it starts a loop exactly as `run` does.
-  share(key: string, work: () => Promise<void>): Ask {
-    if (this.running.has(key)) return { kind: "shared" };
+  // does mid-read). Idle, it starts a loop exactly as `run` does and hands
+  // back its completion; running, the loop's end is its starter's to hear, so
+  // it hands back nothing to report twice.
+  share(key: string, work: () => Promise<void>): Promise<void> | undefined {
+    if (this.running.has(key)) return undefined;
     this.again.add(key);
-    return { kind: "started", done: this.start(key, work) };
+    return this.start(key, work);
   }
 
   private start(key: string, work: () => Promise<void>): Promise<void> {
-    const running: Running = { done: Promise.resolve() };
+    const running = Symbol(key);
     this.running.set(key, running);
-    running.done = this.loop(key, work, running);
-    return running.done;
+    return this.loop(key, work, running);
   }
 
   private async loop(
     key: string,
     work: () => Promise<void>,
-    running: Running,
+    running: symbol,
   ): Promise<void> {
     const own = (): boolean => this.running.get(key) === running;
     // [LAW:no-silent-failure] A pass that throws does not cost the pass queued

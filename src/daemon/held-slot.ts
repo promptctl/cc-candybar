@@ -14,13 +14,17 @@ interface Held {
   cancelEnd: () => void;
 }
 
+// [LAW:types-are-the-program] A slot is empty, holding, or disposed: a
+// disposed slot's owner has closed, so it holds nothing and arms no end.
+type SlotState = Held | "empty" | "disposed";
+
 // [LAW:single-enforcer] The one owner of a daemon event between its happening
 // and its leaving: what it holds now, the answer that marks it, and the rule
 // that lets it go once `eventHoldAt` is `over` for a request. That is checked
 // when its hold ends (one task per occurrence, so an earlier occurrence's end
 // never retires a later one) and when an answer lands past the hold.
 export class HeldSlot {
-  private held: Held | null = null;
+  private state: SlotState = "empty";
 
   constructor(
     private readonly clock: Pick<Timekeeper, "now" | "after">,
@@ -31,28 +35,33 @@ export class HeldSlot {
   ) {}
 
   event(): HeldEvent | null {
-    return this.held?.event ?? null;
+    return typeof this.state === "string" ? null : this.state.event;
   }
 
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a disposed slot takes none and arms no end on a closed daemon.
   hold(event: HeldEvent): void {
-    this.held?.cancelEnd();
+    if (this.state === "disposed") return;
+    if (this.state !== "empty") this.state.cancelEnd();
     const held: Held = { event, cancelEnd: () => {} };
-    this.held = held;
+    this.state = held;
     this.armEnd(held);
   }
 
   // Whether `shown` marked the held event, which leaves too if it is past
   // its hold.
   answer(shown: HeldEvent): boolean {
-    const { held } = this;
-    if (held === null || !answeredBy(held.event, shown)) return false;
+    const held = this.state;
+    if (typeof held === "string" || !answeredBy(held.event, shown))
+      return false;
     held.event = { ...held.event, answered: true };
     if (this.holdNow(held.event) === "over") this.leave(held);
     return true;
   }
 
   dispose(): void {
-    this.held?.cancelEnd();
+    if (typeof this.state !== "string") this.state.cancelEnd();
+    this.state = "disposed";
   }
 
   // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
@@ -89,7 +98,7 @@ export class HeldSlot {
 
   private leave(held: Held): void {
     held.cancelEnd();
-    this.held = null;
+    this.state = "empty";
     this.left();
   }
 }

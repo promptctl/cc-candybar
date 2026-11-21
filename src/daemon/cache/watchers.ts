@@ -1,5 +1,4 @@
 import { compareStructural } from "mobx";
-import { runEach } from "../../utils/run-each.js";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
@@ -243,14 +242,14 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
-  private readonly clock: Pick<Timekeeper, "after" | "every">;
+  private readonly clock: Pick<Timekeeper, "after" | "every" | "detach">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
     // sweep run on.
-    clock: Pick<Timekeeper, "after" | "every">;
+    clock: Pick<Timekeeper, "after" | "every" | "detach">;
     counters?: WatcherCounters;
     // [LAW:single-enforcer] One injection point per consumer. The daemon
     // passes its log so watcher-failure events land in daemon.log; non-
@@ -686,29 +685,24 @@ export class WatcherRegistry {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
   }
 
-  // [LAW:no-ambient-temporal-coupling] A window's steps, each made as it is
-  // reached, so a slot an earlier holder closed or a holder it released
-  // hears nothing: a slot is judged when its turn comes, and its holders are
-  // walked as they stand. A holder's throw names the watch it held.
-  private *delivery(
+  // [LAW:no-silent-failure] Every holder hears the window, whatever one before
+  // it threw: each hearing is a clock task named for its watch, so what it
+  // throws reaches the bar as that watch's, in its own words.
+  // [LAW:no-ambient-temporal-coupling] A slot an earlier holder closed, or a
+  // holder it released, hears nothing: each is judged as its turn comes.
+  private deliver(
     changes: ReadonlyMap<WatcherSlot, Gathering>,
     completed: (() => void) | undefined,
-  ): Generator<() => void> {
+  ): void {
     for (const [changed, gathered] of changes) {
       if (this.slots.get(changed.key) !== changed) continue;
       const heard = heardOf(gathered);
       for (const holder of changed.holders)
-        yield () => {
-          try {
-            holder.onInvalidate(heard);
-          } catch (thrown) {
-            throw new Error(`watch ${changed.key} holder threw`, {
-              cause: thrown,
-            });
-          }
-        };
+        this.clock.detach(`watch ${changed.key} holder`, () =>
+          holder.onInvalidate(heard),
+        );
     }
-    if (completed !== undefined) yield completed;
+    completed?.();
   }
 
   private fire(slot: WatcherSlot, invalidation: Gathering): void {
@@ -722,9 +716,7 @@ export class WatcherRegistry {
           DEBOUNCE_MS,
           () => {
             window.pending = null;
-            // [LAW:no-silent-failure] Every holder hears the window, whatever
-            // one before it threw; what they threw reaches the clock.
-            runEach(this.delivery(changes, window.completed));
+            this.deliver(changes, window.completed);
           },
           { unref: true },
         ),

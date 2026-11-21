@@ -121,9 +121,10 @@ export class DeclaredBarPanes {
     held.application = { kind: "running" };
     // [LAW:single-enforcer] An effect must settle before this pane's next
     // one begins. A change of demand while it ran is applied after settlement.
-    // [LAW:no-silent-failure] Its settling is a clock task, so a throw past
-    // its own failure arm reaches every bar.
-    this.clock.detach(event, () =>
+    // [LAW:no-silent-failure] Its settling is a clock task named for the
+    // pane, so a throw past its own failure arm reaches every bar as that
+    // pane's one error, whichever way it was set.
+    this.clock.detach(`bar pane ${pane.pane} apply`, () =>
       this.setPane(pane, on).then(
         (said) => {
           held.application = { kind: "applied", on };

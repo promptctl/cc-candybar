@@ -64,6 +64,9 @@ export class TurnTime {
 
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
+  // [LAW:nothing-unseen] exception: the name is not kept. A deferral is the
+  // turn's own work, run inside the due turn, so what it throws is the turn's
+  // failure, named by the turn, and is never a clock task's.
   after(_task: string, ms: number, run: () => void): () => void {
     const deferral = { until: (this.tick + ms / 1000) as Tick, run };
     this.held.add(deferral);

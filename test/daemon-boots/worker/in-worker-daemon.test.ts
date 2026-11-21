@@ -14,7 +14,7 @@ import { PassThrough } from "node:stream";
 
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
-import { systemDaemonClock } from "../../helpers/daemon-clock";
+import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
@@ -152,7 +152,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-delivered";
     let now = Date.now();
     daemon = startDaemon(env, {
-      clock: { ...systemDaemonClock(), now: () => now },
+      clock: { ...daemonClock(), now: () => now },
     });
     await render(daemon, sid, projectDir);
     await refusedClick(
@@ -183,7 +183,7 @@ describe("a daemon in this worker", () => {
     const pipe = Object.assign(new PassThrough(), { unref() {} });
     let now = Date.now();
     const running = startDaemon(env, {
-      clock: { ...systemDaemonClock(), now: () => now },
+      clock: { ...daemonClock(), now: () => now },
       launcher: (owner) =>
         createLauncher(owner, systemTimekeeper, {
           ...spawner,

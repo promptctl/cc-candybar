@@ -114,10 +114,11 @@ const coldFold = ([
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, turns);
+      const world = processWorld();
       const ms = await repeat(plan.samples, async () => {
         const store = new SessionUsageStore({
-          host: processWorld().host,
-          clock: processWorld().clock,
+          host: world.host,
+          clock: world.clock,
           sweepIntervalMs: 0,
         });
         await folded(store, transcript, turns);
@@ -149,9 +150,10 @@ const warmFold = (
     try {
       const transcript = path.join(root, "t.jsonl");
       writeTranscript(transcript, SESSION, root, WARM_TURNS);
+      const world = processWorld();
       const store = new SessionUsageStore({
-        host: processWorld().host,
-        clock: processWorld().clock,
+        host: world.host,
+        clock: world.clock,
         sweepIntervalMs: 0,
       });
       let turns = WARM_TURNS;

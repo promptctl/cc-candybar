@@ -106,6 +106,12 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   ) => void;
 }
 
+// An origin a batch could not observe, and what observing it threw.
+interface Failed {
+  readonly key: string;
+  readonly thrown: unknown;
+}
+
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
   // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
@@ -317,10 +323,7 @@ export class ConfigDiscovery {
         changed.some((file) => landingPaths.has(file)),
       )
       .map(([key]) => key);
-    return this.publish(
-      this.rediscovered(touched, "landed", "observed"),
-      writer,
-    );
+    return this.refreshed(touched, "landed", "observed", writer);
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
@@ -346,7 +349,27 @@ export class ConfigDiscovery {
     recover: "observed" | "moved",
   ): void {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys, why, recover), null);
+    this.refreshed(keys, why, recover, null);
+  }
+
+  // [LAW:no-silent-failure] Origins discovered again and what moved published;
+  // an origin that cannot be observed keeps its last snapshot for a retry,
+  // and what it threw is its own task's, reported once the batch has
+  // published what its siblings observed: a failure is a value until then,
+  // so no reporter can cut the batch short.
+  private refreshed(
+    keys: readonly string[],
+    why: string,
+    recover: "observed" | "moved",
+    writer: RendererName | null,
+  ): readonly RenderOrigin[] {
+    const { moved, failed } = this.rediscovered(keys, why, recover);
+    const answered = this.publish(moved, writer);
+    for (const { key, thrown } of failed)
+      this.deps.clock.detach(`config discovery ${key}`, () => {
+        throw thrown;
+      });
+    return answered;
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients
@@ -374,39 +397,43 @@ export class ConfigDiscovery {
     keys: readonly string[],
     why: string,
     recover: "observed" | "moved",
-  ): readonly Followed[] {
-    if (keys.length === 0) return [];
+  ): {
+    readonly moved: readonly Followed[];
+    readonly failed: readonly Failed[];
+  } {
+    if (keys.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved: Followed[] = [];
     const observed: ObservedConfig[] = [];
+    const failed: Failed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
-      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
-      // last snapshot for a retry, and its throw reaches the clock as its own
-      // task's. Its failure cannot suppress a sibling's already-observed
-      // change or reverse a successful write.
-      this.deps.clock.detach(`config discovery ${key}`, () => {
-        const found = this.discovered(was.origin, shared, was.watch);
-        const now = {
-          ...found,
-          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
-          renderers: was.renderers,
-          selected: was.selected,
-        };
-        this.followed.set(key, now);
-        observed.push(now);
-        if (now.digest !== was.digest) moved.push(now);
-      });
+      let found: ReturnType<ConfigDiscovery["discovered"]>;
+      try {
+        found = this.discovered(was.origin, shared, was.watch);
+      } catch (thrown) {
+        failed.push({ key, thrown });
+        continue;
+      }
+      const now = {
+        ...found,
+        snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
+        renderers: was.renderers,
+        selected: was.selected,
+      };
+      this.followed.set(key, now);
+      observed.push(now);
+      if (now.digest !== was.digest) moved.push(now);
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length}`,
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length} failed=${failed.length}`,
     );
     // A targeted watch or write can retry even if the snapshot is unchanged.
     // A broad catch-up already has its own storage recovery trigger.
     this.reloaded(recover === "observed" ? observed : moved);
-    return moved;
+    return { moved, failed };
   }
 
   private reloaded(observed: readonly ObservedConfig[]): void {

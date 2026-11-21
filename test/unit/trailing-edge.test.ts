@@ -9,11 +9,7 @@
 // sleep and no tick count: a mechanism whose whole purpose is to stop losing
 // races cannot be tested by winning one.
 
-import {
-  TrailingEdge,
-  type Ask,
-  type Trigger,
-} from "../../src/utils/trailing-edge";
+import { TrailingEdge, type Trigger } from "../../src/utils/trailing-edge";
 
 // A pass whose completion the test decides, and which records that it ran.
 function controllable() {
@@ -39,7 +35,7 @@ function controllable() {
   };
 }
 
-function started(trigger: Trigger | Ask): Promise<void> {
+function started(trigger: Trigger): Promise<void> {
   if (trigger.kind !== "started") throw new Error("expected a started trigger");
   return trigger.done;
 }
@@ -88,7 +84,7 @@ describe("TrailingEdge", () => {
     // An ask (a period's tick) carries no news that the answer changed: the
     // pass already out answers it.
     // Its end is the starter's to hear, so the share hands back nothing.
-    expect(edge.share("k", w.work)).toEqual({ kind: "shared" });
+    expect(edge.share("k", w.work)).toBeUndefined();
     expect(w.passes).toBe(1);
 
     await w.finish(0);
@@ -101,7 +97,8 @@ describe("TrailingEdge", () => {
     const edge = new TrailingEdge();
     const w = controllable();
 
-    const shared = started(edge.share("k", w.work));
+    const shared = edge.share("k", w.work);
+    expect(shared).toBeInstanceOf(Promise);
     expect(w.passes).toBe(1);
     expect(edge.run("k", w.work)).toEqual({ kind: "queued" });
 

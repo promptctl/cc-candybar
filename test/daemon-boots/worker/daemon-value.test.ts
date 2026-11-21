@@ -43,7 +43,7 @@ import {
 } from "../../../src/renderer-interface/interface";
 import type { LaunchResult } from "../../../src/proc/launcher";
 import { type Timekeeper } from "../../../src/time";
-import { systemDaemonClock } from "../../helpers/daemon-clock";
+import { daemonClock } from "../../../src/host";
 import { systemTimekeeper } from "../../helpers/system-clock";
 import { processProbe } from "../../helpers/host";
 import {
@@ -704,7 +704,7 @@ describe("the daemon is a value", () => {
       `{ segments: { at: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['at'] } }`,
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
-    const clock = { ...systemDaemonClock(), now: () => frozen.getTime() };
+    const clock = { ...daemonClock(), now: () => frozen.getTime() };
     const daemon = construct({ clock });
 
     const bar = await answer(

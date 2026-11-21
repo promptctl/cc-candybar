@@ -150,10 +150,12 @@ export function runDaemon(world: World<ReportingClock>): void {
 }
 
 // [LAW:no-silent-failure] What the clock's tasks threw before a daemon could
-// take it is said beside the refusal, since it may be the refusal's cause.
+// take it is said beside the refusal, since it may be the refusal's cause, and
+// what they throw on the way out is logged as it comes.
 function refuseBoot(err: unknown): void {
-  for (const { task, thrown } of daemonProcess().world.clock.throws.untaken())
-    serverLog("error", `${task} threw: ${inspect(thrown)}`);
+  daemonProcess().world.clock.throws.close(({ task, thrown }) =>
+    serverLog("error", `${task} threw: ${inspect(thrown)}`),
+  );
   serverLog("error", `refusing to boot: ${inspect(err)}`);
   shutdown(1);
 }

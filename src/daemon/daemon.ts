@@ -302,12 +302,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // daemon's tasks threw, each held until no bar can show it.
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  // Each task's slot, with the message it last held, so a recurrence that
-  // says nothing new moves nothing.
-  const taskThrown = new Map<
-    string,
-    { readonly slot: HeldSlot; message: string }
-  >();
+  // [LAW:one-source-of-truth] Each task's error: its slot, whose event is what
+  // every bar shows, and the throws counted since that event was held.
+  interface TaskError {
+    readonly slot: HeldSlot;
+    since: { readonly count: number; readonly latest: ReportedThrow } | null;
+  }
+  const taskErrors = new Map<string, TaskError>();
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
@@ -315,7 +316,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         launcher: launcher.standing(),
         rendererEnded: rendererEnded.event(),
         actFailed: actFailed.event(),
-        taskThrows: [...taskThrown].flatMap(([task, { slot }]) => {
+        taskThrows: [...taskErrors].flatMap(([task, { slot }]) => {
           const event = slot.event();
           return event === null ? [] : [{ task, event }];
         }),
@@ -369,7 +370,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         // A frame can carry a throw whose slot has since left: nothing
         // holds it to mark.
         case "task-threw":
-          if (taskThrown.get(shownEvent.task)?.slot.answer(shownEvent.event))
+          if (taskErrors.get(shownEvent.task)?.slot.answer(shownEvent.event))
             changed = true;
           break;
         default:
@@ -380,38 +381,72 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // publish new facts only when the first confirmation changes an owner.
     if (changed) restateFaults();
   };
-  // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
-  // those thrown before this daemon was built included. Every throw counts.
-  // One that says something new is logged in full and joins its task's error
-  // on every bar; one that repeats the message its task holds moves nothing,
-  // so a task failing on every tick redraws no bar. Past the close no bar
-  // can show it, so it is logged alone.
-  const takeThrow = ({ task, thrown, at }: ReportedThrow): void => {
-    stats.tasksThrew++;
-    const failure = failureOf(thrown);
-    const message = `${task} threw: ${failure.message}`;
-    const held = taskThrown.get(task);
-    if (held?.message === message) return;
-    log("error", `${task} threw: ${failure.detail}`);
-    if (cancelling()) return;
-    const slot =
-      held?.slot ??
-      new HeldSlot(clock, `task throw hold ${task}`, () => {
-        taskThrown.delete(task);
-        restateFaults();
-      });
-    taskThrown.set(task, { slot, message });
+  // What a task threw, and how many times more since its error was last
+  // shown: its words on every bar, and its detail in the log.
+  const threwText = ({ task }: ReportedThrow, more: number): string =>
+    `${task} threw${more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`}`;
+  const showThrow = (
+    slot: HeldSlot,
+    reported: ReportedThrow,
+    more: number,
+  ): void => {
+    const failure = failureOf(reported.thrown);
+    const threw = threwText(reported, more);
+    log("error", `${threw}: ${failure.detail}`);
     // A thrown message can carry a launched command's output, and nothing
     // here can tell which do, so each refuses a recording while it shows.
     slot.hold(
       environmentOutput(
-        joinedEvent(slot.event(), message, instantOf(new Date(at))),
+        joinedEvent(
+          null,
+          `${threw}: ${failure.message}`,
+          instantOf(new Date(reported.at)),
+        ),
         true,
       ),
     );
     restateFaults();
   };
-  clock.throws.attach(takeThrow);
+  // [LAW:no-silent-failure] What the clock's tasks threw, taken as it comes,
+  // those thrown before this daemon was built included. A task's first throw
+  // is logged in full and held on every bar. One while its error is held is
+  // counted, whatever it says, so a task failing on every tick moves no bar
+  // and writes no line. When the hold ends with throws counted, the latest
+  // is held and logged with their count, so a still-failing task shows and
+  // logs once a hold.
+  const taken = (reported: ReportedThrow): void => {
+    stats.tasksThrew++;
+    const known = taskErrors.get(reported.task);
+    if (known !== undefined) {
+      known.since = { count: (known.since?.count ?? 0) + 1, latest: reported };
+      return;
+    }
+    const slot = new HeldSlot(clock, `task throw hold ${reported.task}`, () => {
+      const { since } = error;
+      if (since === null) {
+        taskErrors.delete(reported.task);
+        restateFaults();
+        return;
+      }
+      error.since = null;
+      showThrow(slot, since.latest, since.count);
+    });
+    const error: TaskError = { slot, since: null };
+    taskErrors.set(reported.task, error);
+    showThrow(slot, reported, 0);
+  };
+  // [LAW:no-silent-failure] Taking a throw cannot throw back into the task
+  // that threw it: a failure here is logged beside the throw it was taking.
+  clock.throws.attach((reported) => {
+    try {
+      taken(reported);
+    } catch (failure) {
+      log(
+        "error",
+        `taking what ${reported.task} threw failed: ${failureOf(failure).detail}; it threw: ${failureOf(reported.thrown).detail}`,
+      );
+    }
+  });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -1144,15 +1179,24 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ),
       ["sessionBook close", () => sessionBook.close()],
       ["renderer recordings close", () => recordings?.close()],
-      // [LAW:no-ambient-temporal-coupling] A closed daemon ends no holds: a
-      // throw from here on is logged, and holds nothing.
+      // [LAW:no-ambient-temporal-coupling] A closed daemon holds no events: a
+      // throw counted and not yet shown is logged now, and one from here on
+      // is logged as it comes.
       [
         "held events close",
         () => {
+          const logged = (reported: ReportedThrow, more: number): void =>
+            log(
+              "error",
+              `${threwText(reported, more)}: ${failureOf(reported.thrown).detail}`,
+            );
+          clock.throws.close((reported) => logged(reported, 0));
+          for (const { since } of taskErrors.values())
+            if (since !== null) logged(since.latest, since.count);
           for (const slot of [
             rendererEnded,
             actFailed,
-            ...[...taskThrown.values()].map(({ slot }) => slot),
+            ...[...taskErrors.values()].map(({ slot }) => slot),
           ])
             slot.dispose();
         },

@@ -37,10 +37,13 @@ export function processWorld(): World {
   return worldOver(clockOver(systemTimers, rethrowing));
 }
 
-// The daemon's world: its clock carries the inbox its tasks' throws land in,
-// so what any of them throws, before the daemon exists too, shows on every bar.
+// [LAW:single-enforcer] The daemon's clock: it carries the inbox its tasks'
+// throws land in, so what any of them throws, before the daemon exists too,
+// shows on every bar.
+export const daemonClock = (): ReportingClock => reportingClock(systemTimers);
+
 export function daemonWorld(): World<ReportingClock> {
-  return worldOver(reportingClock(systemTimers));
+  return worldOver(daemonClock());
 }
 
 // [LAW:single-enforcer] The one place src reads the process's environment, home

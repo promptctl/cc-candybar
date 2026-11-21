@@ -37,8 +37,7 @@ import {
   type Request,
 } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "./system-clock";
-import { systemTimers } from "../../src/time";
-import { reportingClock } from "../../src/daemon/task-throws";
+import { daemonClock } from "../../src/host";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
@@ -101,10 +100,10 @@ export function prepareDaemon(
   // The env a case placed names where the daemon lives, read once here.
   const paths = overrides.paths ?? daemonPaths(HOST);
   fs.mkdirSync(paths.state, { recursive: true });
-  // [LAW:single-enforcer] The daemon's clock as the process builds it: what
+  // [LAW:single-enforcer] The daemon's clock from the process's builder: what
   // its tasks throw goes to its inbox, so a case sees a throw where a user
   // does, on the bar.
-  const clock = overrides.clock ?? reportingClock(systemTimers);
+  const clock = overrides.clock ?? daemonClock();
   const daemonLog = overrides.daemonLog ?? new DaemonLog(paths.log, clock);
   try {
     const daemon = createDaemon({
