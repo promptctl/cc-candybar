@@ -73136,8 +73136,8 @@ var TurnTime = class {
   // lets go of it.
   // [LAW:nothing-unseen] exception: the name is not kept. A deferral runs
   // inside the renderer's due turn, so what it throws is that turn's failure,
-  // in its own words: the daemon logs it with the turn and holds it on every
-  // bar as the renderer's due work.
+  // in its own words: the daemon logs it with the turn, and the wake says a
+  // run of failed due turns on every bar.
   after(_task, ms, run2) {
     const deferral = { until: this.tick + ms / 1e3, run: run2 };
     this.held.add(deferral);
@@ -83323,12 +83323,13 @@ var GitDataProvider = class {
       reading: unread(),
       inFlight: null
     };
+    const refreshTask = `git refresh ${root}`;
     const state = {
       root,
-      refresh: new TrailingEdge(this.clock, () => `git refresh ${root}`),
+      refresh: new TrailingEdge(this.clock, () => refreshTask),
       watch: this.followWatch(root, null).watch,
       period: new Period(
-        `git refresh ${root}`,
+        refreshTask,
         () => state.refresh.share(PASS, () => this.refreshPass(state)),
         this.clock
       ),
@@ -90732,11 +90733,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             ["error", delivered.failure.detail]
           ])
         );
-        if (event?.kind === "due")
-          clock.failed(
-            `renderer ${name} due work`,
-            new CrossedFailure(delivered.failure)
-          );
     }
   };
   const throughSlot = (make, at, click2 = null) => {

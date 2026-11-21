@@ -4,15 +4,22 @@
     {
       "version": "pr-925",
       "ref": "refs/pull/925/merge",
-      "sha": "369dc77981a6372665fd956bae10bd00b1206b4d",
-      "timestamp": "2026-11-21T02:11:46.290Z",
+      "sha": "06af0036646db3110f3d85c3c248d4119307e120",
+      "timestamp": "2026-11-21T02:25:52.701Z",
       "commits": [
         {
-          "sha": "369dc77981a6372665fd956bae10bd00b1206b4d",
+          "sha": "06af0036646db3110f3d85c3c248d4119307e120",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T02:10:37Z",
-          "message": "Merge 48b1530c648a6186fe86c26727c2ca615fbcb308 into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+          "timestamp": "2026-11-21T02:24:42Z",
+          "message": "Merge 49c2b595e9d320ccf230180f6fbaa379fa79ceee into 684638b5c514ddd2ee5da5cf1540983a098443ce\n"
+        },
+        {
+          "sha": "49c2b595e9d320ccf230180f6fbaa379fa79ceee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T19:24:30-07:00",
+          "message": "fix(daemon): a failed due turn is said once, and every exit logs early throws\n\nThe wake already says a run of failed due turns on every bar, so the host no\nlonger hands the same failure to the clock as well. Shutdown is the one exit,\nso it hands the clock's queued throws to the log on every early exit, not only\na refused boot. A repo's refresh task is named once.\n"
         },
         {
           "sha": "48b1530c648a6186fe86c26727c2ca615fbcb308",
