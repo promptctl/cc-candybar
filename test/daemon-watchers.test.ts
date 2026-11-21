@@ -568,6 +568,20 @@ describe("WatcherRegistry", () => {
         { dirs: [{ path: root, recursive: true as const }], polled: [] },
         (inv) => seen.push(inv),
       );
+    // [LAW:no-ambient-temporal-coupling] FSEvents goes live after fs.watch
+    // returns and never reports a change made before then, so a watch whose
+    // event a test waits on is first proven live by a probe write it hears.
+    const live = (seen: Invalidation[], dir: string) => {
+      const probe = path.join(dir, "probe");
+      return untilHeard(
+        () => fs.writeFileSync(probe, "probe"),
+        () =>
+          seen.some(
+            (inv) => inv.kind === "changed" && inv.paths.includes(probe),
+          ),
+        `the watch on ${dir} live`,
+      );
+    };
 
     (process.getuid?.() === 0 ? test.skip : test)(
       "a directory below the root it cannot open is refused on its own, and its siblings are heard",
@@ -600,20 +614,12 @@ describe("WatcherRegistry", () => {
       const seen: Invalidation[] = [];
       acquired(seen);
       expect(reg.dirWatches()).toBe(1);
+      await live(seen, root);
       const feature = path.join(root, "feature");
       fs.mkdirSync(feature);
       await until(() => reg.dirWatches() === 2, "the new directory's watch");
       seen.length = 0;
-      fs.writeFileSync(path.join(feature, "x"), "x");
-      await until(
-        () =>
-          seen.some(
-            (inv) =>
-              inv.kind === "changed" &&
-              inv.paths.some((p) => p.startsWith(feature)),
-          ),
-        "the change inside it",
-      );
+      await live(seen, feature);
       fs.rmSync(feature, { recursive: true });
       await until(() => reg.dirWatches() === 1, "its watch closing");
     });
@@ -678,6 +684,7 @@ describe("WatcherRegistry", () => {
       const seen: Invalidation[] = [];
       const handle = acquired(seen);
       expect(reg.dirWatches()).toBe(3);
+      await live(seen, root);
       fs.rmSync(feat, { recursive: true });
       fs.writeFileSync(feat, "ref");
       await until(() => reg.dirWatches() === 1, "the pruned watches closing");
