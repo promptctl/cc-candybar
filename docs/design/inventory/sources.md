@@ -175,7 +175,7 @@ Today the path is read → parse → publish, in `declareSource`.
 | History depth | `SettingsHistory` | Facts, **wire** |
 | Navigation depth | Steps plus the config's gate | Steps **wire**, computed in Draw |
 | Signer | `linkSignerFromKeyFile` | Draw reads the key, already a multi-process pattern (daemon, `check`, demo) |
-| `home`, `resumeCommand`, `term.cols` | `projectPayload` | Facts (`home`); pure for the rest, from payload |
+| `home`, `resumeCommand`, `term.cols` | `composePayload` | Facts (`home`); pure for the rest, from payload |
 | Lanes | Owners | Facts, **wire** |
 | Instant, `DrawSelection`, `SessionEffects`, `menuIdle`, `renderWarnings`, cell sink, `copies` | `server.ts` | Draw |
 | Template functions | Compile | Draw; the only secret-bearing one is `actionRuntime.signer` |
@@ -244,7 +244,7 @@ Also, a config's first request compiles in its arrival turn, which the memory sa
 ## 8. Removing closure gating
 
 **Dependents beyond lanes:**
-- `wantsOf` gates `refreshPayload`, `declareLanes`, `readLanes`, and `projectPayload`'s `want.burn`, `want.block`, `want.autocompact`. `weekly` has no gate; `block` does.
+- `wantsOf` gates `refreshPayload`, `declareLanes`, `readLanes`, and `composePayload`'s `want.burn`, `want.block`, `want.autocompact`. `weekly` has no gate; `block` does.
 - `gitOptionsFromClosure` sets the option set, which keys `holdKey` and `optionsKey`, the spawn set, and the PR hold via `showPullRequest`.
 - `server.ts` passes it to `prFactOf` for the event's `pr=` field.
 - `settlePayload` wait composition follows from which lanes were declared.

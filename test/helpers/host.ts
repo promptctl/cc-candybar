@@ -6,15 +6,11 @@ import type { LaunchOwner, TestableLauncher } from "../../src/proc/launch";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "./system-clock";
 
-// [LAW:types-are-the-program] A test file's environment
-// (test/helpers/quarantine-environment.cjs) hands its runtime this hook and
-// runs what it is given after the file's last hook. The runner's global
-// teardown has none: its launchers live as long as its process, as a process
-// main's do, and each lifeline ends when that process does.
+// A test file's environment (test/helpers/quarantine-environment.cjs) hands
+// its runtime this hook and runs what it is given after the file's last hook.
+// Only a test file's runtime loads this module.
 declare global {
-  var releaseTestFixture:
-    | ((release: () => Promise<void>) => void)
-    | undefined;
+  function releaseTestFixture(release: () => Promise<void>): void;
 }
 
 // [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
@@ -36,35 +32,33 @@ export function hostOf(
   return { env, home: rest.home ?? HOST.home, tmp: rest.tmp ?? HOST.tmp };
 }
 
-const fixtureLaunchers: Array<{
-  owner: AbortController;
-  launcher: TestableLauncher;
-}> = [];
+// [LAW:no-ambient-temporal-coupling] This module's runtime is one test
+// file's, and the file's end is its fixture launchers' one owner. Async
+// launches keep a lifeline open until their owner ends, even after every child
+// has returned, and a worker runs many files.
+const fileEnd = new AbortController();
+const fixtureLaunchers: TestableLauncher[] = [];
 
 // [LAW:single-enforcer] The one way a test gets a real launcher it does not
-// end itself: it belongs to this module's runtime, which ends with its file.
-// Async launches keep a lifeline open until their owner ends, even after every
-// child has returned, and a worker runs many files.
+// end itself.
 export function fixtureLauncher(scope: Omit<LaunchOwner, "signal">) {
-  const owner = new AbortController();
   const launcher = systemOneShotLauncher(
-    { ...scope, signal: owner.signal },
+    { ...scope, signal: fileEnd.signal },
     systemTimekeeper,
   );
-  fixtureLaunchers.push({ owner, launcher });
+  fixtureLaunchers.push(launcher);
   return launcher;
 }
 
-export async function releaseFixtureLaunchers(): Promise<void> {
-  const releases = fixtureLaunchers.splice(0);
-  for (const { owner } of releases) owner.abort();
-  const settled = await Promise.all(releases.map(({ launcher }) => launcher.settled()));
+releaseTestFixture(async () => {
+  fileEnd.abort();
+  const settled = await Promise.all(
+    fixtureLaunchers.map((launcher) => launcher.settled()),
+  );
   const unreaped = settled.flatMap((result) => result.unreaped);
   if (unreaped.length > 0)
     throw new Error(`Fixture launches still running: ${unreaped.join(", ")}`);
-}
-
-globalThis.releaseTestFixture?.(releaseFixtureLaunchers);
+});
 
 // A process main's world over `host`: its launcher's children inherit `host.env`.
 export function worldOf(host: Host): World {

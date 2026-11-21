@@ -72,7 +72,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   },
   "session.id": { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
-  // root by projectPayload). Read by the quick-action tray's
+  // root by composePayload). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.
   transcript_path: {
     kind: "input",

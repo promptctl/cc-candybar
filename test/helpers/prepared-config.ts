@@ -31,6 +31,7 @@ import type { World } from "../../src/host";
 import type { Frame } from "../../src/render/frame";
 import { renderOptionsOf } from "../../src/renderer/render-payload";
 import { SessionState } from "../../src/renderer/session-state";
+import { configFiles, userAuthoredRoots } from "../../src/renderer/render-cache";
 import { timeoutSignal } from "../../src/time";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
@@ -48,6 +49,8 @@ export interface PreparedConfig {
   readonly droppedPlugins: readonly DroppedPlugin[];
   readonly droppedPlacements: readonly string[];
   readonly config: ValidatedConfig;
+  // The preset roots the user's own file authors, read as the daemon reads them.
+  readonly authoredRoots: ReadonlySet<string>;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
@@ -141,6 +144,10 @@ export function prepareSnapshot(
         ...loaded.layers.flatMap((l) => l.plugins.dropped),
       ],
       config,
+      authoredRoots: userAuthoredRoots(
+        loaded.layers,
+        configFiles(snapshot.chain).user,
+      ),
       compiled,
       store,
       registry,

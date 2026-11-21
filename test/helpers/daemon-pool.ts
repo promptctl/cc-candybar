@@ -26,7 +26,6 @@
 // over a shape it wasn't designed for" the carrying-cost law warns against.
 
 import fs from "node:fs";
-import { processLauncher } from "./host";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -35,8 +34,8 @@ import {
   readOwnStartTime,
   sameLiveProcess,
   type ProcessIdentity,
+  type ProcessProbe,
 } from "../../src/daemon/process-fingerprint";
-import { processProbe } from "./host";
 
 type SlotRecord = ProcessIdentity;
 
@@ -102,11 +101,16 @@ function readSlot(p: string): SlotRecord | null {
   }
 }
 
-function isSlotLive(record: SlotRecord): Promise<boolean> {
-  return sameLiveProcess(record.pid, record.startTime, processProbe);
-}
-
-export function createDaemonPool(dir: string, size: number): DaemonPool {
+// [LAW:effects-at-boundaries] The pool reads the process table through the
+// probe its owner hands it: a test file's worker, or the runner's own process
+// at its global teardown.
+export function createDaemonPool(
+  dir: string,
+  size: number,
+  probe: ProcessProbe,
+): DaemonPool {
+  const isSlotLive = (record: SlotRecord): Promise<boolean> =>
+    sameLiveProcess(record.pid, record.startTime, probe);
   const slotPath = (i: number): string => path.join(dir, `slot-${i}.json`);
   // Once per pool, not once per tryClaim: acquire's retry loop can call
   // tryClaim up to `size` times per poll tick over a ~20s budget — hundreds
@@ -157,7 +161,7 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     const timeoutMs = opts.timeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
     const retryIntervalMs = opts.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS;
     const myPid = process.pid;
-    const myStartTime = await readOwnStartTime(myPid, processProbe.startTime);
+    const myStartTime = await readOwnStartTime(myPid, probe.startTime);
     const deadline = Date.now() + timeoutMs;
     // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
     // silently — a full pool means the caller MUST fail loudly so the
@@ -233,7 +237,3 @@ export const DEFAULT_POOL_DIR = path.join(
 );
 export const DEFAULT_POOL_SIZE = 4;
 
-export const daemonPool: DaemonPool = createDaemonPool(
-  DEFAULT_POOL_DIR,
-  DEFAULT_POOL_SIZE,
-);

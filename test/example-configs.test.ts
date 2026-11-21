@@ -53,7 +53,7 @@ describe("shipped example configs (examples/*.json5)", () => {
     const at = instantOf(new Date(WORLD.clock.now()));
     for (const preset of presetNames(prepared.config.presets)) {
       const effective = resolveEffectiveGlobals(
-        prepared.config, (key) => key === "preset" ? preset : null, () => false,
+        prepared.config, (key) => key === "preset" ? preset : null, (root) => prepared.authoredRoots.has(root),
       );
       const { rendered, failures, pending } = await renderEffective(prepared, effective, 200, at);
       expect({ preset, failures, pending }).toEqual({ preset, failures: [], pending: [] });
@@ -81,7 +81,7 @@ describe("shipped example configs (examples/*.json5)", () => {
       const { snapshot, warnings } = discoverFixture(WORLD, file, cwd);
       using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
       const draw = (preset: string | null) => renderEffective(prepared, resolveEffectiveGlobals(
-        prepared.config, (key) => key === "preset" ? preset : null, () => false,
+        prepared.config, (key) => key === "preset" ? preset : null, (root) => prepared.authoredRoots.has(root),
       ), 200, instantOf(new Date(WORLD.clock.now())));
       expect((await draw(null)).failures).toEqual([]);
       expect((await draw("b")).failures).toEqual([expect.stringContaining("mode")]);

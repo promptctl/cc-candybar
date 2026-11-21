@@ -4,8 +4,8 @@ import path from "node:path";
 import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { daemonPool } from "../../helpers/daemon-pool";
 import {
+  daemonPool,
   HAND_RUN_SOURCE,
   spawnTestDaemon,
 } from "../../helpers/spawn-test-daemon";

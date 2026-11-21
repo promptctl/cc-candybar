@@ -11,19 +11,20 @@ import {
 import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
 import { instantOf } from "../../src/utils/instant";
 
-// A session's children get this environment whole, so the shell fixtures
-// reach only the system tools, such as cat and wc, that Linux and macOS both
-// keep there. Its Claude directory is the empty one test/setup.ts made.
+// A session's children get this environment whole. Where a machine keeps its
+// tools is the machine's fact, so its PATH is the worker's; its Claude
+// directory is the empty one test/setup.ts made. Nothing else of the worker's
+// reaches a session.
 export const TEST_ENV: Environment = Object.freeze({
-  PATH: "/usr/bin:/bin",
-  CLAUDE_CONFIG_DIR: claudeConfigDir(),
+  PATH: workerVariable("PATH"),
+  CLAUDE_CONFIG_DIR: workerVariable("CLAUDE_CONFIG_DIR"),
 });
 
-function claudeConfigDir(): string {
-  const dir = process.env.CLAUDE_CONFIG_DIR;
-  if (dir === undefined)
-    throw new Error("test/setup.ts names no empty Claude directory");
-  return dir;
+function workerVariable(name: string): string {
+  const value = process.env[name];
+  if (value === undefined)
+    throw new Error(`the test worker has no ${name} for its sessions`);
+  return value;
 }
 
 export const TEST_ENVIRONMENT: SessionEnvironment = {

@@ -357,8 +357,8 @@ describe("a connection to a daemon built in this worker", () => {
       {
         ...daemon,
         handle: async (...args) => {
-          const reply = await daemon.handle(...args);
-          read.resolve(reply);
+          const reply = daemon.handle(...args);
+          reply.then(read.resolve, read.reject);
           await release.promise;
           return reply;
         },

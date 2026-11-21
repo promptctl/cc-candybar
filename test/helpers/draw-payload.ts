@@ -21,12 +21,14 @@ import {
   type HostReadings,
 } from "../../src/dsl/view-source";
 
-// The view drawing from `store` bound to a fixed `payload` and `selection`,
-// at the width it is drawn at, `term.cols`, and the depth `opts` names, so the
-// writer and every contrast floor read one depth. [LAW:one-source-of-truth]
-// The one composition of what a fixed view reads. [LAW:no-ambient-temporal-coupling]
-// A source keyed on an input starts its run inside this bind, so a caller that
-// waits on that run before drawing draws the payload its key read.
+// The view drawing from `store` bound to a fixed `payload` and `selection`.
+// [LAW:one-source-of-truth] A sample's `opts` are its source: the payload is
+// made to agree with them, at the width it is drawn at, `term.cols`, and the
+// depth they name, so the writer and every contrast floor read one depth. A
+// sample is drawn at its payload's width, so it never takes the daemon's
+// resize path. [LAW:no-ambient-temporal-coupling] A source keyed on an input
+// starts its run inside this bind, so a caller that waits on that run before
+// drawing draws the payload its key read.
 export function bindSample(
   config: ValidatedConfig,
   compiled: CompiledConfig,

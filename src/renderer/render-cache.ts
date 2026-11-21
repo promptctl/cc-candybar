@@ -315,7 +315,7 @@ function configPaths(snapshot: ConfigSnapshot): readonly string[] {
 // [LAW:dataflow-not-control-flow] Both the loaded config and the fallback
 // derive their file facts from the chain used to build them. An absent layer
 // can be written, while an empty chain has neither a file nor a write role.
-function configFiles(chain: ConfigSnapshot["chain"]) {
+export function configFiles(chain: ConfigSnapshot["chain"]) {
   const textPath = (role: LayerRole) => {
     const layer = layerForRole(chain, role);
     return layer?.content.kind === "text" ? layer.path : null;
@@ -539,6 +539,19 @@ function authoredRoots(
   );
 }
 
+// [LAW:one-source-of-truth] The preset roots a load's user file authors,
+// over the chain it tops: the one reading for the daemon's state and for
+// anything that draws a load the way the daemon does.
+export function userAuthoredRoots(
+  layers: LoadedChain["layers"],
+  userPath: string | null,
+): ReadonlySet<string> {
+  return authoredRoots(
+    layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG,
+    layers.find(({ path }) => path === userPath)?.raw ?? {},
+  );
+}
+
 // [LAW:types-are-the-program] One attempt at loading a config's snapshot, and
 // what became of it: a state `built`, the served state `kept` because the
 // resolve named the inputs it was built from, or `failed`, with the error and
@@ -712,7 +725,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // renderer accepts only `ValidatedConfig`, so the compiler enforces the
   // chain — there is no "skip validate" path that typechecks downstream.
   const { layers, config, installed, dropped } = loaded;
-  const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const userRaw = layers.find(({ path }) => path === files.user)?.raw ?? {};
   const projectRaw = layers.find(({ path }) => path === files.project)?.raw;
   const inserted = layers.flatMap((l) =>
@@ -795,7 +807,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       registry,
       compiled: registration.compiled,
       // What the menu's resets clear is the user layer's: they name no other.
-      authoredRoots: authoredRoots(merged, userRaw),
+      authoredRoots: userAuthoredRoots(layers, files.user),
       fileHeldSettings: fileHeldSettings(userRaw),
       configPath: files.user,
       writable: files.writable,

@@ -79,7 +79,7 @@ export async function renderConfig(
     const effective = resolveEffectiveGlobals(
       prepared.config,
       () => null,
-      () => false,
+      (preset) => prepared.authoredRoots.has(preset),
     );
     const { rendered, failures, pending } = await renderEffective(
       prepared,
