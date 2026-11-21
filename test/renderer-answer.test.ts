@@ -683,6 +683,40 @@ describe("a statusline request", () => {
     expect((await dueFrame(t.r)).bar.rows.length).toBeGreaterThan(0);
   });
 
+  test("a start whose retained build throws still records the latest offer and opens its session", async () => {
+    const home = unreadableHome();
+    const t = renderer(undefined, undefined, home.locations);
+    const context = checked();
+    const origin = context.requested;
+    t.rig.cache.configs.follow(origin);
+    const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+    if (config === null) throw new Error("the host did not hold the config");
+    const latest = { ...config, notices: ["found after the retained one"] };
+    home.unreadable = true;
+    threw(
+      await handIn(t.r, {
+        kind: "start",
+        viewers: {},
+        sessions: [
+          {
+            context,
+            worldState: t.rig.served.collector.requested(
+              context,
+              TEST_ENVIRONMENT,
+            ),
+          },
+        ],
+        configs: [{ origin, config: latest, retained: config }],
+      }),
+    );
+    expect(t.rig.cache.snapshotFor(origin)).toBe(latest);
+    expect(t.rig.served.worldStates.contextOf(SESSION)).not.toBeNull();
+
+    home.unreadable = false;
+    answered(await request(t));
+    expect(t.rig.cache.getOrCreate(origin).revision.snapshot).toBe(latest);
+  });
+
   test("successive ordinary draws retain the active subscription declaration", async () => {
     const t = renderer();
     const first = answered(await request(t));

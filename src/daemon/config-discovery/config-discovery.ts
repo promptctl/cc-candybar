@@ -47,8 +47,8 @@ import {
   type PathsWatch,
 } from "../foundations/watch-targets.js";
 
-// [LAW:one-source-of-truth] A revision as the renderer digests it, so the
-// host's "moved" and the renderer's "reload" are one test.
+// [LAW:one-source-of-truth] A revision as the renderer digests it: the host's
+// "moved" and the renderer's digest are one recipe.
 interface ObservedConfig extends ConfigRevision {
   readonly origin: RenderOrigin;
   readonly managedFolders: ReadonlySet<string>;

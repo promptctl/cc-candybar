@@ -57,6 +57,7 @@ import {
   type Registration,
 } from "../dsl/render.js";
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
+import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { deriveActionGates, type Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
@@ -438,16 +439,17 @@ export interface CacheEntry {
   readonly origin: RenderOrigin;
   // The file paths in the most recent attempt, including a failed load.
   readonly configLayers: readonly string[];
-  // [LAW:one-source-of-truth] The revision the last load read: an offer
-  // that digests alike reloads nothing. The bar's repository question and
+  // [LAW:one-source-of-truth] The revision the last load taken read: an
+  // offer that digests alike reloads nothing while no fault stands. The bar's repository question and
   // what the config's watch cannot hear are read off it.
   revision: ConfigRevision;
   selected: SelectedState;
   lastError: string | null;
   // [LAW:no-silent-failure] What the latest load threw before the entry took
   // it, or null once one is taken. The entry serves what it had, shows the
-  // throw to every frame and write, and loads again on its next use
-  // (`reconcile`).
+  // throw to the frames and controls of every session drawing it, and loads
+  // again on its next use (`reconcile`). A write that reads no config does
+  // not read the load either, so it still lands on the host's offer.
   fault: string | null;
   lastWarnings: readonly string[];
   readonly state: DslRenderState;
@@ -1241,10 +1243,12 @@ export class RenderCache<
   // [LAW:single-enforcer] The one test of whether an entry loads: the
   // revision offered to it (its session's draft, or else the host's
   // delivery) is not the one it holds a load of: it digests differently, or
-  // the entry's latest load threw. Every use of an entry offers it, so an
-  // entry a throwing load left behind catches up on the next event, with no
-  // resend from the host. A reload whose load inputs did not move keeps the
-  // state it serves (`loadOrigin`).
+  // the entry's latest load threw. Every event that draws or reads config
+  // through an entry (`getOrCreate`) offers it, so an entry a throwing load
+  // left behind catches up on the next such event, with no resend from the
+  // host. Frames and the lane declaration read what the entry holds and
+  // offer nothing. A reload whose load inputs did not move keeps the state
+  // it serves (`loadOrigin`).
   private reconcile(
     entry: CacheEntry,
     offered: ConfigRevision,
@@ -1261,15 +1265,13 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] The deliveries the renderer still names, by
-  // `originKey`: every other one goes, as the host lets its origin go.
-  // [LAW:single-enforcer] An entry offers itself its origin's delivery on
-  // every use, so the delivery of every origin an entry loads from stays.
+  // `originKey`: every other one goes, as the host lets its origin go. The
+  // renderer's declaration names every origin an entry loads from
+  // (`origins`), so an entry is never left without its delivery.
   prune(keep: ReadonlySet<string>): void {
-    const loading = new Set(this.origins().map(originKey));
     runInAction(() => {
       for (const key of [...this.configDeliveries.keys()])
-        if (!keep.has(key) && !loading.has(key))
-          this.configDeliveries.delete(key);
+        if (!keep.has(key)) this.configDeliveries.delete(key);
     });
   }
 
@@ -2049,9 +2051,17 @@ export class RenderCache<
     try {
       chosen = this.enter(entry.origin, revision, entry.selected);
     } catch (error) {
+      // [LAW:one-source-of-truth] The bar says what the turn's failure says.
+      const fault = rendererFailureOf(error).message;
       runInAction(() => {
-        entry.fault = thrown(error);
+        entry.fault = fault;
       });
+      // [LAW:nothing-unseen] Every attempt that throws is a line, so a fault
+      // that persists shows how often it was retried and when it cleared.
+      this.log(
+        "error",
+        `config load threw projectDir=${valueOf(entry.origin.projectDir)} cwd=${valueOf(entry.origin.cwd)} cause=${cause.kind} error=${JSON.stringify(fault)}`,
+      );
       throw error;
     }
     const { loaded, selected } = chosen;

@@ -305,18 +305,22 @@ export function mainRenderer(
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
-        // each whatever another's opening, or a feed, threw.
+        // each whatever another's opening, its offer, or a feed, threw.
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(({ context, worldState }) => () => {
-            offered(context.requested);
-            notify(
-              { kind: "context", context, worldState },
-              record,
-              effects,
-              frames,
-            );
-          }),
+          // A session's offer and its opening are steps of their own: an
+          // offer that throws still records the latest config, and the
+          // session's context still opens over it.
+          ...event.sessions.flatMap(({ context, worldState }) => [
+            () => offered(context.requested),
+            () =>
+              notify(
+                { kind: "context", context, worldState },
+                record,
+                effects,
+                frames,
+              ),
+          ]),
           // A live session gets its cache entry before idle entries warm,
           // so they cannot take the budget a pinned view needs.
           () =>
