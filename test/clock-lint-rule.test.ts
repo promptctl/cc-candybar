@@ -13,7 +13,18 @@ const ROOT = path.resolve(__dirname, "..");
 const SCRIPT = `
 import { ESLint } from "eslint";
 const [root, casesJson] = process.argv.slice(1);
-const eslint = new ESLint({ cwd: root });
+// The probes are files the project does not hold, which the typed rules
+// cannot read; those rules have their own fixture (promise-lint-rule.test.ts).
+const eslint = new ESLint({
+  cwd: root,
+  overrideConfig: {
+    languageOptions: { parserOptions: { projectService: false } },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-misused-promises": "off",
+    },
+  },
+});
 const out = {};
 for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
   const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });
@@ -106,6 +117,15 @@ for (const [place, file] of Object.entries(PATHS)) {
 for (const [form, { code }] of Object.entries(FORMS)) {
   CASES[`the clock / ${form}`] = { file: "src/time.ts", code };
 }
+// [LAW:single-enforcer] The machine's bare timers report nothing a task
+// throws: only the process world builds a clock over them.
+for (const [place, file] of Object.entries(PATHS)) {
+  const from = path.posix.relative(path.posix.dirname(file), "src/time.js");
+  CASES[`${place} / systemTimers`] = {
+    file,
+    code: `import { systemTimers } from "${from.startsWith(".") ? from : `./${from}`}";\nexport { systemTimers };\n`,
+  };
+}
 // A date given an argument is a value, not a reading.
 CASES["plain / new Date(ms)"] = {
   file: PATHS.plain,
@@ -139,5 +159,18 @@ describe("the clock rules", () => {
 
   test("a date built from a value passes", () => {
     expect(found["plain / new Date(ms)"]).toEqual([]);
+  });
+
+  test.each(Object.keys(PATHS).filter((place) => place !== "host"))(
+    "%s may not import the machine's timers",
+    (place) => {
+      expect(found[`${place} / systemTimers`]).toEqual([
+        "no-restricted-imports",
+      ]);
+    },
+  );
+
+  test("the process world builds its clock over the machine's timers", () => {
+    expect(found["host / systemTimers"]).toEqual([]);
   });
 });

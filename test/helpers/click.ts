@@ -20,6 +20,7 @@ import {
   type Consequence,
 } from "../../src/renderer/config-writes";
 import {
+  configEffectOutcome,
   performChanges,
   type ApproveRepo,
   type ConfigWriteFiles,
@@ -62,7 +63,7 @@ import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { instantOf } from "../../src/utils/instant";
 import { locations, stateDir } from "../../src/daemon/paths";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { NO_CONFIGS } from "./renderers";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
@@ -212,7 +213,7 @@ class LandingAtOnce extends ConfigWrites {
     super.seal(effects, session, consequence);
     const landing = effects.splice(from);
     if (landing.length === 0) return;
-    const outcome = performChanges(
+    const landed = performChanges(
       landing.filter((e): e is ConfigChange => e.kind === "change"),
       {
         stateDir: this.stateDir,
@@ -223,7 +224,8 @@ class LandingAtOnce extends ConfigWrites {
       },
       this.places,
     );
-    if (outcome.kind === "ok") this.landed();
+    if ("files" in landed) this.landed();
+    const outcome = configEffectOutcome(landed);
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
@@ -352,6 +354,7 @@ export function testActs(
     read: missing("claude input read"), type: missing("claude input type"),
   }, ...rest } = deps;
   return new Acts({
+    detach: systemTimekeeper.detach,
     programsFor: () => ({ launch, claudeInput }),
     run: missing("run"),
     barPane: {

@@ -45,7 +45,7 @@ import {
 } from "../src/config/loader/edit-mode";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-theme-expr");

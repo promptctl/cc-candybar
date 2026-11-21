@@ -25,7 +25,7 @@ import { DECOR_HUES } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { swatch, SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const OPTS = {
   endcaps: "plain" as const,

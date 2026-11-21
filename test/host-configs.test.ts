@@ -22,6 +22,10 @@ import {
   type RendererHost,
 } from "../src/daemon/renderer-host";
 import { ConfigDiscovery } from "../src/daemon/config-discovery/config-discovery";
+import {
+  writeConfigFile,
+  type WriteConfigFile,
+} from "../src/daemon/file-rewrites";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { locations } from "../src/daemon/paths";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -32,20 +36,16 @@ import type {
   EventInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
-import { systemTimekeeper, type Monotonic } from "../src/time";
+import { type Monotonic } from "../src/time";
+import { handClock } from "./helpers/hand-clock";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { readTextIfPresent } from "../src/utils/regular-text";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 import { originOf } from "./helpers/config-host";
 import { HOST } from "./helpers/host";
 
 const S = sessionIdOf("s");
-const CLOCK = {
-  now: () => 0,
-  monotonic: () => 0 as Monotonic,
-  after: (): (() => void) => {
-    throw new Error("this rig sets no timer");
-  },
-};
+const CLOCK = handClock({ now: () => 0, monotonic: () => 0 as Monotonic });
 const ORIGIN: RenderOrigin = {
   projectDir: "/p",
   cwd: "/p",
@@ -89,10 +89,11 @@ const output = (
 // event the renderer heard, in order, and `logged` every line.
 function hostOver(
   turn: (event: Event) => RendererOutput,
-  landed: () => readonly RenderOrigin[] = () => [],
+  landed: HostWorld["configs"]["landed"] = () => [],
   bound?: {
     readonly name: RendererName;
     readonly configs: HostWorld["configs"];
+    readonly writeConfigFile?: WriteConfigFile;
   },
 ) {
   const heard: string[] = [];
@@ -110,7 +111,7 @@ function hostOver(
       followed.some((o) => o.projectDir === origin.projectDir)
         ? SNAPSHOT
         : null,
-    landed: () => landed(),
+    landed,
     // Every origin's one layer is the test's file: a landing's origin is
     // one an earlier output named.
     path: (_origin, role) => (role === "user" ? file : null),
@@ -142,6 +143,7 @@ function hostOver(
       ...NO_ACTS,
       stateDir: path.join(dir, "state"),
       configs: bound?.configs ?? configs,
+      writeConfigFile: bound?.writeConfigFile,
       unheard: (text) => void logged.push(`unheard ${text}`),
     },
   );
@@ -186,7 +188,7 @@ test("the host takes a declaration once, drops its origins on replacement, and t
   ]);
 });
 
-function themeChange(origin = ORIGIN): Effect {
+function themeChange(origin = ORIGIN): Extract<Effect, { kind: "change" }> {
   const id = 1 as EffectId;
   return {
     kind: "change",
@@ -217,6 +219,100 @@ test("each origin a turn's landing moved gets its config turn before the landing
   expect(answered.settled).toEqual([{ kind: "ok" }]);
 });
 
+test.each(["unreadable", "restored", "unrestored"] as const)(
+  "only unrestored paths go to discovery before failed effects (%s)",
+  async (restore) => {
+    const destinations = {
+      user: file,
+      project: path.join(dir, "project.json5"),
+      local: path.join(dir, "local.json5"),
+    };
+    const prior = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(destinations.project, prior);
+    fs.writeFileSync(destinations.local, prior);
+    const roles = ["user", "project", "local"] as const;
+    const changes = roles.map((role, i) => {
+      const change = themeChange();
+      return {
+        ...change,
+        id: (i + 1) as EffectId,
+        target: { ...change.target, role },
+      };
+    });
+    const attempts: string[] = [];
+    const observed: Array<readonly string[]> = [];
+    const { host, heard } = hostOver(
+      (event) => output(event.kind === "due" ? changes : [], [ORIGIN]),
+      undefined,
+      {
+        name: MAIN_RENDERER,
+        configs: {
+          ...NO_ACTS.configs,
+          follow: () => {},
+          snapshotOf: () => SNAPSHOT,
+          path: (_origin, role) => destinations[role],
+          readText: (at) => {
+            if (restore === "unreadable" && at === destinations.local)
+              throw new Error("could not read local");
+            return readTextIfPresent(at);
+          },
+          landed: (paths) => {
+            observed.push(paths);
+            return [ORIGIN];
+          },
+        },
+        writeConfigFile: (at, text) => {
+          attempts.push(at);
+          if (at === destinations.local)
+            throw new Error("could not publish local");
+          if (
+            restore === "unrestored" &&
+            at === destinations.project &&
+            text === prior
+          )
+            throw new Error("could not put project bytes back");
+          writeConfigFile(at, text);
+        },
+      },
+    );
+
+    const answer = await host.answer(() => ({ kind: "event", event: due }));
+    expect(attempts).toEqual(
+      restore === "unreadable"
+        ? []
+        : [
+            file,
+            destinations.project,
+            destinations.local,
+            destinations.project,
+            file,
+          ],
+    );
+    expect(fs.readFileSync(file, "utf8")).toBe(prior);
+    expect(observed).toEqual(
+      restore === "unrestored" ? [[destinations.project]] : [],
+    );
+    expect(heard).toEqual([
+      "due",
+      "config",
+      ...(restore === "unrestored" ? ["config"] : []),
+      "effect-done failed",
+      "effect-done failed",
+      "effect-done failed",
+    ]);
+    expect(answer.settled).toEqual(
+      roles.map(() => ({
+        kind: "failed",
+        reason: expect.stringContaining(
+          restore === "unreadable"
+            ? "config read failed"
+            : "could not publish local",
+        ),
+      })),
+    );
+  },
+);
+
 test("failed rediscovery reports its own failure after the successful write", async () => {
   const change = themeChange();
   const { host, heard, logged } = hostOver(
@@ -245,6 +341,7 @@ test("a write through a config symlink reloads the remaining holder after the wr
     locations: locations(HOST),
     stateDir: path.join(dir, "state"),
     watchers: watches,
+    clock: systemTimekeeper,
     log: () => {},
     moved: (name, origins) => hosts.get(name)?.moved(origins),
   });

@@ -14,7 +14,7 @@ import { prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import { SessionState } from "../src/renderer/session-state";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { bareGates } from "./helpers/gates";
 import { loadChain } from "./helpers/discovered-load";
 import { contentOfText } from "../src/config/config-snapshot";

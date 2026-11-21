@@ -411,7 +411,7 @@ import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 import { selectionFor } from "./helpers/selection";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.

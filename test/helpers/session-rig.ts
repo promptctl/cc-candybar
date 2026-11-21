@@ -24,7 +24,7 @@ import {
 } from "../../src/renderer/session-source";
 import { SessionState } from "../../src/renderer/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../../src/renderer/settings-history";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { instantOf } from "../../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";

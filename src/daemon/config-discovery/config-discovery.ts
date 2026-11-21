@@ -33,11 +33,12 @@ import {
 } from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { resolvedTarget } from "../../utils/atomic-write.js";
+import { directoryEntries } from "../../utils/directory-entry.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
-import { failureOf } from "../foundations/verb-error.js";
+import type { Timekeeper } from "../../time.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -56,7 +57,7 @@ interface ObservedConfig {
 // where that can change.
 interface ObservedOrigin extends ObservedConfig {
   readonly watch: HeldWatch;
-  readonly filePaths: readonly string[];
+  readonly landingPaths: ReadonlySet<string>;
 }
 
 interface Followed extends ObservedOrigin {
@@ -69,6 +70,7 @@ interface Followed extends ObservedOrigin {
 interface DiscoveryBatch {
   readonly facts: SharedFacts;
   readonly observed: FileObservations;
+  readonly landingPath: (file: string) => string;
 }
 
 // The config facts available to one renderer and the demands it can replace.
@@ -92,6 +94,9 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly watchers: Pick<WatcherRegistry, "batch">;
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
+  // [LAW:effects-at-boundaries] Where an origin's observation runs, so what
+  // it throws is reported without costing its siblings theirs.
+  readonly clock: Pick<Timekeeper, "failed">;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
@@ -99,6 +104,12 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
     renderer: RendererName,
     origins: readonly RenderOrigin[],
   ) => void;
+}
+
+// An origin a batch could not observe, and what observing it threw.
+interface Failed {
+  readonly key: string;
+  readonly thrown: unknown;
 }
 
 export class ConfigDiscovery {
@@ -299,22 +310,20 @@ export class ConfigDiscovery {
       : "current";
   }
 
-  // Rediscover origins watching one of the files the turn actually wrote.
+  // Rediscover origins watching a file the turn wrote or could not restore.
   // The writer reloads in this slot; the other holders get their own turns.
   private landed(
     writer: RendererName,
     files: readonly string[],
   ): readonly RenderOrigin[] {
-    const changed = new Set(files);
+    const landingPath = directoryEntries();
+    const changed = files.flatMap((file) => [file, landingPath(file)]);
     const touched = [...this.followed]
-      .filter(([, { filePaths }]) =>
-        filePaths.some((file) => changed.has(file)),
+      .filter(([, { landingPaths }]) =>
+        changed.some((file) => landingPaths.has(file)),
       )
       .map(([key]) => key);
-    return this.publish(
-      this.rediscovered(touched, "landed", "observed"),
-      writer,
-    );
+    return this.refreshed(touched, "landed", "observed", writer);
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
@@ -340,7 +349,24 @@ export class ConfigDiscovery {
     recover: "observed" | "moved",
   ): void {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys, why, recover), null);
+    this.refreshed(keys, why, recover, null);
+  }
+
+  // [LAW:no-silent-failure] Origins discovered again and what moved published;
+  // an origin that cannot be observed keeps its last snapshot for a retry,
+  // and what it threw is its own task's, handed to the clock before the batch
+  // publishes: a failure is a value the batch carries, so neither a reporter
+  // nor a publish that throws can cut the batch short or lose it.
+  private refreshed(
+    keys: readonly string[],
+    why: string,
+    recover: "observed" | "moved",
+    writer: RendererName | null,
+  ): readonly RenderOrigin[] {
+    const { moved, failed } = this.rediscovered(keys, why, recover);
+    for (const { key, thrown } of failed)
+      this.deps.clock.failed(`config discovery ${key}`, thrown);
+    return this.publish(moved, writer);
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients
@@ -368,43 +394,43 @@ export class ConfigDiscovery {
     keys: readonly string[],
     why: string,
     recover: "observed" | "moved",
-  ): readonly Followed[] {
-    if (keys.length === 0) return [];
+  ): {
+    readonly moved: readonly Followed[];
+    readonly failed: readonly Failed[];
+  } {
+    if (keys.length === 0) return { moved: [], failed: [] };
     const shared = this.batch();
     const moved: Followed[] = [];
     const observed: ObservedConfig[] = [];
+    const failed: Failed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
-      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
-      // last snapshot for a retry. Its failure cannot suppress a sibling's
-      // already-observed change or reverse a successful write.
+      let found: ReturnType<ConfigDiscovery["discovered"]>;
       try {
-        const found = this.discovered(was.origin, shared, was.watch);
-        const now = {
-          ...found,
-          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
-          renderers: was.renderers,
-          selected: was.selected,
-        };
-        this.followed.set(key, now);
-        observed.push(now);
-        if (now.digest !== was.digest) moved.push(now);
+        found = this.discovered(was.origin, shared, was.watch);
       } catch (thrown) {
-        this.deps.log(
-          "error",
-          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
-        );
+        failed.push({ key, thrown });
+        continue;
       }
+      const now = {
+        ...found,
+        snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
+        renderers: was.renderers,
+        selected: was.selected,
+      };
+      this.followed.set(key, now);
+      observed.push(now);
+      if (now.digest !== was.digest) moved.push(now);
     }
     this.deps.log(
       "info",
-      `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length}`,
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length} failed=${failed.length}`,
     );
     // A targeted watch or write can retry even if the snapshot is unchanged.
     // A broad catch-up already has its own storage recovery trigger.
     this.reloaded(recover === "observed" ? observed : moved);
-    return moved;
+    return { moved, failed };
   }
 
   private reloaded(observed: readonly ObservedConfig[]): void {
@@ -437,7 +463,11 @@ export class ConfigDiscovery {
         return text;
       },
     });
-    return { facts, observed };
+    return {
+      facts,
+      observed,
+      landingPath: directoryEntries(facts.files.realpath),
+    };
   }
 
   // What discovery finds at `origin` now, with its watch following the
@@ -496,7 +526,12 @@ export class ConfigDiscovery {
     return {
       ...observed,
       watch,
-      filePaths: paths.targets.polled,
+      landingPaths: new Set(
+        paths.targets.polled.flatMap((file) => [
+          file,
+          shared.landingPath(file),
+        ]),
+      ),
     };
   }
 

@@ -19,7 +19,7 @@ import type { Instant } from "../utils/instant.js";
 import type { ClockFactory } from "../template-engine/clock.js";
 import {
   type ValidatedConfig,
-  type VariableDecl,
+  type ResolvedVariableDecl,
   type CacheDecl,
   type LayoutNode,
   type ParseDecl,
@@ -294,7 +294,7 @@ function toSourceParse(
 function declareOne(
   registry: SourceRegistry,
   name: string,
-  decl: VariableDecl,
+  decl: ResolvedVariableDecl,
   cwd: string,
   derivation: Derivation,
 ): void {
@@ -315,15 +315,10 @@ function declareOne(
       break;
 
     case "input":
-      // [LAW:types-are-the-program] The loader validated that `decl.type` is
-      // one of "string"|"number"|"boolean" and that `decl.default` (if
-      // present) matches that type. Absent type defaults to "string" — every
-      // existing declaration that omits the field reads a string at the
-      // resolved payload path.
       registry.declareInput(
         name,
         decl.path,
-        decl.type ?? "string",
+        decl.type,
         decl.default,
         derivation,
       );
@@ -352,7 +347,7 @@ function declareOne(
 
     case "template":
       registry.declareTemplate(name, decl.template, {
-        type: decl.type ?? "string",
+        type: decl.type,
         varDefault: decl.default,
         derivation,
       });

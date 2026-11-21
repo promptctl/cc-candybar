@@ -11,7 +11,7 @@ import {
 } from "../src/daemon/socket-ownership";
 import { type LeaseRead } from "../src/daemon/socket-lease";
 import { type ProcessIdentity } from "../src/daemon/process-fingerprint";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const BOUND: SocketIdentity = { dev: 1, ino: 100 };
 const ME: ProcessIdentity = { pid: 4242, startTime: "st" };

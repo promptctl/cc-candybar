@@ -67,7 +67,7 @@ import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { layerFlags } from "../src/config/layer-role";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";
@@ -558,7 +558,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
       chmodSync(dirname(durable.configPath), 0o755);
     }
     expect(lastClickError(r.sessionState, SID)?.text).toMatch(
-      /config write failed.*nothing was written/,
+      /^config write failed: (?:EACCES|EPERM)\b.* — no file changes kept$/,
     );
     expect(durable.history(SID).past).toHaveLength(depth);
     expect(durable.text()).toBe(before);

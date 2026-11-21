@@ -42,6 +42,7 @@ import {
 } from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
 import type { Monotonic } from "../../src/time";
+import { handClock } from "../helpers/hand-clock";
 import { ABSENT } from "../../src/utils/outcome";
 
 const SESSION = sessionIdOf("a-session");
@@ -84,14 +85,14 @@ const NO_SUBSCRIPTIONS: Subscriptions = {
 };
 // The request's deadline is a timer the case fires itself (`deadlines`).
 const deadlines = new Set<() => void>();
-const CLOCK = {
+const CLOCK = handClock({
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
-  after: (_ms: number, fire: () => void) => {
+  timer: (_ms, fire) => {
     deadlines.add(fire);
     return () => void deadlines.delete(fire);
   },
-};
+});
 const NOT_CLOSING = new AbortController().signal;
 
 const present = (id: number, request = REQUEST): Present => ({

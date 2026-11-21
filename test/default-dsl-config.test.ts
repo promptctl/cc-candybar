@@ -63,7 +63,7 @@ import { POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 // The powerline cap glyphs, which visible segment text is read without.

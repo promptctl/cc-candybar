@@ -65,9 +65,11 @@ import {
 } from "./foundations/verb-error.js";
 import {
   performChanges,
+  configEffectOutcome,
   type ApproveRepo,
   type ConfigLanding,
 } from "./effect-interpreter.js";
+import type { WriteConfigFile } from "./file-rewrites.js";
 import { outlives, type HostAct } from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
@@ -140,6 +142,7 @@ export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
+  readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
@@ -222,7 +225,7 @@ export function rendererHost(
   name: RendererName,
   // The clock every input's readings are made on, a hop is timed on, and the
   // renderer's wake is armed on.
-  clock: Pick<Timekeeper, "now" | "monotonic" | "after">,
+  clock: Pick<Timekeeper, "now" | "monotonic" | "after" | "detach">,
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
@@ -248,7 +251,10 @@ export function rendererHost(
   },
   world: HostWorld,
 ): RendererHost {
-  const mailbox = new KeyedSerialQueue<RendererName>();
+  const mailbox = new KeyedSerialQueue<RendererName>(
+    clock.detach,
+    (name) => `renderer ${name} mailbox`,
+  );
   let generation = 0;
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
@@ -506,6 +512,7 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
+    const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
     const followed = took(
@@ -533,10 +540,10 @@ export function rendererHost(
         waited.push(config.settled);
       }
     }
-    // [LAW:dataflow-not-control-flow] Every landed file, including a
-    // repository decision, invalidates the origins that actually used it.
+    // [LAW:dataflow-not-control-flow] Observe a successful write or an
+    // unrestored file through the same discovery path before effect-done.
     const moved =
-      landed.kind === "ok" && landed.files.length > 0
+      "files" in landed && landed.files.length > 0
         ? (recordTaken("landed config discovery", () =>
             world.configs.landed(landed.files),
           ) ?? [])
@@ -559,9 +566,7 @@ export function rendererHost(
             ).settled,
           );
       } else if (effect.kind === "change" || effect.kind === "approve-repo") {
-        const outcome: EffectOutcome =
-          landed.kind === "ok" ? { kind: "ok" } : landed;
-        owed.push((await settleInSlot(effect, outcome)).settled);
+        owed.push((await settleInSlot(effect, configOutcome)).settled);
       } else if (effect.kind === "run") {
         const checked = world.authorizeRun(effect, captures);
         if (checked.kind === "ok") acts.push(checked.value);
@@ -580,7 +585,7 @@ export function rendererHost(
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
-        landed.kind === "ok"
+        configOutcome.kind === "ok"
           ? before
               .then(() => world.perform(act))
               .catch(
@@ -590,15 +595,15 @@ export function rendererHost(
                 }),
               )
           : Promise.resolve<EffectOutcome>(
-              landed.kind === "closing"
-                ? landed
+              configOutcome.kind === "closing"
+                ? configOutcome
                 : {
                     kind: "skipped",
-                    reason: `not performed: ${landed.reason}`,
+                    reason: `not performed: ${configOutcome.reason}`,
                   },
             );
       const settled = acted.then((outcome) => settle(act, outcome));
-      if (outlives(act)) unawaited("act", settled);
+      if (outlives(act)) unawaited("act", () => settled);
       else {
         owed.push(settled);
         before = acted;
@@ -632,6 +637,7 @@ export function rendererHost(
             void recordTaken("trust book record", () => log("info", line)),
         },
         world.configs,
+        world.writeConfigFile,
       );
     } catch (thrown) {
       return { kind: "failed", reason: failureOf(thrown).detail };
@@ -879,8 +885,7 @@ export function rendererHost(
         world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       const retired = "the renderer that drew the frame has ended";
-      unawaited(
-        "frame receipt",
+      unawaited("frame receipt", () =>
         deliver(
           () =>
             issuer === generation
@@ -1069,14 +1074,11 @@ export function rendererHost(
       return turn;
     };
   const deliver = recorded("last");
-  // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
-  // is the daemon's, on every bar.
-  const unawaited = (what: string, settling: Promise<unknown>): void =>
-    void settling.catch((thrown: unknown) => {
-      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
-      log("error", text);
-      world.unheard(text);
-    });
+  // [LAW:no-silent-failure] A turn's settling nothing awaits is the clock's,
+  // whose report puts what it threw on every bar: one made by `settling`, or
+  // one already running that it hands over.
+  const unawaited = (what: string, settling: () => Promise<unknown>): void =>
+    clock.detach(`renderer ${name} ${what}`, settling);
   // [LAW:single-enforcer] A command uses the same slot and lands every
   // part of its turn before its caller can use the result.
   const command = async <C extends Command>(
@@ -1100,8 +1102,7 @@ export function rendererHost(
   };
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
-      unawaited(
-        "config",
+      unawaited("config", () =>
         deliver(configMade(origin), [["why", "config-moved"]]),
       );
   };
@@ -1118,6 +1119,7 @@ export function rendererHost(
   // can leave those sessions' menus alone. Its acts settle outside the slot.
   const wake: RendererWake = new RendererWake({
     clock,
+    task: `renderer ${name} wake`,
     due: async () => {
       const {
         event,
@@ -1139,7 +1141,7 @@ export function rendererHost(
               },
         "scheduled",
       );
-      unawaited("due acts", settled);
+      unawaited("due acts", () => settled);
       record(event, [], turn);
       return turn;
     },

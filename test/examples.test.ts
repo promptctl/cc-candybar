@@ -23,7 +23,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

@@ -11,7 +11,8 @@ import {
   type FakeSpawner,
   type Spawn,
 } from "../../src/proc/spawner-fake";
-import { systemTimekeeper, type Timekeeper } from "../../src/time";
+import { type Timekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { SourceRuns } from "../../src/daemon/source-runs";
 
 export interface FakeLauncher {

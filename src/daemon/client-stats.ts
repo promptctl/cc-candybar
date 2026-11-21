@@ -157,6 +157,9 @@ export function formatStats(s: StatsSnapshot): string {
     `  unknownFields ${s.unknownHookFields.map((f) => JSON.stringify(f)).join(", ") || "-"}`,
   );
   lines.push(``);
+  lines.push(`tasks`);
+  lines.push(`  threw         ${s.tasksThrew}`);
+  lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);
   lines.push(`  held          ${s.gitCache.held}`);

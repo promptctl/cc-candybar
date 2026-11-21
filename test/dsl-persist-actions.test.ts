@@ -65,7 +65,7 @@ import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";

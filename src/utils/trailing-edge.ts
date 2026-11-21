@@ -32,13 +32,24 @@
 // records itself and hands back nothing, because the loop already in flight is
 // the one that will honour it. A caller that must await the work folds over
 // these two arms rather than asking a second question about which happened.
+import type { Timekeeper } from "../time.js";
+
 export type Trigger =
   | { readonly kind: "started"; readonly done: Promise<void> }
   | { readonly kind: "queued" };
 
 export class TrailingEdge {
-  // The keys whose loop is currently executing, each with its completion.
-  private readonly running = new Map<string, Promise<void>>();
+  constructor(
+    // [LAW:no-silent-failure] Where a pass's throw goes as it happens, as its
+    // key's task: a loop that triggers keep alive may never end.
+    private readonly clock: Pick<Timekeeper, "failed">,
+    // A key's pass task name, with the key's subject.
+    private readonly passOf: (key: string) => string,
+  ) {}
+
+  // The keys whose loop is currently executing, each with the token its loop
+  // compares itself against, so a loop a `clear` let go touches only its own.
+  private readonly running = new Map<string, symbol>();
   // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
   // count: ten triggers during one pass mean the same thing as one — the work
   // must be done once more with current inputs.
@@ -55,34 +66,48 @@ export class TrailingEdge {
 
   // A trigger that only ASKS for a reading — a period's tick, a first read —
   // and carries no news that the answer changed: the loop in flight already
-  // answers it, so it shares that loop's completion rather than queueing a
+  // answers it, so it shares that loop rather than queueing a
   // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
-  // does mid-read). Idle, it starts a loop exactly as `run` does.
-  share(key: string, work: () => Promise<void>): Promise<void> {
-    const running = this.running.get(key);
-    if (running !== undefined) return running;
+  // does mid-read). Idle, it starts a loop exactly as `run` does and hands
+  // back its completion; running, the loop's end is its starter's to hear, so
+  // it hands back nothing to report twice.
+  share(key: string, work: () => Promise<void>): Promise<void> | undefined {
+    if (this.running.has(key)) return undefined;
     this.again.add(key);
     return this.start(key, work);
   }
 
   private start(key: string, work: () => Promise<void>): Promise<void> {
-    const done = this.loop(key, work);
-    this.running.set(key, done);
-    return done;
+    const running = Symbol(key);
+    this.running.set(key, running);
+    return this.loop(key, work, running);
   }
 
-  private async loop(key: string, work: () => Promise<void>): Promise<void> {
+  private async loop(
+    key: string,
+    work: () => Promise<void>,
+    running: symbol,
+  ): Promise<void> {
+    const own = (): boolean => this.running.get(key) === running;
+    // A pass that throws does not cost the pass queued behind it: its throw
+    // is the clock's, and the loop goes on. So the loop's end never rejects.
     try {
       do {
         // Cleared BEFORE the pass, never after: a trigger that lands while
         // `work` is awaiting must survive into the `while`, and one cleared
         // afterwards would be the change this whole mechanism exists to keep.
         this.again.delete(key);
-        await work();
-      } while (this.again.has(key));
+        try {
+          await work();
+        } catch (thrown) {
+          this.clock.failed(this.passOf(key), thrown);
+        }
+      } while (own() && this.again.has(key));
     } finally {
-      this.running.delete(key);
-      this.again.delete(key);
+      if (own()) {
+        this.running.delete(key);
+        this.again.delete(key);
+      }
     }
   }
 

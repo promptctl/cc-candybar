@@ -30,7 +30,7 @@ import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

@@ -258,6 +258,32 @@ test("equal shell output keeps its wire bytes when newly bound environment makes
   );
 });
 
+test("a daemon task's throw refuses the capture while every bar holds it, and allows it once it has left", () => {
+  const thrown = environmentOutput(
+    {
+      text: "session sweep threw: it broke",
+      at: AT,
+      revision: 1,
+      answered: false,
+    },
+    true,
+  );
+  const clean = facts();
+  const held = {
+    ...clean,
+    daemon: {
+      ...clean.daemon,
+      taskThrows: [{ task: "session sweep", event: thrown }],
+    },
+  };
+  expect(
+    recordingInputProblem(input({ kind: "world-state", worldState: held })),
+  ).toMatch(/command returned data after receiving a session environment/);
+  expect(
+    recordingInputProblem(input({ kind: "world-state", worldState: clean })),
+  ).toBeNull();
+});
+
 test("capture refuses raw hook extensions and the raw hint payload the renderer receives for diagnostics", () => {
   const top = { ...HOOK, clientExtension: { EXAMPLE: UNREQUESTED } };
   const nested = {

@@ -1,7 +1,13 @@
 import os from "node:os";
 import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
-import { systemTimekeeper, type Timekeeper } from "./time.js";
+import {
+  clockOver,
+  rethrowing,
+  systemTimers,
+  type Timekeeper,
+} from "./time.js";
+import { reportingClock, type ReportingClock } from "./daemon/task-throws.js";
 import type { Host } from "./host-facts.js";
 
 // [LAW:effects-at-boundaries] The machine's facts (src/host-facts.ts), read
@@ -12,10 +18,32 @@ export type { Host };
 // launcher over them (so a child inherits the same environment the process
 // itself reads) and the machine's clock, which real children and real files run
 // on.
-export interface World {
+export interface World<C extends Timekeeper = Timekeeper> {
   readonly host: Host;
   readonly launcher: OneShotLauncher;
-  readonly clock: Timekeeper;
+  readonly clock: C;
+}
+
+// The machine's readings alone, with nothing to schedule on: for the renderer
+// process, whose held work runs on its own turns.
+export const machineReadings: Pick<Timekeeper, "now" | "monotonic"> = {
+  now: () => systemTimers.now(),
+  monotonic: () => systemTimers.monotonic(),
+};
+
+// A command's world: what any of its tasks throws ends the process, naming
+// the task (`rethrowing`).
+export function processWorld(): World {
+  return worldOver(clockOver(systemTimers, rethrowing));
+}
+
+// [LAW:single-enforcer] The daemon's clock: it carries the inbox its tasks'
+// throws land in, so what any of them throws, before the daemon exists too,
+// shows on every bar.
+export const daemonClock = (): ReportingClock => reportingClock(systemTimers);
+
+export function daemonWorld(): World<ReportingClock> {
+  return worldOver(daemonClock());
 }
 
 // [LAW:single-enforcer] The one place src reads the process's environment, home
@@ -23,17 +51,10 @@ export interface World {
 // from the rest). The eslint config keeps every other file from naming them.
 // The launcher holds the live `process.env`, not a copy, and reads it at each
 // launch, so a variable the process sets after this still reaches the
-// children it launches, apart from the repository-scoped ones. The renderer
-// process takes its transport's monotonic reader directly from the CLI entry.
-export function processWorld(): World {
-  const host: Host = {
-    env: process.env,
-    home: os.homedir(),
-    tmp: os.tmpdir(),
-  };
-  const clock = systemTimekeeper;
+// children it launches, apart from the repository-scoped ones.
+function worldOver<C extends Timekeeper>(clock: C): World<C> {
   return {
-    host,
+    host: { env: process.env, home: os.homedir(), tmp: os.tmpdir() },
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };

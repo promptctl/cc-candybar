@@ -43,7 +43,7 @@ import { until } from "./helpers/until";
 import { fakeLauncher } from "./helpers/fake-launcher";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { exits, runsFor, shell } from "../src/proc/spawner-fake";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { originOf } from "./helpers/config-host";
 
 const SID = sessionIdOf(SESSION);

@@ -19,7 +19,6 @@ import {
   parseDuration,
   type Published,
   type SourceParse,
-  type VarValue,
 } from "../src/var-system";
 import {
   SourceRuns,
@@ -58,7 +57,7 @@ import { textOf } from "../src/render/frame";
 import { restamp } from "../src/facts/fact";
 import { instantOf } from "../src/utils/instant";
 import { buildScope } from "../src/template-engine/scope";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 const A_ID = sessionIdOf("a");
@@ -163,7 +162,11 @@ const settledOf = (
   withinMs: number,
 ): Promise<readonly string[]> =>
   heldOf(registry).held.settled(
-    timeoutSignal(registry.variableStore.clock, withinMs),
+    timeoutSignal(
+      registry.variableStore.clock,
+      "test settle deadline",
+      withinMs,
+    ),
   );
 // A source-runs owner for a test's registries: over the process launcher on
 // the real clock unless the test says otherwise, closed after the test.
@@ -178,7 +181,7 @@ function runsOver(deps: Partial<SourceRunsDeps> = {}): SourceRuns {
 }
 function registryOver(
   store: VariableStore,
-  defaultEmptyValue?: VarValue,
+  defaultEmptyValue?: string,
   sessionState?: SessionState,
   parent?: SourceRegistry | null,
   env?: Environment,
@@ -363,10 +366,13 @@ describe("SourceRegistry — input: before its first payload", () => {
     registry.declareInput("count", "count", "number", undefined, "computed");
     feedInputs(registry, { count: "not a number" });
     // An input is derived: its error is recorded when it is read.
-    expect(store.read("count")).toBe(0);
+    expect(() => store.read("count")).toThrow(/variable "count": Cannot cast/);
     expect(registry.getLastError("count")).toBeDefined();
     feedInputs(registry, { count: pendingOf("unread") });
     expect(() => store.read("count")).toThrow(/no value yet/);
+    expect(registry.getLastError("count")).toBeUndefined();
+    feedInputs(registry, { count: 0 });
+    expect(store.read("count")).toBe(0);
     expect(registry.getLastError("count")).toBeUndefined();
   });
 

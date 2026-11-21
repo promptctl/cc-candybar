@@ -8,7 +8,7 @@ import {
   typeOf,
 } from "../src/var-system";
 import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 describe("VariableStore — boxes", () => {
   it("returns the initial value", () => {

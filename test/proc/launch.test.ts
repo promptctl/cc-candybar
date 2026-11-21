@@ -18,7 +18,7 @@ import {
 import { type LaunchCategory, type Launcher } from "../../src/proc/launcher";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 import { until } from "../helpers/until";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;

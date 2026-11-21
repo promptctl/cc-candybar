@@ -75,7 +75,7 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 import { RefreshFaults } from "../../src/daemon/refresh-faults";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { unscriptedRuns } from "./fake-launcher";
 import {

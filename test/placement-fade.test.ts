@@ -34,7 +34,7 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";

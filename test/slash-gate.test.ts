@@ -38,7 +38,7 @@ import {
   requestPayload,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("slash-gate");

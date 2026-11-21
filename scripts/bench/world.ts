@@ -307,10 +307,14 @@ export async function startWorld(
     COLUMNS: String(columns),
   });
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints({ env: clientEnv(columns), home: dirs.home }, session.cwd, {
-      columns,
-      rows: 48,
-    }),
+    ...detectClientHints(
+      { env: clientEnv(columns), home: dirs.home },
+      session.cwd,
+      {
+        columns,
+        rows: 48,
+      },
+    ),
     client: CLIENT,
   });
 

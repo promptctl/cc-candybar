@@ -29,7 +29,7 @@ import {
 import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { NO_LAYERS } from "./helpers/history-step";
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 

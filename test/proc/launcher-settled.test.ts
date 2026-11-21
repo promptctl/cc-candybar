@@ -8,7 +8,7 @@ import path from "node:path";
 import { processProbe } from "../helpers/host";
 import { systemLauncher } from "../../src/proc/system-launcher";
 import { until } from "../helpers/until";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 
 const scope = () => {
   const closing = new AbortController();

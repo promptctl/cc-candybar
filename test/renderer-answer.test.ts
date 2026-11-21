@@ -57,7 +57,7 @@ import {
   type CheckedRenderRequest,
   type SessionContext,
 } from "../src/renderer-interface/request-context";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import type { Instant, Tick } from "../src/utils/instant";
 import {
   AT,
@@ -755,6 +755,22 @@ describe("a statusline request", () => {
     expect(new Map(record).get("warn")).toBe("act-failed");
     expect(presentOf(effects).displayedEvents).toEqual([
       { kind: "act-failed", event },
+    ]);
+  });
+
+  test("draws a daemon task that threw as an error, and reports the event alongside the frame", async () => {
+    const task = "session sweep";
+    const event = joinedEvent(null, `${task} threw: it broke`, READ.at);
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      taskThrows: [{ task, event }],
+    }));
+    const { effects, record } = answered(await request(t));
+    const facts = new Map(record);
+    expect(facts.get("err")).toBe("Y");
+    expect(facts.get("faults")).toEqual(expect.stringContaining(event.text));
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "task-threw", task, event },
     ]);
   });
 

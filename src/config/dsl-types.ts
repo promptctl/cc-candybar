@@ -545,6 +545,8 @@ export interface DslConfig {
 declare const __validated: unique symbol;
 export type ValidatedConfig = DslConfig & {
   readonly actions: Readonly<Record<string, ResolvedActionDecl>>;
+  readonly variables: Readonly<Record<string, ResolvedVariableDecl>>;
+  readonly segments: Readonly<Record<string, ResolvedSegmentDecl>>;
   readonly [__validated]: true;
 };
 
@@ -560,6 +562,19 @@ export type VariableDecl =
   | AuthoredVariableDecl
   | DroppedVarDecl
   | SourceVarDecl;
+
+// [LAW:types-are-the-program] Authored type may be omitted. Registration
+// consumes the resolved type for an input or template in either scope.
+type TypedVariableDecl = InputVarDecl | TemplateVarDecl;
+export type ResolvedVariableDecl =
+  | Exclude<VariableDecl, TypedVariableDecl>
+  | (TypedVariableDecl & {
+      readonly type: NonNullable<TypedVariableDecl["type"]>;
+    });
+
+export type ResolvedSegmentDecl = Omit<SegmentDecl, "vars"> & {
+  readonly vars?: Readonly<Record<string, ResolvedVariableDecl>>;
+};
 
 // What a config may write under `variables:`.
 export type AuthoredVariableDecl =

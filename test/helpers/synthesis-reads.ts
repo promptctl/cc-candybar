@@ -9,7 +9,13 @@
 // later control adds is checked with no second place to update.
 
 import { actionTemplates } from "../../src/config/action.js";
-import { walkNodes, type DslConfig } from "../../src/config/dsl-types.js";
+import {
+  walkNodes,
+  type DslConfig,
+  type SegmentDecl,
+} from "../../src/config/dsl-types.js";
+import { SEGMENT_TEMPLATE_FIELDS } from "../../src/config/loader/plugins.js";
+import { ownValue } from "../../src/utils/plain.js";
 import { presetNames, presetRoot } from "../../src/config/presets.js";
 import {
   templateReads,
@@ -21,8 +27,8 @@ import {
   SESSION_KEY_TO_EFFECTIVE_VAR,
 } from "../../src/config/setting-projections.js";
 
-// Every variable `config` reads that the synthesis minted over `before`, and
-// every node of the preset trees, author nodes included. Two kinds of read:
+// Every read the synthesis minted or broke over `before`, and every node of
+// the preset trees, author nodes included. Two kinds of read:
 // the dotted refs of every template (segment fields, node `when`s and the
 // lead/trail drawn in a segment node's cell, template variables, copy/open
 // actions); and the `.effective` projection a `set` or `persist` on a setting
@@ -31,7 +37,13 @@ export function synthesisReads(
   config: DslConfig,
   before: DslConfig,
 ): Set<string> {
+  return changedReads(config, before).reads;
+}
+
+function changedReads(config: DslConfig, before: DslConfig) {
   const helpers = config.helpers;
+  const priorScope = templateScopeOf(before);
+  const scope = templateScopeOf(config);
   const minted = <T>(
     all: Readonly<Record<string, T>>,
     had: Readonly<Record<string, T>>,
@@ -42,24 +54,28 @@ export function synthesisReads(
       .filter(([name, decl]) => had[name] !== decl)
       .map(([, decl]) => decl);
   const reads = new Set<string>();
-  const add = (
-    template: string | undefined,
-    scope: Readonly<Record<string, string>> = helpers,
-  ): void => {
-    for (const ref of templateReads(template ?? "", scope).keys())
+  const add = (template: string | undefined): void => {
+    for (const ref of templateReads(template ?? "", helpers).keys())
       reads.add(ref);
   };
-  for (const seg of minted(config.segments, before.segments)) {
-    // A segment's own partials are visible to its template/bg/fg/when (and to
-    // each other) exactly as helpers are (candybar-templates-zh8b.53s) — a
-    // read reachable only through one would otherwise never synthesize.
-    const segScope =
-      seg.partials === undefined ? helpers : { ...helpers, ...seg.partials };
-    add(seg.template, segScope);
-    add(seg.bg, segScope);
-    add(seg.fg, segScope);
-    add(seg.when, segScope);
-    for (const body of Object.values(seg.partials ?? {})) add(body, segScope);
+  // [LAW:behavior-not-structure] Synthesis can add a read or break an
+  // existing binding without changing the template. Leave inherited
+  // segment-only reads (such as .settings) to their authored cross-check.
+  for (const [name, segment] of Object.entries(config.segments)) {
+    const prior = ownValue(before.segments, name);
+    const current = segmentReads(segment, helpers);
+    const previous =
+      prior === segment && before.helpers === helpers
+        ? current
+        : prior && segmentReads(prior, before.helpers);
+    for (const ref of current) {
+      if (
+        !previous?.has(ref) ||
+        (refResolves(ref, priorScope) && !refResolves(ref, scope))
+      ) {
+        reads.add(ref);
+      }
+    }
   }
   for (const name of presetNames(config.presets)) {
     const tree = presetRoot(config, name).node;
@@ -84,20 +100,35 @@ export function synthesisReads(
     if (setBack !== undefined) reads.add(setBack);
     if (persistBack !== undefined) reads.add(persistBack);
   }
+  return { reads, scope };
+}
+
+// Read bodies in the scope their segment declared so a reference reached
+// through a partial counts just like one used directly by a template.
+function segmentReads(
+  segment: SegmentDecl,
+  helpers: DslConfig["helpers"],
+): Set<string> {
+  const scope =
+    segment.partials === undefined ? helpers : { ...helpers, ...segment.partials };
+  const templates = [
+    ...SEGMENT_TEMPLATE_FIELDS.map((field) => segment[field]),
+    ...Object.values(segment.partials ?? {}),
+  ];
+  const reads = new Set<string>();
+  for (const template of templates) {
+    if (template === undefined) continue;
+    for (const ref of templateReads(template, scope).keys()) reads.add(ref);
+  }
   return reads;
 }
 
-// Every read the synthesis minted into `config`, over `before` (the merged,
-// cross-referenced config it was synthesized from), that `config` does not
-// resolve. Author nodes in the trees resolved in cross-ref against the merged
-// config, and the synthesized config's scope only adds to it, so they read
-// clean here.
+// Every newly unresolved read after synthesis, relative to the merged,
+// cross-referenced config it was synthesized from.
 export function unresolvedReads(
   config: DslConfig,
   before: DslConfig,
 ): string[] {
-  const scope = templateScopeOf(config);
-  return [...synthesisReads(config, before)].filter(
-    (ref) => !refResolves(ref, scope),
-  );
+  const { reads, scope } = changedReads(config, before);
+  return [...reads].filter((ref) => !refResolves(ref, scope));
 }

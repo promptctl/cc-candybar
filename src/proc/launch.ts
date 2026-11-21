@@ -456,7 +456,9 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   line.once("error", (err) => lose(state, line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(state, line, `exited ${sig ?? code}`));
   pipe.on("error", (err) => lose(state, line, `pipe failed: ${err.message}`));
-  void track(state, new Promise((closed) => line.once("close", closed)));
+  clock.detach("lifeline close", () =>
+    track(state, new Promise((closed) => line.once("close", closed))),
+  );
   line.unref();
   pipe.unref();
   for (const group of state.liveGroups) pipe.write(`+ ${group}\n`);
@@ -829,12 +831,26 @@ async function launchPiped(
     // the child changed its real uid) is this run's result like any other
     // failure — a `LaunchResult` arm, never a rejection or a throw out of a
     // timer callback, so the single-enforcer primitive stays total.
+    // [LAW:one-source-of-truth] The launch's task names, each its category's,
+    // so one launch's throws are one error per task on every bar.
+    const tasks = {
+      reap: `${opts.category} reap`,
+      conclude: `${opts.category} launch conclude`,
+      groupEnd: `${opts.category} group end poll`,
+      killGrace: `${opts.category} kill grace`,
+    };
+    // A step that follows the child's exit, which `exited` only ever resolves.
+    const afterExit = (task: string, then: () => void): void =>
+      clock.detach(task, async () => {
+        await exited;
+        then();
+      });
     const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
         spawner.signalGroup(pid, sig);
       } catch (err) {
         state.unreaped.set(child, opts.category);
-        void exited.then(() => state.unreaped.delete(child));
+        afterExit(tasks.reap, () => state.unreaped.delete(child));
         settle({
           ok: false,
           reason: "signal-refused",
@@ -849,6 +865,8 @@ async function launchPiped(
     // [LAW:no-ambient-temporal-coupling] Run a turn after an end is seen, once
     // what was written before it is read. It concludes on the child's exit.
     const concludeWithGroup = () => conclude(child.exitCode, child.signalCode);
+    const concludeNextTurn = () =>
+      clock.defer(tasks.conclude, concludeWithGroup);
     // While a member of the group lives the launch waits for it, guarded, so
     // SIGKILL still reaches it. The OS has no event for a group's end, so it is
     // polled, with exponential backoff.
@@ -856,15 +874,15 @@ async function launchPiped(
       const awaitGroupEnd = (delayMs: number) => {
         if (settled) return;
         if (spawner.groupGone(group)) {
-          clock.defer(concludeWithGroup);
+          concludeNextTurn();
           return;
         }
-        groupEndTimer = clock.after(delayMs, () =>
+        groupEndTimer = clock.after(tasks.groupEnd, delayMs, () =>
           awaitGroupEnd(Math.min(delayMs * 2, GROUP_END_POLL_MAX_MS)),
         );
       };
-      void exited.then(() =>
-        clock.defer(() => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
+      afterExit(tasks.groupEnd, () =>
+        clock.defer(tasks.groupEnd, () => awaitGroupEnd(GROUP_END_POLL_MIN_MS)),
       );
     }
 
@@ -888,7 +906,7 @@ async function launchPiped(
       const ended = child.exitCode !== null || child.signalCode !== null;
       if (ended && group !== undefined && spawner.groupGone(group)) {
         terminated = cause === "timeout" ? null : cause;
-        clock.defer(concludeWithGroup);
+        concludeNextTurn();
         return;
       }
       terminated = cause;
@@ -899,9 +917,9 @@ async function launchPiped(
         // Escalation armed first, so a refused SIGTERM's cleanup clears it.
         // Concluding here is not behind the group's end: a group holding an
         // unreaped zombie never reads as gone, and this is that launch's bound.
-        killTimer = clock.after(TIMEOUT_KILL_GRACE_MS, () => {
+        killTimer = clock.after(tasks.killGrace, TIMEOUT_KILL_GRACE_MS, () => {
           signal(pid, "SIGKILL");
-          void exited.then(() => clock.defer(concludeWithGroup));
+          afterExit(tasks.conclude, concludeNextTurn);
         });
         signal(pid, "SIGTERM");
       }
@@ -960,7 +978,11 @@ async function launchPiped(
     child.on("close", conclude);
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = clock.after(opts.timeoutMs, () => terminate("timeout"));
+      timer = clock.after(
+        `${opts.category} launch timeout`,
+        opts.timeoutMs,
+        () => terminate("timeout"),
+      );
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
@@ -1229,6 +1251,7 @@ function endJob(
     const signalled = spawner.signalJob(pid, "SIGTERM");
     if (signalled) {
       clock.after(
+        `job kill grace ${pid}`,
         TIMEOUT_KILL_GRACE_MS,
         () => spawner.signalJob(pid, "SIGKILL"),
         {

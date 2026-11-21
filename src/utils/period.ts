@@ -1,5 +1,5 @@
 import type { Outcome } from "./outcome";
-import type { Monotonic, Timekeeper } from "../time";
+import type { Monotonic, Task, Timekeeper } from "../time";
 
 // [LAW:types-are-the-program] A period chosen by the last read's outcome: a
 // failed read is retried on its own (usually shorter) period, so a transient
@@ -50,9 +50,14 @@ export class Period {
     null;
 
   constructor(
-    // Starts a read. The owner calls `landed` when that read (or any other)
-    // lands, which is what schedules the next tick.
-    private readonly tick: () => void,
+    // [LAW:nothing-unseen] The tick's name, with its subject, as a person
+    // reads it if the tick throws. [LAW:one-source-of-truth] The owner starts
+    // the same read off the period under this name too.
+    readonly task: string,
+    // Starts a read, and returns it to the clock, which reports its throw.
+    // The owner calls `landed` when that read (or any other) lands, which is
+    // what schedules the next tick.
+    private readonly tick: Task,
     // [LAW:effects-at-boundaries] The clock the period is measured and armed
     // on: the owner's, so a test holds it.
     private readonly clock: Pick<Timekeeper, "monotonic" | "after">,
@@ -87,10 +92,11 @@ export class Period {
       this.last.at + this.last.periodMs - this.clock.monotonic(),
     );
     this.stop = this.clock.after(
+      this.task,
       wait,
       () => {
         this.stop = null;
-        this.tick();
+        return this.tick();
       },
       { unref: true },
     );

@@ -23,7 +23,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { ContextProvider } from "../src/daemon/cache/context-provider";
 import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";

@@ -46,7 +46,7 @@ import {
   type Outcome,
 } from "../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../src/utils/reading";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import {
   absentOwners,
   fakeCacheExpiry,

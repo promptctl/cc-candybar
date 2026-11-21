@@ -9,7 +9,7 @@ import type {
 import { timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { Collector } from "../../src/daemon/collector";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper } from "./system-clock";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { TEST_SIGNER } from "./link-signer";
 

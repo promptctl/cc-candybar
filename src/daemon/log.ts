@@ -173,7 +173,7 @@ export class DaemonLog {
   // would never end.
   constructor(
     private readonly filePath: string,
-    private readonly clock: Pick<Timekeeper, "now" | "monotonic">,
+    private readonly clock: Pick<Timekeeper, "now" | "monotonic" | "detach">,
   ) {}
 
   // One line, to the log: the daemon's `DaemonLogger`.
@@ -206,7 +206,8 @@ export class DaemonLog {
       this.dropped += cut;
     }
     if (this.exiting) this.writeWaitingSync(true, EXIT_WAIT_MS);
-    else if (!this.flushing) void this.flush();
+    else if (!this.flushing)
+      this.clock.detach("daemon log flush", () => this.flush());
   };
 
   // Resolves once every line logged so far is in the file (or reported

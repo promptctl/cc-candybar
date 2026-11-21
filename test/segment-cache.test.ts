@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 
 import { CacheExpiryProvider, cacheExpiresAt } from "../src/segments/cache";
 import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 const TTL_SEC = 60 * 60;
 

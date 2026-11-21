@@ -86,7 +86,7 @@ export class CacheManager {
         return true;
       } catch (error) {
         if ((error as ErrnoError).code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
+          await sleep(clock, `cache lock wait ${name}`, RETRY_DELAY_MS);
         } else {
           throw error;
         }
@@ -142,7 +142,7 @@ export class CacheManager {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
+        await sleep(clock, `${cacheType} cache wait`, RETRY_DELAY_MS);
         continue;
       }
 
@@ -169,7 +169,7 @@ export class CacheManager {
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${(error as Error).message}. Retrying...`,
         );
-        await sleep(clock, RETRY_DELAY_MS);
+        await sleep(clock, `${cacheType} cache read retry`, RETRY_DELAY_MS);
       }
     }
 

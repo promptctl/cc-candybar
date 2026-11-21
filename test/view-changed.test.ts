@@ -18,7 +18,7 @@ import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
 
 const sleep = (ms: number): Promise<void> =>

@@ -1,4 +1,10 @@
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
+import {
+  clockOver,
+  rethrowing,
+  systemTimers,
+  type ReportThrow,
+} from "../src/time";
 import fs from "node:fs";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -159,13 +165,16 @@ function makeCache(
     // Throws once on the first message it matches, standing in for a bug
     // inside a refresh.
     throwOn?: string;
+    // Where the provider's clock reports what its tasks threw: a case that
+    // means one to throw collects it.
+    report?: ReportThrow;
   } = {},
 ) {
   const inner = new StubGitService(unscriptedLauncher);
   const logs: string[] = [];
   let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
-    clock: systemTimekeeper,
+    clock: clockOver(systemTimers, opts.report ?? rethrowing),
     periodMs: opts.periodMs,
     maxRepos: opts.maxRepos,
     maxPrLookups: opts.maxPrLookups,
@@ -1168,20 +1177,21 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate.resolve();
   });
 
-  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+  test("a refresh that throws reaches the clock as its pass's, and the repo keeps its period", async () => {
     jest.useFakeTimers();
+    const threw: Array<{ task: string; thrown: unknown }> = [];
     const { svc, inner, logs, holds } = makeCache({
       periodMs: 1_000,
       throwOn: "outcome=failed",
+      report: (task, thrown) => threw.push({ task, thrown }),
     });
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.infoFailure = "git status: boom";
 
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
-      "git refresh threw (/repo): Error: logger bug",
+    expect(threw).toEqual([
+      { task: "git refresh /repo", thrown: new Error("logger bug") },
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);

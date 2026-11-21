@@ -24,7 +24,7 @@ import {
 } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 // A whole multiple of the ten-second cycles below, so `frames` reads its
 // first frame at at(0).

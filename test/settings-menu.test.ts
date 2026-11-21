@@ -621,7 +621,9 @@ describe("the menu in a config that declares no variables", () => {
     // template text are among them: session.id (every click) and the
     // banner's `.preset.customized`.
     for (const name of ensured) {
-      expect(bare.variables[name]).toEqual(PAYLOAD_INPUTS[name]);
+      expect(bare.variables[name]).toEqual(
+        expect.objectContaining(PAYLOAD_INPUTS[name]),
+      );
     }
     expect(ensured).toEqual(
       expect.arrayContaining(["session.id", PRESET_CUSTOMIZED_VAR]),
@@ -640,7 +642,7 @@ describe("the menu in a config that declares no variables", () => {
       }`,
         ALLOWED,
       ).variables.project_dir,
-    ).toEqual(PAYLOAD_INPUTS.project_dir);
+    ).toEqual(expect.objectContaining(PAYLOAD_INPUTS.project_dir));
   });
 
 });

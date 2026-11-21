@@ -142,12 +142,12 @@ const OWNED_IMPORTS = {
     owners: [],
     message: "A launcher over the machine is system-launcher's to build.",
   },
-  // A host receives the clock in its World. The renderer process receives
-  // only its monotonic reading from the CLI entry.
-  systemTimekeeper: {
+  // The machine's bare timers, which report nothing a task throws: the process
+  // world builds its one clock over them, and everything else is handed it.
+  systemTimers: {
     group: ["**/time", "**/time.js"],
-    owners: ["src/host.ts", "src/index.ts"],
-    message: "The process entry supplies its clock. Take the reading you are given.",
+    owners: ["src/host.ts"],
+    message: "The process world (src/host.ts) builds its clock over src/time.ts's machine timers: take the clock you are given.",
   },
   // The real adapters a daemon is handed.
   productionClaudeInputEdge: {
@@ -402,6 +402,12 @@ const RENDERER_FS_PATHS = [
 const zonePathsOf = (file) =>
   file.startsWith("src/renderer/") ? RENDERER_FS_PATHS : [];
 
+const ownedPattern = (name) => ({
+  group: OWNED_IMPORTS[name].group,
+  importNames: [name],
+  message: `${OWNED_IMPORTS[name].message} [LAW:single-enforcer]`,
+});
+
 // A file's whole rule: flat config replaces a rule per file rather than merging
 // it, so each block carries the child_process paths and every name but its own.
 // `patterns`, not `paths`: a path matches only the literal import string, and
@@ -413,13 +419,9 @@ function restrictedImports(file, zonePaths = []) {
     {
       paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS, ...zonePaths],
       patterns: [
-        ...Object.entries(OWNED_IMPORTS)
-          .filter(([, { owners }]) => !owners.includes(file))
-          .map(([name, { group, message }]) => ({
-            group,
-            importNames: [name],
-            message: `${message} [LAW:single-enforcer]`,
-          })),
+        ...Object.keys(OWNED_IMPORTS)
+          .filter((name) => !OWNED_IMPORTS[name].owners.includes(file))
+          .map(ownedPattern),
         ...HOST_NAMED_IMPORTS,
         ...FAKE_IMPORTS,
       ],
@@ -453,7 +455,7 @@ function ownedImportBlocks() {
           "error",
           {
             paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
-            patterns: FAKE_IMPORTS,
+            patterns: [...FAKE_IMPORTS, ownedPattern("systemTimers")],
           },
         ],
       },
@@ -461,7 +463,10 @@ function ownedImportBlocks() {
     {
       files: [SPAWNER_FILE],
       rules: {
-        "no-restricted-imports": ["error", { paths: CLOCK_IMPORT_PATHS }],
+        "no-restricted-imports": [
+          "error",
+          { paths: CLOCK_IMPORT_PATHS, patterns: [ownedPattern("systemTimers")] },
+        ],
       },
     },
     ...owners.map((file) => ({
@@ -546,6 +551,25 @@ export default [
   },
   prettierConfig,
   ...ownedImportBlocks(),
+  // [LAW:no-silent-failure] A promise nobody awaits is a task: the clock's
+  // `detach` runs it and reports what it throws, so `void` is no way out, and
+  // a promise handed where a callback's return is dropped is refused too.
+  {
+    files: ["src/**/*.{ts,mts}"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        { ignoreVoid: false },
+      ],
+      "@typescript-eslint/no-misused-promises": "error",
+    },
+  },
   {
     files: ["src/**/*.{ts,mts}"],
     plugins: { zones: { rules: { "import-direction": importDirection } } },

@@ -33,7 +33,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

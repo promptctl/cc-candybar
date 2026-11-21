@@ -1,5 +1,6 @@
 import { Period } from "../../src/utils/period";
-import { systemTimekeeper, type Monotonic } from "../../src/time";
+import { type Monotonic } from "../../src/time";
+import { systemTimekeeper } from "../helpers/system-clock";
 import { heldClock } from "../helpers/held-clock";
 
 afterEach(() => {
@@ -10,7 +11,7 @@ describe("Period", () => {
   test("a disposed period never runs again, whatever holds or lands after", async () => {
     jest.useFakeTimers();
     let ticks = 0;
-    const period = new Period(() => ticks++, systemTimekeeper);
+    const period = new Period("test period", () => ticks++, systemTimekeeper);
     period.landed(1_000);
     period.hold(true);
     period.dispose();
@@ -25,7 +26,7 @@ describe("Period", () => {
   test("a landing kept from earlier resumes where it left off", async () => {
     jest.useFakeTimers();
     let ticks = 0;
-    const period = new Period(() => ticks++, systemTimekeeper);
+    const period = new Period("test period", () => ticks++, systemTimekeeper);
     period.hold(true);
 
     period.landed(1_000, (performance.now() - 600) as Monotonic);
@@ -47,7 +48,7 @@ describe("Period's gap", () => {
     let step = 0;
     const clock = { ...held, now: () => held.now() + step };
     let ticks = 0;
-    const period = new Period(() => ticks++, clock);
+    const period = new Period("test period", () => ticks++, clock);
     period.hold(true);
     period.landed(1_000);
     period.hold(false);

@@ -242,14 +242,14 @@ export class WatcherRegistry {
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
-  private readonly clock: Pick<Timekeeper, "after" | "every">;
+  private readonly clock: Pick<Timekeeper, "after" | "every" | "detach">;
   private closed = false;
   private readonly nodeWalksTrees: boolean;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
     // sweep run on.
-    clock: Pick<Timekeeper, "after" | "every">;
+    clock: Pick<Timekeeper, "after" | "every" | "detach">;
     counters?: WatcherCounters;
     // [LAW:single-enforcer] One injection point per consumer. The daemon
     // passes its log so watcher-failure events land in daemon.log; non-
@@ -685,6 +685,26 @@ export class WatcherRegistry {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
   }
 
+  // [LAW:no-silent-failure] Every holder hears the window, whatever one before
+  // it threw: each hearing is a clock task named for its watch, so what it
+  // throws reaches the bar as that watch's, in its own words.
+  // [LAW:no-ambient-temporal-coupling] A slot an earlier holder closed, or a
+  // holder it released, hears nothing: each is judged as its turn comes.
+  private deliver(
+    changes: ReadonlyMap<WatcherSlot, Gathering>,
+    completed: (() => void) | undefined,
+  ): void {
+    for (const [changed, gathered] of changes) {
+      if (this.slots.get(changed.key) !== changed) continue;
+      const heard = heardOf(gathered);
+      for (const holder of changed.holders)
+        this.clock.detach(`watch ${changed.key} holder`, () =>
+          holder.onInvalidate(heard),
+        );
+    }
+    completed?.();
+  }
+
   private fire(slot: WatcherSlot, invalidation: Gathering): void {
     const { window } = slot;
     if (window.pending === null) {
@@ -692,17 +712,11 @@ export class WatcherRegistry {
       window.pending = {
         changes,
         cancel: this.clock.after(
+          "watch delivery",
           DEBOUNCE_MS,
           () => {
             window.pending = null;
-            for (const [changed, gathered] of changes) {
-              if (this.slots.get(changed.key) !== changed) continue;
-              const heard = heardOf(gathered);
-              for (const holder of changed.holders)
-                this.notify(changed.key, () => holder.onInvalidate(heard));
-            }
-            if (window.completed !== undefined)
-              this.notify(null, window.completed);
+            this.deliver(changes, window.completed);
           },
           { unref: true },
         ),
@@ -718,16 +732,6 @@ export class WatcherRegistry {
           ? { kind: "changed", paths: new Set(invalidation.paths) }
           : invalidation,
     );
-  }
-
-  private notify(key: string | null, take: () => void): void {
-    try {
-      take();
-    } catch (thrown) {
-      const why = thrown instanceof Error ? thrown.message : String(thrown);
-      const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
-    }
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -813,9 +817,14 @@ export class WatcherRegistry {
   // thread to render anyway.
   private armSweep(): void {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
-    this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
-      unref: true,
-    });
+    this.sweep = this.clock.every(
+      "polled paths read",
+      POLL_MS,
+      () => this.readPolled(),
+      {
+        unref: true,
+      },
+    );
   }
 
   private disarmSweep(): void {

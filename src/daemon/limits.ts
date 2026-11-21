@@ -162,7 +162,7 @@ function breachArtifactOf(base: string): BreachArtifact | null {
 export interface LimitsDeps {
   // The machine's clock: when a post-mortem is stamped, and the pace of the
   // readings.
-  clock: Pick<Timekeeper, "now" | "after">;
+  clock: Pick<Timekeeper, "now" | "after" | "detach">;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
   // unit tests of check compute filenames against the real state directory and
@@ -374,18 +374,20 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   // scheduled only once the last has answered: a probe slower than the
   // interval delays the next instead of overlapping it.
   function arm(intervalMs: number = DEFAULT_CHECK_INTERVAL): void {
+    // [LAW:no-silent-failure] A check that throws reaches the clock, which
+    // shows it on every bar, and the next is armed all the same.
     const tick = async (): Promise<void> => {
+      let breached = false;
       try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${(e as Error).message}`);
+        breached = await check();
+      } finally {
+        if (!breached && !disarmed)
+          clearTimer = deps.clock.after("memory check", intervalMs, tick, {
+            unref: true,
+          });
       }
-      if (disarmed) return;
-      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
-        unref: true,
-      });
     };
-    void tick();
+    deps.clock.detach("memory check", tick);
   }
 
   function disarm(): void {
@@ -513,7 +515,7 @@ export function realLimitsDeps(
   owner: {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
-    readonly clock: Pick<Timekeeper, "now" | "after">;
+    readonly clock: Pick<Timekeeper, "now" | "after" | "detach">;
     // The daemon's state directory, which its post-mortems are written to.
     readonly snapshotDir: string;
     // What the log holds, written before the loop blocks (log.ts).

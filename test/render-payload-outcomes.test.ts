@@ -42,7 +42,7 @@ import {
   settled,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 
 type LogEntry = { level: string; msg: string };
 

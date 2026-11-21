@@ -67,7 +67,7 @@ import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
-import { systemTimekeeper } from "../src/time";
+import { systemTimekeeper } from "./helpers/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 const S1 = sessionIdOf("s1");
