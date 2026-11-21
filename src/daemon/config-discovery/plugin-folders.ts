@@ -83,9 +83,20 @@ export function listFolders(root: string): FolderEntries | Unchecked {
     }
     return { folders, files };
   } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "ENOENT"
+    return (e as NodeJS.ErrnoException).code === "ENOENT" && !isEntry(root)
       ? { folders: [], files: [] }
       : { path: root, error: (e as Error).message };
+  }
+}
+
+// [LAW:no-silent-failure] A root that is a link to nothing is there to
+// `lstat`: a prefix removed under it is a broken root, never an empty one.
+function isEntry(root: string): boolean {
+  try {
+    fs.lstatSync(root);
+    return true;
+  } catch {
+    return false;
   }
 }
 

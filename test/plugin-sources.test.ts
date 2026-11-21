@@ -1241,9 +1241,15 @@ describe("a storage folder's watch", () => {
 
     jest.restoreAllMocks();
     const opened = fakeWatches();
-    fs.appendFileSync(path.join(dir, "selected-0.json5"), "\n// physical edit\n");
-    r.configs.again();
+    // A write lands in the first origin's file: only that origin is observed.
+    const landed = path.join(dir, "selected-0.json5");
+    fs.appendFileSync(landed, "\n// physical edit\n");
+    r.configs.discovery.landed([landed]);
     expect(opened.map((watch) => watch.path)).toEqual([folders[0]]);
+    // A rediscover observes every origin, so it retries the other folder
+    // though its snapshot did not move.
+    r.configs.again();
+    expect(opened.map((watch) => watch.path)).toEqual(folders);
   });
 
   test("a reload keeps it open", async () => {

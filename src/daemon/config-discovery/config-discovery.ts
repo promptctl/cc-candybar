@@ -132,7 +132,7 @@ export class ConfigDiscovery {
     this.watches = deps.watchers.batch(() => {
       const keys = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys, "config-watch", "observed");
+      this.heard(keys, "config-watch");
     });
   }
 
@@ -324,13 +324,13 @@ export class ConfigDiscovery {
         changed.some((file) => landingPaths.has(file)),
       )
       .map(([key]) => key);
-    return this.refreshed(touched, "landed", "observed", writer);
+    return this.refreshed(touched, "landed", writer);
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why: string): void {
-    this.heard([...this.followed.keys()], why, "moved");
+    this.heard([...this.followed.keys()], why);
   }
 
   close(): void {
@@ -344,13 +344,9 @@ export class ConfigDiscovery {
 
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  private heard(
-    keys: readonly string[],
-    why: string,
-    recover: "observed" | "moved",
-  ): void {
+  private heard(keys: readonly string[], why: string): void {
     if (this.closed) return;
-    this.refreshed(keys, why, recover, null);
+    this.refreshed(keys, why, null);
   }
 
   // [LAW:no-silent-failure] Origins discovered again and what moved published;
@@ -361,10 +357,9 @@ export class ConfigDiscovery {
   private refreshed(
     keys: readonly string[],
     why: string,
-    recover: "observed" | "moved",
     writer: RendererName | null,
   ): readonly RenderOrigin[] {
-    const { moved, failed } = this.rediscovered(keys, why, recover);
+    const { moved, failed } = this.rediscovered(keys, why);
     for (const { key, thrown } of failed)
       this.deps.clock.failed(`config discovery ${key}`, thrown);
     return this.publish(moved, writer);
@@ -394,7 +389,6 @@ export class ConfigDiscovery {
   private rediscovered(
     keys: readonly string[],
     why: string,
-    recover: "observed" | "moved",
   ): {
     readonly moved: readonly Followed[];
     readonly failed: readonly Failed[];
@@ -428,9 +422,10 @@ export class ConfigDiscovery {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length} failed=${failed.length}`,
     );
-    // A targeted watch or write can retry even if the snapshot is unchanged.
-    // A broad catch-up already has its own storage recovery trigger.
-    this.reloaded(recover === "observed" ? observed : moved);
+    // [LAW:no-mode-explosion] Every observation retries the storage folders
+    // it names, even when the snapshot is unchanged: a rediscover the user
+    // asks for has no other storage trigger.
+    this.reloaded(observed);
     return { moved, failed };
   }
 
