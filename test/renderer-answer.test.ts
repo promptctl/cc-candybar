@@ -767,7 +767,7 @@ describe("a statusline request", () => {
     expect(declarations).toHaveBeenCalledTimes(0);
     expect(origins).toHaveBeenCalledTimes(0);
     expect(sessions).toHaveBeenCalledTimes(0);
-    // Each frame holds the view it draws, and no frame holds the other's.
+    // The drawn session's view is held, and the other session's never is.
     expect(holds).toHaveBeenCalledWith(SESSION);
     expect(holds).not.toHaveBeenCalledWith(second);
     const retired = answered(

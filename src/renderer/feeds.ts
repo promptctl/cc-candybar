@@ -1,5 +1,5 @@
-// Each watched session's frames, as the renderer schedules them (epic
-// candybar-animation-wbxz, ticket .jmm.usl): a feed is open while the host's
+// Each watched session's frames, as the renderer schedules them: a feed is
+// open while the host's
 // viewers name its session, and decides, on the renderer's ticks, when its
 // next frame is drawn. The host owns who watches and what each was sent: a
 // frame drawn here goes out in the turn's output, and the host judges, per

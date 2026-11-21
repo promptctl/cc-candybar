@@ -244,7 +244,7 @@ export type ReloadedEntry = Readonly<
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // bundle, never null: an entry can ALWAYS render. It is seeded with the
-// bundled default's state at creation (candybar-settings-ui-0gz) and
+// bundled default's state at creation and
 // replaced by each config that loads; a config that fails to load leaves it
 // as it was. So the bar under a load error is the best config the entry has
 // — the last one that loaded, or the bundled default before any has — and
@@ -273,8 +273,7 @@ export interface DslRenderState {
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
-  // FILE authors at the path presetRoot() reports for them (candybar-config-
-  // dqe): `root` for a preset staging the config's own root, `presets.<n>.
+  // FILE authors at the path presetRoot() reports for them: `root` for a preset staging the config's own root, `presets.<n>.
   // root` otherwise. This is what `.preset.customized` means now — the file
   // declares that tree, whether a hand wrote it or a `+`/`-` click did; the
   // two are indistinguishable by design. Computed from the SAME raw parse

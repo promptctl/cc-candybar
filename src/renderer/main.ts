@@ -520,8 +520,10 @@ export function mainRenderer(
   );
   const laneDeclaration = computed(
     () => {
-      // [LAW:one-source-of-truth] Read off the same open views: a session whose
-      // view closes stops being named, so its switches go.
+      // [LAW:one-source-of-truth] Named by the same open views: a session whose
+      // view closes stops being named, so its switches go. Each switch comes
+      // from the view, or from the last returned plan for a draft whose
+      // committed config is not held.
       const lanes: Record<SessionId, LaneSwitches> = {};
       const unprepared = new Map<string, RenderOrigin>();
       for (const session of Object.keys(sources.get()) as SessionId[]) {
@@ -536,9 +538,11 @@ export function mainRenderer(
           const state = parts.renderCache.committedState(requested);
           if (!delivered || state === null) {
             if (delivered) unprepared.set(originKey(requested), requested);
-            // [LAW:one-source-of-truth] Read untracked: the last returned
-            // plan changes only to what this derivation produced, so
-            // tracking it would change no output.
+            // [LAW:no-ambient-temporal-coupling] exception: an input MobX
+            // cannot see. `subscriptions` is the last plan `declare` returned
+            // to the host, and `declare`, its one writer, assigns only what
+            // this derivation produced, so the read returns this derivation's
+            // own earlier output.
             const held = subscriptions.lanes[session];
             if (held !== undefined) lanes[session] = held;
             continue;

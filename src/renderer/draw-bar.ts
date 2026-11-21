@@ -293,7 +293,7 @@ function holdSessionAt(
   // [LAW:one-source-of-truth] The explicit config path has two spellings and
   // ONE precedence: the `--config` flag over the client's `CC_CANDYBAR_CONFIG`
   // hint (checkRenderRequest). Both are client facts; the daemon's own env is
-  // never consulted (brandon-config-5g8).
+  // never consulted.
   return parts.renderCache.holdSession(req.requested, req);
 }
 
@@ -309,10 +309,9 @@ export function setUpRender(
   // draws with after the payload await below. An eviction, a reload, or the
   // session's own render from another entry meanwhile retires them, and the
   // cache disposes them when this hold is released — never under the render.
-  // The setup owns the hold from here: a throw
-  // before it is returned releases it, and the setup releases it on every exit
-  // of the render that disposes it. Its facts and its world state came with
-  // its `context`.
+  // The setup owns the hold from here: a throw before it is returned releases
+  // it, and the setup releases it on every exit of the render that disposes
+  // it. Its facts and its world state came with its `context`.
   const hintsError = hintsErrorOf(req);
   const hold = holdSessionAt(parts, req);
   return setUpDraw(parts, hold, req, hintsError, readings, facts, terminal);
@@ -336,9 +335,12 @@ function setUpFrame(
     if (failed !== null) throw failed.error;
     return null;
   }
-  const req = hold.view.facts();
+  // [LAW:no-ambient-temporal-coupling] Every read after the hold is taken
+  // releases it on a throw, the view's request included.
+  let req: CheckedRenderRequest;
   let hintsError: string | null;
   try {
+    req = hold.view.facts();
     contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
