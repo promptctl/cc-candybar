@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-931",
-      "ref": "refs/pull/931/merge",
-      "sha": "766e348c07f547050c4aa6b105800ae4bb576068",
-      "timestamp": "2026-11-21T06:12:32.426Z",
-      "commits": [
-        {
-          "sha": "766e348c07f547050c4aa6b105800ae4bb576068",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T06:10:54Z",
-          "message": "Merge b1089b4de4ee63472f436e9943b1b7bb40537c54 into 1a3809a1c4fa16ba6b1e1aaec69afc0960897150\n"
-        },
-        {
-          "sha": "b1089b4de4ee63472f436e9943b1b7bb40537c54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T23:10:00-07:00",
-          "message": "test(config): drop an unused import\n"
-        },
-        {
-          "sha": "5f54f000d38b7b60ec3409951363bae3aae3e5e9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T23:03:38-07:00",
-          "message": "test(config): the shared-root test runs in its own data home through the production read path\n"
-        },
-        {
-          "sha": "5103846f21198206281cbf6a5c7ac9d0bc2b40a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:52:11-07:00",
-          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval\n\nThe absence proof for a plugin root behind a dangling link moves to its\nown ticket, where one classifier serves the listing, the layer search\nand the watch.\n"
-        },
-        {
-          "sha": "9bd2aef2e449d2117bfcbd7d1d820e5e7b4c1545",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T22:43:55-07:00",
-          "message": "fix(config): a plugin root behind a link to nothing is broken, never empty\n\nA missing plugin root read as one holding no plugins, even when the\nnearest entry on its path was a link to nothing: a removed volume, or a\npackage prefix uninstalled under a linked share/. Every plugin in it\nvanished with no warning. A missing root is now absent only when the\nnearest entry on its path is a directory.\n\nA new test covers a plugin installed, renamed and removed in the shared\ninstalled root, from a first install onto no root, through the root's\nown watch. Each origin gets its own result. The approved repository's\nplugin stands beside the installed ones, and the awaiting repository's\nproject file and definitions are never opened. One batch observes each\npath once.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1a3809a1c4fa16ba6b1e1aaec69afc0960897150",
-      "timestamp": "2026-11-21T05:12:56.598Z",
+      "sha": "b3abd81aa5481a19fffa48bfc65761eef7f30117",
+      "timestamp": "2026-11-21T06:19:12.825Z",
       "commits": [
         {
-          "sha": "1a3809a1c4fa16ba6b1e1aaec69afc0960897150",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-21T05:11:46Z",
-          "message": "chore(release): set `package.json` to 1.236.4\n\n## [1.236.4](https://github.com/promptctl/cc-candybar/compare/v1.236.3...v1.236.4) (2026-11-21)\n\n### Bug Fixes\n\n* **renderer:** each render cache entry compares itself with its offered config wherever it is used ([#929](https://github.com/promptctl/cc-candybar/issues/929)) ([75d266a](https://github.com/promptctl/cc-candybar/commit/75d266afc00407c4ef75d5746c8e403b1348e78c))\n"
+          "sha": "b3abd81aa5481a19fffa48bfc65761eef7f30117",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-20T23:18:04-07:00",
+          "message": "test(config): a plugin changed in a shared root reaches each origin with its own approval (#931)\n\nTwo repositories render through one installed plugin root, and only one of them is approved. A plugin installed, renamed and removed there reaches each origin through the root's watch, from a first install onto no root. Each renderer is delivered its own origin. The approved origin lists the installed plugin beside its own repository plugin. The awaiting origin lists only the installed plugin and never opens its project file or definitions. A batch that covers both origins observes each path once."
         }
       ]
     },
