@@ -4,15 +4,22 @@
     {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
-      "sha": "bebebeb48c2d08a3353d9765fde77e1227f85fb2",
-      "timestamp": "2026-11-21T07:17:16.301Z",
+      "sha": "f23a7cef90753859fc268c384aa5b685e0518ed2",
+      "timestamp": "2026-11-21T07:21:15.623Z",
       "commits": [
         {
-          "sha": "bebebeb48c2d08a3353d9765fde77e1227f85fb2",
+          "sha": "f23a7cef90753859fc268c384aa5b685e0518ed2",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-21T07:16:12Z",
-          "message": "Merge 0e76d89bf3535a0b8001cf3ba5b6085cf0f696b5 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+          "timestamp": "2026-11-21T07:20:17Z",
+          "message": "Merge 82e67fb525f8e5279b2a71d0832494fc2ec94426 into b3abd81aa5481a19fffa48bfc65761eef7f30117\n"
+        },
+        {
+          "sha": "82e67fb525f8e5279b2a71d0832494fc2ec94426",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-21T00:20:04-07:00",
+          "message": "test(fixtures): a prepared config resolves its own globals (ibyq.xrv)\n\nPreparedConfig resolves the globals for a session's picks over its own\nuser file's authored preset roots. prepareConfig's warm-up draw,\nrenderConfig and the example-config draws all call it, so no fixture\nresolves a prepared load by hand or treats an authored preset as\nuncustomized.\n"
         },
         {
           "sha": "0e76d89bf3535a0b8001cf3ba5b6085cf0f696b5",
