@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-928",
-      "ref": "refs/pull/928/merge",
-      "sha": "1b92056a51aacbab3283745d0af6c54fd29d0930",
-      "timestamp": "2026-11-21T03:36:02.122Z",
+      "version": "pr-929",
+      "ref": "refs/pull/929/merge",
+      "sha": "5ff6f2a2fda520cca2fd6410e7df5d11e6af1f88",
+      "timestamp": "2026-11-21T04:16:16.526Z",
       "commits": [
         {
-          "sha": "1b92056a51aacbab3283745d0af6c54fd29d0930",
+          "sha": "5ff6f2a2fda520cca2fd6410e7df5d11e6af1f88",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T20:34:56-07:00",
-          "message": "Merge 38b00ea068b95cbcfad7cb4ef14bc1952d75e278 into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
+          "timestamp": "2026-11-20T21:15:14-07:00",
+          "message": "Merge 3ed2020ce0ef0df289948889ac8f99d49c4a55de into 0b7b6935a6f829b85c5844fcbc580d013853719b\n"
         },
         {
-          "sha": "38b00ea068b95cbcfad7cb4ef14bc1952d75e278",
+          "sha": "3ed2020ce0ef0df289948889ac8f99d49c4a55de",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-20T20:34:29-07:00",
-          "message": "fix(renderer): a render cache entry reloads exactly when its offered config digests differently\n\nAn entry holds one value, what its last load produced, and takes it only once its build is served; every step after the take runs whatever another throws. No entry is left half-applied, so one digest comparison decides whether a host delivery or an edit draft loads, with no record of rejected deliveries. A revision is made by one function for host discovery, the renderer's delivery and the edit draft, which digests when its content changes. Watcher tests that wrote once into a just-opened watch rewrite until it delivers.\n"
+          "timestamp": "2026-11-20T21:11:40-07:00",
+          "message": "fix(renderer): each render cache entry compares itself with its offered config wherever it is used\n\nThe host offers a config snapshot only when its digest moves, so a\nrenderer that recorded a throwing load as a failed delivery waited for a\nresend that never came. The delivery now records only what the host\noffered. Every use of a cache entry compares the entry's loaded revision\nwith the one offered to it (the session's draft, or else the delivery),\nso the next event loads the same delivery again.\n\n- A config revision pairs a snapshot with its digest, taken once.\n- The delivery has no failed kind; rejectConfig and the renderer's\n  recovery replay are gone.\n- A session stays waiting until its view opens, so an opening whose load\n  threw opens on its origin's next config turn.\n- A reload takes its revision only once the cache serves its build, and\n  the steps after it all run, raising their throws together.\n- Writes are gated on the drawn entry's own load error.\n"
         }
       ]
     },
