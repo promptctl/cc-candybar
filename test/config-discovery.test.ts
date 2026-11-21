@@ -40,7 +40,6 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
-import { userPluginRoot } from "../src/daemon/config-discovery/plugin-folders";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { presence } from "../src/utils/presence";
 import { systemTimekeeper } from "./helpers/system-clock";
