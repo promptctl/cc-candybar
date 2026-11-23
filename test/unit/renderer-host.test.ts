@@ -459,31 +459,73 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
 // answered or taken is said loudly elsewhere, and the wait does not hold to
 // its client's deadline for it.
 describe("a turn on a world state tells the collector it is over", () => {
+  const broken = (what: string) => async (): Promise<RendererOutput> => {
+    throw new Error(what);
+  };
+  const aWorldState = (seq: number) => ({
+    kind: "event" as const,
+    event: { kind: "world-state" as const, worldState: worldStateOf({ seq }) },
+  });
+  const startBare = (host: ReturnType<typeof rendererHost>) =>
+    host.start(
+      () => ({
+        kind: "event",
+        event: { kind: "start", viewers: {}, sessions: [] },
+      }),
+      [],
+    );
+
+  // What each case's renderer answers, how its collector takes the
+  // subscriptions, what the case sends the host, and the seqs the collector is
+  // told were taken.
   const ENDS: ReadonlyArray<
     readonly [
       string,
       Renderer["answer"],
       (() => void) | undefined,
+      (host: ReturnType<typeof rendererHost>) => Promise<unknown>,
+      readonly number[],
     ]
   > = [
-    ["answered", async () => answered(), undefined],
+    [
+      "answered",
+      async () => answered(),
+      undefined,
+      (host) => host.answer(() => aWorldState(7)),
+      [7],
+    ],
     [
       "answered, its subscriptions not taken",
       async () => answered(),
       () => {
         throw new Error("the collector broke");
       },
+      (host) => host.answer(() => aWorldState(7)),
+      [7],
     ],
     [
       "threw",
-      async () => {
-        throw new Error("the renderer broke");
+      broken("the renderer broke"),
+      undefined,
+      (host) => host.answer(() => aWorldState(7)),
+      [7],
+    ],
+    [
+      "refused, the renderer's start having failed",
+      async ({ event }) => {
+        if (event.kind === "start") throw new Error("the start broke");
+        return answered();
       },
       undefined,
+      async (host) => {
+        await startBare(host);
+        await host.answer(() => aWorldState(7));
+      },
+      [7],
     ],
   ];
 
-  test.each(ENDS)("%s", async (_, answer, subscribed) => {
+  test.each(ENDS)("%s", async (_, answer, subscribed, drive, expected) => {
     const told: number[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
@@ -501,11 +543,8 @@ describe("a turn on a world state tells the collector it is over", () => {
       // A take the host could not make is said on every bar.
       { ...NO_ACTS, unheard: () => {} },
     );
-    await host.answer(() => ({
-      kind: "event",
-      event: { kind: "world-state", worldState: worldStateOf({ seq: 7 }) },
-    }));
-    expect(told).toEqual([7]);
+    await drive(host);
+    expect(told).toEqual(expected);
   });
 });
 

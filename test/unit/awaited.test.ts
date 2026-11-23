@@ -3,7 +3,8 @@
 // it, so a key the document does not carry and a key it carries as unread are
 // the same unread, for each kind of key.
 
-import { awaitsReading } from "../../src/facts/awaited";
+import { unreadOf } from "../../src/facts/awaited";
+import { failedStamp } from "../../src/daemon/facts-assembly";
 import type { Judged } from "../../src/daemon/foundations/judge-run";
 import type { Subscribed } from "../../src/renderer-interface/request-context";
 import {
@@ -60,7 +61,7 @@ describe("a request's wait over each kind of key", () => {
     "%s the document does not carry is waited for, as the draw reads it unread",
     (_, subscribed, _answered, drawn) => {
       const absent = worldStateOf({});
-      expect(awaitsReading(absent, subscribed)).toBe(true);
+      expect(unreadOf(absent, subscribed)).toHaveLength(1);
       expect(drawn(absent)).toEqual(pendingOf("unread"));
     },
   );
@@ -68,7 +69,7 @@ describe("a request's wait over each kind of key", () => {
   test.each(KINDS)(
     "%s the document carries answered is not waited for",
     (_, subscribed, carried) => {
-      expect(awaitsReading(worldStateOf(carried), subscribed)).toBe(false);
+      expect(unreadOf(worldStateOf(carried), subscribed)).toEqual([]);
     },
   );
 
@@ -78,30 +79,39 @@ describe("a request's wait over each kind of key", () => {
       { ...NOTHING_SUBSCRIBED, runs: new Map([["constructor", JUDGED]]) },
       { ...NOTHING_SUBSCRIBED, env: ["constructor"] },
     ])
-      expect(awaitsReading(worldStateOf({}), subscribed)).toBe(true);
+      expect(unreadOf(worldStateOf({}), subscribed)).toHaveLength(1);
   });
 
   test("a key nothing subscribes to is not waited for", () => {
-    expect(awaitsReading(worldStateOf({}), NOTHING_SUBSCRIBED)).toBe(false);
+    expect(unreadOf(worldStateOf({}), NOTHING_SUBSCRIBED)).toEqual([]);
   });
 
   test("a key superseded is not a first answer still owed", () => {
     const superseded = { ...pendingOf("superseded"), at: AT };
     expect(
-      awaitsReading(worldStateOf({ env: { VAR: superseded } }), {
+      unreadOf(worldStateOf({ env: { VAR: superseded } }), {
         ...NOTHING_SUBSCRIBED,
         env: ["VAR"],
       }),
-    ).toBe(false);
+    ).toEqual([]);
   });
 
   test.each(KINDS)(
-    "%s the document lacks is not waited for while its stamp has failed: the owners cannot read it",
-    (_, subscribed) => {
-      const failedStamp = worldStateOf({
-        diagnostics: [{ kind: "stamp", reason: "reading the owners: boom" }],
+    "%s the document lacks, once its stamp has failed, is that failure the draw reads and no wait",
+    (_, subscribed, _carried, drawn) => {
+      const lacking = worldStateOf({});
+      const failed = failedStamp(
+        lacking,
+        "reading the owners: boom",
+        lacking.daemon,
+        subscribed,
+        AT,
+      );
+      expect(unreadOf(failed, subscribed)).toEqual([]);
+      expect(drawn(failed)).toMatchObject({
+        kind: "failed",
+        reason: "reading the owners: boom",
       });
-      expect(awaitsReading(failedStamp, subscribed)).toBe(false);
     },
   );
 });

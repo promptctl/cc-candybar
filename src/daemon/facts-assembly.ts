@@ -10,7 +10,9 @@ import type {
 } from "../facts/world-state";
 import type { GitInfo, GitRead, PullRequest } from "../segments/git";
 import type { Instant } from "../utils/instant";
-import { ABSENT, ok, type Reading } from "../utils/outcome";
+import { ABSENT, failed, ok, type Reading } from "../utils/outcome";
+import { awaitedReading } from "../facts/awaited";
+import type { Subscribed } from "../renderer-interface/request-context";
 import type { SessionId } from "./foundations/session-id";
 import type { Readings } from "./readings";
 import {
@@ -165,16 +167,103 @@ export function assembleFacts(
 // failure for the reason already held, over the daemon's facts already held,
 // is that document, so a fault that persists mints nothing per landing; the
 // next stamp that succeeds carries no stamp diagnostic, and so moves too.
+//
+// [LAW:no-silent-failure] A fact that has never answered cannot now: its owners
+// could not be read. So it is that failure, and so is each key the session
+// subscribes to that the document lacks, instead of an absence a request's wait
+// could not tell from "not read yet" (`unreadOf`, src/facts/awaited.ts). A fact
+// that answered keeps its answer, and the next clean stamp restamps them all.
 export function failedStamp(
   prior: WorldState,
   reason: string,
   daemon: DaemonFacts,
+  subscribed: Subscribed,
+  at: Instant,
 ): WorldState {
+  const lost = <T>(): Fact<T> =>
+    restamp<T>(undefined, failed(reason, "read"), at);
+  const unreadLost = <T>(fact: Fact<T>): Fact<T> =>
+    awaitedReading(fact) ? lost<T>() : fact;
+  // The keys the document lacks, each as the failure, beside the ones it has.
+  const withLacking = <T>(
+    held: Readonly<Record<string, T>>,
+    names: Iterable<string>,
+    absent: () => T,
+  ): Record<string, T> => ({
+    ...held,
+    ...Object.fromEntries(
+      [...names]
+        .filter((name) => ownValue(held, name) === undefined)
+        .map((name) => [name, absent()]),
+    ),
+  });
+  const mapped = <T, U>(
+    held: Readonly<Record<string, T>>,
+    f: (value: T) => U,
+  ): Record<string, U> =>
+    Object.fromEntries(Object.entries(held).map(([k, v]) => [k, f(v)]));
+  // The prior record itself when no fact in it moved.
+  const kept = <T extends object>(now: T, held: T): T =>
+    sameFacts(now, held) ? held : now;
+  // [LAW:types-are-the-program] exception: the keys of `BuiltinFacts` are the
+  // keys of `prior.builtins`, and each fact keeps its own value type.
+  const builtins = kept(
+    Object.fromEntries(
+      Object.entries(prior.builtins).map(([key, fact]) => [
+        key,
+        unreadLost(fact),
+      ]),
+    ) as unknown as BuiltinFacts,
+    prior.builtins,
+  );
+  const sources = kept(
+    withLacking<Fact<SourceValue>>(
+      mapped(prior.sources, unreadLost),
+      subscribed.plugins.keys(),
+      lost,
+    ),
+    prior.sources,
+  );
+  const runs = kept(
+    withLacking<RunFact>(
+      mapped<RunFact, RunFact>(prior.runs, (run) => {
+        const reading = unreadLost(run.reading);
+        return reading === run.reading
+          ? run
+          : environmentOutput(
+              { reading, fault: run.fault },
+              isEnvironmentOutput(run),
+            );
+      }),
+      subscribed.runs.keys(),
+      () => ({ reading: lost(), fault: null }),
+    ),
+    prior.runs,
+  );
+  const env = kept(
+    withLacking<Fact<string>>(
+      mapped(prior.env, unreadLost),
+      subscribed.env,
+      lost,
+    ),
+    prior.env,
+  );
   const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason && compareStructural(daemon, prior.daemon))
+  if (
+    held?.reason === reason &&
+    compareStructural(daemon, prior.daemon) &&
+    builtins === prior.builtins &&
+    sources === prior.sources &&
+    runs === prior.runs &&
+    env === prior.env
+  )
     return prior;
   return {
     ...prior,
+    builtins,
+    sources,
+    runs,
+    env,
     daemon,
     seq: prior.seq + 1,
     diagnostics: [

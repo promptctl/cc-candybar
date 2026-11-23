@@ -13,6 +13,7 @@ import {
   FACTS_VERSION,
 } from "../src/daemon/facts-assembly";
 import { stampFailureOf } from "../src/facts/world-state";
+import { NOTHING_SUBSCRIBED } from "./helpers/settled";
 import { readingsOf } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { oneDay } from "../src/daemon/foundations/today-facts";
@@ -373,15 +374,33 @@ describe("a session's facts document", () => {
         daemonFactsOf(),
         T0,
       );
-      const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
+      const failedOnce = failedStamp(
+        first,
+        "the read broke",
+        daemonFactsOf(),
+        NOTHING_SUBSCRIBED,
+        at(1),
+      );
       expect(failedOnce.seq).toBe(first.seq + 1);
       expect(failedOnce.builtins).toBe(first.builtins);
       expect(stampFailureOf(failedOnce)).toBe("the read broke");
-      expect(failedStamp(failedOnce, "the read broke", daemonFactsOf())).toBe(
+      expect(failedStamp(
+          failedOnce,
+          "the read broke",
+          daemonFactsOf(),
+          NOTHING_SUBSCRIBED,
+          at(2),
+        )).toBe(
         failedOnce,
       );
       expect(
-        stampFailureOf(failedStamp(failedOnce, "another", daemonFactsOf())),
+        stampFailureOf(failedStamp(
+            failedOnce,
+            "another",
+            daemonFactsOf(),
+            NOTHING_SUBSCRIBED,
+            at(3),
+          )),
       ).toBe("another");
       // The daemon's facts are read apart from the owners that threw, so a
       // failure that persists still carries them as they stand.
@@ -389,6 +408,8 @@ describe("a session's facts document", () => {
         failedOnce,
         "the read broke",
         daemonFactsOf(FILE_EVENTS_STALLED),
+        NOTHING_SUBSCRIBED,
+        at(4),
       );
       expect(moved.seq).toBe(failedOnce.seq + 1);
       expect(moved.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);

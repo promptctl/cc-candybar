@@ -142,6 +142,30 @@ export function sessionOfEvent(event: Event): SessionId | null {
   }
 }
 
+// [LAW:types-are-the-program] The world states an event hands the renderer to
+// take, every kind named so a new one fails the build until it says.
+export function worldStatesOf(event: Event): readonly WorldState[] {
+  switch (event.kind) {
+    case "context":
+    case "world-state":
+      return [event.worldState];
+    case "start":
+      return event.sessions.map(({ worldState }) => worldState);
+    case "request":
+    case "click":
+    case "retire":
+    case "effect-done":
+    case "stats":
+    case "debug":
+    case "close-journal":
+    case "close-views":
+    case "config":
+    case "viewers":
+    case "due":
+      return [];
+  }
+}
+
 // A session's context as its newest request names it, and the world state read
 // at that request's keys.
 export interface SessionConfig {

@@ -179,11 +179,10 @@ type Told =
   | { readonly kind: "pending"; readonly reading: Pending }
   | { readonly kind: "none"; readonly why: Failed };
 
-// [LAW:types-are-the-program] The write half of a source, closed over its
-// store node. A node is only ever written `unanswered` before its first
-// answer: the one effect that tells it holds the answer showing while a key's
-// move waits for the next run's (`declareSource`), so no publisher sees a
-// pending or a failed key after an answer.
+// The write half of a source, closed over its store node. It is told
+// `unanswered` only before its first answer: the one effect that tells it
+// (`declareSource`) holds the answer showing while a key's move waits for the
+// next run's, so no publisher sees a pending or a failed key after an answer.
 interface Publisher {
   // Pending, or the failure of a key that never answered.
   readonly unanswered: (reading: Pending | Failed) => void;
@@ -668,7 +667,9 @@ export class SourceRegistry {
     const node = this.publisherFor(name, parse);
     // [LAW:single-enforcer] The one owner of whether this source has answered,
     // for every parser arm: what it is told after an answer that is not one
-    // is the held answer's to outlast.
+    // is the held answer's to outlast. It is the effect's own memory, as a
+    // run's last key is (`answeredUnder`): the store cannot say it, because the
+    // stand-in for a key that never answered is a value like any answer.
     let answered = false;
     const publish = (told: Told): void => {
       switch (told.kind) {

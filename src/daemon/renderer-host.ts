@@ -28,6 +28,7 @@
 import {
   isCommand,
   sessionOfEvent,
+  worldStatesOf,
   type ConfigChange,
   type Command,
   type CommandReply,
@@ -423,7 +424,6 @@ export function rendererHost(
       output = await renderer.answer(input);
     } catch (thrown) {
       recordTaken("session release", release);
-      turnEnded(input.event);
       const failure = failureOf(thrown);
       if (input.event.kind === "start") endedStart({ kind: "threw", failure });
       return unanswered(failure, queuedMs);
@@ -499,17 +499,6 @@ export function rendererHost(
     };
   };
 
-  // [LAW:single-enforcer] The one word to the collector that the renderer's
-  // turn on a world state is over, whatever it did: a request's wait ends on
-  // a turn that took its subscriptions, and on one that could not (the
-  // renderer threw, or the host could not take them: `notTaken`, which is
-  // loud). Holding the wait to its client's deadline for an answer that
-  // cannot come would only turn the cause into a TIMEOUT.
-  const turnEnded = (event: Event): void => {
-    if (event.kind === "context" || event.kind === "world-state")
-      recordTaken("world state heard", () => collector.heard(event.worldState));
-  };
-
   // [LAW:single-enforcer] After an answer, the host lands the configuration
   // batch, publishes the output, and settles every effect. Only acts that
   // depend on a refused configuration landing are skipped.
@@ -540,7 +529,6 @@ export function rendererHost(
       requested,
       receipt,
     );
-    turnEnded(event);
     let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
@@ -1010,6 +998,8 @@ export function rendererHost(
     }
     return inMailbox(async (queuedMs, holds) => {
       let restore: Subscriptions["configs"] | undefined;
+      // The input this slot took, whose turn the slot ends.
+      let ending: Event | null = null;
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
         let made: Made<Event>;
@@ -1035,6 +1025,7 @@ export function rendererHost(
           if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
+        ending = made.event;
         if (
           !starting &&
           startFailure !== null &&
@@ -1050,6 +1041,15 @@ export function rendererHost(
         if (starting && slotted.turn.kind === "answered") restore = undefined;
         return { event: made.event, slotted };
       } finally {
+        // [LAW:single-enforcer] The one place every slot ends, so the one word
+        // to the collector that the renderer's turn on a world state is over,
+        // whatever became of it: answered and taken, answered and not taken
+        // (`notTaken`, loud), refused, or thrown. A request's wait ends on it
+        // in each case, because holding the wait to its client's deadline for
+        // an answer that cannot come would only turn the cause into a TIMEOUT.
+        if (ending !== null)
+          for (const worldState of worldStatesOf(ending))
+            recordTaken("world state heard", () => collector.heard(worldState));
         // Config effects land inside the slot. Keep their discovery holds
         // until then, and restore previous demand before another input.
         if (restore !== undefined) {

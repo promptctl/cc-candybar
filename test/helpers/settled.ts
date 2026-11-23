@@ -1,6 +1,6 @@
 import { when } from "mobx";
 import { sourcesOf } from "../../src/daemon/collector";
-import { awaitsReading } from "../../src/facts/awaited";
+import { unreadOf } from "../../src/facts/awaited";
 import type { WorldState } from "../../src/facts/world-state";
 import type { Subscribed } from "../../src/renderer-interface/request-context";
 import {
@@ -21,7 +21,7 @@ export const subscribedBy = (
   view: Pick<SessionView, "state" | "registry">,
 ): Subscribed => sourcesOf(subscriptionsOf(view), NOTHING_SUBSCRIBED);
 
-// The unread half of a request's wait (`awaitsReading`, the rule the
+// The unread half of a request's wait (`unreadOf`, the rule the
 // collector's `holds` reads), for the rigs that draw straight from the owners'
 // world state and take no renderer turn: the collector's other half, the
 // renderer's turn on the latest stamp, has nothing to wait on there, and its
@@ -30,5 +30,5 @@ export async function settledWorld(
   worldState: () => WorldState,
   subscribed: () => Subscribed,
 ): Promise<void> {
-  await when(() => !awaitsReading(worldState(), subscribed()));
+  await when(() => unreadOf(worldState(), subscribed()).length === 0);
 }

@@ -8,7 +8,6 @@ import {
   runFactOf,
   shortDigest,
   sourceFactOf,
-  stampFailureOf,
   type BuiltinFacts,
   type WorldState,
 } from "./world-state.js";
@@ -33,6 +32,8 @@ import {
 // [LAW:one-source-of-truth] It takes the session's `Subscribed` itself, not a
 // copy of its shape, so the collector hands it exactly what the renderer
 // subscribed.
+// A world state whose stamp failed lands that failure on every fact that never
+// answered (`failedStamp`), so a failed fact is no wait and this stays one rule.
 // [LAW:nothing-unseen] Each fact it waits on is named for the request's
 // record, so a wait that ends on its deadline says which fact held it.
 export function unreadOf(
@@ -53,21 +54,10 @@ export function unreadOf(
     ),
     ...env.map((name) => [`env:${name}`, envFactOf(facts, name)] as const),
   ];
-  // [LAW:no-silent-failure] A world state whose last stamp failed carries the
-  // readings it held, and its owners cannot read a key it lacks: nothing
-  // arrives for that fact while the failure stands, and the bar says so (⚠
-  // from the stamp's own diagnostic). Waiting on it would hold every request
-  // to its deadline and turn the cause into a TIMEOUT.
-  if (stampFailureOf(facts) !== null) return [];
   return waited
     .filter(([, fact]) => awaitedReading(fact))
     .map(([label]) => label);
 }
-
-export const awaitsReading = (
-  facts: WorldState,
-  subscribed: Subscribed,
-): boolean => unreadOf(facts, subscribed).length > 0;
 
 // [LAW:types-are-the-program] Whether a request waits on each built-in, every
 // one named, so a new built-in fails the build here until it says.

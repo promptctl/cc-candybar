@@ -103,6 +103,9 @@ interface Declared<
   Context extends ViewFacts,
 > extends CollectedRequest<Context> {
   readonly lanes: DeclaredLanes;
+  // The set the lanes were declared over, which a declaration is made again
+  // for whenever it moves, so a stamp that fails names the keys it lacks.
+  readonly subscriptions: Subscribed;
 }
 
 // What a declaration takes the session's holds for: its keys and its
@@ -542,7 +545,16 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           // [LAW:no-ambient-temporal-coupling] A stamp and its delivery are
           // one action, so a request's wait (`settled`) sees only a stamp
           // whose world state is already in the mailbox, ahead of its turn.
-          if (this.stamp({ session, stamped }, moved))
+          if (
+            this.stamp(
+              {
+                session,
+                stamped,
+                subscriptions: reader.declared.get().subscriptions,
+              },
+              moved,
+            )
+          )
             this.deps.clock.detach(`world state delivery ${session}`, () =>
               this.deps.deliver({
                 kind: "world-state",
@@ -596,7 +608,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
         );
-      return { ...request, lanes };
+      return { ...request, lanes, subscriptions };
     } catch (e) {
       this.deps.log(
         "error",
@@ -608,6 +620,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions,
         ),
+        subscriptions,
       };
     }
   }
@@ -629,20 +642,20 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
   private stamp(
-    { session, stamped }: Pick<SessionRecord<Context>, "session" | "stamped">,
+    {
+      session,
+      stamped,
+      subscriptions,
+    }: Pick<SessionRecord<Context>, "session" | "stamped" | "subscriptions">,
     moved: StampInputs,
   ): boolean {
     const prior = stamped.document;
     const { owners, daemon } = moved;
+    const at = instantAt(this.deps.clock);
     const next =
       owners.kind === "failed"
-        ? failedStamp(prior, owners.reason, daemon)
-        : this.assembled(
-            prior,
-            owners.value,
-            daemon,
-            instantAt(this.deps.clock),
-          );
+        ? failedStamp(prior, owners.reason, daemon, subscriptions, at)
+        : this.assembled(prior, owners.value, daemon, subscriptions, at);
     const failure = next === prior ? null : stampFailureOf(next);
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
     if (failure !== null)
@@ -659,6 +672,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     prior: WorldState,
     readings: Readings,
     daemon: DaemonFacts,
+    subscriptions: Subscribed,
     at: Instant,
   ): WorldState {
     try {
@@ -668,6 +682,8 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         prior,
         `stamping the world state: ${String(e)}`,
         daemon,
+        subscriptions,
+        at,
       );
     }
   }

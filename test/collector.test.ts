@@ -55,7 +55,7 @@ import {
   withTranscriptLanes,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { awaitsReading } from "../src/facts/awaited";
+import { unreadOf } from "../src/facts/awaited";
 import { NOTHING_SUBSCRIBED } from "./helpers/settled";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
@@ -256,11 +256,11 @@ describe("a session's transcript", () => {
     const { collector, clock, handedIn } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
-    expect(awaitsReading(first, NOTHING_SUBSCRIBED)).toBe(true);
+    expect(unreadOf(first, NOTHING_SUBSCRIBED)).toContain("metrics");
     await clock.settle(0);
     const landed = lastHandedIn(handedIn)!;
     expect(messagesOf(landed)).toBe(1);
-    expect(awaitsReading(landed, NOTHING_SUBSCRIBED)).toBe(false);
+    expect(unreadOf(landed, NOTHING_SUBSCRIBED)).toEqual([]);
   });
 
   test("an append lands in the world state on the collector's trigger, with no request", async () => {
@@ -280,7 +280,7 @@ describe("a session's transcript", () => {
     await clock.settle(0);
     append();
     const warm = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    expect(awaitsReading(warm, NOTHING_SUBSCRIBED)).toBe(false);
+    expect(unreadOf(warm, NOTHING_SUBSCRIBED)).toEqual([]);
     // What the transcript said when the trigger last read it, not the append
     // this request arrived after: the trigger reads it, not the request.
     expect(messagesOf(warm)).toBe(1);
@@ -422,7 +422,15 @@ describe("a stamp that throws", () => {
     expect(handedIn).toHaveLength(1);
     const failedDoc = (handedIn[0] as { worldState: WorldState }).worldState;
     expect(failedDoc.seq).toBe(first.seq + 1);
-    expect(failedDoc.builtins).toBe(first.builtins);
+    // A fact that answered keeps its answer; one that never did is the
+    // failure, so the request's wait ends on it instead of reading it unread.
+    expect(failedDoc.builtins.autocompact).toBe(first.builtins.autocompact);
+    expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
+    expect(failedDoc.builtins.metrics).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("host read exploded"),
+    });
+    expect(unreadOf(failedDoc, NOTHING_SUBSCRIBED)).toEqual([]);
     expect(stampFailureOf(failedDoc)).toContain("host read exploded");
     expect(logged.join("\n")).toContain("host read exploded");
 
