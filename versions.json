@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-940",
+      "ref": "refs/pull/940/merge",
+      "sha": "aef788ffc74d7fdd3fc97de69e7af9bb0dc68c9c",
+      "timestamp": "2026-11-23T18:52:24.394Z",
+      "commits": [
+        {
+          "sha": "aef788ffc74d7fdd3fc97de69e7af9bb0dc68c9c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T18:50:20Z",
+          "message": "Merge 52d5bf46d13d6ebed22687340f22cde171db0a65 into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+        },
+        {
+          "sha": "52d5bf46d13d6ebed22687340f22cde171db0a65",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:50:04-07:00",
+          "message": "fix(render): a request's draws end as one typed result, and what landed at the renderer never moves back\n\nReview pass 1 on the request wait: the loop's ending is one value, an\nabandoned draw is no throw, a rejected delivery tells the waiting request\nwhy, the deferral spelling is one call per deferred built-in, and the wait\nreturns what it waited on.\n"
+        },
+        {
+          "sha": "98b1fc2c48c0e36b5ce851cea035aba6733c2f8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:17:08-07:00",
+          "message": "fix(render): a request waits for exactly what its frame draws pending, and an unanswered source draws as pending\n\nThe draw reports what it still owes with every frame (settled, owed names, or stalled by a failed stamp), each with the seq of the world state it drew. The host waits for that and nothing it recomputes, redraws when a later world state reaches the renderer, and ends on a draw that owes nothing, a stalled stamp, a turn that threw or was refused, or the client's deadline, recording what held a wait that ran out. Text, file and json variables are pending until their first run answers; their fallback stands in only for a run that read nothing. Today's day sums and the branch's PR draw deferred, which no request waits on.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-942",
       "ref": "refs/pull/942/merge",
       "sha": "783463922aa9fb6080b919d0c749ad3d1d90a2fa",
@@ -64,28 +93,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-23T18:19:59Z",
           "message": "chore(release): set `package.json` to 1.236.10\n\n## [1.236.10](https://github.com/promptctl/cc-candybar/compare/v1.236.9...v1.236.10) (2026-11-23)\n\n### Bug Fixes\n\n* **usage:** today counts each API response once, however many session files hold a copy of it ([#939](https://github.com/promptctl/cc-candybar/issues/939)) ([65b8127](https://github.com/promptctl/cc-candybar/commit/65b812767561b997ca5949478dde770145835dd0))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-940",
-      "ref": "refs/pull/940/merge",
-      "sha": "e1e4a8c892f0efcafce65ccf7a8b506f9bd931a6",
-      "timestamp": "2026-11-23T18:19:18.590Z",
-      "commits": [
-        {
-          "sha": "e1e4a8c892f0efcafce65ccf7a8b506f9bd931a6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:18:14-07:00",
-          "message": "Merge 98b1fc2c48c0e36b5ce851cea035aba6733c2f8d into 65b812767561b997ca5949478dde770145835dd0\n"
-        },
-        {
-          "sha": "98b1fc2c48c0e36b5ce851cea035aba6733c2f8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:17:08-07:00",
-          "message": "fix(render): a request waits for exactly what its frame draws pending, and an unanswered source draws as pending\n\nThe draw reports what it still owes with every frame (settled, owed names, or stalled by a failed stamp), each with the seq of the world state it drew. The host waits for that and nothing it recomputes, redraws when a later world state reaches the renderer, and ends on a draw that owes nothing, a stalled stamp, a turn that threw or was refused, or the client's deadline, recording what held a wait that ran out. Text, file and json variables are pending until their first run answers; their fallback stands in only for a run that read nothing. Today's day sums and the branch's PR draw deferred, which no request waits on.\n"
         }
       ]
     }
