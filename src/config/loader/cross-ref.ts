@@ -12,6 +12,7 @@ import {
   inSettingDomain,
   rangeOf,
   settingOrderProblems,
+  settingBeneath,
   settingsOf,
   type SettingOrderProblem,
   type SettingValue,
@@ -780,10 +781,7 @@ function checkPlacementSettings(
   // Values out of their domains were reported above; the relations are asked
   // of the placement's resolved values only once every one is a member.
   const resolved = Object.fromEntries(
-    Object.entries(declared).map(([n, d]) => [
-      n,
-      node.settings?.[n] ?? d.default,
-    ]),
+    Object.entries(declared).map(([n, d]) => [n, settingBeneath(node, n, d)]),
   );
   const members = Object.entries(resolved).every(([n, v]) =>
     inSettingDomain(declared[n]!, v),

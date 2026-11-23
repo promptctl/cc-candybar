@@ -59,6 +59,8 @@ describe("a pick read through its setting's parse", () => {
     expect(theme.parse("no-such-theme")).toBeNull();
     expect(style.parse("vapor")).not.toBeNull();
     expect(style.parse("other")).toBeNull();
+    // Object.prototype's keys are no declared style.
+    expect(style.parse("constructor")).toBeNull();
     // The floor preset is a member, though no config declares it.
     expect(preset.parse("default")).toBe("default");
     expect(preset.parse("roomy")).toBe("roomy");

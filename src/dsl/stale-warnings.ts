@@ -51,6 +51,10 @@ export function staleWarnings(
   picks: readonly StalePick[],
   domains: () => ReadonlyMap<string, ResolvedDomain>,
 ): readonly StaleWarning[] {
+  // Built when a first warning needs it, once for all of them: a frame with
+  // no stale pick never builds it.
+  let built: ReadonlyMap<string, ResolvedDomain> | undefined;
+  const domainsOnce = () => (built ??= domains());
   return [...new Map(picks.map((p) => [p.row.key, p])).values()].map(
     (pick) => ({
       kind: "stale",
@@ -58,7 +62,7 @@ export function staleWarnings(
       setting: pick.row.name,
       message:
         `Setting ${pick.row.name} holds "${pick.raw}", which it cannot hold, ` +
-        `so the bar wears "${pick.wears}". ${holds(pick, domains())}. ` +
+        `so the bar wears "${pick.wears}". ${holds(pick, domainsOnce())}. ` +
         `Pick it again.`,
     }),
   );

@@ -905,9 +905,15 @@ export class SourceRegistry {
   }
 
   // What the bound view's session holds at `key`, as its `state` variables
-  // read it. A registry with no session state holds nothing.
+  // read it. [LAW:no-silent-failure] A registry with no session state cannot
+  // be asked, as `declareState` cannot be.
   held(key: string): string | null {
-    return this.sessionState?.get(this.session(), key) ?? null;
+    if (!this.sessionState) {
+      throw new Error(
+        `held("${key}"): SourceRegistry was constructed without a SessionState`,
+      );
+    }
+    return this.sessionState.get(this.session(), key);
   }
 
   // [LAW:one-source-of-truth] The revision of the session state this render's

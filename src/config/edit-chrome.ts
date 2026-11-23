@@ -26,6 +26,7 @@ import {
   mapOpens,
   placementId,
   placementIdentityOf,
+  settingBeneath,
   settingsOf,
   IMPLIED_SETTINGS,
   walkNodes,
@@ -392,7 +393,7 @@ function configureParts(
       setting: name,
       decl,
       key,
-      beneath: node.settings?.[name] ?? decl.default,
+      beneath: settingBeneath(node, name, decl),
     };
     // [LAW:one-source-of-truth] The variable holds the setting's fold, so the
     // placement, its control's mark and its step all read one value.

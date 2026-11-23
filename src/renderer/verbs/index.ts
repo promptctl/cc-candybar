@@ -821,10 +821,20 @@ function releaseSaved(
     ...placementDrafts(written, pick).map((p) => p.key),
   ]);
   for (const key of movedOn) drafted.delete(key);
-  for (const key of settingTable(written).rows.keys()) {
-    if (!drafted.has(key) && pick(key) !== null)
-      ctx.sessionState.clear(sid, key);
-  }
+  // [LAW:nothing-unseen] A release that lets go of a stale pick is a decision
+  // the save made for the user: the log names it.
+  const released = [...settingTable(written).rows].flatMap(([key, row]) => {
+    const raw = pick(key);
+    return drafted.has(key) || raw === null
+      ? []
+      : [{ key, stale: row.parse(raw) === null }];
+  });
+  for (const { key } of released) ctx.sessionState.clear(sid, key);
+  if (released.length > 0)
+    ctx.log(
+      "info",
+      `released: ${released.map((r) => `${r.key}${r.stale ? " (stale)" : ""}`).join(" ")} (session=${sid})`,
+    );
 }
 
 // [LAW:single-enforcer] A placement's value re-crosses the gate its control's

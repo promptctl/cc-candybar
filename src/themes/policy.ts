@@ -105,8 +105,9 @@ export const THEME_FLOOR = "textual-dark";
 // three facts apart: nothing held, a member held, or a spelling held that the
 // domain does not admit (a theme since retired, a style the config dropped, a
 // number past a narrowed range). A stale pick is not "no pick": the bar wears
-// what lies beneath it and says so (src/render/stale-warnings.ts), and the
-// session keeps it, so it comes back when its domain does.
+// what lies beneath it and says so (src/dsl/stale-warnings.ts), and the
+// session keeps it, so it comes back when its domain does — until the user
+// picks again, or saves, which releases every pick that is no draft.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
 // chain documented in src/config/presets.ts — a fragment some transient MODE of
@@ -337,8 +338,9 @@ export function resolveSelection<T>(
   named: (raw: string) => Decided<T> | null,
 ): Folded<Selection<T>> {
   // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
-  // config-default rung, so the fold enforces the precedence — there is no "is there an expression?" branch anywhere deciding
-  // whether the rungs above it are honoured.
+  // config-default rung, so the fold enforces the precedence: the one test of
+  // whether that rung holds an expression picks the rung's contents, and
+  // never decides whether the rungs above it are honoured.
   const configRung: Selection<T> | null = isExpression(globalsValue)
     ? { kind: "expression", source: globalsValue }
     : named(globalsValue ?? floor.name);
@@ -384,15 +386,15 @@ export type DecidedStyle = Decided<ThemeKey>;
 
 // One rung's contribution: the style this name selects, or null when it names no
 // declared style — which is not a pick at all, so the fold moves on.
-// [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
-// `hasOwnProperty` first and then looking the key up would be the same question
-// twice, and the second answer could only ever restate the first.
+// [LAW:parse-dont-validate] Membership is by own key: a plain record also
+// answers for `constructor` and the rest of Object.prototype, which are no
+// declared style and must not decide one.
 export function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
-  const value = declaredStyles[name];
-  return value === undefined ? null : { kind: "decided", name, value };
+  if (!Object.hasOwn(declaredStyles, name)) return null;
+  return { kind: "decided", name, value: declaredStyles[name]! };
 }
 
 // [LAW:single-enforcer] The membership policy for a style NAME, wherever the name

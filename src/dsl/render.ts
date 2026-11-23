@@ -30,6 +30,7 @@ import {
   parseArm,
   settingSpelling,
   type DraftSlot,
+  settingBeneath,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -900,7 +901,7 @@ export function compileDslConfig({
         enumerable: true,
         get:
           draft === undefined
-            ? () => node.settings?.[name] ?? decl.default
+            ? () => settingBeneath(node, name, decl)
             : foldedRead(draft, name),
       });
     }

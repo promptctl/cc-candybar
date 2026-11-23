@@ -939,6 +939,18 @@ export type ImpliedSetting = (typeof IMPLIED_SETTINGS)[number];
 // it sets its own. A placement's own value overrides either for that copy
 // alone. A segment cannot declare an implied setting itself
 // (loader/settings.ts), so nothing here shadows another.
+
+// [LAW:one-source-of-truth] The value a placement's setting holds with no
+// session pick: its own, else its declaration's default. The load check, the
+// draft slot and the render all read this one rule.
+export function settingBeneath(
+  node: { readonly settings?: Readonly<Record<string, SettingValue>> },
+  name: string,
+  decl: SettingDecl,
+): SettingValue {
+  return node.settings?.[name] ?? decl.default;
+}
+
 export function settingsOf(
   seg: SegmentDecl,
 ): Readonly<Record<string, SettingDecl>> {

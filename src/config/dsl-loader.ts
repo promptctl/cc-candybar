@@ -625,11 +625,13 @@ function checkPlugin(
   }
   const owned = ownedBy(ns);
   const issues: ConfigIssue[] = [];
-  // Neither check below reads a palette name: only the structural pass does.
+  // [LAW:one-source-of-truth] The declaration check reads the installed
+  // themes (a theme-default action names one), the same set the replacing
+  // branch above judges by, so a definition gets one verdict on either.
   const ctx: ValidateCtx = {
     source: "",
     issues,
-    allowedPalettes: new Set(),
+    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: [],

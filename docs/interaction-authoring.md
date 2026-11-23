@@ -89,8 +89,12 @@ declares exactly one value source:
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
-default: "…" }`. (The one exception: never declare state for a `{{ menu }}` —
-its state is synthesized, see below.) A `persist` action reads its current
+default: "…" }`. (Two exceptions: never declare state for a `{{ menu }}` —
+its state is synthesized, see below — and never for a key a bar setting owns
+(`theme`, `style`, `preset`, `effect`, `padding`, a placement's setting): a
+setting reads its value through its own domain, so a `state` variable over its
+key is a load error. Read a setting's value from its `<field>.effective`
+variable, or from `.settings.<name>` inside the placement.) A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,
@@ -257,7 +261,8 @@ always undoable from the bar itself:
 ```
 
 `applyThemeForever` needs no matching `state` variable: reading a value back
-is required for `set` (through `{ kind: "state" }`), never for `persist`. The
+is required for `set` over a plain key (through `{ kind: "state" }`), never for
+`persist`. The
 click still carries the session id, for error-surfacing: the session the bar
 draws for.
 
