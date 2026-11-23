@@ -4,15 +4,22 @@
     {
       "version": "pr-934",
       "ref": "refs/pull/934/merge",
-      "sha": "2b87d42839720398b484fd349a8b72538d8c1aac",
-      "timestamp": "2026-11-23T08:28:56.672Z",
+      "sha": "c281bef2947b19f24b3802cebb9fe7954a61032d",
+      "timestamp": "2026-11-23T08:46:27.159Z",
       "commits": [
         {
-          "sha": "2b87d42839720398b484fd349a8b72538d8c1aac",
+          "sha": "c281bef2947b19f24b3802cebb9fe7954a61032d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T08:27:49Z",
-          "message": "Merge f120afebc85bdba5b69ebc637ff173a7a066b221 into 7e6b5e5c82b2b65761435a047c890ba77ff34587\n"
+          "timestamp": "2026-11-23T08:45:17Z",
+          "message": "Merge cde5323b54943a3eeb13ab19660351028ccd03bf into 7e6b5e5c82b2b65761435a047c890ba77ff34587\n"
+        },
+        {
+          "sha": "cde5323b54943a3eeb13ab19660351028ccd03bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T01:44:20-07:00",
+          "message": "fix(daemon): a daemon event is always about something\n\nEvery event of the daemon's own carries what it is about, a kind that holds\none event at a time being about itself, so the feed's cover of an answer and\nthe owner's acknowledgement of it ask one question of an event's identity.\nA recurring subject is held only when its slot holds, so a subject whose event\ncould not be built is shown by its next occurrence. What a diagnostic is\nabout is built in one place, the repository question included.\n"
         },
         {
           "sha": "f120afebc85bdba5b69ebc637ff173a7a066b221",

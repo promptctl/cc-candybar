@@ -28407,6 +28407,7 @@ init_globals();
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
+var sameDaemonEvent = (a, b) => a.kind === b.kind && a.about === b.about && sameOccurrence(a.event, b.event);
 var recurrence = (more) => more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
@@ -46929,6 +46930,7 @@ var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
+var aboutOf = (kind, subject) => subject === void 0 ? kind : `${kind}\0${subject}`;
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf3 = (text4, severity) => {
@@ -47143,7 +47145,7 @@ function repoQuestions(question, sessionId2) {
     const line = [diagnosticSpan(message, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
-      about: `repo-question\0${dir}`,
+      about: aboutOf("repo-question", dir),
       message,
       copy: message,
       lines: [line]
@@ -72803,7 +72805,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   const daemonWarnings = daemonEvents.filter(isWarned).map(
     ({ shown, hold: hold2 }) => ({
       warning: { kind: shown.kind, message: shown.event.text, hold: hold2 },
-      subject: shown.kind === "launch-pipes" ? shown.about : void 0
+      subject: shown.about
     })
   );
   const standing2 = [
@@ -73009,7 +73011,6 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
-var aboutOf = (kind, subject) => subject === void 0 ? kind : `${kind}\0${subject}`;
 var isThrew = (event) => event.shown.kind === "task-threw";
 var isWarned = (event) => !isThrew(event);
 function daemonEventsAt(held, at, render3) {
@@ -88475,9 +88476,7 @@ var failedFeed = (refusal) => {
 function covers(prior, offered) {
   if (prior.json !== offered.json) return false;
   return offered.displayedEvents === void 0 || offered.displayedEvents.every(
-    ({ kind, event }) => prior.displayedEvents?.some(
-      (seen) => seen.kind === kind && sameOccurrence(seen.event, event)
-    ) ?? false
+    (event) => prior.displayedEvents?.some((seen) => sameDaemonEvent(seen, event)) ?? false
   );
 }
 function settleWrite(write, delivered) {
@@ -91473,8 +91472,8 @@ var RecurringEvents = class {
   occur(occurrence) {
     if (this.closed) return;
     const about = this.about(occurrence);
-    const subject = this.subjects.get(about);
-    if (subject === void 0) this.show(this.subjectOf(about), occurrence, 0);
+    const subject = this.subjects.get(about) ?? this.subjectOf(about);
+    if (subject.slot.event() === null) this.show(subject, occurrence, 0);
     else
       subject.recurred = {
         count: (subject.recurred?.count ?? 0) + 1,
@@ -91499,8 +91498,9 @@ var RecurringEvents = class {
     for (const { slot } of this.subjects.values()) slot.dispose();
   }
   show(subject, occurrence, more) {
+    const event = this.shown(occurrence, more, instantAt(this.clock));
     subject.recurred = null;
-    subject.slot.hold(this.shown(occurrence, more, instantAt(this.clock)));
+    subject.slot.hold(event);
     this.changed();
   }
   subjectOf(about) {
@@ -92440,7 +92440,7 @@ function createDaemon(inputs) {
   );
   const heldBy2 = (kind, slot) => {
     const event = slot.event();
-    return event === null ? [] : [{ kind, event }];
+    return event === null ? [] : [{ kind, about: kind, event }];
   };
   function restateFaults() {
     runInAction(
