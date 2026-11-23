@@ -4,15 +4,22 @@
     {
       "version": "pr-936",
       "ref": "refs/pull/936/merge",
-      "sha": "360e7cd362fb3c60b58b708cccf36243eddda9a0",
-      "timestamp": "2026-11-23T13:43:19.597Z",
+      "sha": "2a5658e9f09102c6a166fbd4ae21e3c71d1b385a",
+      "timestamp": "2026-11-23T13:44:30.291Z",
       "commits": [
         {
-          "sha": "360e7cd362fb3c60b58b708cccf36243eddda9a0",
+          "sha": "2a5658e9f09102c6a166fbd4ae21e3c71d1b385a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:42:03Z",
-          "message": "Merge 69c27ef81a69a534a55c545355d1b998e26081a7 into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
+          "timestamp": "2026-11-23T13:43:06Z",
+          "message": "Merge b2fdae56fb62fd29e3a79a284db94b25dde4b6f2 into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
+        },
+        {
+          "sha": "b2fdae56fb62fd29e3a79a284db94b25dde4b6f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:42:52-07:00",
+          "message": "docs(click): say plainly what a quoted phrase is\n"
         },
         {
           "sha": "69c27ef81a69a534a55c545355d1b998e26081a7",
