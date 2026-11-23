@@ -271,6 +271,7 @@ describe("config-validators gate", () => {
 describe("persist/reset action loader shape", () => {
   const base = (actions: string) => `{
     globals: {},
+    styles: { vivid: { chromaScale: 1.2 } },
     actions: ${actions},
     segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
     root: 's',
@@ -619,6 +620,7 @@ describe("persist action click → the config file", () => {
   // their own and need the same real-daemon-handler coverage.
   const SRC2 = `{
     globals: {},
+    styles: { vivid: { chromaScale: 1.2 } },
     actions: {
       applyStyleForever: { persist: 'style', to: 'vivid' },
       cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256'] },
@@ -662,6 +664,21 @@ describe("persist action click → the config file", () => {
     await click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
     await click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
     expect(globalsInFile()).toEqual({ padding: 3 });
+  });
+
+  // [LAW:no-silent-failure] A layer that holds a string where the stepper
+  // steps a number is refused, naming what it holds — the loader refuses such
+  // a file, so a step must not paper over it by writing a number from the
+  // value the bar draws.
+  test("a persist stepper over a file value that is no number refuses, and leaves the file", async () => {
+    const { render, click } = buildPersistRuntime(SRC2);
+    const url = ownUrls(render())[2]!;
+    durable.write(SRC2.replace("globals: {},", "globals: { padding: '7' },"));
+    const before = durable.text();
+    await expect(click(url)).rejects.toThrow(
+      /step-config: padding holds "7" in .*, not a number to step/,
+    );
+    expect(durable.text()).toBe(before);
   });
 
   // brandon-settings-2ov: a preset whose fragment names a field wins over

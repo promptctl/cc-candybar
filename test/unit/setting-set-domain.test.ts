@@ -168,3 +168,63 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     ).not.toThrow();
   });
 });
+
+// [LAW:verifiable-goals] A `persist` of the same setting writes the same
+// values into the file, where the loader refuses one the domain does not hold:
+// so it is a load error here, by the same rows, rather than a refused click.
+describe("a persist on a setting is checked against the setting's domain", () => {
+  it.each([
+    [
+      "{ persist: 'padding', to: '99' }",
+      /actions\.pick\.to: "99" is outside the padding domain — a click would write it into a file the loader refuses; padding takes an integer from 0 to 16/,
+    ],
+    [
+      "{ persist: 'padding', min: 0, max: 20, by: 1 }",
+      /actions\.pick\.max: "20"/,
+    ],
+    [
+      "{ persist: 'autoWrap', cycle: ['true', 'maybe'] }",
+      /actions\.pick\.cycle: "maybe" .*true or false/,
+    ],
+    [
+      "{ persist: 'palette', to: 'no-such-theme' }",
+      /actions\.pick\.to: "no-such-theme" is outside the palette domain/,
+    ],
+    [
+      "{ persist: 'style', to: 'no-such-style' }",
+      /actions\.pick\.to: "no-such-style"/,
+    ],
+    [
+      "{ persist: 'presets.compact.globals.padding', to: '99' }",
+      /actions\.pick\.to: "99"/,
+    ],
+    [
+      "{ persist: 'themeDefaults.nord.shade', to: 'no-such-shade' }",
+      /actions\.pick\.to: "no-such-shade"/,
+    ],
+    // The old spelling of endcaps names the persist fix, not a `set`.
+    [
+      "{ persist: 'style', to: 'capsule' }",
+      /"capsule" is an endcaps shape, not a style .*write persist: "endcaps", to: "capsule"/,
+    ],
+  ])("%s is a load error", (action, message) => {
+    expect(() => load(action)).toThrow(message);
+  });
+
+  it.each([
+    "{ persist: 'padding', to: '16' }",
+    "{ persist: 'padding', min: 0, max: 16, by: 1 }",
+    "{ persist: 'autoWrap', cycle: ['true', 'false'] }",
+    `{ persist: 'palette', to: '${THEME}' }`,
+    "{ persist: 'palette', from: 'themes' }",
+    "{ persist: 'style', from: 'styles' }",
+    // A file chooses a selection by a rule, so a persisted rule is a member.
+    "{ persist: 'palette', to: '{{ if .session.model }}nord{{ end }}' }",
+    // A field no session pick can set has no row to judge by.
+    "{ persist: 'colorCompatibility', cycle: ['truecolor', '256'] }",
+    // A tree op writes a layout, which no setting holds.
+    "{ persist: 'presets.default.root', removeSegment: 'gitaculous' }",
+  ])("%s loads", (action) => {
+    expect(() => load(action)).not.toThrow();
+  });
+});

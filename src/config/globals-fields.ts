@@ -680,3 +680,9 @@ function rangedDomain(
     ? { from: row.optionDomain.name }
     : row.domain;
 }
+
+// [LAW:parse-dont-validate] Whether a globals field is one a session pick can
+// set, so it has a row in the setting table.
+export function isControlledField(field: string): field is ControlledField {
+  return (CONTROLLED_FIELDS as readonly string[]).includes(field);
+}

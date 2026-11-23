@@ -54,6 +54,8 @@ Every globals field is one row of the fields table. The schema, the resolved glo
 
 A draft is derived, never flagged. It's a setting whose session value differs from what the file resolves to under the preset the save will land in. Save recomputes the drafts at click time against the config the session renders with, so it writes exactly what the button counted.
 
+A `persist` of a setting is judged at load by the same row as a `set` of its pick, because the loader refuses a file holding a value the domain doesn't, so a bad literal would otherwise fail only at the click. A rule is a member there and not for a pick, since a file chooses a selection by data and a session pick never holds one. A stepper over a file value that is no number is refused, never stepped from the value the bar draws.
+
 Save's write and the picks it releases land together, so no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
 
 Every save releases every pick that is no draft against the config it wrote, so a save needs no case for a pick its setting can't hold: that pick is never written and never a draft. A save is the user deciding what the bar draws, so after one the bar keeps what was saved even when the stale pick's domain returns. Without a save the stale pick stays stored, so a reinstalled theme comes back. Save as preset lays a preset's placement drafts into its copy, so it releases those too: against the preset they came from they would still be drafts, and the next save would write them there.

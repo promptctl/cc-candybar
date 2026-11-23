@@ -2416,7 +2416,10 @@ A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
 `from`'s options and a stepper's ends, and refuses an `int` cursor, which
-writes whatever integer the template binds:
+writes whatever integer the template binds. A `persist` of the same fields
+(under `globals`, a preset's globals or a theme's default) is checked the same
+way, because the loader would refuse the file the click wrote; a rule is a
+member there, since a file may choose a selection by one:
 
 ```json5 check:fail
 {

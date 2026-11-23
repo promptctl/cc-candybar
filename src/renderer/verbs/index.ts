@@ -731,15 +731,23 @@ const stepConfig: VerbHandler = (args, ctx) => {
     requireLayerText(into.path, store.read(into.path)),
     landing.key,
   );
+  // [LAW:no-silent-failure] A file that declares the key holds a number or
+  // something that is no number to step: the latter is refused naming what the
+  // layer holds, never stepped over from the value the bar draws.
+  if (stored !== undefined && typeof stored !== "number") {
+    throw new BadVerbArgs(
+      `step-config: ${landing.key} holds ${JSON.stringify(stored)} in ${into.path}, not a number to step`,
+    );
+  }
   const current =
-    typeof stored === "number"
-      ? clampTo(params, stored)
-      : stepFrom(
+    stored === undefined
+      ? stepFrom(
           "step-config",
           key,
           params,
           configKeySeed(landing.globals, key),
-        );
+        )
+      : clampTo(params, stored);
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);

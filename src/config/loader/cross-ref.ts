@@ -43,6 +43,7 @@ import { configOptionDomains } from "../edit-chrome.js";
 import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
 import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import { describeControlDomain } from "../setting-control.js";
+import { isControlledField, settingNameOf } from "../globals-fields.js";
 import { settingTable, type SettingRow } from "../setting-table.js";
 import {
   EXPRESSION_SLOTS,
@@ -1145,14 +1146,44 @@ function checkHelperIssue(
 // from, and reported at the field that states it.
 // [LAW:one-source-of-truth] Admitted is the setting's own parse
 // (src/config/setting-table.ts), the one a pick is read through.
+//
+// A `persist` of the same setting writes the same values into the file, where
+// the loader would refuse one the domain does not hold, so it is checked here,
+// by the same rows. What differs is data (`write`): the verb the author
+// spelled, the key as they spelled it, what a click would do with a value
+// outside, and what the file may hold that a pick may not — a rule.
+interface SettingWrite {
+  readonly verb: "set" | "persist";
+  readonly key: string;
+  readonly consequence: string;
+  readonly admits: (row: SettingRow, value: string) => boolean;
+}
+
+const SET_WRITE = (key: string): SettingWrite => ({
+  verb: "set",
+  key,
+  consequence: "a click would write it and nothing would change",
+  admits: (row, value) => row.parse(value) !== null,
+});
+
+// [LAW:no-silent-failure] A rule is how a file chooses a selection by data, so
+// a persisted rule is a member; its result is checked when it renders.
+const PERSIST_WRITE = (key: string): SettingWrite => ({
+  verb: "persist",
+  key,
+  consequence: "a click would write it into a file the loader refuses",
+  admits: (row, value) => isExpression(value) || row.parse(value) !== null,
+});
+
 function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,
-  a: SetAction,
+  a: SetAction | PersistWriteAction,
+  write: SettingWrite,
   row: SettingRow,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): void {
-  const key = a.set;
+  const { key } = write;
   const { domain } = row;
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   // A stepper writes every integer between its ends, which only a range
@@ -1174,7 +1205,7 @@ function checkSettingWrites(
     });
     return;
   }
-  const outside = writes.filter((w) => row.parse(w.value) === null);
+  const outside = writes.filter((w) => !write.admits(row, w.value));
   if (outside.length === 0) return;
   // An action drawing from the endcaps domain, or writing nothing but the
   // endcaps `style` held before the rename, under `style` is the old name for
@@ -1192,14 +1223,14 @@ function checkSettingWrites(
             message: endcapsNameMessage(
               `actions.${name}.to`,
               a.to,
-              `set: "${endcaps}", to`,
+              `${write.verb}: "${endcaps}", to`,
             ),
             line: findKeyLine(ctx.source, ["actions", name, "to"]),
           }
         : {
-            path: `actions.${name}.set`,
-            message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles — endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
-            line: findKeyLine(ctx.source, ["actions", name, "set"]),
+            path: `actions.${name}.${write.verb}`,
+            message: `actions.${name}.${write.verb}: "${key}" here writes only endcaps shapes, not styles — endcaps were renamed from "style" to "endcaps"; write ${write.verb}: "${endcaps}"`,
+            line: findKeyLine(ctx.source, ["actions", name, write.verb]),
           },
     );
     return;
@@ -1215,7 +1246,7 @@ function checkSettingWrites(
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
+      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — ${write.consequence}; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field]),
     });
   }
@@ -1224,6 +1255,25 @@ function checkSettingWrites(
 const REPORTED_VALUES = 3;
 
 type SetAction = Extract<ActionDecl, { readonly set: string }>;
+
+// Whether a persist writes a value (not a layout) — the arms `setWrites` reads.
+function isValueWrite(a: ActionDecl): a is PersistWriteAction {
+  return (
+    "persist" in a && ("to" in a || "from" in a || "min" in a || "cycle" in a)
+  );
+}
+
+// A `persist` that writes a value (a tree op writes a layout, which no setting
+// holds), by the same four arms a `set` writes by, bar the int cursor.
+type PersistWriteAction = Extract<
+  ActionDecl,
+  { readonly persist: string } & (
+    | { readonly to: string }
+    | { readonly from: unknown }
+    | { readonly min: number }
+    | { readonly cycle: readonly string[] }
+  )
+>;
 
 // An `int` cursor writes whatever integer the template binds, so nothing
 // about its values is known at load.
@@ -1234,7 +1284,7 @@ const ANY_INTEGER = Symbol("any integer");
 // members, an option domain its members, a stepper its two ends (checked only
 // against a range domain, which holds every integer between them).
 function setWrites(
-  a: SetAction,
+  a: SetAction | PersistWriteAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ):
   | ReadonlyArray<{ readonly field: string; readonly value: string }>
@@ -1321,7 +1371,7 @@ export function validateDeclarations(
     }
     const row = settingTable(cfg).rows.get(a.set);
     if (row !== undefined) {
-      checkSettingWrites(ctx, name, a, row, optionDomains);
+      checkSettingWrites(ctx, name, a, SET_WRITE(a.set), row, optionDomains);
     }
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged
@@ -1447,6 +1497,29 @@ export function validateDeclarations(
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
+    }
+    // [LAW:one-source-of-truth] A persisted value is judged by the row of the
+    // setting it lands in, the one a `set` of its pick is judged by.
+    if (
+      discriminator === "persist" &&
+      "field" in target &&
+      isControlledField(target.field) &&
+      isValueWrite(a) &&
+      // An unknown `from` was reported where the option domains are checked.
+      !(
+        "from" in a &&
+        typeof a.from === "string" &&
+        !knownDomains.includes(a.from)
+      )
+    ) {
+      checkSettingWrites(
+        ctx,
+        name,
+        a,
+        PERSIST_WRITE(key),
+        settingTable(cfg).globals[settingNameOf(target.field)],
+        optionDomains,
+      );
     }
     if (target.scope !== "segment-palette") continue;
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
