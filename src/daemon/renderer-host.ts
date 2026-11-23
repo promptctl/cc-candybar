@@ -54,6 +54,7 @@ import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
+import type { WorldState } from "../facts/world-state.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
@@ -232,6 +233,10 @@ export function rendererHost(
     // [LAW:single-enforcer] Where changed subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
+    // [LAW:single-enforcer] Told after a turn that took a world state has had
+    // its output taken, so a request's wait covers what that world state
+    // taught the renderer to subscribe to.
+    readonly heard: (worldState: WorldState) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
     // send each subscriber what changed for it.
     readonly frames: (
@@ -523,6 +528,8 @@ export function rendererHost(
       requested,
       receipt,
     );
+    if (event.kind === "context" || event.kind === "world-state")
+      recordTaken("world state heard", () => collector.heard(event.worldState));
     let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];

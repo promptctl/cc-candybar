@@ -86,6 +86,7 @@ function hostOver(
       holding: () => {
         throw new Error("a command holds no session");
       },
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -284,6 +285,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
   );
@@ -326,6 +328,7 @@ test("every turn's record reaches `recorded`, whatever input it took and however
       recorded: (record) =>
         void records.push(record.map(([k, v]) => `${k}=${v}`).join(" ")),
       holding: () => () => {},
+      heard: () => {},
     },
     NO_ACTS,
   );
@@ -371,6 +374,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     NO_ACTS,
   );
@@ -432,6 +436,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
   );
@@ -478,6 +483,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
     {
       subscribed: () => {}, stored: () => {}, recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
       frames: (frames, settle) => {
         for (const frame of frames) writes.push(ok => settle(frame, ok));
       },
@@ -538,6 +544,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
         throw new Error("record sink failed");
       },
       holding: () => () => {},
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -604,6 +611,7 @@ test("a config named by a command reaches the renderer before the next queued ev
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -755,6 +763,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
       recorded: (record) =>
         void recorded.push(...record.map(([key, value]) => `${key}=${value}`)),
       holding: () => () => {},
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -901,6 +910,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     NO_ACTS,
   );
@@ -954,6 +964,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -1010,6 +1021,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     NO_ACTS,
   );
@@ -1094,6 +1106,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     NO_ACTS,
   );

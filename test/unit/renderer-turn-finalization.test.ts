@@ -135,6 +135,7 @@ function rig(
       subscribed: (next) => subscriptions.push(next),
       stored: (writes) => stored.push(writes),
       holding: () => () => {},
+      heard: () => {},
       recorded: () => {},
       frames: () => {},
     },

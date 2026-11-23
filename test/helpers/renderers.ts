@@ -27,10 +27,11 @@ export const hostHeld = (
 // A collector as a host's turns reach it, in a rig no feed follows a session
 // in: the frames a turn drew go nowhere.
 export const unfollowedCollector = (
-  collector: Pick<Collector, "subscribed" | "holding">,
+  collector: Pick<Collector, "subscribed" | "holding" | "heard">,
 ) => ({
   subscribed: collector.subscribed.bind(collector),
   holding: collector.holding.bind(collector),
+  heard: collector.heard.bind(collector),
   frames: () => {},
   stored: () => {},
   recorded: () => {},

@@ -1121,7 +1121,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 // What a view needs read: each plugin source its config declares, at its
 // storage folder, then each run its registry names, in digest order, then each
 // variable of the session's environment its `env` sources read, sorted.
-const subscriptionsOf = ({
+export const subscriptionsOf = ({
   state,
   registry,
 }: Pick<SessionView, "state" | "registry">): Subscription[] => [

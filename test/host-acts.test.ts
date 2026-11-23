@@ -147,6 +147,7 @@ function hostOver(
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
+      heard: () => {},
       stored: () => {},
       recorded: () => {},
     },

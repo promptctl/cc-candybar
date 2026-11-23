@@ -423,6 +423,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     { ...NO_ACTS, configs: discovery },
   );

@@ -98,7 +98,7 @@ export function assembleFacts(
   const sources: Record<string, Fact<SourceValue>> = Object.fromEntries(
     [...lanes.sources].map(([name, reading]) => [
       name,
-      stamp(prior?.sources[name], reading),
+      stamp(prior && ownValue(prior.sources, name), reading),
     ]),
   );
 
@@ -107,7 +107,7 @@ export function assembleFacts(
   const runs: Record<string, RunFact> = Object.fromEntries(
     [...lanes.runs].map(([digest, observation]) => {
       const { reading, fault } = observation;
-      const held = prior?.runs[digest];
+      const held = prior && ownValue(prior.runs, digest);
       const fact = stamp(held?.reading, reading);
       const privateOutput = isEnvironmentOutput(observation);
       return [

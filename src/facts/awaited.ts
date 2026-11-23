@@ -27,21 +27,24 @@ import {
 // answered: the draw reads it the same way (`runFactOf`). A doctor run is not
 // waited on: its read probes the terminal, fonts and the forge, so its report
 // lands in a later world state, as the PR does.
-export interface Subscribed {
-  readonly plugins: Iterable<string>;
-  readonly runs: Iterable<string>;
-  readonly env: Iterable<string>;
+//
+// The keys of a session's `Subscribed` (src/renderer-interface/request-context.ts),
+// which it is passed whole: the rule needs the names, never what each maps to.
+export interface SubscribedKeys {
+  readonly plugins: ReadonlyMap<string, unknown>;
+  readonly runs: ReadonlyMap<string, unknown>;
+  readonly env: readonly string[];
 }
 
 export function awaitsReading(
   facts: WorldState,
-  { plugins, runs, env }: Subscribed,
+  { plugins, runs, env }: SubscribedKeys,
 ): boolean {
   return [
     ...AWAITED_BUILTINS.map((name) => facts.builtins[name]),
-    ...[...plugins].map((name) => sourceFactOf(facts, name)),
-    ...[...runs].map((digest) => runFactOf(facts, digest).reading),
-    ...[...env].map((name) => envFactOf(facts, name)),
+    ...[...plugins.keys()].map((name) => sourceFactOf(facts, name)),
+    ...[...runs.keys()].map((digest) => runFactOf(facts, digest).reading),
+    ...env.map((name) => envFactOf(facts, name)),
   ].some(awaitedReading);
 }
 

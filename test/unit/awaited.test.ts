@@ -3,7 +3,7 @@
 // it, so a key the document does not carry and a key it carries as unread are
 // the same unread, for each kind of key.
 
-import { awaitsReading, type Subscribed } from "../../src/facts/awaited";
+import { awaitsReading, type SubscribedKeys } from "../../src/facts/awaited";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import {
   envFactOf,
@@ -56,17 +56,22 @@ const answered = { ...ok("x"), at: AT };
 // Each kind of key: what subscribing to it says, what a document carrying its
 // answer looks like, and how a draw reads it from a document that lacks it.
 const KINDS: ReadonlyArray<
-  readonly [string, Subscribed, Partial<WorldState>, (w: WorldState) => unknown]
+  readonly [
+    string,
+    SubscribedKeys,
+    Partial<WorldState>,
+    (w: WorldState) => unknown,
+  ]
 > = [
   [
     "a plugin source",
-    { ...NOTHING_SUBSCRIBED, plugins: ["p"] },
+    { ...NOTHING_SUBSCRIBED, plugins: new Map([["p", null]]) },
     { sources: { p: answered } },
     (w) => sourceFactOf(w, "p"),
   ],
   [
     "a run",
-    { ...NOTHING_SUBSCRIBED, runs: ["digest"] },
+    { ...NOTHING_SUBSCRIBED, runs: new Map([["digest", null]]) },
     { runs: { digest: { reading: answered, fault: null } } },
     (w) => runFactOf(w, "digest").reading,
   ],
@@ -94,6 +99,16 @@ describe("a request's wait over each kind of key", () => {
       expect(awaitsReading(worldStateOf(carried), subscribed)).toBe(false);
     },
   );
+
+  test("a key named like an inherited member is a key the document lacks", () => {
+    const inherited = new Map([["constructor", null]]);
+    for (const subscribed of [
+      { ...NOTHING_SUBSCRIBED, plugins: inherited },
+      { ...NOTHING_SUBSCRIBED, runs: inherited },
+      { ...NOTHING_SUBSCRIBED, env: ["constructor"] },
+    ])
+      expect(awaitsReading(worldStateOf({}), subscribed)).toBe(true);
+  });
 
   test("a key nothing subscribes to is not waited for", () => {
     expect(awaitsReading(worldStateOf({}), NOTHING_SUBSCRIBED)).toBe(false);

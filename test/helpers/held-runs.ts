@@ -25,12 +25,13 @@ import type { HostReadings, ViewSource } from "../../src/dsl/view-source";
 import { awaitedReading } from "../../src/facts/awaited";
 import {
   UNREAD_ENV,
+  envFactOf,
+  runFactOf,
   UNREAD_RUN,
   type WorldState,
 } from "../../src/facts/world-state";
 import type { Launcher } from "../../src/proc/launcher";
 import { systemTimekeeper } from "./system-clock";
-import { ownValue } from "../../src/utils/plain";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import { daemonFactsOf } from "./daemon-facts";
 import { absentOwners, withTranscriptLanes } from "./payload-owners";
@@ -93,8 +94,8 @@ export function collectedRuns(
     return held;
   };
   const readings: HostReadings = {
-    run: (digest) => document().runs[digest] ?? UNREAD_RUN,
-    env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
+    run: (digest) => runFactOf(document(), digest),
+    env: (name) => envFactOf(document(), name),
   };
   const stragglers = () =>
     [...registry.namedRuns()]

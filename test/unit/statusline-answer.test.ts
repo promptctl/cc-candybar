@@ -204,6 +204,7 @@ async function answer(
         stored: () => {},
         recorded: () => {},
         holding,
+        heard: () => {},
       },
       NO_ACTS,
     ),
@@ -452,6 +453,7 @@ test("a new session context retries its failed config with the same declaration,
       stored: () => {},
       recorded: () => {},
       holding: () => () => {},
+      heard: () => {},
     },
     {
       ...NO_ACTS,
@@ -658,6 +660,7 @@ describe("the request's wait, between its context and its request", () => {
         stored: () => {},
         recorded: () => {},
         holding: () => () => {},
+        heard: () => {},
       },
       NO_ACTS,
     );

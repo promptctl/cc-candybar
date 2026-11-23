@@ -816,6 +816,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         },
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
+        heard: (worldState) => collector.heard(worldState),
         recorded: () => {},
       },
       {

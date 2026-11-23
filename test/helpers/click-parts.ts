@@ -128,6 +128,7 @@ export function clickParts(
       subscribed: () => {},
       frames: () => {},
       holding: collector.holding,
+      heard: () => {},
       stored: () => {},
       recorded: () => {},
     },

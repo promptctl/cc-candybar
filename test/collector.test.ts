@@ -47,6 +47,7 @@ import {
 } from "../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../src/utils/reading";
 import { systemTimekeeper } from "./helpers/system-clock";
+import { until } from "./helpers/until";
 import {
   absentOwners,
   fakeCacheExpiry,
@@ -294,11 +295,17 @@ const UNREAD: Current<unknown> = {
 };
 
 describe("a request's wait", () => {
+  // The renderer taking each world state handed to it.
+  const takeTurns = (collector: Collector, handedIn: readonly HandedIn[]) =>
+    handedIn.forEach((e) => {
+      if (e.kind === "world-state") collector.heard(e.worldState);
+    });
+
   test("ends once the read it waits on lands, and a warm session's at once", async () => {
     const { owners, land } = handLanded();
-    const { collector } = collectorOver(owners);
+    const { collector, handedIn } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+    collector.heard(collector.requested(requestAt("/a"), TEST_ENVIRONMENT));
     let ended = false;
     const waiting = collector
       .settled(SID, new AbortController().signal)
@@ -306,8 +313,45 @@ describe("a request's wait", () => {
     await drained();
     expect(ended).toBe(false);
     land("host.name", ok("box"));
+    await until(() => {
+      takeTurns(collector, handedIn);
+      return ended;
+    }, "the wait ending once the read landed and was taken");
     await waiting;
     await collector.settled(SID, new AbortController().signal);
+  });
+
+  // [LAW:verifiable-goals] The order is forced here: the stamp is in the
+  // renderer's mailbox and its turn is not taken, with nothing unread.
+  test("holds while the renderer has not taken the turn on the latest stamp, though nothing the draw waits on is unread", async () => {
+    const { owners, land } = handLanded();
+    const { collector, handedIn } = collectorOver(owners);
+    land("host.name", ok("one"));
+    collector.heard(collector.requested(requestAt("/a"), TEST_ENVIRONMENT));
+    // The first wait ends once every lane has landed and been taken.
+    let landed = false;
+    void collector
+      .settled(SID, new AbortController().signal)
+      .then(() => (landed = true));
+    await until(() => {
+      takeTurns(collector, handedIn);
+      return landed;
+    }, "the session's first wait ending");
+    // A source keyed on a value that moves is subscribed only by the
+    // renderer's turn on the move, so a wait that ended before that turn
+    // would draw the run it names unread.
+    land("host.name", ok("two"));
+    let ended = false;
+    const waiting = collector
+      .settled(SID, new AbortController().signal)
+      .then(() => (ended = true));
+    await drained();
+    expect(ended).toBe(false);
+    await until(() => {
+      takeTurns(collector, handedIn);
+      return ended;
+    }, "the wait ending once the renderer took the stamp");
+    await waiting;
   });
 
   test("ends when its signal does", async () => {

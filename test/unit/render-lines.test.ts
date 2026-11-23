@@ -45,6 +45,19 @@ describe("retriedRender", () => {
     expect(retriedRender(line)).toBe(false);
   });
 
+  // [LAW:verifiable-goals] Each ordering of the answer and the deadline, for a
+  // text source whose first run is unread: the draw says so, so the helper
+  // asks again after a deadline and refuses a draw its answered wait left unread.
+  test("an unread text source drawn pending is asked again at the deadline and refused after an answered wait", () => {
+    const pending = "pending=out sourcesPending=out:unread";
+    const atDeadline = event(`timedOut=N ended=deadline ${pending}`);
+    expect(drewAwaitedPending(atDeadline)).toBe(true);
+    expect(retriedRender(atDeadline)).toBe(true);
+    const answered = event(`timedOut=N ended=answered ${pending}`);
+    expect(drewAwaitedPending(answered)).toBe(true);
+    expect(retriedRender(answered)).toBe(false);
+  });
+
   test("an answer that drew pending though its wait answered is not retried but is pending", () => {
     // renderRequest fails on it rather than asking again.
     const line = event("timedOut=N ended=settled pending=git");

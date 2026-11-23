@@ -1699,6 +1699,9 @@ describe("SourceRegistry — shell: key: cache policy", () => {
 
       // The key evaluating again is a key: the source re-runs, the fault clears.
       store.setBox("trigger", "a");
+      // The fallback stood in for the run that would not happen, not for the
+      // one the key now names, which has not answered.
+      expect(store.stored("val")).toEqual(pendingOf("unread"));
       await ran(registry);
       expect(store.read("val")).toBe("v2");
       expect(registry.getLastError("val")).toBeUndefined();

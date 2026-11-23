@@ -46,6 +46,7 @@ import {
   orElse,
   isPending,
   pendingOf,
+  type Failed,
   type Outcome,
   type Present,
   type PayloadNode,
@@ -169,16 +170,18 @@ export interface StateOptions {
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
-// The publish half of a source, closed over its store node: takes what the
-// run yielded, parsed, and writes the node — value or fallback.
-// What a source's node takes: the reading of a run that answered, and the
-// word that no run will, so a variable whose run was refused or whose key
-// threw before it ever ran still shows what stands in for a run that read
-// nothing.
-interface Publish {
-  readonly answered: (outcome: Outcome<unknown>) => void;
-  readonly unrun: () => void;
-}
+// What a source's node is told each time the run it names moves: that run's
+// reading, or that it names none. A source's key that failed before it ever
+// answered names no run (answeredUnder), and so nothing has ever been read
+// for it either.
+type Told =
+  | { readonly kind: "run"; readonly reading: Reading<unknown> }
+  | { readonly kind: "none"; readonly why: Failed };
+
+// The publish half of a source, closed over its store node: takes what it is
+// told and writes the node — pending until the first run answers, then the
+// value or fallback.
+type Publish = (told: Told) => void;
 
 // [LAW:one-source-of-truth] The parser's identity, without its default: what
 // the run digests.
@@ -682,11 +685,16 @@ export class SourceRegistry {
       this.sourceNames.push(name);
       this.runs.set(name, run);
     });
+    // The host's fact about the run a source names, while it names one.
+    const factOf = (named: SourceRun): RunFact | undefined =>
+      named.kind === "ok"
+        ? this.inputs.get().run(named.value.digest)
+        : undefined;
     this.cleanups.push(
       // The run's fault, as the host reads it, is the variable's standing
       // fault for as long as this source names that run.
       reaction(
-        () => this.runFact(name)?.fault ?? null,
+        () => factOf(run.get())?.fault ?? null,
         (fault) =>
           this.noteFault(
             this.runFaults,
@@ -695,36 +703,36 @@ export class SourceRegistry {
           ),
         { fireImmediately: true },
       ),
+      // [LAW:dataflow-not-control-flow] One total mapping from the run to what
+      // the node is told, the way the draw reads a run (`sourceSummaryOf`): a
+      // named run is the host's reading of it, one whose key's values have not
+      // answered is pending, and one whose key failed names none.
       reaction(
-        () => this.runFact(name)?.reading,
-        (reading) => {
-          if (reading === undefined || reading.kind === "pending") return;
-          // The instant the reading first differed is the world state's; the
-          // store holds what the run answered.
-          const { at: _at, ...outcome } = reading;
-          publish.answered(outcome);
+        (): Told => {
+          const named = run.get();
+          switch (named.kind) {
+            case "failed":
+              return { kind: "none", why: named };
+            case "pending":
+              return { kind: "run", reading: named };
+            case "ok": {
+              // The instant the reading first differed is the world state's;
+              // the store holds what the run answered.
+              const fact = this.inputs.get().run(named.value.digest).reading;
+              if (fact.kind === "pending")
+                return { kind: "run", reading: fact };
+              const { at: _at, ...reading } = fact;
+              return { kind: "run", reading };
+            }
+          }
         },
-        { fireImmediately: true },
-      ),
-      // A run that cannot be named (its key threw, its refresh was refused)
-      // never answers, and what it read is nothing.
-      reaction(
-        () => this.runs.get(name)?.get().kind === "failed",
-        (unrun) => {
-          if (unrun) publish.unrun();
-        },
-        { fireImmediately: true },
+        publish,
+        // Equal by what was told, so a stamp that moved nothing this source
+        // reads tells it nothing (a torn write's settle clock restarts on
+        // every telling).
+        { fireImmediately: true, equals: compareStructural },
       ),
     );
-  }
-
-  // The reading of the run `name` names, or nothing while its policy names
-  // none (one over values not answered yet).
-  private runFact(name: string): RunFact | undefined {
-    const run = this.runs.get(name)?.get();
-    return run?.kind === "ok"
-      ? this.inputs.get().run(run.value.digest)
-      : undefined;
   }
 
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
@@ -747,31 +755,37 @@ export class SourceRegistry {
     varDefault: string | undefined,
   ): Publish {
     const fallback = varDefault ?? this.defaultEmptyValue;
-    // [LAW:one-source-of-truth] Not answered yet is its own state, so the node
-    // is pending until its first run answers, as a document without a default
-    // and an `env` variable are. The fallback stands in for a run that read
-    // nothing (a missing file, a failed command, blank output), which a run
-    // that has not run is not.
+    // [LAW:types-are-the-program] Not answered yet is its own state, so the node
+    // is pending until its first run answers, as a document and an `env`
+    // variable are. The fallback stands in for a run that read nothing (a
+    // missing file, a failed command, blank output), which a run that has not
+    // run is not.
     this.store.defineBox(name, "string", pendingOf("unread"));
-    return {
-      answered: (outcome) => {
-        this.noteOutcome(name, outcome);
-        this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
-      },
-      // The run's fault is the variable's standing error already
-      // (`cachePolicyFaults`, `runFaults`), so only the value is set, and only
-      // while nothing has answered.
-      unrun: () => {
-        if (isPending(this.store.stored(name)))
-          this.store.setBox(name, fallback);
-      },
+    // Whether a run has answered: after one, a run still unread (a key's move)
+    // leaves that answer showing until its own lands.
+    let answered = false;
+    return (told) => {
+      // A run that is named nowhere has read nothing, and its failure is the
+      // variable's standing fault already (`cachePolicyFaults`).
+      if (told.kind === "none") {
+        this.store.setBox(name, fallback);
+        return;
+      }
+      const { reading } = told;
+      if (reading.kind === "pending") {
+        if (!answered) this.store.setBox(name, reading);
+        return;
+      }
+      answered = true;
+      this.noteOutcome(name, reading);
+      this.store.setBox(name, orElse(reading as Outcome<string>, fallback));
     };
   }
 
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node is pending until its first scan, then holds what the scan
-  // found — absent when it had nothing to read, failed with its reason after a
-  // bad one — which the scope proxy surfaces naming the variable
+  // A document is pending until its first scan, then holds what the scan
+  // found — or, with a default, the default for a run that had nothing to read.
+  // Without one it holds absent for that run, or failed with its reason after
+  // a bad one — which the scope proxy surfaces naming the variable
   // [LAW:no-silent-failure]: a document has no honest empty value to show for
   // a run that read nothing, where a string has "".
   //
@@ -793,23 +807,37 @@ export class SourceRegistry {
     name: string,
     varDefault: JsonValue | undefined,
   ): Publish {
-    // What the node holds before its first scan, and — with a default — what
-    // stands in for a run that had nothing to read.
-    const fallback: Reading<JsonValue> =
-      varDefault === undefined ? pendingOf("unread") : ok(varDefault);
-    this.store.defineDocument(name, fallback);
+    // What stands in for a run that had nothing to read: the default, or with
+    // none the failure itself.
+    const standIn = <F extends Reading<JsonValue>>(failure: F) =>
+      varDefault === undefined ? failure : ok(varDefault);
+    this.store.defineDocument(name, pendingOf("unread"));
     let clearSettling: (() => void) | undefined;
-    // Whether the document showing was READ (not the default standing in).
+    // Whether a run has answered, and whether the document showing was READ
+    // (not the default standing in).
+    let answered = false;
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    const answered = (raw: Outcome<unknown>): void => {
+    return (told) => {
+      // A run that is named nowhere has read nothing, and its failure is the
+      // variable's standing fault already (`cachePolicyFaults`).
+      if (told.kind === "none") {
+        this.store.setDocument(name, standIn(told.why));
+        return;
+      }
+      const { reading } = told;
+      if (reading.kind === "pending") {
+        if (!answered) this.store.setDocument(name, reading);
+        return;
+      }
+      answered = true;
       clearSettling?.();
-      const outcome = raw as Outcome<JsonValue>;
+      const outcome = reading as Outcome<JsonValue>;
       this.noteOutcome(name, outcome);
       const readText =
         outcome.kind === "ok" ||
         (outcome.kind === "failed" && outcome.failedAt === "parse");
-      const next = readText || varDefault === undefined ? outcome : fallback;
+      const next = readText ? outcome : standIn(outcome);
       const torn = showingRead && readText && outcome.kind !== "ok";
       const show = () => {
         showingRead = outcome.kind === "ok";
@@ -825,9 +853,6 @@ export class SourceRegistry {
         show();
       }
     };
-    // A document without a default is pending until a scan answers, and one
-    // with a default already shows it: neither has a stand-in to set.
-    return { answered, unrun: () => {} };
   }
 
   // template: a variable whose value is derived by evaluating a go-template

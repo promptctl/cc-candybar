@@ -136,6 +136,7 @@ function hostOver(
       subscribed: (value) => void declarations.push(value),
       frames: () => {},
       holding: () => () => {},
+      heard: () => {},
       stored: () => {},
       recorded: () => {},
     },

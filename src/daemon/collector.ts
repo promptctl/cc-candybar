@@ -144,6 +144,10 @@ interface SessionRecord<Context extends ViewFacts> {
   readonly session: SessionId;
   readonly stamped: Stamped;
   subscriptions: Subscribed;
+  // The newest world state's seq whose turn the host has taken the renderer's
+  // output of: `subscriptions` accounts for the landings up to it, and for
+  // none after.
+  heard: number;
   // Whether a request named the session since the last sweep.
   active: boolean;
   // The renderer's turns on the session still under way: each holds the
@@ -175,7 +179,7 @@ const locatorOf = ({
 // [LAW:single-enforcer] A set is judged where it arrives, and only for the
 // digests new to it: a run the session already subscribed keeps its verdict,
 // so a request, which declares the set again, judges nothing.
-const sourcesOf = (
+export const sourcesOf = (
   subscriptions: readonly Subscription[],
   prior: Subscribed,
 ): Subscribed => ({
@@ -269,9 +273,14 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
   }
 
   // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
-  // model): until the session's latest stamp has no fact its draw waits on
-  // that has never answered, over the runs its renderer subscribes to now
+  // model): until the renderer has answered the session's latest stamp, and
+  // that stamp has no fact its draw waits on that has never answered, over
+  // the plugin sources, runs and `env` variables its renderer subscribes to
   // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
+  // The renderer's answer is part of the wait because a source whose key is
+  // another's value names its run only once the renderer has read that
+  // value's landing: until its turn is taken, the subscriptions know nothing
+  // of the run that landing names.
   // The wait triggers no read: the owners' reads follow the world, and each
   // stamp they move goes to the renderer ahead of the request, so the request
   // draws the world state the wait ended on. It reads the subscriptions as
@@ -284,11 +293,8 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           const record = this.records.get(session);
           return (
             record?.phase.kind !== "live" ||
-            !awaitsReading(record.stamped.document, {
-              plugins: record.subscriptions.plugins.keys(),
-              runs: record.subscriptions.runs.keys(),
-              env: record.subscriptions.env,
-            })
+            (record.heard >= record.stamped.document.seq &&
+              !awaitsReading(record.stamped.document, record.subscriptions))
           );
         },
         { signal },
@@ -297,6 +303,18 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
+  }
+
+  // [LAW:single-enforcer] The host's word that the renderer's turn on this
+  // world state is taken, its subscriptions with it (`subscribed`), so a wait
+  // reads the run the state's landings named. A turn on a session whose
+  // record is gone (retired while the turn ran) has nothing to tell.
+  heard(worldState: WorldState): void {
+    const record = this.records.get(worldState.session);
+    if (record === undefined) return;
+    runInAction(() => {
+      record.heard = Math.max(record.heard, worldState.seq);
+    });
   }
 
   // A click is a person's input naming the session, as a request is, so the
@@ -454,6 +472,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
         session,
         stamped,
         subscriptions,
+        heard: 0,
         active: true,
         turns: 0,
         phase: this.watch(session, stamped, reader),
