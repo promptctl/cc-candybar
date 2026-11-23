@@ -5,7 +5,7 @@ import {
   type TimerSource,
 } from "../time.js";
 import { failureOf } from "./foundations/verb-error.js";
-import { recurrence } from "./held-slot.js";
+import { recurrence } from "../utils/event-hold.js";
 
 // A throw as the clock reported it: the task's name, what it threw, and the
 // wall reading when it was caught.

@@ -3,13 +3,10 @@
 // for a request, whether its hold ends after an answer or an answer lands
 // after its hold. Events that recur are held per subject, counted while held.
 
-import {
-  HeldSlot,
-  RecurringEvents,
-  recurrence,
-} from "../../src/daemon/held-slot";
+import { HeldSlot, RecurringEvents } from "../../src/daemon/held-slot";
 import {
   DAEMON_EVENT_HOLD_S,
+  recurrence,
   type HeldEvent,
 } from "../../src/utils/event-hold";
 import { instantAt } from "../../src/utils/instant";
@@ -130,11 +127,10 @@ function recurring() {
     new RecurringEvents(
       clock,
       "launch-pipes",
-      "test hold",
       ({ about }) => about,
-      ({ said }, more) => ({
+      ({ said }, more, at) => ({
         text: `${said}${recurrence(more)}`,
-        at: instantAt(clock),
+        at,
         revision: 1,
         answered: false,
       }),
@@ -156,6 +152,19 @@ test("an occurrence while its subject is held is counted, and the latest is held
   const [held] = events.held();
   expect(events.answer("cut", held!.event)).toBe(true);
   expect(texts()).toEqual(["cut late 2 more times"]);
+});
+
+test("an event held afresh is stamped when it is shown, so its hold runs from there", () => {
+  const { clock, events } = recurring();
+  events.occur({ about: "cut", said: "cut" });
+  clock.advance(HOLD_MS / 2);
+  events.occur({ about: "cut", said: "cut" });
+  const [first] = events.held();
+  clock.advance(HOLD_MS / 2);
+  events.answer("cut", first!.event);
+  const [again] = events.held();
+  expect(again!.event.at).toBe(instantAt(clock));
+  expect(again!.event.at).toBeGreaterThan(first!.event.at);
 });
 
 test("each subject is held apart, so one never stands for another", () => {
@@ -192,11 +201,10 @@ test("what recurred reaches the event it is shown as at the close, and nothing i
   const events = new RecurringEvents<string>(
     clock,
     "task-threw",
-    "test hold",
     (about) => about,
-    (said, more) => {
+    (said, more, at) => {
       shown.push(more);
-      return { text: said, at: instantAt(clock), answered: false };
+      return { text: said, at, answered: false };
     },
     () => {},
   );
@@ -205,5 +213,14 @@ test("what recurred reaches the event it is shown as at the close, and nothing i
   events.dispose();
   expect(shown).toEqual([0, 1]);
   expect(events.held()).toEqual([]);
+  expect(clock.pending()).toBe(0);
+});
+
+test("an occurrence after the close, of a subject never held, holds nothing and arms no end", () => {
+  const { clock, events, heard } = recurring();
+  events.dispose();
+  events.occur({ about: "late", said: "late" });
+  expect(events.held()).toEqual([]);
+  expect(heard).toEqual([]);
   expect(clock.pending()).toBe(0);
 });

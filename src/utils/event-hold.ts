@@ -40,11 +40,19 @@ export type DaemonEvent =
       readonly kind: "renderer-ended" | "act-failed";
       readonly event: HeldEvent;
     }
-  | {
-      readonly kind: "launch-pipes" | "task-threw";
-      readonly about: string;
-      readonly event: HeldEvent;
-    };
+  | RecurringDaemonEvent<"launch-pipes">
+  | RecurringDaemonEvent<"task-threw">;
+
+interface RecurringDaemonEvent<Kind extends string> {
+  readonly kind: Kind;
+  readonly about: string;
+  readonly event: HeldEvent;
+}
+
+// [LAW:single-enforcer] How every event of the daemon's own says it recurred
+// `more` times since it was last shown.
+export const recurrence = (more: number): string =>
+  more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
 
 // `held` inside the hold, `owed` past it to a request no answer has served,
 // `over` once neither holds.

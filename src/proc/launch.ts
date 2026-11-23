@@ -177,9 +177,9 @@ export interface LaunchScope {
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
   // Hears each change in the launcher's warnings: why the lifeline is down
-  // (`fault`, below), and each pipe event. The daemon logs it and redraws its
-  // feeds, so a warning comes on pushed frames too; one going needs no call,
-  // since every render reads the hold against its own instant.
+  // (`fault`, below), and each pipe event as it happens. The daemon logs it
+  // and holds a pipe event while a bar can show it, so a warning comes on
+  // pushed frames too and leaves when the daemon lets it go.
   readonly observeWarnings: (change: WarningChange) => void;
   // [LAW:single-enforcer] The one checkpoint for "nothing launches after the
   // owner closed": every spawn crosses this module, so a launch in flight is

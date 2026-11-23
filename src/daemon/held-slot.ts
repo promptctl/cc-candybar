@@ -7,7 +7,7 @@ import {
   type EventHold,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { instantAt } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
 
 // The event a slot holds, and the end armed for it.
 interface Held {
@@ -111,11 +111,6 @@ export class HeldSlot {
   }
 }
 
-// [LAW:single-enforcer] How every event of the daemon's own says it recurred
-// `more` times since it was last shown.
-export const recurrence = (more: number): string =>
-  more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
-
 // The kinds of daemon event that recur, each held per subject.
 type RecurringKind = Extract<DaemonEvent, { about: string }>["kind"];
 
@@ -134,24 +129,31 @@ interface Subject<R> {
 // counted the subject leaves every bar.
 export class RecurringEvents<R> {
   private readonly subjects = new Map<string, Subject<R>>();
+  private closed = false;
 
   constructor(
     private readonly clock: Pick<Timekeeper, "now" | "after">,
     private readonly kind: RecurringKind,
-    // The hold-end tasks' name: what a person reads if one throws.
-    private readonly task: string,
     // What an occurrence is about: the subject it is counted against.
     private readonly about: (occurrence: R) => string,
-    // The event an occurrence is held as, `more` times since its subject's
-    // event was last shown.
-    private readonly shown: (occurrence: R, more: number) => HeldEvent,
+    // [LAW:single-enforcer] The event an occurrence is held as, `more` times
+    // since its subject's event was last shown, stamped `at` the instant it
+    // is shown: its hold runs from there, a first occurrence's and a
+    // recurrence's alike.
+    private readonly shown: (
+      occurrence: R,
+      more: number,
+      at: Instant,
+    ) => HeldEvent,
     // Hears each change in what is held.
     private readonly changed: () => void,
   ) {}
 
-  // [LAW:dataflow-not-control-flow] One operation for every occurrence: held
-  // while its subject holds nothing, counted while it does.
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a closed family takes none and arms no end on a closed
+  // daemon, as a disposed slot takes none.
   occur(occurrence: R): void {
+    if (this.closed) return;
     const about = this.about(occurrence);
     const subject = this.subjects.get(about);
     if (subject === undefined) this.show(this.subjectOf(about), occurrence, 0);
@@ -178,18 +180,19 @@ export class RecurringEvents<R> {
   // Each subject lets go as at any slot's disposal, so what recurred is still
   // shown to whatever hears it, and nothing is held after.
   dispose(): void {
+    this.closed = true;
     for (const { slot } of this.subjects.values()) slot.dispose();
   }
 
   private show(subject: Subject<R>, occurrence: R, more: number): void {
     subject.recurred = null;
-    subject.slot.hold(this.shown(occurrence, more));
+    subject.slot.hold(this.shown(occurrence, more, instantAt(this.clock)));
     this.changed();
   }
 
   private subjectOf(about: string): Subject<R> {
     const subject: Subject<R> = {
-      slot: new HeldSlot(this.clock, `${this.task} ${about}`, () => {
+      slot: new HeldSlot(this.clock, `${this.kind} hold ${about}`, () => {
         const { recurred } = subject;
         if (recurred !== null)
           return this.show(subject, recurred.latest, recurred.count);

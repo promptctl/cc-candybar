@@ -64,7 +64,7 @@ import { linkSignerOver } from "../click/link-signer.js";
 import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
-import { instantAt, instantOf, type Instant } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
@@ -89,8 +89,12 @@ import {
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
-import { joinedEvent, type DaemonEvent } from "../utils/event-hold.js";
-import { HeldSlot, RecurringEvents, recurrence } from "./held-slot.js";
+import {
+  joinedEvent,
+  recurrence,
+  type DaemonEvent,
+} from "../utils/event-hold.js";
+import { HeldSlot, RecurringEvents } from "./held-slot.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -305,31 +309,29 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const restateOnceBuilt = (): void => {
     if (phase.kind !== "building") restateFaults();
   };
+  // [LAW:one-source-of-truth] A pipe event is stamped on the clock every
+  // render holds events against: the family stamps each event it shows.
   const launchPipes = new RecurringEvents<string>(
     clock,
     "launch-pipes",
-    "launch pipe hold",
     (text) => text,
-    (text, more) => joinedEvent(null, `${text}${recurrence(more)}`, instant()),
+    (text, more, at) => joinedEvent(null, `${text}${recurrence(more)}`, at),
     restateOnceBuilt,
   );
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  // A task's throw is logged in full whenever it is shown on every bar.
+  // [LAW:one-source-of-truth] Each task's error is the one event its subject
+  // holds. It is logged in full whenever it is shown on every bar.
   const taskThrows = new RecurringEvents<ReportedThrow>(
     clock,
     "task-threw",
-    "task throw hold",
     (reported) => reported.task,
-    (reported, more) => {
+    (reported, more, at) => {
       const { shown, logged } = thrownText(reported, more);
       log("error", logged);
       // A thrown message can carry a launched command's output, and nothing
       // here can tell which do, so each refuses a recording while it shows.
-      return environmentOutput(
-        joinedEvent(null, shown, instantOf(new Date(reported.at))),
-        true,
-      );
+      return environmentOutput(joinedEvent(null, shown, at), true);
     },
     restateFaults,
   );

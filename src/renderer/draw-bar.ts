@@ -481,6 +481,7 @@ export function drawRender(
   // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const daemonEvents = daemonEventsAt(daemon.held, at, drawing.by);
+  const threw = daemonEvents.filter(isThrew);
   const errors: readonly DrawError[] = [
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
@@ -493,7 +494,7 @@ export function drawRender(
       (e): MaybeError => ({
         kind: "dropped",
         subject: e.file,
-        about: `dropped\0${e.file}`,
+        about: aboutOf("dropped", e.file),
         text: e.message,
         copy: e.prompt,
       }),
@@ -502,18 +503,14 @@ export function drawRender(
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
-    ...daemonEvents.flatMap(({ shown }): MaybeError[] =>
-      shown.kind === "task-threw"
-        ? [
-            {
-              kind: "task-threw",
-              subject: shown.about,
-              about: `task-threw\0${shown.about}`,
-              text: shown.event.text,
-              copy: shown.event.text,
-            },
-          ]
-        : [],
+    ...threw.map(
+      ({ shown }): MaybeError => ({
+        kind: "task-threw",
+        subject: shown.about,
+        about: aboutOf("task-threw", shown.about),
+        text: shown.event.text,
+        copy: shown.event.text,
+      }),
     ),
   ].flatMap(({ about, text, copy, ...named }) =>
     text != null && copy != null ? [{ ...named, about, text, copy }] : [],
@@ -531,39 +528,29 @@ export function drawRender(
   const eventsShown: readonly DaemonEvent[] = daemonEvents
     .map(({ shown }) => shown)
     .filter(({ event }) => !event.answered);
-  const daemonWarnings = daemonEvents.flatMap(
-    ({ shown, hold }): DaemonEventWarning[] => {
-      const message = shown.event.text;
-      switch (shown.kind) {
-        case "task-threw":
-          return [];
-        case "launch-pipes":
-          return [{ kind: shown.kind, message, hold, subject: shown.about }];
-        default:
-          return [{ kind: shown.kind, message, hold }];
-      }
-    },
+  const daemonWarnings = daemonEvents.filter(isWarned).map(
+    ({ shown, hold }): Standing<DaemonEventWarning> => ({
+      warning: { kind: shown.kind, message: shown.event.text, hold },
+      subject: shown.kind === "launch-pipes" ? shown.about : undefined,
+    }),
   );
-  const standing: readonly StandingWarning[] = [
-    ...daemon.fileEvents,
-    ...(daemon.launcher === null ? [] : [daemon.launcher]),
+  const standing: readonly Standing[] = [
+    ...daemon.fileEvents.map(alone),
+    ...(daemon.launcher === null ? [] : [alone(daemon.launcher)]),
     ...daemonWarnings,
     ...(configWatch === null
       ? []
-      : [{ kind: "config-watch" as const, message: configWatch }]),
-    ...entry.lastWarnings.map((message) => ({
-      kind: "load" as const,
-      message,
-    })),
+      : [alone({ kind: "config-watch", message: configWatch })]),
+    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...(failure === null
       ? []
       : [
-          {
-            kind: "facts" as const,
+          alone({
+            kind: "facts",
             message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`,
-          },
+          }),
         ]),
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
@@ -583,10 +570,10 @@ export function drawRender(
       // recurs, whose words change as it does (a pipe event's count), so
       // that is what it is about: a viewer open on it stays open. A render
       // warning is about its words.
-      ...standing.map((w) => ({
-        about: "subject" in w ? `${w.kind}\0${w.subject}` : w.kind,
-        text: w.message,
-        copy: w.message,
+      ...standing.map(({ warning, subject }) => ({
+        about: aboutOf(warning.kind, subject),
+        text: warning.message,
+        copy: warning.message,
       })),
       ...presentations
         .warnings(sessionId, drawing.by, config)
@@ -716,8 +703,10 @@ export function drawRender(
   const warnings = drawnWarnings.map(describeWarning);
   const warned =
     [
-      ...standing.map((w) =>
-        w.kind === "file-events" ? `${w.kind}:${w.state}` : w.kind,
+      ...standing.map(({ warning }) =>
+        warning.kind === "file-events"
+          ? `${warning.kind}:${warning.state}`
+          : warning.kind,
       ),
       ...warnings.map(({ tag }) => tag),
     ].join(",") || "-";
@@ -729,13 +718,8 @@ export function drawRender(
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing.map((w) =>
-      faultOf(
-        "warning",
-        w.kind,
-        w.message,
-        "subject" in w ? w.subject : undefined,
-      ),
+    ...standing.map(({ warning, subject }) =>
+      faultOf("warning", warning.kind, warning.message, subject),
     ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
@@ -772,9 +756,13 @@ export function drawRender(
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // The launcher's pipe event as this frame showed it: `-` for not at all.
+    // Each pipe event as this frame showed it, in the order held: `-` for
+    // none at all.
     pipeEvent:
-      daemonWarnings.find(({ kind }) => kind === "launch-pipes")?.hold ?? "-",
+      daemonWarnings
+        .filter(({ warning }) => warning.kind === "launch-pipes")
+        .map(({ warning }) => warning.hold)
+        .join(",") || "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -874,11 +862,29 @@ interface FactsWarning {
   readonly message: string;
 }
 
+// [LAW:single-enforcer] What a diagnostic is about: its kind, and for a kind
+// with several (a task that threw, a file a load dropped) its subject too, so
+// one never stands for another.
+const aboutOf = (kind: string, subject?: string): string =>
+  subject === undefined ? kind : `${kind}\0${subject}`;
+
+type ThrewEvent = Extract<DaemonEvent, { kind: "task-threw" }>;
+
 // A daemon event a draw shows, and why: inside the hold, or owed past it.
-interface ShownDaemonEvent {
-  readonly shown: DaemonEvent;
+interface ShownDaemonEvent<Event extends DaemonEvent = DaemonEvent> {
+  readonly shown: Event;
   readonly hold: Exclude<EventHold, "over">;
 }
+
+// [LAW:single-enforcer] Which of the daemon's events is an error: a task that
+// threw is a fault in the daemon, where each other event is a warning.
+const isThrew = (
+  event: ShownDaemonEvent,
+): event is ShownDaemonEvent<ThrewEvent> => event.shown.kind === "task-threw";
+const isWarned = (
+  event: ShownDaemonEvent,
+): event is ShownDaemonEvent<Exclude<DaemonEvent, ThrewEvent>> =>
+  !isThrew(event);
 
 // [LAW:single-enforcer] Which of the daemon's events a render shows: by the
 // one hold every event of the daemon's own is held by.
@@ -898,13 +904,11 @@ function daemonEventsAt(
 // renderer process that ended, taking the session state that lives only in
 // memory with it (open menus, armed confirms), so the bar the next one draws
 // says so; and an act that failed where no session's bar could hold it.
-type DaemonEventWarning = {
+interface DaemonEventWarning {
+  readonly kind: Exclude<DaemonEvent, ThrewEvent>["kind"];
   readonly message: string;
   readonly hold: ShownDaemonEvent["hold"];
-} & (
-  | { readonly kind: "renderer-ended" | "act-failed" }
-  | { readonly kind: "launch-pipes"; readonly subject: string }
-);
+}
 
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
@@ -914,6 +918,18 @@ type StandingWarning =
   | ConfigWatchWarning
   | LoadWarning
   | FactsWarning;
+
+// A standing warning and what it is about beyond its kind, for a kind that
+// recurs.
+interface Standing<Warning extends StandingWarning = StandingWarning> {
+  readonly warning: Warning;
+  readonly subject: string | undefined;
+}
+
+const alone = (warning: StandingWarning): Standing => ({
+  warning,
+  subject: undefined,
+});
 
 // What one render drew: the body — the bar, or the viewer in its place — and
 // what the statusline's handoff line is drawn from: whether the body is the
