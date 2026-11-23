@@ -75611,15 +75611,25 @@ function writeDrafts(store, layer, pairs2, placements) {
   );
 }
 function withPlacements(text4, under2, file, placements, own2) {
+  const landed = /* @__PURE__ */ new Map();
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, under2, preset, id2);
     const placement = layoutPlacementOf(docOf(acc), under2, preset, id2);
+    const spelled2 = json5Text(value);
+    const slot = `${placement.path.join(".")}\0${id2}\0${setting}`;
+    const rival = landed.get(slot);
+    if (rival !== void 0 && rival.value !== spelled2) {
+      throw new BadVerbArgs(
+        `presets "${rival.preset}" and "${preset}" both render ${placement.path.join(".")} in ${file} and hold different values for ${id2}.${setting}: reset one of the drafts`
+      );
+    }
+    landed.set(slot, { preset, value: spelled2 });
     const set2 = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
       id2,
       setting,
-      json5Text(value)
+      spelled2
     );
     if (set2 === null) {
       throw new BadVerbArgs(

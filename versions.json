@@ -4,15 +4,22 @@
     {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
-      "sha": "3f84903125505263c2e38d2526362bb5df003282",
-      "timestamp": "2026-11-23T10:18:57.898Z",
+      "sha": "3d26c439178c49868b2647b395f322e91882eb08",
+      "timestamp": "2026-11-23T10:30:42.977Z",
       "commits": [
         {
-          "sha": "3f84903125505263c2e38d2526362bb5df003282",
+          "sha": "3d26c439178c49868b2647b395f322e91882eb08",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:17:49Z",
-          "message": "Merge 318cee5bb9d9b8f0e2d105a0b74376696e28c9ec into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+          "timestamp": "2026-11-23T10:29:39Z",
+          "message": "Merge 3d33bec6336d7fb4ae47924d3a65c4e3c2695dd2 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+        },
+        {
+          "sha": "3d33bec6336d7fb4ae47924d3a65c4e3c2695dd2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T03:29:21-07:00",
+          "message": "fix(config): a save refuses two presets' differing drafts for one shared placement, and memory names the placement's identity\n"
         },
         {
           "sha": "318cee5bb9d9b8f0e2d105a0b74376696e28c9ec",
