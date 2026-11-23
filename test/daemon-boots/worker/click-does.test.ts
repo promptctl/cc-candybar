@@ -5,8 +5,8 @@
 // clicks on one screen never read alike, a click that acts on the world never
 // reads as a session write, and the words change nothing about the click.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
@@ -20,15 +20,13 @@ import {
 } from "../../helpers/drive-bar";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
+import { doesOf, longNumbersSaid } from "../../helpers/click-words";
+import { jestTmpDir } from "../../helpers/jest-tmp";
 
 jest.setTimeout(60_000);
 
 const CLICKS = 150;
 
-// The words a link says, as a hover's reader decodes them; empty on a link with
-// none.
-const doesOf = (url: string): string =>
-  new URLSearchParams(url.split("/dispatch/")[1] ?? "").get("does") ?? "";
 const withoutDoes = (url: string): string => url.replace(/does=[^&]*&/, "");
 const barLinks = (rendered: Frame): DrawnLink[] =>
   linksOf(rendered).filter((l) => isBarLink(l.url));
@@ -101,24 +99,49 @@ async function walk(bar: Bar): Promise<Walked> {
 // The example config, where its plugin's path still reads: a bar copies the
 // config it is given into a scratch directory.
 function pluginConfig(): string {
-  const example = path.resolve("examples/plugin-deploy.json5");
-  const config = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "click-does-")),
-    "config.json5",
+  const example = path.resolve(
+    __dirname,
+    "../../../examples/plugin-deploy.json5",
   );
+  const config = path.join(scratchDir("click-does-"), "config.json5");
   fs.writeFileSync(
     config,
     fs
       .readFileSync(example, "utf8")
-      .replace("./plugins", path.join(path.dirname(example), "plugins")),
+      .replace("./plugins", () => path.join(path.dirname(example), "plugins")),
   );
   return config;
 }
 
+// The scratch directories a run makes live under one worker-owned root, so a
+// worker that dies before cleanup leaves a directory the sweep can name.
+const scratchRoot = jestTmpDir("fixtures");
+fs.mkdirSync(scratchRoot);
+const scratchDir = (name: string): string =>
+  fs.mkdtempSync(path.join(scratchRoot, name));
+afterAll(() => fs.rmSync(scratchRoot, { recursive: true, force: true }));
+
+// A git checkout whose path holds a long run of digits, as an agent worktree's
+// name can: the bar runs from it, and the words that name it say so.
+const digitCheckout = (): string => {
+  const dir = scratchDir("click-does-12345678-");
+  execFileSync("git", ["init", "-q", dir], { stdio: "ignore" });
+  return dir;
+};
+
 describe.each([
-  ["the default bar", () => null],
-  ["a bar with a plugin's long segment name", pluginConfig],
-])("%s: its links say what their clicks do", (_, config) => {
+  ["the default bar", () => null, () => process.cwd()],
+  [
+    "a bar with a plugin's long segment name",
+    pluginConfig,
+    () => process.cwd(),
+  ],
+  [
+    "a bar run from a checkout whose path holds digits",
+    () => null,
+    digitCheckout,
+  ],
+])("%s: its links say what their clicks do", (_, config, checkout) => {
   let bar: Bar;
   let frames: DrawnLink[][];
   let turns: Turn[];
@@ -130,7 +153,7 @@ describe.each([
         width: 160,
         rows: 60,
         config: config(),
-        cwd: process.cwd(),
+        cwd: checkout(),
         ssh: false,
       },
       startBarDaemon,
@@ -158,9 +181,7 @@ describe.each([
   });
 
   test("no link's words hold a number the bar never shows", () => {
-    expect(
-      links.map((l) => doesOf(l.url)).filter((t) => /\d{7,}/.test(t)),
-    ).toEqual([]);
+    expect(links.flatMap((l) => longNumbersSaid(l.url))).toEqual([]);
   });
 
   test("every bar link says something, in printable ASCII", () => {

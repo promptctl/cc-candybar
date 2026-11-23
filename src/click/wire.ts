@@ -272,9 +272,10 @@ function sayWrite(key: string, value: string): string {
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Only a
-// copy is cut, because it alone has no natural length: the rest are names, paths
-// and what an author wrote. Both ends stay, by code point: a path differs at its
-// end, and half a surrogate pair cannot be encoded.
+// copy is cut, because it alone carries text of any length (a command, a whole
+// diagnostic); the rest say the name, path or authored value they act on whole.
+// Both ends stay, by code point: a path differs at its end, and half a
+// surrogate pair cannot be encoded.
 const COPIED_LENGTH = 60;
 const ELISION = "...";
 function saidCopy(text: string): string {
@@ -285,6 +286,17 @@ function saidCopy(text: string): string {
     : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
 }
 
+// A phrase a click says. A phrase that quotes text the bar was handed rather
+// than computed (a path, a directory, a copied text whose template the author
+// wrote) names that text, so a reader of the words can tell the two apart:
+// where a checkout lives holds whatever digits its name does.
+export interface Said {
+  readonly words: string;
+  readonly quoted: string;
+}
+
+const said = (words: string, quoted = ""): Said => ({ words, quoted });
+
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
@@ -292,42 +304,47 @@ function saidCopy(text: string): string {
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
     pairs.flatMap((key, i) =>
-      i % 2 === 0 ? [sayWrite(key, pairs[i + 1]!)] : [],
+      i % 2 === 0 ? [said(sayWrite(key, pairs[i + 1]!))] : [],
     ),
-  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
-  [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_STEP_STATE]: ([, key, by]) => [said(sayStep(key!, by!))],
+  [VERB_COPY]: ([text]) => {
+    const copied = saidCopy(text!);
+    return [said(`copy ${copied}`, copied)];
+  },
+  [VERB_OPEN_VSCODE]: ([target]) => [said(`open ${target} in vs code`, target)],
   // A config write says the layer of the session's chain it writes.
   [VERB_SET_CONFIG]: ([, layer, key, value]) => [
-    `save ${key} as ${value} in ${layer} config`,
+    said(`save ${key} as ${value} in ${layer} config`),
   ],
   [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
-    `save ${sayStep(key!, by!)} in ${layer} config`,
+    said(`save ${sayStep(key!, by!)} in ${layer} config`),
   ],
-  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
+  [VERB_SAVE]: ([, layer]) => [said(`save settings to ${layer} config`)],
   [VERB_SAVE_PRESET]: ([, layer]) => [
-    `save as a new preset in ${layer} config`,
+    said(`save as a new preset in ${layer} config`),
   ],
   [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
-    `save this look for the theme in ${layer} config`,
+    said(`save this look for the theme in ${layer} config`),
   ],
   [VERB_DELETE_PRESET]: ([, layer, name]) => [
-    `delete preset ${name} from ${layer} config`,
+    said(`delete preset ${name} from ${layer} config`),
   ],
   [VERB_RESET_CONFIG]: ([, layer, ...keys]) =>
-    keys.map((key) => `reset ${key} in ${layer} config`),
+    keys.map((key) => said(`reset ${key} in ${layer} config`)),
   [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
-    `edit ${op} in ${key} of ${layer} config`,
+    said(`edit ${op} in ${key} of ${layer} config`),
   ],
-  [VERB_UNDO]: () => ["undo"],
-  [VERB_REDO]: () => ["redo"],
-  [VERB_BACK]: () => ["go back"],
-  [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_SLASH]: ([, line]) => [`type ${line}`],
-  [VERB_RUN]: ([, action]) => [`run ${action}`],
-  [VERB_REPO_CONFIG]: ([, dir, answer]) => [`mark config in ${dir} ${answer}`],
-  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"],
-} satisfies Record<string, (args: readonly string[]) => string[]>;
+  [VERB_UNDO]: () => [said("undo")],
+  [VERB_REDO]: () => [said("redo")],
+  [VERB_BACK]: () => [said("go back")],
+  [VERB_REWIND]: () => [said("cancel edits")],
+  [VERB_SLASH]: ([, line]) => [said(`type ${line}`)],
+  [VERB_RUN]: ([, action]) => [said(`run ${action}`)],
+  [VERB_REPO_CONFIG]: ([, dir, answer]) => [
+    said(`mark config in ${dir} ${answer}`, dir),
+  ],
+  [VERB_COPY_DIAGNOSTIC]: () => [said("copy diagnostic")],
+} satisfies Record<string, (args: readonly string[]) => Said[]>;
 
 // [LAW:types-are-the-program] A verb the table does not say is no effect, so a
 // new verb cannot ride unsaid.
@@ -342,17 +359,23 @@ const spell = (text: string): string =>
     .replaceAll("%2F", "/")
     .replaceAll("%3A", ":");
 
-// A click's words: its face, then a count of what else it does. Session writes
-// are the bar's own housekeeping, so whatever else the click does is its face:
-// a confirm disarms first, but what it does is what it fires.
-function clickDoes(effects: readonly Effect[]): string {
+// What a click's effects say, face first. Session writes are the bar's own
+// housekeeping, so whatever else the click does is its face: a confirm disarms
+// first, but what it does is what it fires.
+export function saysOf(effects: readonly Effect[]): Said[] {
   const writesSession = (e: Effect): boolean =>
     e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
-  const [face = "nothing", ...rest] = [
+  return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession),
   ].flatMap((e) => SAYS[e.verb](e.args));
-  return rest.length > 0 ? `${face} and ${rest.length} more` : face;
+}
+
+// A click's words: its face, then a count of what else it does.
+function clickDoes(effects: readonly Effect[]): string {
+  const [face, ...rest] = saysOf(effects);
+  if (face === undefined) return "nothing";
+  return rest.length > 0 ? `${face.words} and ${rest.length} more` : face.words;
 }
 
 // A parsed link effect with its encoded argument tail. Admission decodes
@@ -594,7 +617,7 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   VERB_DISPATCH,
 ]);
 
-function isEffectVerb(verb: string): verb is EffectVerb {
+export function isEffectVerb(verb: string): verb is EffectVerb {
   return Object.hasOwn(SAYS, verb);
 }
 
