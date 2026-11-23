@@ -269,10 +269,11 @@ export async function answerStatusline(
         );
       }
       if (answer === null) return ended({ kind: "unpresented", turn });
-      // [LAW:single-enforcer] The one admission rule for a frame that
-      // answers: it is for a recipient, whichever way the wait ended. A
-      // recipient that left refuses it, so nothing is published for no one.
-      const answers = (
+      // [LAW:single-enforcer] A draw is admitted only while the reply has a
+      // recipient (above), and a frame it drew stands as its answer. One the
+      // wait ended on is a later moment: a recipient that left during it
+      // refuses the frame, so nothing is published for no one.
+      const answersAfterWait = (
         ending: Extract<Ending, { readonly answer: Present }>,
       ): Drawing => {
         if (!abandoned()) return ended(ending);
@@ -281,10 +282,10 @@ export async function answerStatusline(
       };
       const { awaiting } = answer;
       if (awaiting.kind === "settled")
-        return answers({ kind: "settled", turn, answer });
+        return ended({ kind: "settled", turn, answer });
       if (draws === 1) waitedFor = awaiting.names;
       if (awaiting.seq <= drewSeq)
-        return answers({
+        return ended({
           kind: "stale",
           turn,
           answer,
@@ -292,14 +293,14 @@ export async function answerStatusline(
         });
       drewSeq = awaiting.seq;
       if (awaiting.kind === "stalled")
-        return answers({
+        return ended({
           kind: "stalled",
           turn,
           answer,
           cause: awaiting.reason,
         });
       const left = recipient.waitEndsAt - clock.monotonic();
-      if (left <= 0) return answers({ kind: "deadline", turn, answer });
+      if (left <= 0) return ended({ kind: "deadline", turn, answer });
       const waitFrom = clock.monotonic();
       const wait = await waitWithin(
         `render wait ${session}`,
@@ -319,13 +320,13 @@ export async function answerStatusline(
       };
       if (wait.end === "closed") return closed();
       if (wait.end === "deadline")
-        return answers({ kind: "deadline", turn, answer });
+        return answersAfterWait({ kind: "deadline", turn, answer });
       switch (wait.value.kind) {
         case "aborted":
           if (closing.aborted) return closed();
-          return answers({ kind: "deadline", turn, answer });
+          return answersAfterWait({ kind: "deadline", turn, answer });
         case "gone":
-          return answers({ kind: "gone", turn, answer });
+          return answersAfterWait({ kind: "gone", turn, answer });
         case "moved":
           // A frame replaced is never shown: refused, so the renderer commits
           // nothing of it.
