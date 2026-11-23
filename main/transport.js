@@ -28404,12 +28404,11 @@ init_globals();
 // src/renderer/draw-bar.ts
 init_globals();
 
-// src/proc/launcher.ts
-init_globals();
-
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
+var sameDaemonEvent = (a, b) => a.kind === b.kind && a.about === b.about && sameOccurrence(a.event, b.event);
+var recurrence = (more) => more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
@@ -28446,53 +28445,6 @@ function answeredBy(last2, shown) {
 }
 function sameOccurrence(a, b) {
   return a.at === b.at && a.text === b.text && a.revision === b.revision;
-}
-
-// src/proc/launcher.ts
-function whyFailed(r) {
-  switch (r.reason) {
-    case "non-zero":
-      return `exited with code ${r.exitCode}`;
-    case "signal":
-      return `killed by ${r.signal ?? "a signal"}`;
-    // These are whole sentences: the launcher wrote them.
-    case "timeout":
-    case "output-limit":
-    case "rate-limited":
-    case "pipe-error":
-    case "spawn-error":
-      return r.error ?? r.reason;
-    default:
-      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
-  }
-}
-var SAID_LINE_CHARS = 200;
-var clipped = (line) => {
-  const kept = [];
-  for (const ch of line) {
-    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
-    kept.push(ch);
-  }
-  return line;
-};
-function saidBy(r, text4) {
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const t2 = text4.trim();
-  const firstEnd = t2.search(/[\r\n]/);
-  if (firstEnd === -1) return clipped(t2);
-  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
-  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
-}
-function failureText(r, where = "") {
-  const said2 = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
-}
-function launcherWarningsAt(facts, at, render3) {
-  return facts.flatMap((fact) => {
-    if (fact.kind === "lifeline") return [fact];
-    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
-    return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
-  });
 }
 
 // src/daemon/foundations/protocol.ts
@@ -46978,6 +46930,7 @@ var colorsOf = (severity) => DIAGNOSTIC_LEVELS[severity.level].colors;
 function diagnosticSpan(text4, link) {
   return { text: sanitizeText(text4), link };
 }
+var aboutOf = (kind, subject) => subject === void 0 ? kind : `${kind}\0${subject}`;
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf3 = (text4, severity) => {
@@ -47192,7 +47145,7 @@ function repoQuestions(question, sessionId2) {
     const line = [diagnosticSpan(message, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
-      about: `repo-question\0${dir}`,
+      about: aboutOf("repo-question", dir),
       message,
       copy: message,
       lines: [line]
@@ -72812,9 +72765,8 @@ function drawRender(parts, setup, drawing2, feeds) {
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const { daemon: daemon2 } = document;
-  const tasksThrew = daemon2.taskThrows.flatMap(
-    ({ task, event }) => daemonEventShows(event, at, drawing2.by) ? [{ kind: "task-threw", task, event }] : []
-  );
+  const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
+  const threw2 = daemonEvents.filter(isThrew);
   const errors2 = [
     said2("refused-args", refusedArgsError(req.refusedArgs)),
     said2("hints", hintsError),
@@ -72827,53 +72779,48 @@ function drawRender(parts, setup, drawing2, feeds) {
       (e) => ({
         kind: "dropped",
         subject: e.file,
-        about: `dropped\0${e.file}`,
+        about: aboutOf("dropped", e.file),
         text: e.message,
         copy: e.prompt
       })
     ),
     said2("click", clickShown?.text),
-    ...tasksThrew.map(
-      ({ task, event }) => ({
+    // [LAW:no-silent-failure] A daemon task that threw is a fault in the
+    // daemon, an error on every bar. Each task is one message about itself,
+    // however often it threw.
+    ...threw2.map(
+      ({ shown }) => ({
         kind: "task-threw",
-        subject: task,
-        about: `task-threw\0${task}`,
-        text: event.text,
-        copy: event.text
+        subject: shown.about,
+        about: aboutOf("task-threw", shown.about),
+        text: shown.event.text,
+        copy: shown.event.text
       })
     )
   ].flatMap(
     ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
   const configWatch = entry.revision.snapshot.watch;
-  const launched = launcherWarningsAt(daemon2.launcher, at, drawing2.by);
-  const launchEvents = launched.flatMap(
-    (warning) => "event" in warning ? [warning] : []
+  const eventsShown = daemonEvents.map(({ shown }) => shown).filter(({ event }) => !event.answered);
+  const daemonWarnings = daemonEvents.filter(isWarned).map(
+    ({ shown, hold: hold2 }) => ({
+      warning: { kind: shown.kind, message: shown.event.text, hold: hold2 },
+      subject: shown.about
+    })
   );
-  const held = [
-    daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
-    daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
-  ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [
-    ...[...launchEvents, ...held].map(({ kind, event }) => ({ kind, event })),
-    ...tasksThrew
-  ].filter(({ event }) => !event.answered);
   const standing2 = [
-    ...daemon2.fileEvents,
-    ...launched,
-    ...held,
-    ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
-    ...entry.lastWarnings.map((message) => ({
-      kind: "load",
-      message
-    })),
+    ...daemon2.fileEvents.map(alone),
+    ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
+    ...daemonWarnings,
+    ...configWatch === null ? [] : [alone({ kind: "config-watch", message: configWatch })],
+    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...failure2 === null ? [] : [
-      {
+      alone({
         kind: "facts",
         message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure2}`
-      }
+      })
     ]
   ];
   const config = presentations.configOf(state.config);
@@ -72884,13 +72831,14 @@ function drawRender(parts, setup, drawing2, feeds) {
     errors2,
     questions,
     [
-      // A standing warning is one per kind whose words change as it does (a
-      // pipe event's counts), so its kind alone is what it is about: a viewer
-      // open on it stays open. A render warning is about its words.
-      ...standing2.map((w) => ({
-        about: w.kind,
-        text: w.message,
-        copy: w.message
+      // A standing warning is one per kind, or per subject of a kind that
+      // recurs, whose words change as it does (a pipe event's count), so
+      // that is what it is about: a viewer open on it stays open. A render
+      // warning is about its words.
+      ...standing2.map(({ warning, subject }) => ({
+        about: aboutOf(warning.kind, subject),
+        text: warning.message,
+        copy: warning.message
       })),
       ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
         about: key,
@@ -72974,13 +72922,15 @@ function drawRender(parts, setup, drawing2, feeds) {
   const warnings = drawnWarnings.map(describeWarning);
   const warned = [
     ...standing2.map(
-      (w) => w.kind === "file-events" ? `${w.kind}:${w.state}` : w.kind
+      ({ warning }) => warning.kind === "file-events" ? `${warning.kind}:${warning.state}` : warning.kind
     ),
     ...warnings.map(({ tag }) => tag)
   ].join(",") || "-";
   const faults = [
     ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing2.map((w) => faultOf("warning", w.kind, w.message)),
+    ...standing2.map(
+      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
+    ),
     ...warnings.map(
       ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
     )
@@ -73016,8 +72966,9 @@ function drawRender(parts, setup, drawing2, feeds) {
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: launchEvents[0]?.hold ?? "-",
+    // Each pipe event as this frame showed it, in the order held: `-` for
+    // none at all.
+    pipeEvent: daemonWarnings.filter(({ warning }) => warning.kind === "launch-pipes").map(({ warning }) => warning.hold).join(",") || "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -73060,12 +73011,18 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
-function daemonEventAt(kind, event, at, render3) {
-  return event !== null && daemonEventShows(event, at, render3) ? { kind, message: event.text, event } : void 0;
+var isThrew = (event) => event.shown.kind === "task-threw";
+var isWarned = (event) => !isThrew(event);
+function daemonEventsAt(held, at, render3) {
+  return held.flatMap((shown) => {
+    const hold2 = eventHoldAt(shown.event, DAEMON_EVENT_HOLD_S, at, render3);
+    return hold2 === "over" ? [] : [{ shown, hold: hold2 }];
+  });
 }
-function daemonEventShows(event, at, render3) {
-  return eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) !== "over";
-}
+var alone = (warning) => ({
+  warning,
+  subject: void 0
+});
 function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
@@ -78011,50 +77968,13 @@ var lifelineMessage = (fault) => `programs launched now would outlive their laun
 var pipeEventWords = (kind) => kind === "cut" ? `output cut at the ${MAX_CAPTURED_BYTES}-byte bound, so the program holding it now fails its writes` : "output failed to read";
 var PIPE_EVENT_LEAD = "a launched program's pipe outlived its launch: ";
 function pipeEvent(state, kind, category) {
-  const last2 = state.pipeEvent;
-  const counts = new Map(last2 === null || last2.answered ? [] : last2.counts);
-  const key = `${kind}\0${category}`;
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-  const said2 = [...counts].map(([at, n]) => {
-    const [k, c] = at.split("\0");
-    return `${n}\xD7 ${c} ${pipeEventWords(k)}`;
-  });
-  state.pipeEvent = {
-    text: `${PIPE_EVENT_LEAD}${said2.join("; ")}`,
-    at: state.scope.now(),
-    // [LAW:types-are-the-program] An old write must not answer a later event
-    // with the same count, category and instant.
-    revision: (last2?.revision ?? 0) + 1,
-    answered: false,
-    counts
-  };
   state.scope.observeWarnings({
     kind: "launch-pipes",
     text: `${PIPE_EVENT_LEAD}${category} ${pipeEventWords(kind)}`
   });
 }
-function answeredPipeEvent(state, event) {
-  const last2 = state.pipeEvent;
-  if (last2 === null || !answeredBy(last2, event)) return false;
-  state.pipeEvent = { ...last2, answered: true };
-  return true;
-}
 function standing(state) {
-  const event = state.pipeEvent;
-  return [
-    ...state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }],
-    ...event === null ? [] : [
-      {
-        kind: "launch-pipes",
-        event: {
-          text: event.text,
-          at: event.at,
-          revision: event.revision,
-          answered: event.answered
-        }
-      }
-    ]
-  ];
+  return state.fault === null ? null : { kind: "lifeline", message: lifelineMessage(state.fault) };
 }
 function spawnLifeline(state) {
   const { stats, clock } = state.scope;
@@ -78664,7 +78584,6 @@ function launcherWithState(owner, clock, spawner) {
     jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
     endJob: (pid2, status, end) => endJob(spawner, clock, pid2, status, end),
     standing: () => standing(state),
-    answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
       return { unreaped: [...state.unreaped.values()] };
@@ -78690,7 +78609,6 @@ function launcherWithState(owner, clock, spawner) {
         if (message !== null) process.emitWarning(message);
       },
       signal: new AbortController().signal,
-      now: () => instantOf(new Date(clock.now())),
       ...owner,
       clock
     },
@@ -78699,7 +78617,6 @@ function launcherWithState(owner, clock, spawner) {
     liveGroups: /* @__PURE__ */ new Set(),
     lifeline: null,
     fault: null,
-    pipeEvent: null,
     ending: /* @__PURE__ */ new Set(),
     unreaped: /* @__PURE__ */ new Map(),
     drains: /* @__PURE__ */ new Set()
@@ -78845,8 +78762,7 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 init_globals();
 function thrownText(reported, more = 0) {
   const failure2 = failureOf(reported.thrown);
-  const again = more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
-  const threw2 = `${reported.task} threw${again}`;
+  const threw2 = `${reported.task} threw${recurrence(more)}`;
   return {
     shown: `${threw2}: ${failure2.message}`,
     logged: `${threw2}: ${failure2.detail}`
@@ -79222,6 +79138,47 @@ var SessionBook = class {
 // src/daemon/runs.ts
 init_globals();
 var import_node_path12 = __toESM(require_path_browserify(), 1);
+
+// src/proc/launcher.ts
+init_globals();
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said2 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
+}
 
 // src/daemon/environment-output.ts
 init_globals();
@@ -88519,9 +88476,7 @@ var failedFeed = (refusal) => {
 function covers(prior, offered) {
   if (prior.json !== offered.json) return false;
   return offered.displayedEvents === void 0 || offered.displayedEvents.every(
-    ({ kind, event }) => prior.displayedEvents?.some(
-      (seen) => seen.kind === kind && sameOccurrence(seen.event, event)
-    ) ?? false
+    (event) => prior.displayedEvents?.some((seen) => sameDaemonEvent(seen, event)) ?? false
   );
 }
 function settleWrite(write, delivered) {
@@ -91010,7 +90965,7 @@ function parseSessionPicks(value) {
 }
 
 // src/renderer-interface/wire.ts
-var RENDERER_WIRE_VERSION = 14;
+var RENDERER_WIRE_VERSION = 15;
 
 // src/daemon/recording-privacy.ts
 init_globals();
@@ -91022,7 +90977,7 @@ var UNKNOWN_PROFILE = "saved renderer state contains values of unknown origin; r
 function worldProblem({ env: env2, runs, daemon: daemon2 }) {
   if (Object.values(env2).some((fact) => fact.kind === "ok"))
     return SESSION_ENVIRONMENT;
-  return Object.values(runs).some(isEnvironmentOutput) || daemon2.actFailed !== null && isEnvironmentOutput(daemon2.actFailed) || daemon2.taskThrows.some(({ event }) => isEnvironmentOutput(event)) ? ENVIRONMENT_OUTPUT : null;
+  return Object.values(runs).some(isEnvironmentOutput) || daemon2.held.some(({ event }) => isEnvironmentOutput(event)) ? ENVIRONMENT_OUTPUT : null;
 }
 function hookCarriesEnvironment(hook) {
   const remaining = [hook];
@@ -91438,7 +91393,7 @@ var HeldSlot = class {
     if (this.state === "disposed") return;
     if (this.state !== "empty") this.state.cancelEnd();
     const held = { event, cancelEnd: () => {
-    }, recurred: null };
+    } };
     this.state = held;
     this.armEnd(held);
   }
@@ -91452,22 +91407,14 @@ var HeldSlot = class {
     if (this.holdNow(held.event) === "over") this.leave(held);
     return true;
   }
-  // Counts `latest` against the held event, for the owner to hear when the
-  // slot lets it go; false when nothing is held to count it against.
-  recur(latest) {
-    const held = this.state;
-    if (typeof held === "string") return false;
-    held.recurred = { count: (held.recurred?.count ?? 0) + 1, latest };
-    return true;
-  }
-  // A disposed slot lets go of what it holds as any slot does, so what
-  // recurred reaches the owner, and it holds nothing after.
+  // A disposed slot lets go of what it holds as any slot does, and it holds
+  // nothing after.
   dispose() {
     const held = this.state;
     this.state = "disposed";
     if (typeof held === "string") return;
     held.cancelEnd();
-    this.left(held.recurred);
+    this.left();
   }
   // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
   // and timed on the timers, which need not agree: an end that finds the
@@ -91501,7 +91448,74 @@ var HeldSlot = class {
   leave(held) {
     held.cancelEnd();
     this.state = "empty";
-    this.left(held.recurred);
+    this.left();
+  }
+};
+var RecurringEvents = class {
+  constructor(clock, kind, about, shown, changed) {
+    this.clock = clock;
+    this.kind = kind;
+    this.about = about;
+    this.shown = shown;
+    this.changed = changed;
+  }
+  clock;
+  kind;
+  about;
+  shown;
+  changed;
+  subjects = /* @__PURE__ */ new Map();
+  closed = false;
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a closed family takes none and arms no end on a closed
+  // daemon, as a disposed slot takes none.
+  occur(occurrence) {
+    if (this.closed) return;
+    const about = this.about(occurrence);
+    const subject = this.subjects.get(about) ?? this.subjectOf(about);
+    if (subject.slot.event() === null) this.show(subject, occurrence, 0);
+    else
+      subject.recurred = {
+        count: (subject.recurred?.count ?? 0) + 1,
+        latest: occurrence
+      };
+  }
+  held() {
+    return [...this.subjects].flatMap(([about, { slot }]) => {
+      const event = slot.event();
+      return event === null ? [] : [{ kind: this.kind, about, event }];
+    });
+  }
+  // Whether `shown` marked its subject's held event. A frame can carry an
+  // event whose subject has since left: nothing holds it to mark.
+  answer(about, shown) {
+    return this.subjects.get(about)?.slot.answer(shown) ?? false;
+  }
+  // Each subject lets go as at any slot's disposal, so what recurred is still
+  // shown to whatever hears it, and nothing is held after.
+  dispose() {
+    this.closed = true;
+    for (const { slot } of this.subjects.values()) slot.dispose();
+  }
+  show(subject, occurrence, more) {
+    const event = this.shown(occurrence, more, instantAt(this.clock));
+    subject.recurred = null;
+    subject.slot.hold(event);
+    this.changed();
+  }
+  subjectOf(about) {
+    const subject = {
+      slot: new HeldSlot(this.clock, `${this.kind} hold ${about}`, () => {
+        const { recurred } = subject;
+        if (recurred !== null)
+          return this.show(subject, recurred.latest, recurred.count);
+        this.subjects.delete(about);
+        this.changed();
+      }),
+      recurred: null
+    };
+    this.subjects.set(about, subject);
+    return subject;
   }
 };
 
@@ -92398,29 +92412,47 @@ function createDaemon(inputs) {
     clock
   });
   const daemonFaults = observable.box(
-    {
-      fileEvents: [],
-      launcher: [],
-      rendererEnded: null,
-      actFailed: null,
-      taskThrows: []
-    },
+    { fileEvents: [], launcher: null, held: [] },
     { deep: false, equals: compareStructural }
+  );
+  const restateOnceBuilt = () => {
+    if (phase.kind !== "building") restateFaults();
+  };
+  const launchPipes = new RecurringEvents(
+    clock,
+    "launch-pipes",
+    (text4) => text4,
+    (text4, more, at) => joinedEvent(null, `${text4}${recurrence(more)}`, at),
+    restateOnceBuilt
   );
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
-  const taskErrors = /* @__PURE__ */ new Map();
+  const taskThrows = new RecurringEvents(
+    clock,
+    "task-threw",
+    (reported) => reported.task,
+    (reported, more, at) => {
+      const { shown, logged } = thrownText(reported, more);
+      log("error", logged);
+      return environmentOutput(joinedEvent(null, shown, at), true);
+    },
+    restateFaults
+  );
+  const heldBy2 = (kind, slot) => {
+    const event = slot.event();
+    return event === null ? [] : [{ kind, about: kind, event }];
+  };
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded: rendererEnded.event(),
-        actFailed: actFailed.event(),
-        taskThrows: [...taskErrors].flatMap(([task, slot]) => {
-          const event = slot.event();
-          return event === null ? [] : [{ task, event }];
-        })
+        held: [
+          ...launchPipes.held(),
+          ...heldBy2("renderer-ended", rendererEnded),
+          ...heldBy2("act-failed", actFailed),
+          ...taskThrows.held()
+        ]
       })
     );
   }
@@ -92428,20 +92460,20 @@ function createDaemon(inputs) {
     inherited: host.env,
     stats: stats.launchStats,
     signal: cancelWork.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
     // [LAW:no-silent-failure] Each change in whether what the daemon launches
     // dies with it, and each pipe event, is said in daemon.log, and every
     // session's world state carries it, so its warning comes on frames too.
     observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
-        );
-      if (phase.kind !== "building") restateFaults();
+      if (change.kind === "launch-pipes") {
+        log("warn", change.text);
+        launchPipes.occur(change.text);
+        return;
+      }
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+      );
+      restateOnceBuilt();
     }
   });
   const acknowledgeDisplayed = (shown) => {
@@ -92449,7 +92481,8 @@ function createDaemon(inputs) {
     for (const shownEvent of shown) {
       switch (shownEvent.kind) {
         case "launch-pipes":
-          if (launcher.answeredPipeEvent(shownEvent.event)) changed = true;
+          if (launchPipes.answer(shownEvent.about, shownEvent.event))
+            changed = true;
           break;
         case "renderer-ended":
           if (rendererEnded.answer(shownEvent.event)) changed = true;
@@ -92457,10 +92490,8 @@ function createDaemon(inputs) {
         case "act-failed":
           if (actFailed.answer(shownEvent.event)) changed = true;
           break;
-        // A frame can carry a throw whose slot has since left: nothing
-        // holds it to mark.
         case "task-threw":
-          if (taskErrors.get(shownEvent.task)?.answer(shownEvent.event))
+          if (taskThrows.answer(shownEvent.about, shownEvent.event))
             changed = true;
           break;
         default:
@@ -92469,35 +92500,9 @@ function createDaemon(inputs) {
     }
     if (changed) restateFaults();
   };
-  const showThrow = (slot, reported, more) => {
-    const { shown, logged } = thrownText(reported, more);
-    log("error", logged);
-    slot.hold(
-      environmentOutput(
-        joinedEvent(null, shown, instantOf(new Date(reported.at))),
-        true
-      )
-    );
-    restateFaults();
-  };
-  const taskErrorOf = (task) => {
-    const slot = new HeldSlot(
-      clock,
-      `task throw hold ${task}`,
-      (recurred) => {
-        if (recurred !== null)
-          return showThrow(slot, recurred.latest, recurred.count);
-        taskErrors.delete(task);
-        restateFaults();
-      }
-    );
-    taskErrors.set(task, slot);
-    return slot;
-  };
   const taken2 = (reported) => {
     stats.tasksThrew++;
-    const slot = taskErrors.get(reported.task) ?? taskErrorOf(reported.task);
-    if (!slot.recur(reported)) showThrow(slot, reported, 0);
+    taskThrows.occur(reported);
   };
   clock.throws.attach((reported) => {
     try {
@@ -93105,7 +93110,12 @@ function createDaemon(inputs) {
           clock.throws.close(
             (reported) => log("error", thrownText(reported).logged)
           );
-          for (const slot of [rendererEnded, actFailed, ...taskErrors.values()])
+          for (const slot of [
+            launchPipes,
+            rendererEnded,
+            actFailed,
+            taskThrows
+          ])
             slot.dispose();
         }
       ],
