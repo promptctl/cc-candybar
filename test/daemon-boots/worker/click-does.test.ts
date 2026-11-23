@@ -44,6 +44,14 @@ const DRAWN_ONLY_AFTER = [
   /^turn .* to page /,
 ];
 
+// The long numbers in a link's words that the bar has no reason to show. A
+// link may name the checkout the bar runs in (copy its path, open it in an
+// editor), and an agent worktree's name can hold a run of digits, so a run the
+// path itself holds is the path and not a number; the words may cut the path
+// short, which leaves a run that is still part of it.
+const unshownNumbers = (words: string, checkout: string): string[] =>
+  (words.match(/\d{7,}/g) ?? []).filter((run) => !checkout.includes(run));
+
 // Every `2/6` a frame draws: where each paged list stands.
 const positionsIn = (rendered: Frame): string[] =>
   textOf(rendered).match(/\d+\/\d+/g) ?? [];
@@ -115,6 +123,28 @@ function pluginConfig(): string {
   return config;
 }
 
+// [LAW:verifiable-goals] The check passes from any checkout path and still
+// catches a number the bar never shows: it is held here on both sides, without
+// a bar, so a path with digits does not have to be where the suite runs.
+describe("the long numbers a link's words may not hold", () => {
+  const checkout = "/work/agent-12345678-ab";
+  test("a path's own digits are the path, whole or cut short", () => {
+    expect(unshownNumbers(`open ${checkout} in vs code`, checkout)).toEqual([]);
+    expect(unshownNumbers("copy /work/...nt-12345678-ab", checkout)).toEqual(
+      [],
+    );
+    expect(unshownNumbers("copy /work/agent-1234567...", checkout)).toEqual([]);
+  });
+  test("any other long number is one the bar never shows", () => {
+    expect(
+      unshownNumbers(`open ${checkout} and set 1700000000000`, checkout),
+    ).toEqual(["1700000000000"]);
+    expect(unshownNumbers("step 98765432 up by 1", checkout)).toEqual([
+      "98765432",
+    ]);
+  });
+});
+
 describe.each([
   ["the default bar", () => null],
   ["a bar with a plugin's long segment name", pluginConfig],
@@ -159,7 +189,9 @@ describe.each([
 
   test("no link's words hold a number the bar never shows", () => {
     expect(
-      links.map((l) => doesOf(l.url)).filter((t) => /\d{7,}/.test(t)),
+      links
+        .map((l) => doesOf(l.url))
+        .filter((t) => unshownNumbers(t, process.cwd()).length > 0),
     ).toEqual([]);
   });
 
