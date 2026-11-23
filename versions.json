@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "8c5b69d401bf9d1fbab5442331abc77b0ebb11f6",
-      "timestamp": "2026-11-23T12:12:32.308Z",
+      "sha": "1c5a40b642d34fb27fa6936298168aa0cce67159",
+      "timestamp": "2026-11-23T12:19:44.138Z",
       "commits": [
         {
-          "sha": "8c5b69d401bf9d1fbab5442331abc77b0ebb11f6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T05:11:23-07:00",
-          "message": "fix(settings): fold every pick through one setting table and warn on stale picks (#901)\n\n* fix(settings): fold every pick through one setting table and warn on stale picks\n\nA session pick its setting can no longer hold (an uninstalled or retired theme, an undeclared style or preset, a dropped effect, an out-of-range value, a placement value outside its declaration) now reads through its setting's one parse as stale. The fold draws what lies beneath it and reports which rung decided, and the frame shows one stale warning per stale pick that decided, naming the setting, the spelling held, what the bar wears and what the setting can hold. Every save releases every pick that is not a draft against the config it wrote, and a state variable may no longer read a setting's session key.\n\n* fix(settings): own-key style membership, one installed-theme verdict for a plugin's theme-default action, and a logged release\n\n* fix(settings): list every member in a load refusal, share one retired-theme sentence, and pin the release paths\n\n* fix(settings): a save's release takes the preset it settles on instead of reading it from session state\n\n* fix(settings): a save's release reads the picks its caller settles on, and a stale-pick comment says what the PR does"
+          "sha": "1c5a40b642d34fb27fa6936298168aa0cce67159",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T12:18:34Z",
+          "message": "chore(release): set `package.json` to 1.236.8\n\n## [1.236.8](https://github.com/promptctl/cc-candybar/compare/v1.236.7...v1.236.8) (2026-11-23)\n\n### Bug Fixes\n\n* **settings:** fold every pick through one setting table and warn on stale picks ([#901](https://github.com/promptctl/cc-candybar/issues/901)) ([8c5b69d](https://github.com/promptctl/cc-candybar/commit/8c5b69d401bf9d1fbab5442331abc77b0ebb11f6))\n"
         }
       ]
     }
