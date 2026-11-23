@@ -43312,14 +43312,26 @@ function wireKindOf(field) {
   const { domain } = row;
   return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
 }
+var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
+function fileValueOf(field, raw) {
+  const kind = wireKindOf(field);
+  if (kind === "string") return { value: raw };
+  if (kind === "number") {
+    const n = Number(raw);
+    return Number.isFinite(n) ? { value: n } : { reason: `expects a number, got "${raw}"` };
+  }
+  if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
+  if (BOOLEAN_FALSY.has(raw)) return { value: false };
+  return {
+    reason: `expects boolean-ish (1, 0, true, false), got "${raw}"`
+  };
+}
 function settingControlDomain(field) {
   return rangedDomain(GLOBAL_FIELDS[field]);
 }
 function rangedDomain(row) {
   return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
-}
-function isControlledField(field) {
-  return CONTROLLED_FIELDS.includes(field);
 }
 
 // src/config/setting-projections.ts
@@ -49808,6 +49820,16 @@ function validateGlobals(ctx, path31, raw) {
 }
 function validatePresetGlobals(ctx, path31, raw) {
   return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+var FILE_SCHEMAS = {
+  globals: GLOBALS_SCHEMA,
+  "preset-globals": PRESET_GLOBALS_SCHEMA,
+  "theme-default": THEME_DEFAULT_SCHEMA
+};
+function fileFieldIssue(ctx, scope, path31, field, value) {
+  const scratch = { ...ctx, source: "", issues: [] };
+  record(scratch, FILE_SCHEMAS[scope], path31, { [field]: value });
+  return scratch.issues[0]?.message ?? null;
 }
 function presetGlobalsJson() {
   return recordJson(PRESET_GLOBALS_SCHEMA);
@@ -61473,19 +61495,21 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     )
   ];
   for (const [at, name, endcapsAt] of styleFragments) {
-    if (name === void 0 || isExpression(name) || Object.prototype.hasOwnProperty.call(cfg.styles, name))
-      continue;
+    if (name === void 0) continue;
     const where = `${at.join(".")}.style`;
+    const message = undeclaredStyleMessage(cfg, where, name, endcapsAt);
+    if (message === null) continue;
     ctx.issues.push({
       path: where,
-      message: isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      message,
       line: findKeyLine(ctx.source, [...at, "style"])
     });
   }
-  if (cfg.globals.preset !== void 0 && !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)) {
+  const undeclaredPreset = cfg.globals.preset === void 0 ? null : undeclaredPresetMessage(cfg, "globals.preset", cfg.globals.preset);
+  if (undeclaredPreset !== null) {
     ctx.issues.push({
       path: "globals.preset",
-      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
+      message: undeclaredPreset,
       line: findKeyLine(ctx.source, ["globals", "preset"])
     });
   }
@@ -61964,20 +61988,70 @@ function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
     line: findKeyLine(ctx.source, keyPath)
   });
 }
-var SET_WRITE = (key) => ({
-  verb: "set",
-  key,
-  consequence: "a click would write it and nothing would change",
-  admits: (row, value) => row.parse(value) !== null
-});
-var PERSIST_WRITE = (key) => ({
-  verb: "persist",
-  key,
-  consequence: "a click would write it into a file the loader refuses",
-  admits: (row, value) => isExpression(value) || row.parse(value) !== null
-});
-function checkSettingWrites(ctx, name, a, write, row, optionDomains) {
-  const { key } = write;
+function undeclaredStyleMessage(cfg, where, name, endcapsAt) {
+  if (isExpression(name) || Object.hasOwn(cfg.styles, name)) return null;
+  return isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
+}
+function undeclaredPresetMessage(cfg, where, name) {
+  return presetNames(cfg.presets).includes(name) ? null : `${where} "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
+}
+function checkPersistedValues(ctx, cfg, name, a, optionDomains) {
+  const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+  const writes = valuesWritten(a, optionDomains);
+  if (target === null || !Array.isArray(writes) || target.scope !== "globals" && target.scope !== "preset-globals" && target.scope !== "theme-default") {
+    return;
+  }
+  const { path: path31, endcapsAt } = fileLocation(target);
+  const reasonOf2 = (raw) => {
+    const lifted = fileValueOf(target.field, raw);
+    if ("reason" in lifted) return lifted.reason;
+    const refused2 = fileFieldIssue(
+      ctx,
+      target.scope,
+      path31,
+      target.field,
+      lifted.value
+    );
+    if (refused2 !== null) return refused2;
+    if (target.field === "style") {
+      return undeclaredStyleMessage(cfg, `${path31}.style`, raw, endcapsAt);
+    }
+    return target.scope === "globals" && target.field === "preset" ? undeclaredPresetMessage(cfg, `${path31}.preset`, raw) : null;
+  };
+  for (const field of new Set(writes.map((w) => w.field))) {
+    const refused2 = writes.filter((w) => w.field === field).flatMap((w) => {
+      const reason = reasonOf2(w.value);
+      return reason === null ? [] : [{ value: w.value, reason }];
+    });
+    if (refused2.length === 0) continue;
+    const where = `actions.${name}.${field}`;
+    const [first2] = refused2;
+    const more = refused2.length === 1 ? "" : ` (and ${refused2.length - 1} more)`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: persisting ${JSON.stringify(first2.value)} would write a file the loader refuses${more} \u2014 ${first2.reason}`,
+      line: findKeyLine(ctx.source, ["actions", name, field])
+    });
+  }
+}
+function fileLocation(target) {
+  switch (target.scope) {
+    case "globals":
+      return { path: "globals", endcapsAt: "globals.endcaps" };
+    case "preset-globals":
+      return {
+        path: `presets.${target.preset}.globals`,
+        endcapsAt: `presets.${target.preset}.globals.endcaps`
+      };
+    case "theme-default":
+      return {
+        path: `themeDefaults.${target.theme}`,
+        endcapsAt: "globals.endcaps"
+      };
+  }
+}
+function checkSettingWrites(ctx, name, a, row, optionDomains) {
+  const key = a.set;
   const { domain } = row;
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   if ("min" in a && (domain === "bool" || !("min" in domain))) {
@@ -61988,7 +62062,7 @@ function checkSettingWrites(ctx, name, a, write, row, optionDomains) {
     });
     return;
   }
-  const writes = setWrites(a, optionDomains);
+  const writes = valuesWritten(a, optionDomains);
   if (writes === ANY_INTEGER) {
     ctx.issues.push({
       path: `actions.${name}.int`,
@@ -61997,7 +62071,7 @@ function checkSettingWrites(ctx, name, a, write, row, optionDomains) {
     });
     return;
   }
-  const outside = writes.filter((w) => !write.admits(row, w.value));
+  const outside = writes.filter((w) => row.parse(w.value) === null);
   if (outside.length === 0) return;
   if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes.every((w) => isStyleEraEndcaps(w.value)))) {
     const endcaps = SETTINGS.endcaps.sessionKey;
@@ -62007,13 +62081,13 @@ function checkSettingWrites(ctx, name, a, write, row, optionDomains) {
         message: endcapsNameMessage(
           `actions.${name}.to`,
           a.to,
-          `${write.verb}: "${endcaps}", to`
+          `set: "${endcaps}", to`
         ),
         line: findKeyLine(ctx.source, ["actions", name, "to"])
       } : {
-        path: `actions.${name}.${write.verb}`,
-        message: `actions.${name}.${write.verb}: "${key}" here writes only endcaps shapes, not styles \u2014 endcaps were renamed from "style" to "endcaps"; write ${write.verb}: "${endcaps}"`,
-        line: findKeyLine(ctx.source, ["actions", name, write.verb])
+        path: `actions.${name}.set`,
+        message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles \u2014 endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
+        line: findKeyLine(ctx.source, ["actions", name, "set"])
       }
     );
     return;
@@ -62024,17 +62098,14 @@ function checkSettingWrites(ctx, name, a, write, row, optionDomains) {
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 ${write.consequence}; ${takes}`,
+      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field])
     });
   }
 }
 var REPORTED_VALUES = 3;
-function isValueWrite(a) {
-  return "persist" in a && ("to" in a || "from" in a || "min" in a || "cycle" in a);
-}
 var ANY_INTEGER = /* @__PURE__ */ Symbol("any integer");
-function setWrites(a, optionDomains) {
+function valuesWritten(a, optionDomains) {
   if ("to" in a) return [{ field: "to", value: a.to }];
   if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
   if ("from" in a) {
@@ -62049,7 +62120,7 @@ function setWrites(a, optionDomains) {
       { field: "max", value: String(a.max) }
     ];
   }
-  return ANY_INTEGER;
+  return "int" in a ? ANY_INTEGER : null;
 }
 function subjects(record2, subject) {
   return Object.entries(record2).filter(([name]) => subject(name));
@@ -62067,6 +62138,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       });
       continue;
     }
+    if ("persist" in a) checkPersistedValues(ctx, cfg, name, a, optionDomains);
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -62077,7 +62149,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
     }
     const row = settingTable(cfg).rows.get(a.set);
     if (row !== void 0) {
-      checkSettingWrites(ctx, name, a, SET_WRITE(a.set), row, optionDomains);
+      checkSettingWrites(ctx, name, a, row, optionDomains);
     }
   }
   for (const [name, a] of subjects(cfg.actions, subject)) {
@@ -62156,17 +62228,6 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
       continue;
-    }
-    if (discriminator === "persist" && "field" in target && isControlledField(target.field) && isValueWrite(a) && // An unknown `from` was reported where the option domains are checked.
-    !("from" in a && typeof a.from === "string" && !knownDomains.includes(a.from))) {
-      checkSettingWrites(
-        ctx,
-        name,
-        a,
-        PERSIST_WRITE(key),
-        settingTable(cfg).globals[settingNameOf(target.field)],
-        optionDomains
-      );
     }
     if (target.scope !== "segment-palette") continue;
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
@@ -75459,26 +75520,14 @@ function closingView(store, nestOf2, log) {
 // src/renderer/config-file-store.ts
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
-var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
   const target = requireValueTarget(key);
-  const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
-  if (kind === "string") return JSON.stringify(raw);
-  if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      throw new Error(
-        `persistValueText: "${key}" expects a number, got "${raw}"`
-      );
-    }
-    return String(n);
+  if (target.scope === "segment-palette") return JSON.stringify(raw);
+  const lifted = fileValueOf(target.field, raw);
+  if ("reason" in lifted) {
+    throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
-  if (BOOLEAN_TRUTHY.has(raw)) return "true";
-  if (BOOLEAN_FALSY.has(raw)) return "false";
-  throw new Error(
-    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
-  );
+  return JSON.stringify(lifted.value);
 }
 function docOf(text4) {
   return /^\s*$/.test(text4) ? null : parseDocument(text4);
@@ -75793,11 +75842,15 @@ function refuseNewDrops(into, was, will) {
     );
   }
 }
-function readValue(text4, key) {
+function readDeclared(text4, key) {
   const target = requireValueTarget(key);
   const doc = docOf(text4 ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
-  return node !== void 0 && "value" in node ? node.value : void 0;
+  if (node === void 0) return void 0;
+  return {
+    source: textOf(text4 ?? "", node),
+    number: node.kind === "number" ? node.value : void 0
+  };
 }
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
@@ -76359,13 +76412,14 @@ var stepConfig = (args, ctx) => {
     key
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(
+  const declared = readDeclared(
     requireLayerText(into.path, store.read(into.path)),
     landing.key
   );
-  if (stored !== void 0 && typeof stored !== "number") {
+  const stored = declared?.number;
+  if (declared !== void 0 && !(stored !== void 0 && Number.isInteger(stored) && stored >= params.min && stored <= params.max)) {
     throw new BadVerbArgs(
-      `step-config: ${landing.key} holds ${JSON.stringify(stored)} in ${into.path}, not a number to step`
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer from ${params.min} to ${params.max} to step`
     );
   }
   const current = stored === void 0 ? stepFrom(
@@ -76373,7 +76427,7 @@ var stepConfig = (args, ctx) => {
     key,
     params,
     configKeySeed(landing.globals, key)
-  ) : clampTo(params, stored);
+  ) : stored;
   const next2 = stepWithin(current, by, params.min, params.max);
   const result = gate2.validate(key, String(next2));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
