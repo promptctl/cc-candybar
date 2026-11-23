@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-936",
+      "ref": "refs/pull/936/merge",
+      "sha": "00007e25357cda474b295c3a62df7a28051f13a6",
+      "timestamp": "2026-11-23T13:33:07.800Z",
+      "commits": [
+        {
+          "sha": "00007e25357cda474b295c3a62df7a28051f13a6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T13:32:05Z",
+          "message": "Merge 1bef5801d6745060232a2234daf678cc050fceba into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
+        },
+        {
+          "sha": "1bef5801d6745060232a2234daf678cc050fceba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:31:52-07:00",
+          "message": "test(click): the click-words case never reads the machine's own text as a number\n"
+        },
+        {
+          "sha": "260e536436d37854b6f604e0381d965eb0a12cc6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:22:55-07:00",
+          "message": "test(click): the click-words case treats the checkout path's own digits as the path\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1bc8a492d7f2458aaa33e154361a22475fd112b3",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-23T13:28:17Z",
           "message": "chore(release): set `package.json` to 1.236.9\n\n## [1.236.9](https://github.com/promptctl/cc-candybar/compare/v1.236.8...v1.236.9) (2026-11-23)\n\n### Bug Fixes\n\n* **config:** judge a persisted value by its setting's row at load, and refuse a step over a stored non-number ([#935](https://github.com/promptctl/cc-candybar/issues/935)) ([341c494](https://github.com/promptctl/cc-candybar/commit/341c494d0eada140f82fa3ae26638e0ef19e42de))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-936",
-      "ref": "refs/pull/936/merge",
-      "sha": "802caaae6f74e9522f1331aa35449a45a5aa6778",
-      "timestamp": "2026-11-23T13:24:45.777Z",
-      "commits": [
-        {
-          "sha": "802caaae6f74e9522f1331aa35449a45a5aa6778",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:23:33-07:00",
-          "message": "Merge 260e536436d37854b6f604e0381d965eb0a12cc6 into 341c494d0eada140f82fa3ae26638e0ef19e42de\n"
-        },
-        {
-          "sha": "260e536436d37854b6f604e0381d965eb0a12cc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:22:55-07:00",
-          "message": "test(click): the click-words case treats the checkout path's own digits as the path\n"
         }
       ]
     }
