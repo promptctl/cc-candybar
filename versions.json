@@ -4,15 +4,22 @@
     {
       "version": "pr-940",
       "ref": "refs/pull/940/merge",
-      "sha": "2fd30dc764e03734a9c0e6c584551c06e119255c",
-      "timestamp": "2026-11-23T19:10:03.655Z",
+      "sha": "0614571ee6782f787944d97e90c2f27a5ca48c1b",
+      "timestamp": "2026-11-23T19:26:53.477Z",
       "commits": [
         {
-          "sha": "2fd30dc764e03734a9c0e6c584551c06e119255c",
+          "sha": "0614571ee6782f787944d97e90c2f27a5ca48c1b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T19:08:51Z",
-          "message": "Merge 330f7385e4786bc46fa1ffbc43e99f5a2285adfa into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+          "timestamp": "2026-11-23T19:25:38Z",
+          "message": "Merge 1332727b1a084e9567805dffa065d745744b83d2 into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+        },
+        {
+          "sha": "1332727b1a084e9567805dffa065d745744b83d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T12:25:18-07:00",
+          "message": "fix(render): a request's wait ends on the next stamp, and a redraw that reads no newer world state ends it as stale\n\nReview pass 3 on the request wait: the host's own record of what reached the\nrenderer is deleted. Mailbox order puts a stamp's delivery ahead of the\nredraw, and a renderer that refused it fails the redraw, so the record only\nre-answered both and missed paths to the renderer.\n"
         },
         {
           "sha": "330f7385e4786bc46fa1ffbc43e99f5a2285adfa",

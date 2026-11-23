@@ -73792,13 +73792,6 @@ function followingOf(viewers) {
     if (seen.drawing) following.add(lane);
   return following;
 }
-var WORLD_STATE_UNTAKEN = ["world-state", "no-live-session"];
-function untakenBy(turn) {
-  if (turn.kind === "threw") return turn.failure.message;
-  return turn.record.some(
-    ([key, value]) => key === WORLD_STATE_UNTAKEN[0] && value === WORLD_STATE_UNTAKEN[1]
-  ) ? "the renderer holds no view of the session" : null;
-}
 
 // src/renderer/feeds.ts
 var FEED_PERIODS = {
@@ -77607,7 +77600,7 @@ function mainRenderer(parts, drains) {
       }
       case "world-state":
         if (!parts.worldStates.take(event.worldState))
-          record2.push(WORLD_STATE_UNTAKEN);
+          record2.push(["world-state", "no-live-session"]);
         return;
       case "retire":
         opening.delete(event.session);
@@ -82079,13 +82072,20 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
     const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
     let draws = 0;
     let waited = 0;
+    let waitedFor = [];
+    let drewSeq = -1;
     for (; ; ) {
       const turn = await host.answer(
         () => abandoned() ? DRAW_ABANDONED : draw2()
       );
       draws++;
       const answer2 = presentedBy(turn);
-      const ended = (ending2) => ({ ending: ending2, draws, waited });
+      const ended = (ending2) => ({
+        ending: ending2,
+        draws,
+        waited,
+        waitedFor
+      });
       if (turn.kind === "threw") {
         if (turn.failure === DRAW_ABANDONED)
           return ended({ kind: "abandoned", turn });
@@ -82102,6 +82102,15 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       const { awaiting } = answer2;
       if (awaiting.kind === "settled")
         return answers({ kind: "settled", turn, answer: answer2 });
+      if (draws === 1) waitedFor = awaiting.names;
+      if (awaiting.seq <= drewSeq)
+        return answers({
+          kind: "stale",
+          turn,
+          answer: answer2,
+          cause: `the renderer drew world state ${awaiting.seq} again after a wait for one later than ${drewSeq}`
+        });
+      drewSeq = awaiting.seq;
       if (awaiting.kind === "stalled")
         return answers({
           kind: "stalled",
@@ -82133,14 +82142,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
           return answers({ kind: "deadline", turn, answer: answer2 });
         case "gone":
           return answers({ kind: "gone", turn, answer: answer2 });
-        case "untaken":
-          return answers({
-            kind: "untaken",
-            turn,
-            answer: answer2,
-            cause: wait.value.reason
-          });
-        case "landed":
+        case "moved":
           turn.settlePresentation(
             answer2,
             abandoned() ? DRAW_ABANDONED.message : "a later draw of this request replaces it"
@@ -82154,11 +82156,6 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       unlessClosing({ kind: "context", context: req, worldState })
     );
     recorded(facts, configured);
-    collector.landed(
-      session,
-      worldState,
-      configured.kind === "threw" ? configured.failure.message : null
-    );
     if (checkoutError !== null) noteFacts(facts, { checkoutError });
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
@@ -82176,6 +82173,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       noteFacts(facts, {
         draws: String(drawing2.draws),
         waited: `${drawing2.waited}ms`,
+        waitedFor: drawing2.waitedFor.join(",") || "-",
         ended: drawing2.ending.kind,
         cause: "cause" in drawing2.ending ? drawing2.ending.cause : "-"
       });
@@ -88785,8 +88783,8 @@ var Collector = class {
   }
   deps;
   // [LAW:one-source-of-truth] Observable as far as a request's wait reads
-  // them (`moved`): which sessions are read, each one's phase, and what has
-  // landed at the renderer.
+  // them (`moved`): which sessions are read, each one's phase and its latest
+  // stamp.
   records = observable.map(
     void 0,
     { deep: false }
@@ -88825,21 +88823,17 @@ var Collector = class {
     return document;
   }
   // [LAW:single-enforcer] A request's wait for its draw's owed answers: until
-  // a world state later than `after` (the one the draw read) reaches the
-  // renderer, or the renderer fails to take it, or the session is no longer
-  // read. The wait triggers no read: the owners' reads follow the world, and
-  // each stamp they move goes to the renderer ahead of the request, so the
-  // request's next draw reads the world state the wait ended on. It judges
-  // the renderer's side, never the stamp alone, so a wait cannot end on a
-  // world state its next draw cannot read. `signal` ends it from outside (the
-  // wait's deadline or its owner's close), and a wait so ended says so.
+  // the session is stamped later than `after` (the world state the draw read),
+  // or is no longer read, or `signal` ends it. The wait triggers no read: the
+  // owners' reads follow the world, and each stamp they move goes to the
+  // renderer ahead of the request, so the request's next draw reads the world
+  // state the wait ended on. A renderer that did not take it says so by what
+  // the draw reports: it throws, or reads the world state it already drew.
   async moved(session, after, signal) {
     const read2 = () => {
       const record2 = this.records.get(session);
       if (record2?.phase.kind !== "live") return { kind: "gone" };
-      const { landed } = record2.stamped;
-      if (landed.seq <= after) return null;
-      return landed.untaken === null ? { kind: "landed" } : { kind: "untaken", reason: landed.untaken };
+      return record2.stamped.document.seq > after ? { kind: "moved" } : null;
     };
     try {
       await when(() => read2() !== null, { signal });
@@ -88847,20 +88841,6 @@ var Collector = class {
       if (!signal.aborted) throw e;
     }
     return read2() ?? { kind: "aborted" };
-  }
-  // [LAW:single-enforcer] The one place what reached the renderer moves: a
-  // delivery's settling, and the context turn that carried a request's own
-  // stamp. It never moves back, because a session that changed renderer has
-  // turns settling from two mailboxes, in either order.
-  landed(session, document, untaken) {
-    const record2 = this.records.get(session);
-    if (record2 !== void 0) this.settled(record2.stamped, document, untaken);
-  }
-  settled(stamped, document, untaken) {
-    runInAction(() => {
-      if (document.seq > stamped.landed.seq)
-        stamped.landed = { seq: document.seq, untaken };
-    });
   }
   // A click is a person's input naming the session, as a request is, so the
   // next sweep keeps it whatever the click's turn draws in the meantime. A
@@ -88984,8 +88964,8 @@ var Collector = class {
       throw e;
     }
     const stamped = observable(
-      { document, from: first2, landed: { seq: document.seq, untaken: null } },
-      { document: observableRef, from: false, landed: observableRef }
+      { document, from: first2 },
+      { document: observableRef, from: false }
     );
     return observable(
       {
@@ -89039,23 +89019,14 @@ var Collector = class {
       () => reader.inputs.get(),
       (moved2) => runInAction(() => {
         if (moved2 === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved2)) {
-          const { document } = stamped;
+        if (this.stamp({ session, stamped }, moved2))
           this.deps.clock.detach(
             `world state delivery ${session}`,
-            async () => {
-              const untaken = await this.deps.deliver({ kind: "world-state", worldState: document }).catch((e) => {
-                const threw2 = `its delivery threw: ${failureOf(e).message}`;
-                this.deps.log(
-                  "error",
-                  `world state ${threw2} sid=${JSON.stringify(session)}`
-                );
-                return threw2;
-              });
-              this.settled(stamped, document, untaken);
-            }
+            () => this.deps.deliver({
+              kind: "world-state",
+              worldState: stamped.document
+            })
           );
-        }
       }),
       {
         // The expression cannot throw; the effect's catch is `stamp`.
@@ -93440,7 +93411,7 @@ function createDaemon(inputs) {
       const session = event.kind === "retire" ? event.session : event.worldState.session;
       const route = routes.get(session);
       const renderer = (renderers.get(nameOf2(session)) ?? primary).renderer;
-      return renderer.deliver(() => ({ kind: "event", event }), []).then(untakenBy).finally(() => {
+      return renderer.deliver(() => ({ kind: "event", event }), []).finally(() => {
         if (event.kind === "retire" && routes.get(session) === route)
           routes.delete(session);
       });
