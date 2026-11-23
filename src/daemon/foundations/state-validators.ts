@@ -16,8 +16,9 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import {
-  listResolvablePaletteNames,
   ENDCAPS_SHAPES,
+  installedTheme,
+  installedThemesNote,
 } from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
 import { configOptionDomains } from "../../config/edit-chrome";
@@ -52,21 +53,18 @@ export {
   makeRangeValidator,
 } from "./validator-registry";
 
-// [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
-// members resolve to a concrete Palette. It deliberately excludes the "custom"
-// sentinel (which needs inline colors and is not a renderable theme name):
-// accepting "custom" here would persist an unrenderable value into SessionState
-// and break the next render.
-const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
-const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
 const RESOLVABLE_ENDCAPS: ReadonlySet<string> = new Set(ENDCAPS_SHAPES);
 
+// [LAW:one-source-of-truth] A theme pick is an installed theme
+// (`installedTheme`), the one membership the fold reads it through. The
+// "custom" sentinel needs inline colors and is no installed theme name, so it
+// is refused here rather than persisted unrenderable.
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
+  if (installedTheme(raw) === null) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`,
+      reason: `unknown theme "${raw}" (have ${installedThemesNote()})`,
     };
   }
   return { ok: true, value: raw };

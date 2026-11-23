@@ -11,6 +11,7 @@ import {
   VALUED_FIELDS,
   valuedRow,
   type SessionField,
+  type SettingName,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
@@ -20,6 +21,8 @@ import {
   resolveEffectSelection,
   type EffectSelection,
   effectiveGlobal,
+  type DecidedBy,
+  type Folded,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -79,6 +82,10 @@ export type EffectiveGlobals = ValuedGlobals & {
   // bundled", so naming a floor here would be a second copy of a constant
   // that lives in rich-js.
   readonly separator: string | undefined;
+  // [LAW:one-source-of-truth] Which rung decided each setting a session can
+  // pick, under its session key: the fold's own answer, so whether a stale
+  // pick matters is read here and never re-derived from the precedence.
+  readonly decidedBy: Readonly<Record<SettingName, DecidedBy>>;
 };
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
@@ -105,7 +112,7 @@ function resolveValued<K extends ValuedField>(
   staged: Partial<Globals>,
   sessionPick: (key: string) => string | null,
   globals: Globals,
-): ValuedGlobals[K] {
+): Folded<ValuedGlobals[K]> {
   const row = valuedRow(field);
   return effectiveGlobal(
     staged[field] as ValuedGlobals[K] | undefined,
@@ -123,7 +130,7 @@ function resolveValued<K extends ValuedField>(
 export function presetOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
-): string {
+): Folded<string> {
   return effectivePresetName(
     // [LAW:one-source-of-truth] Read under the key a preset pick is written
     // under.
@@ -144,7 +151,7 @@ export function resolveEffectiveGlobals(
   // The preset resolves FIRST: every field below reads globals, and which
   // globals is exactly what the preset decides.
   const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset);
+  const declared = presetGlobals(config, preset.value);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as
   // PRESET_FLOOR's is. Every field below is resolved by the same expression
@@ -164,29 +171,45 @@ export function resolveEffectiveGlobals(
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme, config.themeDefaults),
+    themeDefaultsOf(theme.value, config.themeDefaults),
+  );
+  const valued = VALUED_FIELDS.map(
+    (field) =>
+      [field, resolveValued(field, staged, sessionPick, globals)] as const,
+  );
+  const style = resolveStyleSelection(
+    staged.style,
+    sessionPick(settingNameOf("style")),
+    globals.style,
+    config.styles,
+  );
+  const effect = resolveEffectSelection(
+    staged.effect,
+    sessionPick(settingNameOf("effect")),
+    globals.effect,
   );
   return {
     ...(Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, sessionPick, globals),
-      ]),
+      valued.map(([field, folded]) => [field, folded.value]),
     ) as ValuedGlobals),
-    preset,
-    presetCustomized: presetCustomized(preset),
-    theme,
-    style: resolveStyleSelection(
-      staged.style,
-      sessionPick(settingNameOf("style")),
-      globals.style,
-      config.styles,
-    ),
-    effect: resolveEffectSelection(
-      staged.effect,
-      sessionPick(settingNameOf("effect")),
-      globals.effect,
-    ),
+    preset: preset.value,
+    presetCustomized: presetCustomized(preset.value),
+    theme: theme.value,
+    style: style.value,
+    effect: effect.value,
+    decidedBy: {
+      ...(Object.fromEntries(
+        valued.flatMap(([field, folded]) =>
+          valuedRow(field).kind === "session"
+            ? [[settingNameOf(field as SessionField), folded.decidedBy]]
+            : [],
+        ),
+      ) as Record<SessionField, DecidedBy>),
+      [settingNameOf("preset")]: preset.decidedBy,
+      [settingNameOf("palette")]: theme.decidedBy,
+      [settingNameOf("style")]: style.decidedBy,
+      [settingNameOf("effect")]: effect.decidedBy,
+    },
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
     // config` — the same `??`, minus the rungs it does not have.
     separator: staged.default_separator ?? globals.default_separator,

@@ -263,7 +263,6 @@ describe("preset selection — the arrangement the bar renders", () => {
   const SRC = `{
     globals: { palette: '${THEME}', padding: 1 },
     variables: {
-      presetPick: { kind: 'state', key: 'preset', default: '${PRESET_FLOOR}' },
     },
     actions: { applyPreset: { set: 'preset', from: 'presets' } },
     segments: {

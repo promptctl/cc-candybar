@@ -70,7 +70,12 @@ describe("parsePluginSource", () => {
 
   test("a directory that exists is a path, even one spelled like a slug", () => {
     expect(
-      parsePluginSource("owner/repo", "/cwd", HOST.home, isDir(["/cwd/owner/repo"])),
+      parsePluginSource(
+        "owner/repo",
+        "/cwd",
+        HOST.home,
+        isDir(["/cwd/owner/repo"]),
+      ),
     ).toEqual({
       kind: "path",
       dir: "/cwd/owner/repo",
@@ -78,7 +83,9 @@ describe("parsePluginSource", () => {
   });
 
   test("anything else names nothing, and says so", () => {
-    expect(parsePluginSource("./nowhere/at/all", "/cwd", HOST.home, isDir([]))).toEqual({
+    expect(
+      parsePluginSource("./nowhere/at/all", "/cwd", HOST.home, isDir([])),
+    ).toEqual({
       error: `"./nowhere/at/all" is not a directory, a GitHub repo slug (owner/repo) or a git URL`,
     });
   });
@@ -154,9 +161,38 @@ describe("installFromRepo", () => {
     expect(fs.readdirSync(root)).toEqual([]);
   });
 
+  test("an action resetting an installed theme's default installs, and one naming a theme nothing installs does not", () => {
+    const reset = (theme: string) =>
+      `{ actions: { shade: { reset: "themeDefaults.${theme}.shade" } } }`;
+    const root = path.join(dir, "plugins");
+    expect(
+      installFromRepo(
+        repoWith({ app: reset("nord") }),
+        root,
+        "repo",
+        HOST.home,
+      ),
+    ).toEqual([
+      { path: path.join(root, "app/plugin.json5"), placed: "installed" },
+    ]);
+    expect(() =>
+      installFromRepo(
+        repoWith({ app: reset("no-such-theme") }),
+        path.join(dir, "other"),
+        "repo",
+        HOST.home,
+      ),
+    ).toThrow(/names theme "no-such-theme" which is not installed/);
+  });
+
   test("a repo with no plugins is an error, never an empty install", () => {
     expect(() =>
-      installFromRepo(repoWith({}), path.join(dir, "plugins"), "repo", HOST.home),
+      installFromRepo(
+        repoWith({}),
+        path.join(dir, "plugins"),
+        "repo",
+        HOST.home,
+      ),
     ).toThrow(
       /^repo has no plugins: none at \.cc-candybar\/plugins\/<name>\/plugin\.json5/,
     );
@@ -212,7 +248,9 @@ describe("runPlugin", () => {
   let log: jest.SpyInstance;
   let err: jest.SpyInstance;
   beforeEach(() => {
-    world = worldOf(hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }));
+    world = worldOf(
+      hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }),
+    );
     log = jest.spyOn(console, "log").mockImplementation(() => {});
     err = jest.spyOn(console, "error").mockImplementation(() => {});
   });

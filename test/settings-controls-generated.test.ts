@@ -23,9 +23,11 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { stateGate } from "./helpers/gates";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS } from "../src/config/setting-projections";
-import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import {
+  GLOBAL_FIELDS,
   globalsControlDomain,
+} from "../src/config/globals-fields";
+import {
   globalsJson,
   listGlobalsFieldNames,
 } from "../src/config/loader/globals";

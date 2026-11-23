@@ -97,7 +97,7 @@ import {
   type SubmenuName,
   type TabName,
 } from "./menu-places.js";
-import { settingControlDomain } from "./loader/globals.js";
+import { settingControlDomain } from "./globals-fields.js";
 import { settingControl, type Affordance } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
 import {

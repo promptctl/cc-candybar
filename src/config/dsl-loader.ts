@@ -100,6 +100,7 @@ import {
 import { declarationsAt, templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import { validateNoNesting } from "./loader/nesting.js";
+import { refuseSettingKeyOwners } from "./loader/setting-keys.js";
 import {
   applyPlugins,
   listedPlugins,
@@ -624,11 +625,13 @@ function checkPlugin(
   }
   const owned = ownedBy(ns);
   const issues: ConfigIssue[] = [];
-  // Neither check below reads a palette name: only the structural pass does.
+  // [LAW:one-source-of-truth] The declaration check reads the installed
+  // themes (a theme-default action names one), the same set the replacing
+  // branch above judges by, so a definition gets one verdict on either.
   const ctx: ValidateCtx = {
     source: "",
     issues,
-    allowedPalettes: new Set(),
+    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: [],
@@ -866,6 +869,7 @@ function judgeRenderable(
     checked: () => true,
     authored: (name) => authored.has(name),
   });
+  refuseSettingKeyOwners(ctx, withChrome);
   refuseIfIssues();
   // [LAW:single-enforcer] Authored and synthesized actions share the same
   // layer checkpoint before any reaches the renderer.

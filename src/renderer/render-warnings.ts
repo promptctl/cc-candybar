@@ -35,6 +35,9 @@ export function describeWarning(warning: RenderWarning): DescribedWarning {
     case "when":
       subject = warning.where;
       break;
+    case "stale":
+      subject = warning.key;
+      break;
   }
   // [LAW:one-source-of-truth] A tuple gives equal warnings the same identity
   // regardless of the producer's object field order.
