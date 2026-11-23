@@ -41599,8 +41599,8 @@ function resolveSelection(stagedName2, sessionPick, globalsValue, floor3, named2
 }
 var STYLE_FLOOR = "none";
 function namedStyle(name, declaredStyles) {
-  const value = declaredStyles[name];
-  return value === void 0 ? null : { kind: "decided", name, value };
+  if (!Object.hasOwn(declaredStyles, name)) return null;
+  return { kind: "decided", name, value: declaredStyles[name] };
 }
 function decideStyleName(name, declaredStyles) {
   return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
@@ -41789,6 +41789,9 @@ function* stateVarDecls(config) {
 var THEME_SETTING = "theme";
 var EFFECT_SETTING = "effect";
 var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
+function settingBeneath(node, name, decl) {
+  return node.settings?.[name] ?? decl.default;
+}
 function settingsOf(seg2) {
   return {
     ...seg2.settings,
@@ -58259,7 +58262,7 @@ function configureParts(ctx, node, decls) {
       setting: name,
       decl,
       key,
-      beneath: node.settings?.[name] ?? decl.default
+      beneath: settingBeneath(node, name, decl)
     };
     ctx.artifacts.variables[variable] = { kind: "setting", slot };
     drafts[name] = { ...slot, variable };
@@ -61765,10 +61768,7 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
     }
   }
   const resolved = Object.fromEntries(
-    Object.entries(declared).map(([n, d]) => [
-      n,
-      node.settings?.[n] ?? d.default
-    ])
+    Object.entries(declared).map(([n, d]) => [n, settingBeneath(node, n, d)])
   );
   const members = Object.entries(resolved).every(
     ([n, v]) => inSettingDomain(declared[n], v)
@@ -62614,7 +62614,7 @@ function checkPlugin(config, ns, replaces, filePath2, allowedPalettes) {
   const ctx = {
     source: "",
     issues,
-    allowedPalettes: /* @__PURE__ */ new Set(),
+    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: []
@@ -66208,9 +66208,15 @@ var SourceRegistry = class _SourceRegistry {
     });
   }
   // What the bound view's session holds at `key`, as its `state` variables
-  // read it. A registry with no session state holds nothing.
+  // read it. [LAW:no-silent-failure] A registry with no session state cannot
+  // be asked, as `declareState` cannot be.
   held(key) {
-    return this.sessionState?.get(this.session(), key) ?? null;
+    if (!this.sessionState) {
+      throw new Error(
+        `held("${key}"): SourceRegistry was constructed without a SessionState`
+      );
+    }
+    return this.sessionState.get(this.session(), key);
   }
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
@@ -67306,12 +67312,14 @@ function holds2(pick2, domains) {
   return successor === void 0 ? `It can hold ${describeControlDomain(pick2.row.domain, domains)}` : `"${pick2.raw}" was retired; its successor is "${successor}"`;
 }
 function staleWarnings(picks, domains) {
+  let built;
+  const domainsOnce = () => built ??= domains();
   return [...new Map(picks.map((p2) => [p2.row.key, p2])).values()].map(
     (pick2) => ({
       kind: "stale",
       key: pick2.row.key,
       setting: pick2.row.name,
-      message: `Setting ${pick2.row.name} holds "${pick2.raw}", which it cannot hold, so the bar wears "${pick2.wears}". ${holds2(pick2, domains())}. Pick it again.`
+      message: `Setting ${pick2.row.name} holds "${pick2.raw}", which it cannot hold, so the bar wears "${pick2.wears}". ${holds2(pick2, domainsOnce())}. Pick it again.`
     })
   );
 }
@@ -69792,7 +69800,7 @@ function compileDslConfig({
       const draft = node.drafts?.[name];
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: draft === void 0 ? () => node.settings?.[name] ?? decl.default : foldedRead(draft, name)
+        get: draft === void 0 ? () => settingBeneath(node, name, decl) : foldedRead(draft, name)
       });
     }
     return Object.freeze(out);
@@ -76384,10 +76392,16 @@ function releaseSaved(ctx, written2, movedOn = []) {
     ...placementDrafts(written2, pick2).map((p2) => p2.key)
   ]);
   for (const key of movedOn) drafted.delete(key);
-  for (const key of settingTable(written2).rows.keys()) {
-    if (!drafted.has(key) && pick2(key) !== null)
-      ctx.sessionState.clear(sid, key);
-  }
+  const released = [...settingTable(written2).rows].flatMap(([key, row]) => {
+    const raw = pick2(key);
+    return drafted.has(key) || raw === null ? [] : [{ key, stale: row.parse(raw) === null }];
+  });
+  for (const { key } of released) ctx.sessionState.clear(sid, key);
+  if (released.length > 0)
+    ctx.log(
+      "info",
+      `released: ${released.map((r) => `${r.key}${r.stale ? " (stale)" : ""}`).join(" ")} (session=${sid})`
+    );
 }
 var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
 function gatePlacements(verb, gate2, placements) {

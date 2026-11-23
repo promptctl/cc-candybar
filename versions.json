@@ -4,15 +4,22 @@
     {
       "version": "pr-901",
       "ref": "refs/pull/901/merge",
-      "sha": "5e4daf2e28c539599e81ee9d49567ffb4bf99751",
-      "timestamp": "2026-11-23T11:00:54.291Z",
+      "sha": "261c34ad3c921c6669a60882f705182e2b25632f",
+      "timestamp": "2026-11-23T11:17:56.230Z",
       "commits": [
         {
-          "sha": "5e4daf2e28c539599e81ee9d49567ffb4bf99751",
+          "sha": "261c34ad3c921c6669a60882f705182e2b25632f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:59:45Z",
-          "message": "Merge 2f53f6a711e259b736e6b1cb1b73b67e3ff69c93 into 9981658049e4a64f1743182196945f5de277f53e\n"
+          "timestamp": "2026-11-23T11:16:58Z",
+          "message": "Merge 6c678248edc73e4418dfa68445e467acffa1812f into 9981658049e4a64f1743182196945f5de277f53e\n"
+        },
+        {
+          "sha": "6c678248edc73e4418dfa68445e467acffa1812f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T04:16:44-07:00",
+          "message": "fix(settings): own-key style membership, one installed-theme verdict for a plugin's theme-default action, and a logged release\n"
         },
         {
           "sha": "2f53f6a711e259b736e6b1cb1b73b67e3ff69c93",
