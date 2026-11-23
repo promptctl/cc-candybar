@@ -63187,9 +63187,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
     //
     //   • `host.ssh` is the client's judgement over three variables (any of
     //     `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY` set), carried as a wire
-    //     hint (the `termCols` pattern), so the payload holds one boolean that
-    //     the bar and the doctor read alike; an `env` variable reads one
-    //     string.
+    //     hint (the `termCols` pattern), so the payload holds one boolean; an
+    //     `env` variable reads one string.
     //   • `host.name`/`host.user` are machine facts the daemon reads directly,
     //     so they cost two syscalls instead of a per-render subprocess.
     //
@@ -82305,8 +82304,8 @@ function detectClientHints(host, cwd2, tty) {
     // settings.json from THIS session's Claude Code directory.
     claudeConfigDir: detectClaudeConfigDir(env2, cwd2),
     // Total like tmux: always an object, so an absent hint means only "client
-    // too old". The doctor reads which terminal draws the bar from these
-    // (src/doctor/terminal.ts).
+    // too old". No code reads them today; they name the terminal that draws the
+    // bar (src/terminal-hint.ts).
     terminalEnv: detectTerminalEnv(env2)
   };
 }
@@ -87853,7 +87852,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.236.10";
+var PACKAGE_VERSION = "1.236.11";
 
 // src/daemon/stats.ts
 var NO_RUNS = {

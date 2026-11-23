@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-941",
+      "ref": "refs/pull/941/merge",
+      "sha": "0e70241f94171e72d1bb393630bcaac713070fa6",
+      "timestamp": "2026-11-23T20:14:14.757Z",
+      "commits": [
+        {
+          "sha": "0e70241f94171e72d1bb393630bcaac713070fa6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T20:13:06Z",
+          "message": "Merge a59499a03b0c184ee1b94e27a4722f0a8d7a2e87 into a3da8f9db90b8e27fb883db81e687a3e39f1ea9f\n"
+        },
+        {
+          "sha": "a59499a03b0c184ee1b94e27a4722f0a8d7a2e87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T13:12:51-07:00",
+          "message": "fix(docs): living docs cite only paths that exist, and the Doctor is named as retired wherever it was a live reader\n\nA unit test now reads the memory files, CLAUDE.md and the host/renderer design\ndocs and fails on any cited repo path that is not on disk.\n\nDesign docs: host-and-renderer states what the interface carries (subscription\nkinds, origin, write targets, how frames reach a surface, the one-way-deps\nexception) and drops the false claims; the gather gap and clicks docs no longer\ndescribe a tmux click binding nothing writes; the inventory files keep only\nwhat the code still does.\n\nMemory: the decisions book, refresh interval, lane-held-by-declaration reason\nand diagnostic identity say what is true, with identifiers removed.\n\nComment-only edits in src, scripts and rust-client replace the retired Doctor\nas a named reader with the readers that exist.\n"
+        },
+        {
+          "sha": "a23f7887f22dab28b0335d7924c7d78af1cc9f58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:26:53-07:00",
+          "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a3da8f9db90b8e27fb883db81e687a3e39f1ea9f",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-23T19:48:29Z",
           "message": "chore(release): set `package.json` to 1.236.11\n\n## [1.236.11](https://github.com/promptctl/cc-candybar/compare/v1.236.10...v1.236.11) (2026-11-23)\n\n### Bug Fixes\n\n* **render:** a request waits for exactly what its frame draws pending ([#940](https://github.com/promptctl/cc-candybar/issues/940)) ([8c0bb1d](https://github.com/promptctl/cc-candybar/commit/8c0bb1d6a482c98263a00d5db9cd63d931555cce))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-941",
-      "ref": "refs/pull/941/merge",
-      "sha": "0499eb9261a9de90930caa8c85b173e1f9adc0c7",
-      "timestamp": "2026-11-23T19:48:44.874Z",
-      "commits": [
-        {
-          "sha": "0499eb9261a9de90930caa8c85b173e1f9adc0c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T19:47:36Z",
-          "message": "Merge a23f7887f22dab28b0335d7924c7d78af1cc9f58 into 8c0bb1d6a482c98263a00d5db9cd63d931555cce\n"
-        },
-        {
-          "sha": "a23f7887f22dab28b0335d7924c7d78af1cc9f58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:26:53-07:00",
-          "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
         }
       ]
     },
