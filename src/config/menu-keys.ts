@@ -30,8 +30,12 @@ import {
   placementKeyScope,
   type PlacementIdentity,
 } from "./placement-identity.js";
-import { EDIT_NS, MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
-import { isEditModeKey } from "./session-key.js";
+import {
+  EDIT_NS,
+  MENU_NS,
+  MENU_PAGE_NS,
+  isEditNamespaced,
+} from "./reserved-names.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -65,7 +69,7 @@ export function menuMember(applyName: string): string {
 // per key and carried in it: a page cursor sits in its menu's scope.
 type MenuScope = typeof EDIT_NS | "";
 function menuScope(host: string): MenuScope {
-  return isEditModeKey(host) ? EDIT_NS : "";
+  return isEditNamespaced(host) ? EDIT_NS : "";
 }
 
 // [LAW:single-enforcer] THE state key for a menu. Independent (no shared key):

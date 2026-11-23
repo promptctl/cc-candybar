@@ -56,7 +56,10 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import { presetRootKey } from "../src/config/loader/persist-target";
-import { placementDrafts } from "../src/renderer/setting-drafts";
+import {
+  placementDrafts,
+  presetSnapshot,
+} from "../src/renderer/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -696,6 +699,27 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const text = textOf(rt.render());
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text).not.toContain("⚠");
+  });
+
+  test("a draft in a preset the session switched away from is still a draft a save writes", () => {
+    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
+    durable.write(src);
+    const rt = configureBar(src, "b");
+    const pick = (k: string) => rt.ctx.edits.view.get(SID, k);
+    arrange(rt.ctx, SID);
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "depth"), "3");
+    rt.ctx.sessionState.set(
+      SID,
+      placementDraftKey({ preset: "b", id: "vcs2", segment: "vcs" }, "depth"),
+      "1",
+    );
+    expect(placementDrafts(rt.config, pick).map((d) => d.preset)).toEqual([
+      "default",
+      "b",
+    ]);
+    expect(
+      presetSnapshot(rt.config, pick).placements.map((d) => d.preset),
+    ).toEqual(["default"]);
   });
 
   test("configure mode names its preset: another preset's placement of the id stays closed", () => {

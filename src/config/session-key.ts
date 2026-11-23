@@ -5,8 +5,8 @@
 import {
   CLICK_ERROR_KEY,
   EDIT_MODE_KEY,
-  EDIT_NS,
   PLACEMENT_DRAFT_NS,
+  isEditNamespaced,
   isMenuStateKey,
   reservedNamespaceOf,
 } from "./reserved-names.js";
@@ -37,7 +37,7 @@ export type SessionKeyKind =
   | { readonly kind: "plain" };
 
 export function sessionKeyKind(key: string): SessionKeyKind {
-  if (key.startsWith(EDIT_NS))
+  if (isEditNamespaced(key))
     return {
       kind: "edit",
       part:

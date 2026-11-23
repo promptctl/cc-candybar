@@ -51,6 +51,13 @@ export function reservedNamespaceOf(name: string): string | undefined {
   return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }
 
+// [LAW:one-source-of-truth] Whether a name sits in edit mode's own namespace:
+// the key classifier and a menu's key scope both ask it, so neither imports
+// the other.
+export function isEditNamespaced(name: string): boolean {
+  return name.startsWith(EDIT_NS);
+}
+
 // [LAW:one-source-of-truth] Whether a key sits in the namespaces the menu pass
 // mints under: a menu's state and its page cursor.
 export function isMenuStateKey(key: string): boolean {
