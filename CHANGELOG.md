@@ -1,3 +1,9 @@
+## [1.236.8](https://github.com/promptctl/cc-candybar/compare/v1.236.7...v1.236.8) (2026-11-23)
+
+### Bug Fixes
+
+* **settings:** fold every pick through one setting table and warn on stale picks ([#901](https://github.com/promptctl/cc-candybar/issues/901)) ([8c5b69d](https://github.com/promptctl/cc-candybar/commit/8c5b69d401bf9d1fbab5442331abc77b0ebb11f6))
+
 ## [1.236.7](https://github.com/promptctl/cc-candybar/compare/v1.236.6...v1.236.7) (2026-11-23)
 
 ### Bug Fixes
