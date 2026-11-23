@@ -5,6 +5,7 @@
 // clicks on one screen never read alike, a click that acts on the world never
 // reads as a session write, and the words change nothing about the click.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -102,10 +103,7 @@ function pluginConfig(): string {
     __dirname,
     "../../../examples/plugin-deploy.json5",
   );
-  const config = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "click-does-")),
-    "config.json5",
-  );
+  const config = path.join(scratchDir("click-does-"), "config.json5");
   fs.writeFileSync(
     config,
     fs
@@ -115,10 +113,24 @@ function pluginConfig(): string {
   return config;
 }
 
-// A checkout whose path holds a long run of digits, as an agent worktree's
+// The scratch directories a run makes, removed when it ends.
+const scratch: string[] = [];
+const scratchDir = (name: string): string => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), name));
+  scratch.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of scratch) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// A git checkout whose path holds a long run of digits, as an agent worktree's
 // name can: the bar runs from it, and the words that name it say so.
-const digitCheckout = (): string =>
-  fs.mkdtempSync(path.join(os.tmpdir(), "click-does-12345678-"));
+const digitCheckout = (): string => {
+  const dir = scratchDir("click-does-12345678-");
+  execFileSync("git", ["init", "-q", dir], { stdio: "ignore" });
+  return dir;
+};
 
 describe.each([
   ["the default bar", () => null, () => process.cwd()],

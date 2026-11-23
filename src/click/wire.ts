@@ -347,13 +347,40 @@ const spell = (text: string): string =>
 // are the bar's own housekeeping, so whatever else the click does is its face:
 // a confirm disarms first, but what it does is what it fires.
 function clickDoes(effects: readonly Effect[]): string {
-  const writesSession = (e: Effect): boolean =>
+  const [face = "nothing", ...rest] = inFaceOrder(effects).flatMap((e) =>
+    SAYS[e.verb](e.args),
+  );
+  return rest.length > 0 ? `${face} and ${rest.length} more` : face;
+}
+
+function inFaceOrder<E extends { readonly verb: string }>(
+  effects: readonly E[],
+): E[] {
+  const writesSession = (e: E): boolean =>
     e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
-  const [face = "nothing", ...rest] = [
+  return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession),
-  ].flatMap((e) => SAYS[e.verb](e.args));
-  return rest.length > 0 ? `${face} and ${rest.length} more` : face;
+  ];
+}
+
+// The verbs whose phrase quotes text the machine holds — a copied text, a path
+// to open, the directory a config answer names — rather than what the bar
+// computed. Beside `SAYS`, so a phrase that quotes the machine is marked where
+// it is written.
+const SAYS_MACHINE_TEXT: ReadonlySet<string> = new Set<EffectVerb>([
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+  VERB_REPO_CONFIG,
+]);
+
+// Whether the words a click's effects say lead with such a phrase: the face is
+// the words, and the rest only counts.
+export function saysMachineText(
+  effects: ReadonlyArray<{ readonly verb: string }>,
+): boolean {
+  const [face] = inFaceOrder(effects);
+  return face !== undefined && SAYS_MACHINE_TEXT.has(face.verb);
 }
 
 // A parsed link effect with its encoded argument tail. Admission decodes
