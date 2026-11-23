@@ -13,17 +13,12 @@ import {
   type Response,
 } from "../src/daemon/foundations/protocol";
 import type { RequestId } from "../src/renderer-interface/interface";
-import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
+import { timeoutResponse } from "../src/daemon/foundations/request-deadline";
 import { click } from "./helpers/daemon-e2e";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
-const TIMEOUT = (request: number): Response => ({
-  ok: false,
-  error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
-  code: "TIMEOUT",
-  daemonV: PROTOCOL_VERSION,
-  request: request as RequestId,
-});
+const TIMEOUT = (request: number): Response =>
+  timeoutResponse(request as RequestId);
 const OK: Response = { ok: true, output: "" };
 const BAD_REQUEST: Response = {
   ok: false,
@@ -40,9 +35,7 @@ interface StandIn {
 
 // A daemon stand-in on an isolated daemon's socket that answers the nth click
 // as `answer` says, so a case chooses what the helper is told.
-async function answering(
-  answer: (nth: number) => Response,
-): Promise<StandIn> {
+async function answering(answer: (nth: number) => Response): Promise<StandIn> {
   const { sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-clk");
   let clicks = 0;
   const server = net.createServer((sock) => {
@@ -75,10 +68,10 @@ const URL = effectsUrl([
   { verb: VERB_SET_STATE, args: ["bc-click", "candybar.diagnostics", "0"] },
 ]);
 
-test("a click answered TIMEOUT is sent again, and lands once the daemon reads it", async () => {
+test("a click answered TIMEOUT is sent again, and is done on the answer it then gets", async () => {
   const daemon = await answering((nth) => (nth === 1 ? TIMEOUT(nth) : OK));
   try {
-    await click(daemon.sockPath, URL);
+    await expect(click(daemon.sockPath, URL)).resolves.toBeUndefined();
     expect(daemon.clicks()).toBe(2);
   } finally {
     await daemon.close();

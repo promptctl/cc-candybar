@@ -30,11 +30,11 @@ export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: TOTAL_BUDGET_MS,
 };
-// [LAW:one-source-of-truth] A click or pane lookup waits past the daemon's
-// own backstop, so one the daemon read late hears its TIMEOUT, a definite
-// answer, rather than giving up first. A click the daemon did read is
-// answered with its own outcome, however long it takes, so the client's own
-// clock is the one that can end that wait, with the outcome unknown.
+// [LAW:no-ambient-temporal-coupling] A click or pane lookup waits past the
+// daemon's own backstop, so a request the daemon read late hears its TIMEOUT, a
+// definite answer, rather than giving up first. A click the daemon read in
+// time is answered with its own outcome however long that takes, so only this
+// clock can end that wait, and then its outcome is unknown.
 const CLICK_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
   budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS,

@@ -679,10 +679,9 @@ async function clickEvent(
     ["queued", `${spanMs(accepted.at, t0)}ms`],
   ];
   // When a click still waiting in the mailbox is refused: the daemon's
-  // deadline passed before the click was read (a click request) or while it
-  // waited (a url frame), or a client that waited for the answer left. The
-  // connection knows which clients wait (the forwarder does not), so its
-  // `clientLeft` already says so.
+  // deadline, or a client that waited for the answer leaving. The connection
+  // knows which clients wait (the forwarder does not), so its `clientLeft`
+  // already says so.
   const click: ClickInFlight = {
     gone: () => timedOut() || clientLeft(),
   };
@@ -690,12 +689,8 @@ async function clickEvent(
   // arm it took, so every click writes its event.
   const outcome = await run(facts, click).catch(failureOf);
   // Whether the client was told TIMEOUT, and whether a client that waited
-  // hung up, by the time the click was done. A click request told TIMEOUT was
-  // read after the backstop, so it was refused at its turn (`abandoned`) and
-  // ran nothing, as was one whose client left while it waited. A click that
-  // was read in time is no longer bounded by the backstop, so only a url
-  // frame's click, whose writer waits for no answer, can land with
-  // `timedOut=Y`.
+  // hung up, by the time the click was done. Only a url frame's click, whose
+  // writer waits for no answer, can land with `timedOut=Y`.
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N",
@@ -873,7 +868,7 @@ async function handleClick(
   if (session !== null) parts.collector.clicked(session);
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
-  // again after a TIMEOUT cannot revert a toggle.
+  // again cannot revert a toggle.
   const delivered = await target.answerClick(session, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))

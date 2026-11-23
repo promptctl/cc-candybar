@@ -20,10 +20,9 @@ import JSON5 from "json5";
 import os from "node:os";
 import path from "node:path";
 
-import { linksOf } from "../../../src/click/read";
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
 import { textOf, type Frame } from "../../../src/render/frame";
-import { click, render } from "../../helpers/daemon-e2e";
+import { click, linkTo, render } from "../../helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import {
   startDaemon,
@@ -110,13 +109,6 @@ async function messagesOf(rig: Rig, sid: string): Promise<string[]> {
 
 const staleAbout = (messages: readonly string[], setting: string) =>
   messages.filter((m) => m.startsWith(`⚠ Setting ${setting} holds`));
-
-const linkTo = (frame: Frame, text: string): string => {
-  const hit = linksOf(frame).find((l) => l.text === text);
-  if (hit === undefined)
-    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
-  return hit.url;
-};
 
 // Into edit mode, through the settings door.
 async function arrange(rig: Rig, sid: string): Promise<void> {

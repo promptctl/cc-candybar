@@ -378,9 +378,10 @@ export interface ShutdownRequest {
 // A manual `url-handle` request carries the original signed link.
 export interface ClickRequest {
   v: number;
-  kind: "click";
+  kind: typeof CLICK_REQUEST_KIND;
   url: string;
 }
+export const CLICK_REQUEST_KIND = "click";
 
 // [LAW:types-are-the-program] A link as the URL handler app forwards it: the
 // raw `cc-candybar://` string, nothing split, nothing decoded. The frame is
@@ -416,11 +417,11 @@ export interface UrlFrame {
 // the connection that read it: the URL handler's frame, a click request, or
 // another request the `v` gate judges. The connection needs the kind too: a
 // url frame's writer hangs up at once by design, so its socket's close says
-// nothing about its click, and a click request, once read, is answered with
-// its own outcome where any other request is bounded by the backstop. A url
-// frame's fields stay untrusted JSON here (not a Partial that claims their
-// types): the click path reads them, and refuses what it cannot read with the
-// click event that says so.
+// nothing about its click, and a click request is the one request the
+// backstop does not bound once read (connection.ts). A url frame's fields
+// stay untrusted JSON here (not a Partial that claims their types): the click
+// path reads them, and refuses what it cannot read with the click event that
+// says so.
 export type Inbound =
   | { readonly kind: "url"; readonly frame: Record<string, unknown> }
   | { readonly kind: "click"; readonly req: Request }
@@ -433,7 +434,10 @@ export function classifyInbound(raw: unknown): Inbound {
       : undefined;
   if (kind === URL_FRAME_KIND)
     return { kind: "url", frame: raw as Record<string, unknown> };
-  return { kind: kind === "click" ? "click" : "request", req: raw as Request };
+  return {
+    kind: kind === CLICK_REQUEST_KIND ? "click" : "request",
+    req: raw as Request,
+  };
 }
 
 export interface StatsRequest {
@@ -516,7 +520,8 @@ export type Response =
   // A TIMEOUT also carries `request`, the request's id: a TIMEOUT abandons
   // the reply, not the work, and a render's or a click's event records the
   // id where its outcome is told. Other kinds write no event, and nor does a
-  // request whose frame never arrived.
+  // request whose frame never arrived. A click's TIMEOUT is the exception to
+  // abandoning the reply and not the work: the click was refused unread.
   | {
       ok: false;
       error: string;

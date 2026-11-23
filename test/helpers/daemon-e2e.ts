@@ -11,6 +11,7 @@
 // when the click stops doing what it claimed.
 
 import { linkUrls } from "./frame";
+import { linksOf } from "../../src/click/read";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
@@ -86,6 +87,15 @@ const REPLY_BUDGET_MS = 5000;
 // of its own (sendDaemonRequest).
 const PENDING_RETRY_BUDGET = 20;
 
+// [LAW:single-enforcer] The one rule for when a TIMEOUT is asked again: while
+// the budget, counted from the first ask, has time left.
+const askAgain = (
+  resp: Response,
+  firstAskMs: number,
+  budgetMs: number,
+): boolean =>
+  !resp.ok && resp.code === "TIMEOUT" && Date.now() - firstAskMs < budgetMs;
+
 // A session's render events whose reply its client read, in log order.
 export function answeredEvents(log: string, sessionId: string): string[] {
   return renderEventsOf(logLines(log), sessionId).filter(answeredRender);
@@ -138,8 +148,7 @@ async function renderAnswer(
       replyBudgetMs,
     );
     if (!resp.ok) {
-      if (resp.code === "TIMEOUT" && Date.now() - firstAskMs < replyBudgetMs)
-        continue;
+      if (askAgain(resp, firstAskMs, replyBudgetMs)) continue;
       // [LAW:nothing-unseen] What the daemon logged across every attempt,
       // so a runner that failed says where its turns' time went.
       throw new Error(
@@ -311,16 +320,23 @@ export function drawnLink(
   ).signLink(unprovenLink(link), source);
 }
 
+// The url of the link a frame drew over `text`.
+export const linkTo = (frame: Frame, text: string): string => {
+  const hit = linksOf(frame).find((l) => l.text === text);
+  if (hit === undefined)
+    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
+  return hit.url;
+};
+
 // A click sent as the URL handler app sends it, and sent again while the
 // daemon answers TIMEOUT, within the reply budget counted from the first ask.
-// The daemon's answer is returned as it came, refusal included; a TIMEOUT only
-// once the budget is spent.
+// Each ask gets the whole budget, since one given the remainder can expire
+// before the round trip does. The daemon's answer is returned as it came,
+// refusal included; a TIMEOUT only once the budget is spent.
 //
-// [LAW:no-ambient-temporal-coupling] A TIMEOUT to a click means the daemon read
-// its frame after its guard fired, so it refused the click at its turn and ran
-// nothing: sending it again applies it once, which is why a click may be asked
-// again as a render is. A click the daemon did read is answered with its own
-// outcome, so no answer is ever read off the daemon's log.
+// [LAW:no-ambient-temporal-coupling] A TIMEOUT to a click is safe to send
+// again (connection.ts), so a click is asked again as a render is, and its
+// answer is never read off the daemon's log.
 export async function sendClick(
   target: DaemonTarget,
   url: string,
@@ -329,12 +345,7 @@ export async function sendClick(
   const firstAskMs = Date.now();
   for (;;) {
     const resp = await sendDaemonRequest(target, clickBody(url), replyBudgetMs);
-    if (
-      resp.ok ||
-      resp.code !== "TIMEOUT" ||
-      Date.now() - firstAskMs >= replyBudgetMs
-    )
-      return resp;
+    if (!askAgain(resp, firstAskMs, replyBudgetMs)) return resp;
   }
 }
 

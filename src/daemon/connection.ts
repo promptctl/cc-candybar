@@ -39,11 +39,10 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 // [LAW:types-are-the-program] A connection's one state.
 // - `awaiting`: no frame yet; a client is taken to wait.
 // - `answering`: a request is read, and its client waits for the answer.
-// - `held`: a click request is read, and its client waits for the answer, which
-//   no backstop bounds. A TIMEOUT to a click therefore means its frame was
-//   unread when the backstop fired, so it was refused at its turn and ran
-//   nothing (src/daemon/reply.ts), and a click that was read is answered with
-//   its own outcome, whether it ran or was refused.
+//   `bounded`: the backstop still answers TIMEOUT for it. A click request's
+//   is not, so a TIMEOUT to a click means its frame was unread when the
+//   backstop fired, and it was refused at its turn (src/daemon/reply.ts). A
+//   click read in time is answered with its own outcome.
 // - `unattended`: a url frame is read. The URL handler app waits for no
 //   outcome, reading the verdict on its link at most, so its hanging up is its
 //   design, not a peer leaving: the frame stays in flight until its click is
@@ -59,8 +58,7 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 //   deadline passed and whether a waiting client left stay readable.
 type Open =
   | { readonly kind: "awaiting" }
-  | { readonly kind: "answering" }
-  | { readonly kind: "held" }
+  | { readonly kind: "answering"; readonly bounded: boolean }
   | {
       readonly kind: "unattended";
       readonly lapsed: boolean;
@@ -117,11 +115,10 @@ type Step = readonly [Phase, Act];
 const inFlight = (p: Phase): boolean =>
   p.kind !== "streaming" && p.kind !== "closed";
 
-// While the backstop is armed: an answer is owed under the deadline. A frame
-// not yet read is bounded, and so is a request's answer; a click's is not.
+// While the backstop is armed: an answer is owed under the deadline.
 const armed = (p: Phase): boolean =>
   p.kind === "awaiting" ||
-  p.kind === "answering" ||
+  (p.kind === "answering" && p.bounded) ||
   (p.kind === "unattended" && !p.lapsed);
 
 // [LAW:one-source-of-truth] Whether the deadline passed, read off the phase.
@@ -135,7 +132,6 @@ function lapsed(p: Phase): boolean {
       return lapsed(p.from);
     case "awaiting":
     case "answering":
-    case "held":
     case "streaming":
       return false;
   }
@@ -145,9 +141,15 @@ function lapsed(p: Phase): boolean {
 // up before it came. A url frame's writer never waited, so it never left.
 const left = (p: Phase): boolean =>
   p.kind === "closed" &&
-  (p.from.kind === "awaiting" ||
-    p.from.kind === "answering" ||
-    p.from.kind === "held");
+  (p.from.kind === "awaiting" || p.from.kind === "answering");
+
+// [LAW:dataflow-not-control-flow] What a frame puts a waiting connection in is
+// a fact of what was sent.
+const READ: { readonly [K in Inbound["kind"]]: Open } = {
+  request: { kind: "answering", bounded: true },
+  click: { kind: "answering", bounded: false },
+  url: { kind: "unattended", lapsed: false, told: false },
+};
 
 const NONE: Act = { kind: "none" };
 const write = (answer: Reply): Act => ({ kind: "write", answer });
@@ -159,14 +161,6 @@ const dropped = (p: Phase, owed: Owed, what = "answer"): Act => ({
     ? "the client was already told TIMEOUT"
     : `the connection is ${p.kind}`,
 });
-
-// [LAW:dataflow-not-control-flow] The phase a frame puts a waiting connection
-// in is a fact of what was sent.
-const READ: { readonly [K in Inbound["kind"]]: Open } = {
-  request: { kind: "answering" },
-  click: { kind: "held" },
-  url: { kind: "unattended", lapsed: false, told: false },
-};
 
 // [LAW:types-are-the-program] Every transition, as what each event does in
 // each phase. The table is total over both, so a move it does not name
@@ -189,11 +183,11 @@ const STEP: {
   deadline: (p, e) => {
     switch (p.kind) {
       case "awaiting":
-      case "answering":
         return [{ kind: "answered", by: "backstop" }, write(e.answer)];
-      // Disarmed on entering `held`, so the backstop never reaches it.
-      case "held":
-        return [p, NONE];
+      case "answering":
+        return p.bounded
+          ? [{ kind: "answered", by: "backstop" }, write(e.answer)]
+          : [p, NONE];
       // A url frame's click still runs, and is refused at its turn.
       case "unattended":
         return [{ ...p, lapsed: true }, NONE];
@@ -210,13 +204,12 @@ const STEP: {
   replied: (p, e) => {
     switch (p.kind) {
       case "answering":
-      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       // [LAW:no-silent-failure] A client that hung up waiting is written to
       // all the same: the flush fails, and the exit the reply carries runs on
       // that failure as it would on success.
       case "closed":
-        return p.from.kind === "answering" || p.from.kind === "held"
+        return p.from.kind === "answering"
           ? [p, write(e.answer)]
           : [p, dropped(p, e.answer)];
       case "awaiting":
@@ -243,7 +236,6 @@ const STEP: {
   failed: (p, e) => {
     switch (p.kind) {
       case "answering":
-      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       case "unattended":
         return [
@@ -267,7 +259,6 @@ const STEP: {
   refused: (p, e) => {
     switch (p.kind) {
       case "answering":
-      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       case "streaming":
         return [{ kind: "closed", from: p }, write(e.answer)];
@@ -307,7 +298,6 @@ const STEP: {
         ];
       case "awaiting":
       case "answering":
-      case "held":
       case "answered":
         return [{ kind: "closed", from: p }, NONE];
       // A url frame's writer hangs up by design: it stays in flight until its

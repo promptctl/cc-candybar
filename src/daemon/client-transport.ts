@@ -59,13 +59,11 @@ export interface TransientOutcome {
   message: string;
 }
 
-// `phase` is how far the request got, and so what a click became:
-// - "connect": it never reached the listener, so a click is undelivered.
-// - "deadline": our own clock ended the wait after it was sent, so a click may
-//   be queued, running, done or refused.
-// - "backstop": the daemon answered TIMEOUT, so its frame was unread when the
-//   daemon's guard fired and a click was refused at its turn, ran nothing, and
-//   can be sent again.
+// `phase` is whose clock ended the wait, and how far the request had got:
+// - "connect": our clock, before the listener accepted the request.
+// - "deadline": our clock, after the request was sent.
+// - "backstop": the daemon's guard answered TIMEOUT. What that says of a click
+//   is connection.ts's rule.
 export type BusyPhase = TimeoutPhase | "backstop";
 
 export interface BusyOutcome {
@@ -229,7 +227,7 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but its guard fired before it read the frame.
+      // Daemon is alive, and its own guard ended the wait.
       return { kind: "busy", phase: "backstop", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };

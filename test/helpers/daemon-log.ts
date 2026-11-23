@@ -52,6 +52,15 @@ export const renderEventsOf = (
 ): string[] =>
   lines.filter((l) => l.includes(`] render sid=${valueOf(sessionId)} `));
 
+// The click event a request's id names, which a TIMEOUT carries back.
+export const clickEventOf = (
+  lines: readonly string[],
+  request: unknown,
+): string | undefined =>
+  lines.find(
+    (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(request),
+  );
+
 // [LAW:one-source-of-truth] Count the session's render answers. A backstop
 // or an abandoned draw can log an attempt that only produced a timeout.
 export const answeredRender = (line: string): boolean => {

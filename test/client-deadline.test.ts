@@ -160,7 +160,7 @@ describe("the Node client's deadline", () => {
     ],
     [
       { ok: false, code: "TIMEOUT", error: "late" },
-      { kind: "busy", phase: "deadline" },
+      { kind: "busy", phase: "backstop" },
     ],
   ])(
     "a completed or ambiguous attempt sends just the compact frame",

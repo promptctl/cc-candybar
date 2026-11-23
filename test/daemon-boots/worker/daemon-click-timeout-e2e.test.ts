@@ -12,15 +12,13 @@ import JSON5 from "json5";
 import os from "node:os";
 import path from "node:path";
 
-import { linksOf } from "../../../src/click/read";
 import { interpretResponse } from "../../../src/daemon/client-transport";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { urlHandlePlan } from "../../../src/install/index";
-import { textOf, type Frame } from "../../../src/render/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { clickBody, click, render } from "../../helpers/daemon-e2e";
-import { loggedWhen, logLines } from "../../helpers/daemon-log";
+import { clickBody, click, linkTo, render } from "../../helpers/daemon-e2e";
+import { clickEventOf, loggedWhen, logLines } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { openedOn } from "../../helpers/opened-connection";
@@ -33,13 +31,6 @@ jest.setTimeout(30_000);
 
 const [PALETTE] = listResolvablePaletteNames();
 const SID = "click-timeout";
-
-const linkTo = (frame: Frame, text: string): string => {
-  const hit = linksOf(frame).find((l) => l.text === text);
-  if (hit === undefined)
-    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
-  return hit.url;
-};
 
 // A project whose bar draws one link, whose click pins the palette in its
 // config file: the file is what a landed click leaves behind.
@@ -88,13 +79,14 @@ test("a click read after the guard fired is answered TIMEOUT and ran nothing; ur
     await until(() => opened.received.length > 0, "the click's answer");
     const [answer] = opened.received;
     expect(answer).toMatchObject({ ok: false, code: "TIMEOUT" });
+    const { request } = answer as { request: unknown };
 
     const lines = await loggedWhen(
       env,
-      (all) => all.slice(from).some((l) => l.includes("] click ")),
+      (all) => clickEventOf(all.slice(from), request) !== undefined,
       "the refused click's event",
     );
-    const event = fieldsOf(lines.slice(from).find((l) => l.includes("] click "))!);
+    const event = fieldsOf(clickEventOf(lines.slice(from), request)!);
     expect(event.get("outcome")).toBe("abandoned");
     expect(event.get("timedOut")).toBe("Y");
     expect(bar.pinned()).toBeUndefined();
@@ -104,7 +96,7 @@ test("a click read after the guard fired is answered TIMEOUT and ran nothing; ur
     if (outcome.kind === "ok") throw new Error("a TIMEOUT read as ok");
     const plan = urlHandlePlan(outcome);
     expect(plan.code).toBe(1);
-    expect(plan.stderr).toMatch(/ran nothing; click again/);
+    expect(plan.stderr).toMatch(/refused it; click again/);
 
     // Sent again, as the message says, it lands once.
     await click(daemon, pin);

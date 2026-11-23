@@ -481,30 +481,21 @@ export async function runUrlHandle(
 // line and the exit code. runUrlHandle performs it.
 export interface UrlHandlePlan {
   readonly stderr: string;
-  readonly code: 0 | 1;
+  readonly code: 1;
 }
 
-// [LAW:dataflow-not-control-flow] What a busy daemon's answer says of the click,
-// by how far the click got (`BusyPhase`). A non-zero exit is an error dialog
-// from the handler app, and a second click on a click that ran can revert it.
-// So a click known not to have run exits 1 and says to click again, and one
-// whose outcome the client's own clock cut off exits 0 and claims neither: it
-// may be queued behind the loop, running, done, or refused at its read.
-const BUSY_PLAN: {
-  readonly [P in BusyPhase]: (message: string) => UrlHandlePlan;
-} = {
-  connect: (message) => ({
-    stderr: `url-handle: daemon busy (${message}): the click was never sent, so it ran nothing; click again\n`,
-    code: 1,
-  }),
-  backstop: (message) => ({
-    stderr: `url-handle: daemon busy (${message}): it read the click after its deadline and refused it, so it ran nothing; click again\n`,
-    code: 1,
-  }),
-  deadline: (message) => ({
-    stderr: `url-handle: daemon busy (${message}): the click may or may not have run; check the bar before clicking again\n`,
-    code: 0,
-  }),
+// [LAW:dataflow-not-control-flow] What a busy daemon's answer tells the reader of
+// the click, by whose clock ended the wait (`BusyPhase`). Every one exits 1,
+// since none confirms the click ran. Two say it did not run, so clicking again
+// is safe; the third cannot, because our own clock ends while a click may be
+// queued, running, done or refused, and a second click on one that ran can
+// revert it.
+const BUSY_WHY: { readonly [P in BusyPhase]: string } = {
+  connect: "the click was never sent; click again",
+  backstop:
+    "the daemon read the click after its deadline and refused it; click again",
+  deadline:
+    "the click may or may not have run; check the bar before clicking again",
 };
 
 export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
@@ -512,7 +503,10 @@ export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
     // A daemon holds the socket, so kicking would respawn a live daemon
     // mid-click.
     case "busy":
-      return BUSY_PLAN[outcome.phase](outcome.message);
+      return {
+        stderr: `url-handle: daemon busy (${outcome.message}): ${BUSY_WHY[outcome.phase]}\n`,
+        code: 1,
+      };
     case "transient":
       return {
         stderr: `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
