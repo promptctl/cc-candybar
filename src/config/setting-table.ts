@@ -25,11 +25,11 @@ import {
 import {
   GLOBAL_FIELDS,
   CONTROLLED_FIELDS,
+  settingControlDomain,
   settingNameOf,
   type ControlledField,
   type SettingName,
 } from "./globals-fields.js";
-import { settingControlDomain } from "./loader/globals.js";
 import { controlDeclOf, type ControlDomain } from "./setting-control.js";
 import { presetMember, presetNames, presetRoot } from "./presets.js";
 import {

@@ -208,6 +208,15 @@ describe("step-state handler", () => {
     expect(sessionState.get(S1, KEY)).toBe("8");
   });
 
+  test("a key holding a non-integer refuses the step, naming it, and keeps the value", async () => {
+    const { sessionState, click } = setup();
+    sessionState.set(S1, KEY, "x");
+    await expect(click(2)).rejects.toThrow(
+      `step-state: "${KEY}" shows "x", not an integer to step`,
+    );
+    expect(sessionState.get(S1, KEY)).toBe("x");
+  });
+
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
     const step = CLICK_VERBS.get(VERB_STEP_STATE)!;

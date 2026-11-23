@@ -9,6 +9,7 @@
 import type { DslConfig } from "../dsl-types.js";
 import { settingTable } from "../setting-table.js";
 import { findKeyLine } from "./diagnostics.js";
+import { declarationsAt } from "./refs.js";
 import type { ValidateCtx } from "./validate-core.js";
 
 export function refuseSettingKeyOwners(
@@ -16,23 +17,13 @@ export function refuseSettingKeyOwners(
   config: DslConfig,
 ): void {
   const { rows } = settingTable(config);
-  const declared = [
-    ...Object.entries(config.variables).map(
-      ([name, decl]) => [["variables", name], decl] as const,
-    ),
-    ...Object.entries(config.segments).flatMap(([seg, decl]) =>
-      Object.entries(decl.vars ?? {}).map(
-        ([name, v]) => [["segments", seg, "vars", name], v] as const,
-      ),
-    ),
-  ];
-  for (const [at, decl] of declared) {
+  for (const [, decl, at] of declarationsAt(config)) {
     if (decl.kind !== "state") continue;
     const row = rows.get(decl.key);
     if (row === undefined) continue;
     ctx.issues.push({
       path: [...at, "key"].join("."),
-      message: `${at.join(".")}: a state variable reads "${decl.key}", which is the session key of setting ${row.name} — the setting owns it; read the setting's value instead`,
+      message: `${at.join(".")}: a state variable reads "${decl.key}", which is the session key of setting ${row.name} — the setting owns it; read its value from the "${row.name}.effective" variable`,
       line: findKeyLine(ctx.source, [...at, "key"]),
     });
   }

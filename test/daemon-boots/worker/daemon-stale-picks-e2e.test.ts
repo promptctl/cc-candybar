@@ -170,7 +170,7 @@ describe("a pick its setting cannot hold", () => {
         const messages = await messagesOf(rig, ALL);
         const [theme] = staleAbout(messages, "theme");
         expect(theme).toMatch(
-          /holds "no-such-theme", which it cannot hold, so the bar wears "[a-z-]+"\. It can hold one of the \d+ "themes" names, such as /,
+          /holds "no-such-theme", which it cannot hold, so the bar wears "[a-z-]+"\. It can hold one of \d+ values, such as /,
         );
         expect(theme).toMatch(/Pick it again\.$/);
         // The label names the theme the message says the bar wears.
@@ -193,7 +193,7 @@ describe("a pick its setting cannot hold", () => {
         const [retired] = staleAbout(await messagesOf(rig, RETIRED), "theme");
         expect(retired).toContain('holds "dark"');
         expect(retired).toContain(
-          '"dark" was retired; its successor is "textual-dark"',
+          '"dark" was retired; write "textual-dark"',
         );
 
         // Edit mode stages endcaps over the session's pick: it decided

@@ -772,8 +772,9 @@ const save: VerbHandler = (args, ctx) => {
   const drafts = settingDrafts(config, pick);
   const placements = placementDrafts(config, pick);
   // Nothing unsaved writes nothing — a second click on a bar drawn before the
-  // first save released its picks — so it is a recorded no-op, never a
-  // failure the bar reports, and the bar draws what the file holds.
+  // first save released its picks — so it is never a failure the bar reports,
+  // and the bar draws what the file holds. It still settles the session: a
+  // pick that is no draft (a stale one) is released, as any save releases it.
   if (drafts.length + placements.length === 0) {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
     releaseSaved(ctx, config);
@@ -887,6 +888,9 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
+  // [LAW:no-ambient-temporal-coupling] The new preset is picked BEFORE the
+  // release: its drafts are judged against the session's preset, which this
+  // line sets, so a pick the new preset's globals now hold is no draft.
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   releaseSaved(
     ctx,

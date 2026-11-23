@@ -4,13 +4,7 @@
 // (src/config/globals-fields.ts); this file derives its schema from the rows.
 
 import type { Globals, ThemeDefault } from "../dsl-types.js";
-import {
-  GLOBAL_FIELDS,
-  THEME_DEFAULT_FIELDS,
-  type ControlledField,
-  type FieldRow,
-  type GlobalField,
-} from "../globals-fields.js";
+import { GLOBAL_FIELDS, THEME_DEFAULT_FIELDS } from "../globals-fields.js";
 import { isExpression, oneOf, retiredThemeNote } from "../../themes/policy.js";
 import {
   describeType,
@@ -26,7 +20,6 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
-import type { ControlDomain } from "../setting-control.js";
 
 // [LAW:one-source-of-truth] THE globals field specs, read off the globals
 // rows (src/config/globals-fields.ts). Both the top-level `globals:` schema and
@@ -68,33 +61,6 @@ const GLOBALS_FIELDS = {
     "Obsolete tmux status renderer.",
   ),
 };
-
-// The domain a control changing `field` from the bar ranges, as its row
-// declares it beside the field's spec — `text` for a field no control shape
-// fits.
-export function globalsControlDomain(
-  field: GlobalField,
-): ControlDomain | "text" {
-  const row = GLOBAL_FIELDS[field];
-  return row.kind === "text" ? "text" : rangedDomain(row);
-}
-
-// The domain of a setting the bar controls. Every controlled row declares
-// one, so this cannot be asked of a field no control shape fits.
-export function settingControlDomain(field: ControlledField): ControlDomain {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-
-// [LAW:one-source-of-truth] A row with a named domain is ranged by that name,
-// so the picker and the click gate resolve the one registration that carries
-// its facets; every other row by the members it declares.
-function rangedDomain(
-  row: Exclude<FieldRow, { readonly kind: "text" }>,
-): ControlDomain {
-  return "optionDomain" in row && row.optionDomain !== undefined
-    ? { from: row.optionDomain.name }
-    : row.domain;
-}
 
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
 // config's own globals at render time — may not carry `preset`: which preset is
@@ -309,7 +275,7 @@ export function validateThemeDefaults(
     if (!ctx.allowedPalettes.has(theme)) {
       ctx.issues.push({
         path,
-        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected ${oneOf([...ctx.allowedPalettes].sort(), "themes")}`,
+        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme]),
       });
       continue;

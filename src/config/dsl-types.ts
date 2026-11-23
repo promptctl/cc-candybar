@@ -33,6 +33,7 @@ import {
   FOLLOW_BAR,
   isPlacementThemeName,
   oneOf,
+  parseSessionBoolean,
   parseSessionInt,
   PLACEMENT_EFFECTS,
 } from "../themes/policy.js";
@@ -1103,15 +1104,10 @@ export function parseSettingSpelling(
   if (typeof domain === "object" && "min" in domain) {
     return parseSessionInt(raw, domain) ?? undefined;
   }
-  const value: SettingValue =
-    domain === "bool"
-      ? raw === "true"
-        ? true
-        : raw === "false"
-          ? false
-          : raw
-      : raw;
-  return inSettingDomain(decl, value) ? value : undefined;
+  // [LAW:one-source-of-truth] A boolean is spelled in the session store as
+  // BOOLEAN_MEMBERS says, and parsed where every boolean key is.
+  if (domain === "bool") return parseSessionBoolean(raw) ?? undefined;
+  return inSettingDomain(decl, raw) ? raw : undefined;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

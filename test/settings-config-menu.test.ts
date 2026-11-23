@@ -579,6 +579,27 @@ describe("the config menu, reached from a user config whose root is one row", ()
     const globals = durable.parsed().globals as Record<string, unknown>;
     expect(globals.padding).toBe(2);
     expect(globals).not.toHaveProperty("palette");
+    // It is released all the same: the save settled every pick that is no
+    // draft, and the log names the one it let go of as stale.
+    expect(r.sessionState.get(SID, "theme")).toBeNull();
+    expect(r.logs).toContainEqual(
+      expect.stringMatching(/^released: .*theme \(stale\)/),
+    );
+  });
+
+  test("a save with nothing unsaved still releases a stale pick, and says so", async () => {
+    await r.click(await paddingUp());
+    const url = saveUrl()!;
+    await r.click(url);
+    r.sessionState.set(SID, "theme", "no-such-theme");
+    const saved = durable.text();
+    await r.click(url);
+    expect(durable.text()).toBe(saved);
+    expect(r.sessionState.get(SID, "theme")).toBeNull();
+    expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
+    expect(r.logs).toContainEqual(
+      expect.stringMatching(/^released: .*theme \(stale\)/),
+    );
   });
 });
 
@@ -1539,6 +1560,17 @@ describe("a theme's default look, set from the bar", () => {
     expect(out).not.toContain("💾 save");
     expect(r.logs).toContainEqual(
       `save-theme-default: nord style=dim variation=duo shade=deepest → ${durable.configPath} (session=${SID})`,
+    );
+  });
+
+  test("the click releases a stale pick of a setting the theme default does not hold, and says so", async () => {
+    await start(THEMED);
+    pick({ shade: "deepest", style: "dim" });
+    r.sessionState.set(SID, "padding", "99");
+    await r.click(link(SAVE_LABEL)!);
+    expect(r.sessionState.get(SID, "padding")).toBeNull();
+    expect(r.logs).toContainEqual(
+      expect.stringMatching(/^released: .*padding \(stale\)/),
     );
   });
 

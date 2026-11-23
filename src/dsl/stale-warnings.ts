@@ -13,7 +13,7 @@
 import type { ResolvedDomain } from "../config/option-domain.js";
 import { describeControlDomain } from "../config/setting-control.js";
 import type { SettingRow } from "../config/setting-table.js";
-import { successorOf } from "../themes/policy.js";
+import { retiredThemeSentence, sampledOneOf } from "../themes/policy.js";
 
 // One pick that decided: its setting, the spelling the session holds, and the
 // value the bar wears in its place.
@@ -36,13 +36,13 @@ function holds(
   pick: StalePick,
   domains: ReadonlyMap<string, ResolvedDomain>,
 ): string {
-  const successor =
+  const retired =
     typeof pick.row.domain === "object" && "themes" in pick.row.domain
-      ? successorOf(pick.raw)
-      : undefined;
-  return successor === undefined
-    ? `It can hold ${describeControlDomain(pick.row.domain, domains)}`
-    : `"${pick.raw}" was retired; its successor is "${successor}"`;
+      ? retiredThemeSentence(pick.raw)
+      : "";
+  return retired === ""
+    ? `It can hold ${describeControlDomain(pick.row.domain, domains, sampledOneOf)}`
+    : retired;
 }
 
 // One warning per key, in the order the picks came: a name label draws its

@@ -8,10 +8,13 @@ import { placementDraftKey } from "../../src/config/edit-chrome";
 import { settingTable, placementFold } from "../../src/config/setting-table";
 import { staleWarnings } from "../../src/dsl/stale-warnings";
 import {
+  BOOLEAN_MEMBERS,
   foldSetting,
   heldBy,
   listResolvablePaletteNames,
+  placementThemeNames,
 } from "../../src/themes/policy";
+import { parseSettingSpelling } from "../../src/config/dsl-types";
 import { parseAndValidate } from "../helpers/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -50,6 +53,25 @@ describe("a pick read through its setting's parse", () => {
     expect(heldBy(null, parse)).toEqual({ kind: "unset" });
     expect(heldBy("ok", parse)).toEqual({ kind: "held", value: "ok" });
     expect(heldBy("gone", parse)).toEqual({ kind: "stale", raw: "gone" });
+  });
+
+  // The picker offers the domain's members and the row's parse admits what the
+  // fold may hold: the two must agree, or a menu offers a value the next frame
+  // warns it cannot hold.
+  test("a placement's theme row admits every member its domain offers", () => {
+    const decl = { label: "theme", domain: "theme", default: "bar" } as const;
+    for (const name of placementThemeNames()) {
+      expect(parseSettingSpelling(decl, name)).toBe(name);
+    }
+    expect(parseSettingSpelling(decl, "no-such-theme")).toBeUndefined();
+  });
+
+  test("a boolean setting spells its members as the session store does", () => {
+    const decl = { label: "wrap", domain: "bool", default: true } as const;
+    for (const member of BOOLEAN_MEMBERS) {
+      expect(String(parseSettingSpelling(decl, member))).toBe(member);
+    }
+    expect(parseSettingSpelling(decl, "yes")).toBeUndefined();
   });
 
   test("each setting's row admits its domain and nothing else", () => {
@@ -135,7 +157,7 @@ describe("the stale warning", () => {
       domains,
     );
     expect(warning!.message).toContain(
-      '"dark" was retired; its successor is "textual-dark"',
+      '"dark" was retired; write "textual-dark"',
     );
     expect(warning!.message).not.toMatch(/\bsave\b/i);
   });
@@ -145,9 +167,7 @@ describe("the stale warning", () => {
       [{ row: TABLE.globals.theme, raw: "no-such-theme", wears: "x" }],
       domains,
     );
-    expect(warning!.message).toMatch(
-      /It can hold one of the \d+ "themes" names/,
-    );
+    expect(warning!.message).toMatch(/It can hold one of \d+ values, such as /);
   });
 
   test("one warning per setting, however often the frame met it", () => {
@@ -179,7 +199,7 @@ describe("one owner per session key", () => {
 
   test("a state variable over a globals setting's key is refused", () => {
     expect(load(`{ mine: { kind: "state", key: "theme" } }`)).toThrow(
-      /variables\.mine: a state variable reads "theme", which is the session key of setting theme — the setting owns it/,
+      /variables\.mine: a state variable reads "theme", which is the session key of setting theme — the setting owns it; read its value from the "theme\.effective" variable/,
     );
   });
 

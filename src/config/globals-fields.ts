@@ -653,3 +653,30 @@ export function wireKindOf(field: GlobalField): WireKind {
       ? "number"
       : "string";
 }
+
+// The domain a control changing `field` from the bar ranges, as its row
+// declares it beside the field's spec — `text` for a field no control shape
+// fits.
+export function globalsControlDomain(
+  field: GlobalField,
+): ControlDomain | "text" {
+  const row = GLOBAL_FIELDS[field];
+  return row.kind === "text" ? "text" : rangedDomain(row);
+}
+
+// The domain of a setting the bar controls. Every controlled row declares
+// one, so this cannot be asked of a field no control shape fits.
+export function settingControlDomain(field: ControlledField): ControlDomain {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+
+// [LAW:one-source-of-truth] A row with a named domain is ranged by that name,
+// so the picker and the click gate resolve the one registration that carries
+// its facets; every other row by the members it declares.
+function rangedDomain(
+  row: Exclude<FieldRow, { readonly kind: "text" }>,
+): ControlDomain {
+  return "optionDomain" in row && row.optionDomain !== undefined
+    ? { from: row.optionDomain.name }
+    : row.domain;
+}

@@ -90,12 +90,15 @@ export type Affordance =
 export function describeControlDomain(
   domain: ControlDomain,
   perConfigDomains: ReadonlyMap<string, ResolvedDomain>,
+  listing: (members: readonly string[]) => string = oneOf,
 ): string {
   if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
   if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    return oneOf(members, typeof from === "string" ? from : undefined);
+    const { members } = resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains,
+    );
+    return listing(members);
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }

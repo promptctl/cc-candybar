@@ -103,7 +103,7 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     );
   });
 
-  it("a long domain is named, not listed", () => {
+  it("a refusal lists every member the author could have meant", () => {
     const message = (() => {
       try {
         load("{ set: 'theme', to: 'nope' }");
@@ -112,14 +112,9 @@ describe("a set on a setting key is checked against the setting's domain", () =>
       }
       throw new Error("loaded");
     })();
-    expect(message).toMatch(
-      new RegExp(
-        `theme takes one of the ${listResolvablePaletteNames().length} "themes" names, such as "`,
-      ),
-    );
-    expect(message).not.toContain(
-      JSON.stringify(listResolvablePaletteNames().at(-1)),
-    );
+    for (const name of listResolvablePaletteNames()) {
+      expect(message).toContain(JSON.stringify(name));
+    }
   });
 
   it("an outside list is capped", () => {

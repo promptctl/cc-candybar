@@ -122,7 +122,7 @@ export function validatePaletteName(
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
       path: `${path}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected ${oneOf([...ctx.allowedPalettes].sort(), "themes")}`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
       line: findKeyLine(ctx.source, [...path.split("."), "palette"]),
     });
     return undefined;

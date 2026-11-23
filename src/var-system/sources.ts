@@ -904,8 +904,8 @@ export class SourceRegistry {
     });
   }
 
-  // What the bound view's session holds at `key`, as its `state` variables
-  // read it. [LAW:no-silent-failure] A registry with no session state cannot
+  // The raw spelling the bound view's session holds at `key`, before any
+  // variable's default or fold reads it. [LAW:no-silent-failure] A registry with no session state cannot
   // be asked, as `declareState` cannot be.
   held(key: string): string | null {
     if (!this.sessionState) {

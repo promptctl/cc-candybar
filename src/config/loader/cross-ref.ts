@@ -1443,7 +1443,7 @@ export function validateDeclarations(
     ) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort(), "themes")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort())})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;

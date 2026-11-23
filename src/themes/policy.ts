@@ -53,34 +53,46 @@ export function successorOf(name: string): string | undefined {
   return RETIRED_THEMES.get(name);
 }
 
-// The sentence appended to an unknown-theme refusal — empty for a name that
-// was never installed, so every refusal site spells it the same way.
-export function retiredThemeNote(name: unknown): string {
+// [LAW:single-enforcer] THE sentence saying a retired theme's successor,
+// empty for a name that was never retired, so a refusal and a warning spell
+// it the same way.
+export function retiredThemeSentence(name: unknown): string {
   const to = typeof name === "string" ? successorOf(name) : undefined;
   return to === undefined
     ? ""
-    : ` — "${name as string}" was retired; write "${to}", the same palette`;
+    : `"${name as string}" was retired; write "${to}", the same palette`;
 }
 
-// A domain longer than this reads in a message as its name, its size and a
-// few of its members: an error naming every installed theme is a wall of text
-// that buries the rest of the message in the diagnostics viewer.
+// The sentence appended to an unknown-theme refusal.
+export function retiredThemeNote(name: unknown): string {
+  const sentence = retiredThemeSentence(name);
+  return sentence === "" ? "" : ` — ${sentence}`;
+}
+
+// [LAW:single-enforcer] THE spelling of a listed domain in a refusal: every
+// member, because the author fixing the config needs the one they meant.
+export function oneOf(members: readonly string[]): string {
+  return `one of ${members.map((m) => JSON.stringify(m)).join(", ")}`;
+}
+
+// A domain longer than this reads in a warning as its size and a few of its
+// members: a ⚠ naming every installed theme is a wall of text that buries the
+// rest of the message in the diagnostics viewer, and the control that clears
+// it lists them all.
 const LISTED_MEMBERS = 8;
 const SAMPLED_MEMBERS = 3;
 
-// [LAW:single-enforcer] THE spelling of a listed domain in a message, capped:
-// `one of "a", "b"`, or past the cap `one of the 40 "themes" names, such as
-// "a", "b", "c"`. `named` is the domain's name, when it has one.
-export function oneOf(members: readonly string[], named?: string): string {
-  const quoted = members.map((m) => JSON.stringify(m));
-  if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-  const name = named === undefined ? "" : ` "${named}"`;
-  return `one of the ${members.length}${name} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+export function sampledOneOf(members: readonly string[]): string {
+  if (members.length <= LISTED_MEMBERS) return oneOf(members);
+  return `one of ${members.length} values, such as ${members
+    .slice(0, SAMPLED_MEMBERS)
+    .map((m) => JSON.stringify(m))
+    .join(", ")}`;
 }
 
 // The installed themes, in a message.
 export function installedThemesNote(): string {
-  return oneOf([...listResolvablePaletteNames()].sort(), "themes");
+  return oneOf([...listResolvablePaletteNames()].sort());
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
