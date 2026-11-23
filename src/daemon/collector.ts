@@ -59,6 +59,7 @@ import {
 } from "../renderer-interface/request-context.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { judgeRun } from "./foundations/judge-run.js";
+import { failureOf } from "./foundations/verb-error.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
@@ -118,8 +119,7 @@ export type Untaken = string | null;
 // The newest world state a delivery settled at the renderer: taken, or not,
 // and why. A request's wait reads this, never the stamp: a stamp is only what
 // the collector holds until the renderer has it. A world state that goes with
-// a session's context is no delivery and moves nothing here; the next
-// delivery, which is later, does.
+// a session's context settles with that turn (`landed`).
 interface Landed {
   readonly seq: number;
   readonly untaken: Untaken;
@@ -134,11 +134,13 @@ interface Stamped {
 
 // [LAW:types-are-the-program] How a request's wait for the renderer's next
 // world state ended: one landed after the draw's, the renderer did not take it
-// (so no later draw can read it), or the session is no longer read.
+// (so no later draw can read it), the session is no longer read, or the wait's
+// own signal ended it first.
 export type Moved =
   | { readonly kind: "landed" }
   | { readonly kind: "untaken"; readonly reason: string }
-  | { readonly kind: "gone" };
+  | { readonly kind: "gone" }
+  | { readonly kind: "aborted" };
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.
@@ -297,8 +299,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
   // request's next draw reads the world state the wait ended on. It judges
   // the renderer's side, never the stamp alone, so a wait cannot end on a
   // world state its next draw cannot read. `signal` ends it from outside (the
-  // wait's deadline or its owner's close), and the answer of a wait so ended
-  // is read by no one.
+  // wait's deadline or its owner's close), and a wait so ended says so.
   async moved(
     session: SessionId,
     after: number,
@@ -319,7 +320,27 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
-    return read() ?? { kind: "gone" };
+    return read() ?? { kind: "aborted" };
+  }
+
+  // [LAW:single-enforcer] The one place what reached the renderer moves: a
+  // delivery's settling, and the context turn that carried a request's own
+  // stamp. It never moves back, because a session that changed renderer has
+  // turns settling from two mailboxes, in either order.
+  landed(session: SessionId, document: WorldState, untaken: Untaken): void {
+    const record = this.records.get(session);
+    if (record !== undefined) this.settled(record.stamped, document, untaken);
+  }
+
+  private settled(
+    stamped: Stamped,
+    document: WorldState,
+    untaken: Untaken,
+  ): void {
+    runInAction(() => {
+      if (document.seq > stamped.landed.seq)
+        stamped.landed = { seq: document.seq, untaken };
+    });
   }
 
   // A click is a person's input naming the session, as a request is, so the
@@ -551,20 +572,14 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
                 const untaken = await this.deps
                   .deliver({ kind: "world-state", worldState: document })
                   .catch((e: unknown) => {
-                    const threw = `its delivery threw: ${inspect(e)}`;
+                    const threw = `its delivery threw: ${failureOf(e).message}`;
                     this.deps.log(
                       "error",
                       `world state ${threw} sid=${JSON.stringify(session)}`,
                     );
                     return threw;
                   });
-                runInAction(() => {
-                  // [LAW:single-enforcer] What landed never moves back: a
-                  // session that changed renderer has deliveries settling
-                  // from two mailboxes, in either order.
-                  if (document.seq > stamped.landed.seq)
-                    stamped.landed = { seq: document.seq, untaken };
-                });
+                this.settled(stamped, document, untaken);
               },
             );
           }

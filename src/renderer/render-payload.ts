@@ -139,9 +139,10 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
 // their slots null/missing — and the DSL templates handle absence via
 // `when`/inline guards, never by branching in this code.
 // [LAW:types-are-the-program] `P` is how a field a source answers says "not
-// answered yet": a frame draws every value as it stands, so its payload may
-// carry `Pending` (`DrawnPayload`); a request waits for every answer, so its
-// payload carries none (`RenderPayload`, `P = never`).
+// answered yet": a draw takes every value as it stands, so a payload drawn
+// from may carry `Pending` (`DrawnPayload`). A request waits only for what it
+// draws pending for a first answer; `RenderPayload` (`P = never`) is the
+// shape that carries none.
 export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // env-style values surfaced as paths so the DSL can read them via `input`
   // alongside the rest of the payload. (`kind: "env"` is also available for

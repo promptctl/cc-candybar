@@ -162,7 +162,7 @@ export async function answerStatusline(
   publish: PublishFrame,
   collector: Pick<
     Collector<CheckedRenderRequest>,
-    "requested" | "holding" | "moved"
+    "requested" | "holding" | "moved" | "landed"
   >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
@@ -246,28 +246,39 @@ export async function answerStatusline(
       const ended = (ending: Ending): Drawing => ({ ending, draws, waited });
       if (turn.kind === "threw") {
         // A draw refused for the recipient's leaving, or for the close, is
-        // those endings: neither is a throw of the renderer's.
+        // those endings: neither is a throw of the renderer's, and a throw
+        // while the close is under way is still the renderer's.
         if (turn.failure === DRAW_ABANDONED)
           return ended({ kind: "abandoned", turn });
         return ended(
-          closing.aborted
+          turn.failure.kind === "closing"
             ? { kind: "closed", turn }
             : { kind: "threw", turn, failure: turn.failure },
         );
       }
       if (answer === null) return ended({ kind: "unpresented", turn });
+      // [LAW:single-enforcer] The one admission rule for a frame that
+      // answers: it is for a recipient, whichever way the wait ended. A
+      // recipient that left refuses it, so nothing is published for no one.
+      const answers = (
+        ending: Extract<Ending, { readonly answer: Present }>,
+      ): Drawing => {
+        if (!abandoned()) return ended(ending);
+        turn.settlePresentation(answer, DRAW_ABANDONED.message);
+        return ended({ kind: "abandoned", turn });
+      };
       const { awaiting } = answer;
       if (awaiting.kind === "settled")
-        return ended({ kind: "settled", turn, answer });
+        return answers({ kind: "settled", turn, answer });
       if (awaiting.kind === "stalled")
-        return ended({
+        return answers({
           kind: "stalled",
           turn,
           answer,
           cause: awaiting.reason,
         });
       const left = recipient.waitEndsAt - clock.monotonic();
-      if (left <= 0) return ended({ kind: "deadline", turn, answer });
+      if (left <= 0) return answers({ kind: "deadline", turn, answer });
       const waitFrom = clock.monotonic();
       const wait = await waitWithin(
         `render wait ${session}`,
@@ -277,20 +288,25 @@ export async function answerStatusline(
         closing,
       );
       waited += elapsedMs(clock, waitFrom);
-      if (wait.end === "closed") {
-        // [LAW:no-ambient-temporal-coupling] The close has begun, so no draw
-        // may follow into the views its teardown is closing: the frame drawn
-        // is refused, and the request answers closing.
+      // [LAW:no-ambient-temporal-coupling] The close has begun, so no draw
+      // may follow into the views its teardown is closing: the frame drawn
+      // is refused, and the request answers closing. A wait whose own signal
+      // ended it as its answer was taken ended the same way.
+      const closed = (): Drawing => {
         turn.settlePresentation(answer, "the daemon closed");
         return ended({ kind: "closed", turn });
-      }
+      };
+      if (wait.end === "closed") return closed();
       if (wait.end === "deadline")
-        return ended({ kind: "deadline", turn, answer });
+        return answers({ kind: "deadline", turn, answer });
       switch (wait.value.kind) {
+        case "aborted":
+          if (closing.aborted) return closed();
+          return answers({ kind: "deadline", turn, answer });
         case "gone":
-          return ended({ kind: "gone", turn, answer });
+          return answers({ kind: "gone", turn, answer });
         case "untaken":
-          return ended({
+          return answers({
             kind: "untaken",
             turn,
             answer,
@@ -324,6 +340,14 @@ export async function answerStatusline(
     // session, which the event's readers key on (`render sid=`), and says
     // what the context was, whether or not a request turn runs after it.
     recorded(facts, configured);
+    // [LAW:single-enforcer] The world state this turn carried reached the
+    // renderer with it, so a request waiting on an older draw wakes to read
+    // it: only a delivery moved what landed before, and this one is none.
+    collector.landed(
+      session,
+      worldState,
+      configured.kind === "threw" ? configured.failure.message : null,
+    );
     // [LAW:no-silent-failure] A failed lookup leaves the location unknown.
     // The request says why, and the bar does not offer to initialize Git.
     if (checkoutError !== null) noteFacts(facts, { checkoutError });

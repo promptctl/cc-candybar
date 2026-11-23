@@ -192,6 +192,12 @@ interface Meets {
   readonly closing?: AbortSignal;
   // Whether the client has hung up.
   readonly gone?: () => boolean;
+  // Told what the context turn landed at the renderer.
+  readonly landed?: (
+    session: unknown,
+    document: unknown,
+    untaken: string | null,
+  ) => void;
 }
 
 async function answer(
@@ -232,6 +238,7 @@ async function answer(
         return WORLD;
       },
       holding,
+      landed: meets.landed ?? (() => {}),
       // A draw that owes nothing never waits.
       moved: meets.moved ?? (async () => ({ kind: "gone" })),
     },
@@ -731,6 +738,47 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     ]);
   });
 
+  test("a client that leaves while its wait ends any other way is answered abandoned too, and the frame is refused", async () => {
+    let left = false;
+    const { renderer, heard } = scripted(output([owing(1, OWED)]));
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
+      gone: () => left,
+      moved: async () => {
+        left = true;
+        return { kind: "gone" };
+      },
+      waitEndsAt: 5000,
+    });
+    expect(answered.outcome).toMatchObject({ kind: "abandoned" });
+    expect(facts.get("ended")).toBe("abandoned");
+    await drained();
+    expect(heard).toMatchObject([
+      { kind: "effect-done", of: 1, outcome: { kind: "failed" } },
+    ]);
+  });
+
+  test("the context turn's world state is told landed with the turn's own outcome", async () => {
+    const told: Array<[unknown, unknown, string | null]> = [];
+    const { renderer } = scripted(output([present(1)]));
+    await answer(renderer, [], [], undefined, {
+      landed: (session, document, untaken) =>
+        void told.push([session, document, untaken]),
+    });
+    expect(told).toEqual([[SESSION, WORLD, null]]);
+    const refused: Array<[unknown, unknown, string | null]> = [];
+    await answer(
+      scripted(output([present(1)]), threwWith([], "no view")).renderer,
+      [],
+      [],
+      undefined,
+      {
+        landed: (session, document, untaken) =>
+          void refused.push([session, document, untaken]),
+      },
+    );
+    expect(refused).toEqual([[SESSION, WORLD, "no view"]]);
+  });
+
   test("a session no longer read ends the request with the frame it drew", async () => {
     const { renderer } = scripted(output([owing(1, OWED)]));
     const { answered, facts } = await answer(renderer, [], [], undefined, {
@@ -752,6 +800,24 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     expect(answered.resp).toMatchObject({ ok: false });
     expect(requests).toHaveLength(1);
     expect(facts.get("ended")).toBe("threw");
+  });
+
+  test("a draw that throws while the close is under way is the renderer's failure, said as it threw", async () => {
+    const closing = new AbortController();
+    const renderer = eventRenderer(async ({ event }) => {
+      if (event.kind !== "request") return output([]);
+      closing.abort();
+      return threwWith([], "template exploded");
+    });
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
+      closing: closing.signal,
+      waitEndsAt: 5000,
+    });
+    expect(facts.get("ended")).toBe("threw");
+    expect(answered.resp).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("template exploded"),
+    });
   });
 
   test("the daemon's close ends the wait, and the request draws nothing more into the closing views", async () => {
@@ -834,6 +900,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
       {
         requested: () => WORLD,
         holding: () => () => {},
+        landed: () => {},
         moved: wait.moved,
       },
       CLOCK,

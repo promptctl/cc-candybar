@@ -688,15 +688,18 @@ export class SourceRegistry {
             )
           : refresh;
       },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
+      // A failure is equal to another by what it says: a never-answered node
+      // draws it, so a key throwing a moving message must move what the cell
+      // shows along with the variable's standing fault.
       {
         equals: (a, b) =>
           a.kind === "ok" && b.kind === "ok"
             ? a.value.digest === b.value.digest
             : a.kind === "pending" && b.kind === "pending"
               ? a.why === b.why
-              : a.kind === b.kind,
+              : a.kind === "failed" && b.kind === "failed"
+                ? a.reason === b.reason
+                : a.kind === b.kind,
       },
     );
     runInAction(() => {

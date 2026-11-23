@@ -303,7 +303,7 @@ test("a kept view draws by each request holdSession is given, inside a batch too
   });
 });
 
-test("a view held by a render in flight is disposed only when the render returns", () => {
+test("a view held by a render in flight is disposed only when the render returns", async () => {
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(
@@ -313,10 +313,14 @@ test("a view held by a render in flight is disposed only when the render returns
   configure(dir, 1);
   cache.configs.again();
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
-  // Retired, not disposed: the render still draws through it, its sources
-  // not answered yet.
+  // Retired, not disposed: the render still draws through it, and what its
+  // sources answer is its own session's.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
-  expect(drawn(held.view)).not.toBe("");
+  drawn(held.view);
+  expect(await runsOf(held.view).settled(AbortSignal.timeout(5000))).toEqual(
+    [],
+  );
+  expect(drawn(held.view)).toContain("who=s-a");
   held[Symbol.dispose]();
   expect(cache.stats.retiredViews).toBe(0);
   expect(lines).toContainEqual(

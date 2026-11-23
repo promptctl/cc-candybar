@@ -333,9 +333,31 @@ describe("a request's wait for a later world state", () => {
     const signal = new AbortController();
     const waiting = collector.moved(SID, drawn.seq, signal.signal);
     signal.abort();
-    // It ends; what it answers is read by no one.
-    await waiting;
-    expect(signal.signal.aborted).toBe(true);
+    expect(await waiting).toEqual({ kind: "aborted" });
+  });
+
+  test("a world state a later request's own context carries wakes a wait on an older draw once that turn lands it", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock } = collectorOver(owners);
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const waiting = collector.moved(
+      SID,
+      drawn.seq,
+      new AbortController().signal,
+    );
+    // A directory the owners already read answers differently, so the request
+    // that names it stamps a world state of its own.
+    land("git:/b", ok({}));
+    const carried = collector.requested(requestAt("/b"), TEST_ENVIRONMENT);
+    expect(carried.seq).toBeGreaterThan(drawn.seq);
+    // The stamp alone is only what the collector holds.
+    let ended = false;
+    void waiting.then(() => (ended = true));
+    await drained();
+    expect(ended).toBe(false);
+    collector.landed(SID, carried, null);
+    expect(await waiting).toEqual({ kind: "landed" });
   });
 
   test("ends saying why when the renderer did not take the world state, so no later draw reads it", async () => {
