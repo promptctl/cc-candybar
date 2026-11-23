@@ -1,55 +1,83 @@
 // [LAW:one-source-of-truth] Which repository paths a document cites, and
-// whether each is on disk. The documents that must stay true to the tree
-// (test/unit/living-docs-cite-existing-paths.test.ts) read through this, so
-// what counts as a citation is decided in one place.
+// whether each is there. What is there is git's answer about the checkout, taken
+// once for the run by the global setup (test/helpers/checkout.ts), so this
+// module reads no repository path to decide: `existsIn` is a lookup over what
+// git listed, and the documents it reads are the ones it is asked about.
 
 import fs from "node:fs";
 import path from "node:path";
 
-import { IGNORED_ENV } from "./package-files";
-
 export const ROOT = path.join(__dirname, "..", "..");
 
-// [LAW:one-source-of-truth] The top-level directories a citation can start at
-// are the root's own, apart from `.git`, `node_modules` and what .gitignore names (builds, logs,
-// other worktrees): a path into those would not be the repository's.
-export function topLevelDirectories(
-  root: string,
-  ignored: readonly string[],
-): string[] {
-  const named = new Set(ignored.map((entry) => entry.replace(/\/$/, "")));
+// The run's answer, carried from the global setup to the workers.
+export const DOC_CITATIONS_ENV = "CC_CANDYBAR_TEST_DOC_CITATIONS";
+
+// What a path can start at, and what git said of every path the documents cite.
+export interface CitationAnswer {
+  // The checkout's top-level directories and files.
+  readonly directories: readonly string[];
+  readonly rootFiles: readonly string[];
+  // Each cited path as written, whether the checkout has it.
+  readonly exists: Readonly<Record<string, boolean>>;
+}
+
+export function citationAnswer(): CitationAnswer {
+  const raw = process.env[DOC_CITATIONS_ENV];
+  if (raw === undefined) {
+    throw new Error(
+      `${DOC_CITATIONS_ENV} is unset: the unit project runs through jest.unit.config.js, whose global setup sets it`,
+    );
+  }
+  return JSON.parse(raw) as CitationAnswer;
+}
+
+// [LAW:one-source-of-truth] The documents that must stay true to the tree are
+// found in it: the two root documents, every memory file, and every design
+// document except the inventory, a survey of what the code reaches kept by hand.
+export const INVENTORY = "docs/design/inventory";
+
+function markdownUnder(root: string, directory: string): string[] {
   return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isDirectory() &&
-        entry.name !== ".git" &&
-        entry.name !== "node_modules" &&
-        !named.has(entry.name),
-    )
-    .map((entry) => entry.name)
+    .readdirSync(path.join(root, directory), { withFileTypes: true })
+    .flatMap((entry) => {
+      const relative = path.posix.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        return relative === INVENTORY ? [] : markdownUnder(root, relative);
+      }
+      return entry.name.endsWith(".md") ? [relative] : [];
+    })
     .sort();
 }
 
-export function repositoryDirectories(): string[] {
-  const answer = process.env[IGNORED_ENV];
-  if (answer === undefined) {
-    throw new Error(
-      `${IGNORED_ENV} is unset: the unit project runs through jest.unit.config.js, whose global setup sets it`,
-    );
-  }
-  return topLevelDirectories(ROOT, JSON.parse(answer) as string[]);
+export function livingDocuments(root: string): string[] {
+  return [
+    "CLAUDE.md",
+    "README.md",
+    ...markdownUnder(root, ".claude/memory"),
+    ...markdownUnder(root, "docs/design"),
+  ];
 }
 
 const escaped = (text: string): string =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// A path starts at a top-level directory that is no part of a longer word or
-// path (`design-docs/` is no `docs/`, `../src/` is a link's business), and runs
-// over path characters. Sentence punctuation that ends it is no part of the path.
-function citationPattern(directories: readonly string[]): RegExp {
-  const names = directories.map(escaped).join("|");
-  return new RegExp(`(?<![\\w./-])(?:${names})/[\\w.*/-]*[\\w*/]`, "g");
+// A path starts at one of the checkout's top-level directories, or is one of
+// its top-level files, and is no part of a longer word or path (`design-docs/`
+// is no `docs/`, `../src/` is a link's business). It runs over path characters;
+// sentence punctuation that ends it is no part of the path.
+function citationPattern(
+  directories: readonly string[],
+  rootFiles: readonly string[],
+): RegExp {
+  const forms = [
+    ...(directories.length === 0
+      ? []
+      : [`(?:${directories.map(escaped).join("|")})/[\\w.*/-]*[\\w*/]`]),
+    ...(rootFiles.length === 0
+      ? []
+      : [`(?:${rootFiles.map(escaped).join("|")})(?![\\w/-]|\\.\\w)`]),
+  ];
+  return new RegExp(`(?<![\\w./-])(?:${forms.join("|")})`, "g");
 }
 
 // A markdown link whose target is a relative path: `[text](../../src/x.ts#L3)`
@@ -63,10 +91,11 @@ export function citedPaths(
   text: string,
   docDir: string,
   directories: readonly string[],
+  rootFiles: readonly string[] = [],
 ): string[] {
-  const spelled = [...text.matchAll(citationPattern(directories))].map(
-    (m) => m[0],
-  );
+  const spelled = [
+    ...text.matchAll(citationPattern(directories, rootFiles)),
+  ].map((m) => m[0]);
   const linked = [...text.matchAll(LINK_TARGET)].flatMap((m) => {
     const target = m[1]!.split("#")[0]!;
     if (target === "" || /^[a-z][a-z0-9+.-]*:/i.test(target)) return [];
@@ -87,64 +116,53 @@ function globPattern(glob: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
-function filesUnder(root: string, directory: string): string[] {
-  const found: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(path.join(root, dir), {
-      withFileTypes: true,
-    })) {
-      const relative = path.posix.join(dir, entry.name);
-      found.push(relative);
-      if (entry.isDirectory() && entry.name !== "node_modules") walk(relative);
+// What git says the checkout holds: the files tracked or not yet tracked and
+// not ignored, and each directory above them; and which of the paths asked
+// about git ignores.
+export interface Checkout {
+  readonly files: ReadonlySet<string>;
+  readonly directories: ReadonlySet<string>;
+  readonly ignored: ReadonlySet<string>;
+}
+
+export function checkoutOf(
+  files: readonly string[],
+  ignored: readonly string[],
+): Checkout {
+  const directories = new Set<string>(["."]);
+  for (const file of files) {
+    for (
+      let dir = path.posix.dirname(file);
+      dir !== "." && !directories.has(dir);
+      dir = path.posix.dirname(dir)
+    ) {
+      directories.add(dir);
     }
+  }
+  return {
+    files: new Set(files),
+    directories,
+    ignored: new Set(ignored),
   };
-  walk(directory);
-  return found;
 }
 
-// Whether .gitignore names a path: what a build or a run produces, which a
-// fresh checkout lacks and a document may still cite. A pattern with no slash
-// but a trailing one names a path segment at any depth; a pattern with a slash
-// in it is anchored at the root.
-export function ignoredByGit(gitignore: string, cited: string): boolean {
-  const segments = cited.replace(/\/$/, "").split("/");
-  return gitignore.split("\n").some((raw) => {
-    const line = raw.trim();
-    if (line === "" || line.startsWith("#") || line.startsWith("!")) {
-      return false;
-    }
-    const pattern = line.replace(/^\//, "").replace(/\/$/, "");
-    const anchored = line.replace(/\/$/, "").includes("/");
-    const names = pattern.split("/");
-    const starts = anchored
-      ? [0]
-      : segments.map((_, index) => index);
-    return starts.some((start) =>
-      names.every((name, offset) => {
-        const segment = segments[start + offset];
-        return segment !== undefined && globPattern(name).test(segment);
-      }),
-    );
-  });
-}
-
-// A cited path exists when it is on disk or .gitignore names it as something
-// a build produces. A glob exists when it matches at least one real file or
-// directory, so a glob over a directory that holds nothing of that shape is a
-// citation of nothing.
-export function exists(root: string, cited: string): boolean {
-  if (!cited.includes("*")) {
-    return (
-      fs.existsSync(path.join(root, cited)) ||
-      ignoredByGit(
-        fs.readFileSync(path.join(root, ".gitignore"), "utf8"),
-        cited,
-      )
+// A cited path is there when the checkout holds it. A glob is there when it
+// matches a file or directory the checkout holds. A path git ignores is a build
+// product, which a fresh checkout lacks and a document may still name: it counts
+// when it would land in a directory the checkout holds, so an ignored name under
+// a directory nothing holds (`src/render/dist/gone.ts`) is no build product.
+export function existsIn(checkout: Checkout, cited: string): boolean {
+  if (cited.includes("*")) {
+    const pattern = globPattern(cited);
+    return [...checkout.files, ...checkout.directories].some((held) =>
+      pattern.test(held),
     );
   }
-  const literal = cited.slice(0, cited.indexOf("*"));
-  const base = literal.slice(0, literal.lastIndexOf("/"));
-  if (base === "" || !fs.existsSync(path.join(root, base))) return false;
-  const pattern = globPattern(cited);
-  return filesUnder(root, base).some((file) => pattern.test(file));
+  const bare = cited.replace(/\/$/, "");
+  return (
+    checkout.files.has(bare) ||
+    checkout.directories.has(bare) ||
+    (checkout.ignored.has(cited) &&
+      checkout.directories.has(path.posix.dirname(bare)))
+  );
 }

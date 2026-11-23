@@ -7,10 +7,8 @@
 // it imports is the vocabulary both sides speak (the session context, the
 // world state, the frame, the instant) and the failure shape with its one
 // converter, so a thrown value crosses as the same data whichever side threw it.
-// [LAW:one-way-deps] exception: it imports the stats snapshot's types, and the
-// snapshot imports `RendererStats` back from here. The stats reply carries one
-// renderer portion that both files must spell the same way, and each import is
-// type-only, so neither loads the other at runtime.
+// The renderer's portion of the stats reply is a module below both
+// (./renderer-stats), which the host's stats snapshot embeds.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
@@ -30,11 +28,7 @@ import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
 import type { DaemonEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
-import type {
-  MenuIdleStats,
-  RenderCacheStats,
-  StatsSnapshot,
-} from "../daemon/foundations/stats-snapshot";
+import type { RendererStats } from "./renderer-stats";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -186,15 +180,6 @@ const COMMAND_KINDS = {
 
 export function isCommand(event: Event): event is Command {
   return Object.hasOwn(COMMAND_KINDS, event.kind);
-}
-
-export interface RendererStats {
-  readonly renderCache: RenderCacheStats;
-  readonly effectCache: StatsSnapshot["effectCache"];
-  readonly sessionState: StatsSnapshot["sessionState"];
-  readonly menuIdle: MenuIdleStats;
-  readonly rendererTurns: StatsSnapshot["rendererTurns"];
-  readonly framesDrawn: number;
 }
 
 // [LAW:types-are-the-program] Every input and output of a turn is plain data.

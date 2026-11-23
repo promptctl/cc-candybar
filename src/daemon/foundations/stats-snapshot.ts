@@ -10,7 +10,11 @@ import type { ServingDaemon } from "./memory-limit";
 
 import type { KeyedSourceStats } from "../../utils/keyed-source";
 import { isPlainObject } from "../../config/loader/validate-core.js";
-import type { RendererStats } from "../../renderer-interface/interface.js";
+import type {
+  MenuIdleStats,
+  RenderCacheStats,
+  RendererStats,
+} from "../../renderer-interface/renderer-stats.js";
 
 // [LAW:one-source-of-truth] The renderer portion of the public stats
 // reference also describes what the host must receive before using it.
@@ -170,10 +174,7 @@ export interface StatsSnapshot {
   // to the renderer: `sessions` climbing with no requests is a session the
   // sweep never retires.
   collector: CollectorStats;
-  effectCache: {
-    sessions: number;
-    effects: number;
-  };
+  effectCache: RendererStats["effectCache"];
   // Sessions whose idle clock the renderer keeps, and those whose menus it
   // will close when their idle period runs out (src/renderer/menu-idle.ts).
   menuIdle: MenuIdleStats;
@@ -183,11 +184,7 @@ export interface StatsSnapshot {
   mailbox: MailboxStats;
   // [LAW:nothing-unseen] Renderer work awaiting config, an effect result,
   // or a future tick. Growth without new inputs signals a stuck lifetime.
-  rendererTurns: {
-    parked: number;
-    presents: number;
-    deferrals: number;
-  };
+  rendererTurns: RendererStats["rendererTurns"];
   // `run` acts (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, and runs in flight now.
   runs: RunStats;
@@ -196,11 +193,7 @@ export interface StatsSnapshot {
   // has taken. Observers climbing while renderCache holds steady is a
   // disposed config's store still held; the revision climbing while nobody
   // clicks is something writing session state on every render.
-  sessionState: {
-    sessions: number;
-    observers: number;
-    revision: number;
-  };
+  sessionState: RendererStats["sessionState"];
   // Subscribed sessions, their subscribers, and the frames drawn for them and
   // pushed (a drawn frame identical to the last is not pushed).
   frameFeeds: FeedStats;
@@ -251,11 +244,6 @@ export interface CollectorStats {
   readonly retiring: number;
 }
 
-export interface MenuIdleStats {
-  readonly sessions: number;
-  readonly armed: number;
-}
-
 export interface RunStats {
   readonly started: number;
   // Ended with a non-zero exit, or could not be started.
@@ -278,33 +266,6 @@ export interface FeedStats {
   // and how many found a session.
   readonly lookups: number;
   readonly found: number;
-}
-
-// [LAW:nothing-unseen] The states renders are drawing with now, and those
-// retired but not yet reclaimed because one still is (`daemon-stats`):
-// `retired` climbing while `size` holds is a render that never returned.
-export interface RenderCacheStats {
-  readonly size: number;
-  readonly held: number;
-  readonly retired: number;
-  // Distinct compiles the cache holds — below `size` exactly when entries
-  // share them.
-  readonly compiles: number;
-  // Sessions' views served now: one per session at most.
-  readonly views: number;
-  // Sessions an open feed pins (`pin`).
-  readonly pinned: number;
-  // Views retired but not yet disposed because a render still holds one: as
-  // `retired` is for states, climbing while `views` holds is a render that
-  // never returned.
-  readonly retiredViews: number;
-  // The transitions in flight on the views' surfaces, each a rich-js effect
-  // holding its settled shares: climbing while `views` holds is a surface
-  // whose passages never end.
-  readonly passages: number;
-  // What the entries the map serves are charged against the budget.
-  readonly accountedBytes: number;
-  readonly budgetBytes: number;
 }
 
 // `held` counts the repos a home holds — the ones the period visits.

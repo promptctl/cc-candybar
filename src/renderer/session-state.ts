@@ -16,7 +16,7 @@
 
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
-import type { RendererStats } from "../renderer-interface/interface";
+import type { RendererStats } from "../renderer-interface/renderer-stats";
 import type {
   SessionStateReader,
   SessionStateRW,

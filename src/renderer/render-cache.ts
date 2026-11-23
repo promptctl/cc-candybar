@@ -85,7 +85,7 @@ import {
 import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
 import type { TurnClock } from "./turn-time";
-import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
+import type { RenderCacheStats } from "../renderer-interface/renderer-stats";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
