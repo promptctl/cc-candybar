@@ -21,13 +21,15 @@ export interface PlacementIdentity {
   readonly segment: string;
 }
 
-export function placementScope(identity: PlacementIdentity): string {
+export function placementKeyScope(identity: PlacementIdentity): string {
   return `p${escapedIdent(identity.preset)}.d${escapedIdent(identity.id)}.s${escapedIdent(identity.segment)}`;
 }
 
-// The identity a scope spells, or undefined for a spelling `placementScope`
+// The identity a scope spells, or undefined for a spelling `placementKeyScope`
 // never makes.
-export function placementOfScope(scope: string): PlacementIdentity | undefined {
+export function placementOfKeyScope(
+  scope: string,
+): PlacementIdentity | undefined {
   const [preset, id, segment, ...more] = scope.split(".");
   if (
     preset === undefined ||

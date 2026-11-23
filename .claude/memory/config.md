@@ -70,7 +70,7 @@ Edit mode's own keys sit in a namespace of their own and never persist, because 
 
 What an edit has to keep is one count, the files it changed and the drafts a save would write, derived over the config as the save derives them, so the save cell and the save itself agree: a draft on a placement since removed is no work. The idle close also counts redo, which the cell does not show, because a timer must not discard it.
 
-The bar's own record of a failed click belongs to no edit: an open edit does not hold it, so cancelling cannot erase an error before it is read. A profile load drops what nothing reads: edit mode's keys, menu keys no current spelling mints (an older build's), and a failed-click record that does not parse, so a bad value never reaches a render.
+The bar's own record of a failed click belongs to no edit: an open edit does not hold it, so cancelling cannot erase an error before it is read. A profile load drops what nothing reads: edit mode's keys, menu keys no current spelling mints, and a failed-click record that does not parse, so a bad value never reaches a render.
 
 ## Placements
 

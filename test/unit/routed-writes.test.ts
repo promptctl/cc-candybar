@@ -85,6 +85,21 @@ describe("with none open", () => {
     expect([...aside.held(S1).keys()]).toEqual([EDIT_MODE_KEY, DRAFT]);
   });
 
+  test("a batch lands as written: the last write to a key wins", () => {
+    const store = new SessionState();
+    const routed = routedWrites(store, () => null, heldAside());
+    routed.write(S1, [
+      { key: SETTING, value: "x" },
+      { key: SETTING, value: null },
+    ]);
+    expect(store.get(S1, SETTING)).toBeNull();
+    routed.write(S1, [
+      { key: SETTING, value: null },
+      { key: SETTING, value: "y" },
+    ]);
+    expect(store.get(S1, SETTING)).toBe("y");
+  });
+
   test("a clear reaches the store", () => {
     const store = new SessionState();
     store.set(S1, SETTING, "x");

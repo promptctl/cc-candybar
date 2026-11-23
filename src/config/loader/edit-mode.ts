@@ -23,7 +23,7 @@
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
 import {
-  placementScope,
+  placementKeyScope,
   type PlacementIdentity,
 } from "../placement-identity.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
@@ -71,7 +71,7 @@ export const EDIT_MODE_ARRANGE = "arrange";
 // switching presets, or a hand edit that gives a kept id another segment,
 // never carries configure mode onto a different placement.
 export function configureMember(placement: PlacementIdentity): string {
-  return placementScope(placement);
+  return placementKeyScope(placement);
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has

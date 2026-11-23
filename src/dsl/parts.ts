@@ -711,17 +711,21 @@ class Placement implements PlacementParts {
     this.ownGate =
       when === undefined
         ? always<Gate>(SHOWN)
-        : view.derive(`${node.id} when`, view.readsInstant(when), () =>
-            outsideSegments(ref, () => gateOf(when, scope)),
+        : view.derive(
+            `${node.placement.id} when`,
+            view.readsInstant(when),
+            () => outsideSegments(ref, () => gateOf(when, scope)),
           );
     this.open =
       opens === undefined
         ? always<Gate>(HIDDEN)
-        : view.derive(`${node.id} body gate`, view.readsInstant(opens), () =>
-            outsideSegments(ref, () => gateOf(opens, view.scope)),
+        : view.derive(
+            `${node.placement.id} body gate`,
+            view.readsInstant(opens),
+            () => outsideSegments(ref, () => gateOf(opens, view.scope)),
           );
     this.colours = view.derive(
-      `${node.id} colours`,
+      `${node.placement.id} colours`,
       view.readsInstant(bg, fg),
       () => {
         const { palette, region } = this.where.get();
@@ -738,7 +742,7 @@ class Placement implements PlacementParts {
       },
     );
     this.body = view.derive(
-      `${node.id} body`,
+      `${node.placement.id} body`,
       view.readsInstant(template),
       () => {
         const { colours, bodyOpen } = this.ground.get();
@@ -749,7 +753,7 @@ class Placement implements PlacementParts {
       lead === undefined && trail === undefined
         ? always(NO_AFFIXES)
         : view.derive(
-            `${node.id} affixes`,
+            `${node.placement.id} affixes`,
             view.readsInstant(lead, trail),
             () => {
               const { colours, open } = this.opened.get();

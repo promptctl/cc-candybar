@@ -195,11 +195,9 @@ describe("edit mode leaves nothing behind", () => {
     const older = {
       [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
       [EDIT_LIVE_KEY]: DISCLOSURE_OPEN,
-      // The spellings that build minted for edit chrome's menus and for a
-      // failed click.
+      // The spellings that build minted for edit chrome's menus.
       "menus.edit_default_insertSeg_clock": "x",
       "menupages.menus.edit_default_insertSeg_clock": "1",
-      "click.error": "{}",
     };
     await b.restart((stored) => ({
       ...stored,

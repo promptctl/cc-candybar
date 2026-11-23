@@ -38,7 +38,6 @@ import {
   AXIS_OF,
   bodyPath,
   childPath,
-  placementId,
   placementIdentityOf,
 } from "../config/dsl-types.js";
 import type { PlacementIdentity } from "../config/placement-identity.js";
@@ -80,13 +79,12 @@ export interface CompiledSegmentNode {
   readonly when?: Template<RichText>;
   readonly name: string;
   // [LAW:parse-dont-validate] The placement's identity, resolved once
-  // (`placementId`), and its settings resolved against its segment's
-  // declaration — every declared setting present, the placement's value else
-  // the default — so the render reads a finished object, never a fallback.
-  readonly id: string;
-  // The placement's identity (config/placement-identity.ts): what session
-  // state it owns is filed under.
+  // (`placementIdentityOf`): what session state it owns is filed under, and
+  // its id is the placement's name wherever the render says which it drew.
   readonly placement: PlacementIdentity;
+  // Its settings resolved against its segment's declaration — every declared
+  // setting present, the placement's value else the default — so the render
+  // reads a finished object, never a fallback.
   readonly settings: PlacementSettings;
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
@@ -714,7 +712,6 @@ const segmentType: NodeType<"segment"> = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
-      id: placementId(node),
       placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
@@ -743,7 +740,7 @@ const segmentType: NodeType<"segment"> = {
   // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
   // hidden, gated off, drawn, broken — is reported to the session's record, so
   // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx)),
+  render: (node, ctx) => ctx.placed(node.placement.id, drawSegment(node, ctx)),
 };
 
 // What one placement draws this frame: nothing, its rows (with the menus it
@@ -818,7 +815,7 @@ function drawSegment(
     // cells), and every one fades in from its palette's ground when the
     // placement appears.
     const placement = {
-      id: node.id,
+      id: node.placement.id,
       effect: node.settings.effect,
       ground: groundOf(palette),
     };
@@ -933,7 +930,7 @@ function drawSegment(
     // row among them. A disclosure body's cells belong to the
     // segments in it, each of which sinks its own.
     ctx.segments.set(
-      node.id,
+      node.placement.id,
       [
         ...laidLines.flatMap((line) => line.cells),
         ...bodyLines.flatMap(leadOf),
@@ -1066,7 +1063,7 @@ function waitingRows(
   layoutOf: (baseStyle: Style) => Layout,
 ): OwnRows | null {
   ctx.waited(variable);
-  const last = ctx.lastDrawn(node.id);
+  const last = ctx.lastDrawn(node.placement.id);
   if (last?.kind === "hidden") return null;
   const styles = ctx.decorations(node, palette);
   const style = bodyOpen ? styles.trigger : styles.closed;
@@ -1122,7 +1119,7 @@ function brokenSegment(
   ctx: NodeRenderCtx,
   message: string,
 ): RenderedLines {
-  ctx.brokenPlacement(node.id, message);
+  ctx.brokenPlacement(node.placement.id, message);
   // The error cell is a row of the band the segment sits on, like any
   // inline line — a broken segment inside an open body still gets its ✕.
   // A cell is one line: the message's own line breaks (a parse error's
@@ -1133,7 +1130,7 @@ function brokenSegment(
   return [
     {
       cells: applySegmentLayout(
-        [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
+        [new RichText(`⚠ ${node.placement.id}: ${oneLine}`, { end: "" })],
         {
           width: "auto",
           justify: "left",
@@ -1143,7 +1140,7 @@ function brokenSegment(
           // failure it reports may be the read of this placement's own
           // settings.
           placement: {
-            id: node.id,
+            id: node.placement.id,
             effect: FOLLOW_BAR,
             ground: groundOf(ctx.palette),
           },
@@ -1175,7 +1172,11 @@ function errorAffix(
     // [LAW:single-enforcer] `readPending` is the one thing that tells them apart.
     const pending = readPending(err);
     if (pending !== undefined) ctx.waited(pending.variable);
-    else ctx.brokenPlacement(node.id, (err as Error).message ?? String(err));
+    else
+      ctx.brokenPlacement(
+        node.placement.id,
+        (err as Error).message ?? String(err),
+      );
     return [];
   }
 }

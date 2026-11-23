@@ -26,8 +26,8 @@
 
 import { escapedIdent, unescapedIdent } from "./ident.js";
 import {
-  placementOfScope,
-  placementScope,
+  placementOfKeyScope,
+  placementKeyScope,
   type PlacementIdentity,
 } from "./placement-identity.js";
 import { EDIT_NS, MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
@@ -89,7 +89,7 @@ export function menuStateKey(
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : `${menuScope(host.id)}${MENU_NS}${placementScope(host)}.${escapedIdent(applyName)}`;
+    : `${menuScope(host.id)}${MENU_NS}${placementKeyScope(host)}.${escapedIdent(applyName)}`;
 }
 
 // [LAW:decomposition] The shared arm of that derivation, named so the settings
@@ -115,7 +115,7 @@ export function menuOfKey(
     return shared === undefined ? undefined : { menu: shared, page };
   }
   const parts = rest.split(".");
-  const host = placementOfScope(parts.slice(0, 3).join("."));
+  const host = placementOfKeyScope(parts.slice(0, 3).join("."));
   const apply = unescapedIdent(parts[3] ?? "");
   return host === undefined || apply === undefined || parts.length !== 4
     ? undefined

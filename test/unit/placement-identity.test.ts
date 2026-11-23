@@ -3,8 +3,8 @@
 // in one spelling.
 
 import {
-  placementOfScope,
-  placementScope,
+  placementOfKeyScope,
+  placementKeyScope,
 } from "../../src/config/placement-identity";
 
 const IDENTITIES = [
@@ -18,16 +18,16 @@ const IDENTITIES = [
 
 test("a scope is three parts, each led by a letter", () => {
   for (const identity of IDENTITIES)
-    expect(placementScope(identity)).toMatch(
+    expect(placementKeyScope(identity)).toMatch(
       /^p[A-Za-z0-9]*\.d[A-Za-z0-9]*\.s[A-Za-z0-9]*$/,
     );
 });
 
 test("a scope reads back as the identity, and identities never share one", () => {
-  const scopes = IDENTITIES.map(placementScope);
+  const scopes = IDENTITIES.map(placementKeyScope);
   expect(new Set(scopes).size).toBe(IDENTITIES.length);
   scopes.forEach((scope, at) =>
-    expect(placementOfScope(scope)).toEqual(IDENTITIES[at]),
+    expect(placementOfKeyScope(scope)).toEqual(IDENTITIES[at]),
   );
 });
 
@@ -42,5 +42,5 @@ test.each([
   "pdefault.dclock.sZffffff",
   "pdefault.dclock.sa.b",
 ])("%j is a spelling no identity makes", (spelled) => {
-  expect(placementOfScope(spelled)).toBeUndefined();
+  expect(placementOfKeyScope(spelled)).toBeUndefined();
 });

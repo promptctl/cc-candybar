@@ -51,6 +51,12 @@ export function reservedNamespaceOf(name: string): string | undefined {
   return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }
 
+// [LAW:one-source-of-truth] Whether a key sits in the namespaces the menu pass
+// mints under: a menu's state and its page cursor.
+export function isMenuStateKey(key: string): boolean {
+  return key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS);
+}
+
 export function isReservedName(name: string): boolean {
   return reservedNamespaceOf(name) !== undefined;
 }

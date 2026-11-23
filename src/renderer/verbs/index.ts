@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   heldAside,
   routedWrites,
-  staleEditWrite,
+  staleEdit,
   type EditFinish,
   type EditTransactions,
 } from "../edit-transaction.js";
@@ -1295,12 +1295,10 @@ function journaled<C extends DaemonContext>(
       journal,
       readConfigFile: (edit?.files ?? files).read,
       finishEdit: (finish) => {
-        // [LAW:no-silent-failure] A save or cancel drawn before its edit
-        // closed has no edit to finish, and says so as a stale write does.
-        if (edit === undefined) {
-          staleEditWrite(ctx.log, sid, [finish]);
-          return;
-        }
+        // A save outside an edit (the settings menu's own) has none to finish:
+        // it writes through the click's journal alone. A stale edit-mode key
+        // is what the consequence reports.
+        if (edit === undefined) return;
         requested.finish = finish;
         sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
       },
@@ -1357,7 +1355,7 @@ function journaled<C extends DaemonContext>(
         if (entering) {
           ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edited.size > 0) staleEditWrite(ctx.log, sid, edited.keys());
+        } else if (edited.size > 0) failed.push(staleEdit(edited.keys()));
       } else if (saved !== null) {
         saved.commit();
         end();

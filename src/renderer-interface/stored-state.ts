@@ -10,11 +10,7 @@ import type { Crosses } from "./crosses";
 import type { DaemonLogger } from "../utils/logger";
 import { isEditModeKey } from "../config/session-key";
 import { menuOfKey } from "../config/menu-keys";
-import {
-  CLICK_ERROR_KEY,
-  MENU_NS,
-  MENU_PAGE_NS,
-} from "../config/reserved-names";
+import { CLICK_ERROR_KEY, isMenuStateKey } from "../config/reserved-names";
 import { isClickErrorRecord } from "../daemon/foundations/click-error";
 import {
   parseSessionHistory,
@@ -43,23 +39,14 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
       };
 }
 
-// The key the bar once recorded a failed click under, before it moved into its
-// own namespace (reserved-names.ts).
-const RETIRED_CLICK_ERROR_KEY = "click.error";
-
 // Why a stored pick reads nothing now, or undefined for one a render can read.
 // A key no current spelling mints is never read again and never cleared, so it
 // would sit in the profile for good; a click error that does not parse would
 // throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
-  if (
-    (key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS)) &&
-    menuOfKey(key) === undefined
-  )
+  if (isMenuStateKey(key) && menuOfKey(key) === undefined)
     return "no menu is keyed that way now";
-  if (key === RETIRED_CLICK_ERROR_KEY)
-    return "a failed click is recorded elsewhere now";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
     return "not a record of a failed click";
   return undefined;

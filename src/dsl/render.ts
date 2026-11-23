@@ -1134,7 +1134,7 @@ function ruleName(
 function placementsUnder(node: CompiledNode): string[] {
   return segmentsUnder(node)
     .filter((segment) => !segment.name.startsWith(EDIT_NS))
-    .map((segment) => segment.id);
+    .map((segment) => segment.placement.id);
 }
 
 // Every segment node a layout node holds, its open bodies' included, in order.

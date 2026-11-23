@@ -95,13 +95,12 @@ test("a profile loads without the keys nothing reads, and a session left holding
               S1,
               {
                 [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
-                // Spellings an older build minted: a menu keyed by its segment
-                // alone, its page cursor, edit chrome's collapsed menu, and the
-                // click error before it moved.
+                // Menu spellings no current derivation makes: a menu keyed by
+                // its segment alone, its page cursor, edit chrome's collapsed
+                // menu.
                 "menus.picker.applyTheme": "applyTheme",
                 "menupages.menus.picker.applyTheme": "2",
                 "menus.edit_default_insertSeg": "x",
-                "click.error": "{}",
                 // And a record of a failed click no build wrote.
                 [CLICK_ERROR_KEY]: "x",
                 [live]: "applyTheme",
@@ -120,7 +119,6 @@ test("a profile loads without the keys nothing reads, and a session left holding
     [S1]: { [live]: "applyTheme", theme: "nord" },
   });
   expect(logged).toHaveLength(2);
-  expect(logged[0]).toContain("click.error");
   expect(logged[0]).toContain(CLICK_ERROR_KEY);
   expect(logged[0]).toContain("menus.picker.applyTheme");
 });

@@ -48,7 +48,7 @@ import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { escapedIdent } from "./ident.js";
 import {
-  placementScope,
+  placementKeyScope,
   type PlacementIdentity,
 } from "./placement-identity.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
@@ -333,7 +333,7 @@ export function placementDraftKey(
   placement: PlacementIdentity,
   setting: string,
 ): string {
-  return `${PLACEMENT_DRAFT_NS}${placementScope(placement)}.${setting}`;
+  return `${PLACEMENT_DRAFT_NS}${placementKeyScope(placement)}.${setting}`;
 }
 
 // What configure mode adds to one placement: the `🔧` that

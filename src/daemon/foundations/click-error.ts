@@ -101,8 +101,8 @@ export function clickErrorAt(
   return kind === "over" ? { kind } : { kind, error: last };
 }
 
-// [LAW:parse-dont-validate] Whether a stored value is a record this build
-// writes. The profile load asks it, so a record a render reads has parsed.
+// Whether a stored value is a record this build writes. The profile load asks
+// it at the boundary, so a record a render reads is one that parsed.
 export function isClickErrorRecord(raw: string): boolean {
   try {
     recordOf(raw);

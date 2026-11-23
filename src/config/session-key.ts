@@ -6,9 +6,8 @@ import {
   CLICK_ERROR_KEY,
   EDIT_MODE_KEY,
   EDIT_NS,
-  MENU_NS,
-  MENU_PAGE_NS,
   PLACEMENT_DRAFT_NS,
+  isMenuStateKey,
   reservedNamespaceOf,
 } from "./reserved-names.js";
 import { SESSION_KEY_TO_SETTING } from "./setting-projections.js";
@@ -51,11 +50,13 @@ export function sessionKeyKind(key: string): SessionKeyKind {
   if (SESSION_KEY_TO_SETTING.has(key)) return { kind: "setting" };
   // A menu's key ends in its apply action's name, which may be `armed`, so the
   // menu namespaces are told before the confirm suffix is.
-  if (key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS))
-    return { kind: "menu" };
+  if (isMenuStateKey(key)) return { kind: "menu" };
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
   if (key === CLICK_ERROR_KEY) return { kind: "record" };
+  // The rest of the bar's namespaces hold disclosures only: a group's open
+  // member (`groups.`) and the settings menu's own disclosures and tabs
+  // (`candybar.`). Every other bar-owned key above has its own kind.
   return reservedNamespaceOf(key) === undefined
     ? { kind: "plain" }
     : { kind: "menu" };

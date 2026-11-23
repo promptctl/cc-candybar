@@ -29,7 +29,11 @@ interface Visit {
 // The visits a turn ended, one per session.
 export type EndedVisits = ReadonlyMap<SessionId, Visit>;
 
+// [LAW:types-are-the-program] The one place a visit joins a timeline, so every
+// visit in one moved a key, which Back's search relies on: a visit that moved
+// none leaves the timeline as it was.
 function followedBy(timeline: Timeline, visit: Visit): Timeline {
+  if (movedKeys(visit.from, visit.to).length === 0) return timeline;
   const visits = [...timeline.visits.slice(0, timeline.cursor), visit].slice(
     -MAX_VISITS,
   );
@@ -246,8 +250,7 @@ export class NavigationHistory {
     const next = new Map<SessionId, Timeline>();
     for (const [sid, visit] of visits) {
       const landed = { from: outside(visit.from), to: outside(visit.to) };
-      if (movedKeys(landed.from, landed.to).length > 0)
-        next.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
+      next.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
     }
     this.publish(next);
   }

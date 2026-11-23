@@ -3,6 +3,9 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { EditTransactions } from "../../src/renderer/edit-transaction";
 import { SessionState } from "../../src/renderer/session-state";
+import { EDIT_MODE_KEY } from "../../src/config/reserved-names";
+import { EDIT_MODE_ARRANGE } from "../../src/config/loader/edit-mode";
+import { DISCLOSURE_CLOSED } from "../../src/config/disclosure";
 
 type Standing = NonNullable<ConfigSnapshot["repo"]>["standing"];
 const origin: RenderOrigin = {
@@ -38,7 +41,12 @@ function snapshot(standing: Standing): ConfigSnapshot {
           {
             scope: "repo",
             path: "/checkout/sample.json5",
-            definition: { kind: "text", text: "{}", dir: origin.cwd, storage: `${origin.cwd}/session` },
+            definition: {
+              kind: "text",
+              text: "{}",
+              dir: origin.cwd,
+              storage: `${origin.cwd}/session`,
+            },
           },
         ]
       : [],
@@ -69,4 +77,15 @@ test("the draft keeps its edits but follows live repository trust", () => {
   expect(edits.revision(origin, other)).toBeNull();
   expect(edits.view.get(sid, "theme")).toBe("nord");
   expect(committed.get(sid, "theme")).toBeNull();
+});
+
+test("an open edit reads as arranging with no write of its mode, and a write of it reads as written", () => {
+  const committed = new SessionState();
+  const edits = new EditTransactions(committed, () => {});
+  expect(edits.view.get(sid, EDIT_MODE_KEY)).toBeNull();
+  edits.open(sid, origin, snapshot("approved"), new Map());
+  expect(edits.view.get(sid, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
+  edits.view.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+  expect(edits.view.get(sid, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+  expect(committed.get(sid, EDIT_MODE_KEY)).toBeNull();
 });

@@ -29,6 +29,10 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import { isEditModeKey, isHeldByEdit } from "../config/session-key.js";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../config/loader/edit-mode.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import { NavigationHistory } from "./navigation-history.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -89,13 +93,19 @@ export function routedWrites(
   const write = (sid: SessionId, pairs: Pairs): void => {
     const draft = draftOf(sid);
     const stored: Array<{ key: string; value: string }> = [];
+    // A batch lands as written: the sets before a clear go in before it.
+    const flush = (): void => {
+      if (stored.length > 0) store.setBatch(sid, stored.splice(0));
+    };
     runInAction(() => {
       for (const { key, value } of pairs)
         if (draft !== null && isHeldByEdit(key)) draft.put(key, value);
         else if (isEditModeKey(key)) unheld.put(sid, key, value);
-        else if (value === null) store.clear(sid, key);
-        else stored.push({ key, value });
-      if (stored.length > 0) store.setBatch(sid, stored);
+        else if (value === null) {
+          flush();
+          store.clear(sid, key);
+        } else stored.push({ key, value });
+      flush();
     });
   };
   return {
@@ -129,17 +139,12 @@ export function heldAside(): Unheld & {
   };
 }
 
-// [LAW:no-silent-failure] THE line for a write, or a save or cancel, meant for
-// an edit that is not open: one drawn before the edit closed. It says what was
-// dropped, in one wording wherever it happens.
-export function staleEditWrite(
-  log: DaemonLogger,
-  sid: SessionId,
-  what: Iterable<string>,
-): void {
-  log(
-    "warn",
-    `edit: dropped ${[...what].join(",")} — no edit is open (session=${sid})`,
+// [LAW:no-silent-failure] THE wording for a write, or a save or cancel, meant
+// for an edit that is not open: one drawn before the edit closed. A click
+// fails with it, so the bar shows it; a write no click made is logged with it.
+export function staleEdit(what: Iterable<string>): BadVerbArgs {
+  return new BadVerbArgs(
+    `edit: dropped ${[...what].join(",")} — no edit is open`,
   );
 }
 
@@ -219,8 +224,13 @@ class EditDraft implements DraftWrites {
     };
   }
 
+  // [LAW:one-source-of-truth] Whether edit mode is open is the draft's
+  // existence, so an edit with no write of its mode reads `arrange`; a write
+  // of it (the click that leaves) is the request the click's consequence
+  // consumes, and reads as written until then.
   read(key: string): string | null {
     if (this.writes.has(key)) return this.writes.get(key)!;
+    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
     return this.committed.get(this.session, key);
   }
 
@@ -355,7 +365,8 @@ export class EditTransactions {
   ) {
     const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
       get: () => null,
-      put: (sid, key) => staleEditWrite(log, sid, [key]),
+      put: (sid, key) =>
+        log("warn", `${staleEdit([key]).message} (session=${sid})`),
     });
     this.view = {
       get: routed.get,
