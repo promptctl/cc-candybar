@@ -39,4 +39,4 @@ Load `laws:code` first. The laws govern this work.
 
 ## Awaiting a decision
 
-Removal candidates: `env` variables ([gather](areas/gather.md)) and direct verb URLs ([clicks](areas/clicks.md)).
+Removal candidate: direct verb URLs ([clicks](areas/clicks.md)). `env` is a subscription kind that reads the session's environment, so it stays (`src/renderer-interface/interface.ts`).

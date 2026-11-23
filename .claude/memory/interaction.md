@@ -46,11 +46,11 @@ The menu's door appears in every preset root. It's declared once and referenced 
 
 A destructive control's first click arms a confirm. The door and the tabs disarm it, so a confirm always fires in the same menu it was armed in.
 
-Menus close themselves after a timeout counted from the session's last click. The close is the same journaled write the ✕ makes, so savepoints and back treat it like a click. A click that names no session (copy, open) doesn't restart the clock. An open menu marks an otherwise still frame as able to move, so the doctor asks for a one-second refresh while a menu is open. Without it, neither the closing flash nor the close would show until Claude Code's next event.
+Menus close themselves after a timeout counted from the session's last click. The close is the same journaled write the ✕ makes, so savepoints and back treat it like a click. A click that names no session (copy, open) doesn't restart the clock. An open menu marks an otherwise still frame as able to move. Without a one-second `statusLine.refreshInterval` in Claude Code's settings, neither the closing flash nor the close would show until Claude Code's next event.
 
 ## Slash commands
 
-A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed. Whatever acts in one pane (a slash line, the band's /reload-plugins, a restart, a bar pane split) goes one at a time in the order asked, because each reads the pane before it types and two at once would both find the bare input box. A slash line for a session a restart holds is refused at once rather than queued, because it would land in the shell the restart leaves; nothing outside the pane waits behind a restart, so a copy is never held behind one.
+A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed. Whatever acts in one pane (a slash line, a bar pane split) goes one at a time in the order asked, because each reads the pane before it types and two at once would both find the bare input box.
 
 ## Running a program
 

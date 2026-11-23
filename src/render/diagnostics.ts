@@ -127,7 +127,8 @@ export const aboutOf = (kind: string, subject?: string): string =>
 // lines the viewer shows. Non-empty by construction — a
 // message with no visible line is no message. `about` is named by the message's
 // producer — its source, and the file or repository it concerns — and stays
-// put while the text changes (an issue fixed, a count moved).
+// put while the text changes (an issue fixed, a count moved). A refused
+// request, its hints and a click error are about exactly their text.
 export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
   readonly about: string;
@@ -274,8 +275,9 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // message's identity, never as a position: a list that shifts under an open
 // viewer would otherwise show another message under the same position, and
 // one that shrank and grew again would reopen it. The identity is the
-// severity and what the message is about, digested — never its text, which
-// moves while the message stays the same one (an issue count) — and which of
+// severity and what the message is about, digested — not its text, which
+// moves while a message stays the same one (an issue count) unless the
+// producer names its text as what it is about — and which of
 // the list's messages of that identity it is, so two alike are two stops. The
 // page of the message shown rides in the same key, so a message has at most
 // PAGES pages: the viewer never draws a page its key cannot name.

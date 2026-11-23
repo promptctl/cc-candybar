@@ -38,30 +38,12 @@ A renderer's lane declaration sets the desired pane policy. The host's latest ac
 
 A lane's switch is read where the config is, in the renderer, and every output declares each viewed session's switches, a turn that threw included, so the host's gate ends a lane switched off while the render throws. The host gates on the switches the last output declared: a subscribe to a lane that's off is refused at once, and a subscriber whose lane goes off is ended, told why. A session with no view yet has no switch to read, since only an event opens a view, so its subscriber is admitted and the switches its view opens with decide.
 
-A lane is set up or torn down only by the session's own click that moved its switch, measured around the click (before the handler, after the commit) rather than inferred at a draw. A switch moved by anything else (another session's save, a hand edit, a restart, a cd) sets nothing up, because that would restart every idle Claude Code reading the file. One edge: the before reading is the config as this session's cache last loaded it, and the after reading follows the click's own reload, so another session's save that the watcher hasn't reloaded here yet counts as this click's move. The window is the watcher's debounce, and only the clicking session is set up, to match the bar its click left. A click on a bar from before a daemon restart has no request to set the lane up with yet, so it is owed to the session's next click or request, and settled against the switch as that event finds it: by then another session's save may have moved the switch back, and a setup from the click's reading would restart Claude Code for a lane the bar shows off.
-
-The tmux status line is held by declaration: the renderer names the sessions whose row is on, and the host holds each at the pane its newest request reports and releases one no longer named. An act would make the renderer remember what it asked, and that memory drifts from the host's whenever the host releases a row on its own, an act is refused, or the renderer restarts. A row the host released on its own is held again only at the session's next request, so nothing between requests re-takes it.
-
 While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one small row instead of a second bar: a button that draws it back there, and the diagnostics indicator, so an error is seen even where the lane's bar isn't. Turning the switch on alone draws nothing.
 
-The tmux status line is switched by the renderer, a setting every session the config renders shares. A session outside tmux has no status line to take, so it draws in Claude Code's while the setting still says tmux, and nothing writes the setting for it. Its control is offered only inside tmux, and reset-all resets it only where it is drawn: a reset clicked outside tmux would turn tmux off for every tmux session.
-
-## Relaunching Claude Code under the attach launcher
-
-- End Claude Code with SIGTERM, not /exit. /exit removes a clean --worktree worktree and asks about a dirty one.
-- Read the relaunch directory after Claude Code exits. While Claude Code runs, tmux reports Claude Code's directory instead of the shell's.
-- Add --worktree when Claude Code ran in a worktree it created and the relaunch directory isn't inside it.
-- Carry only the variables needed to find the session again. The rest stay the shell's. The line lands in shell history, so credentials never go on it.
-- Use --session-id instead of --resume when the session has no transcript yet, because --resume would find no conversation.
-- Refuse before the kill, not after, whenever the relaunch can't succeed. That includes: a draft, a stash, a turn in progress, a dialog or copy mode in the pane; an unknown flag; an answered session with no transcript persistence; a Claude Code build the launcher can't run (an npm install runs node cli.js); a PATH whose node the preload would refuse.
-- The restart counts only if the session's statusline subscribes again within the patience window. If it doesn't, the line is shown for the user to type.
+## The attach launcher
 
 A Bun-compiled Claude Code honours BUN_OPTIONS. It doesn't honour BUN_INSPECT_PRELOAD or NODE_OPTIONS. BUN_INSPECT names a single socket, so two sessions can't share it, and BUN_INSPECT_CONNECT_TO dials out without holding the process. This was measured on one Claude Code release, so recheck it if attaching stops working. The preload execs node with the launcher in the same pid and removes itself from BUN_OPTIONS, so no Bun child process runs it again. When it can't attach, it refuses rather than start a stock session.
 
-## The tmux status line
+## Restoring tmux status options
 
-- tmux stores an array option whole at each level. A session-level status-format[1] blanks the global [0] (the window list), and unsetting indices leaves an empty array that still shadows the global one. So copy, write and restore the session's array whole.
-- The restore compares against a record kept in tmux itself, so the next daemon puts back what a dead one left. Each record names the socket of the daemon that wrote it, and a daemon touches only its own records. A dev or test daemon on the same tmux server therefore leaves the real one's records alone.
-- Recognise our mouse binding by the URL its command runs, not by its list-keys line. tmux pads that line's key column to the longest key in the table.
-- A tmux spawn costs about 20 ms on macOS, so calls are async and serial per server. Each tmux call is its own client, which reaches the server whenever it does, so the shutdown restore waits for the calls in flight before it puts anything back: a lay-out write landing after a restore lays the session out again with no daemon left. A killed daemon's last call can still land after the next daemon's restore, so draws run under an if-shell guard on the prior record and land on nothing.
-- A click from the tmux status line arrives through tmux, so it proves nothing about the URL handler or about terminal links.
+A daemon puts back the status options an older daemon wrote into tmux. tmux stores an array option whole at each level, so a session's status-format array is restored whole: a session-level index blanks the global window list, and unsetting indices leaves an empty array that still shadows the global one. The restore compares against a record kept in tmux itself, so the next daemon puts back what a dead one left. Each record names the socket of the daemon that wrote it and a daemon touches only its own, so a dev or test daemon on the same tmux server leaves the real one's records alone.

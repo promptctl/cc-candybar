@@ -8,7 +8,7 @@ The reach classes, the dev rows and the Facts-or-Draw placement of state below b
 
 **I did not write `/tmp/ccb-probe/findings-verbs.md`.** This agent runs in read-only mode, which forbids creating files, including in `/tmp`, so the full findings are below instead of a path and summary.
 
-the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming-wind`. All 25 leaf verbs, `dispatch`, and `tmux-status-click` have rows, based on code read at commit `10f26ceb`.
+the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming-wind`. The code declares 20 leaf verbs and `dispatch` (`src/click/wire.ts`), and each has a row. The rows were read at commit `10f26ceb`.
 
 ## Main isolation hazards
 
@@ -27,7 +27,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 - `dlog` writes the click event to `<state>/daemon.log`.
 - `<state>` is `stateDir()`, normally `~/.local/state/cc-candybar`.
 
-**Exceptions:** `copy`, `open-vscode` and `doctor-probe` are not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane follow-up. It still opens and commits empty journals.
+**Exceptions:** `copy` and `open-vscode` are not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane follow-up. It still opens and commits empty journals.
 
 **Touch codes:** P picks (`session-state.json`), SH settings history, NH navigation history (memory only), CF config file, CC Claude Code process or pane, TM tmux, OS another session, MA machine, SS source storage. Anything not listed is not touched by the handler.
 
@@ -53,14 +53,9 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `redo` | same | same | same | P, CF, SH; L | config | Same |
 | `rewind` | same | same | same | P, CF, SH; L | config | Same. It does not close edit mode; a sibling effect does |
 | `repo-config` | `links`, `reloadConfig`, `dlog` | `<state>/repo-configs/repo-configs.json` | none directly; see reload | No listed target except OS: the answers watcher reloads every entry; L | config (nearest; a per-user trust book, not the config file) | Own book. If Facts runs sources for it, a dev approval must not approve them for the live side |
-| `doctor-run` | `doctor`, `doctorStores`, `clients`, `serving`, `bundle`, `dlog`, `arrival` | `session-state.json` (report keys); `doctor-clicked-terminals.json` if via link and terminal seen | `tmux display`, `ps`, `git`, `gh auth token` or `glab --version`, `osascript` or `fc-match`, each only when its branch applies | P; reloads config; reads settings chain and transcript; L possible | picks (nearest) | Report on its own copy. Probes need a read message to Facts |
-| `doctor-fix` | as above | `claude-settings` fix: a Claude settings file, setting `env.<TMUX_TRUECOLOR_VAR>` or `statusLine.refreshInterval`; `post-mortems-read` fix: `doctor-post-mortems-read.json`; report in `session-state.json` | same | MA, P; the file changes take effect in live Claude Code sessions | machine | Refused visibly |
-| `doctor-mark` | as above | `doctor-marks.json`, `session-state.json`, possibly `doctor-clicked-terminals.json` | same | P, per-user store | picks (nearest) | Own store and report; probes go to Facts |
-| `doctor-probe` | `probes`, `arrival`, `dlog` | none | none | In-memory list only; read through daemon-stats | no class fits; picks is nearest | Probably Facts' job, since `cc-candybar doctor` reads it from the daemon it asked |
 | `slash` | `configFor`, `claudeInput`, `dlog` | none | `tmux display`, `capture-pane`, `load-buffer`, `send-keys C-s`, `paste-buffer`, `send-keys Enter` | CC, TM | claude-code | Refused visibly |
 | `run` | `configFor`, `links`, `sourcesFor`, `runs` | Unknown: whatever the program writes | The argv the link carries, under the session's env, 10 s limit | SS (`supersede`, then resume); P on failure (`candybar.clickError` on the raw store); effects otherwise unknown | no class fits; machine is nearest | Refused visibly. Facts must refuse it too: verifying a dev key proves nothing to the live side |
 | `dispatch` | Union of its effects | Union | Union | Union; P for `candybar.clickError` on failure | Per effect | Classify each effect, never the whole click. It reaches only `LEAF_VERBS`, so no nesting |
-| `tmux-status-click` (not in `VERBS`) | Not a `DaemonContext` user; `tmuxStatusLines.linkAt`, then `handleClick` | Those of the inner verb | Inner verb's, or `/usr/bin/open` or `xdg-open <url>` for a non-candybar link | TM read; otherwise as the inner verb | Inner verb's; host for a plain URL | Needs a message: Facts receives the click, and only the Draw that drew the frame can run it. Dev frames should stay out of the status line |
 
 ## (1) Click-triggered side effects outside verb handlers
 
@@ -127,9 +122,7 @@ Other points:
 | Any lane-moving click | Draw to Facts: `lanesMoved{sid, before, after}`, live Draw only. Facts to Draw: `setupFailed{sid, text}` |
 | `slash` | Draw to Facts: `typeSlash{sid, line}`, with the pane hint held by Facts |
 | `run` | Draw to Facts: `run{RunRequest}`, Facts to Draw: `runFailed{sid, text}`. Storage keys come from Draw's config, and `supersede` runs in Facts |
-| Doctor verbs | Draw to Facts: `gatherDoctorFacts{sid, origin, needs}`. `doctor-fix` also sends `writeClaudeSettings`, live Draw only |
 | `copy`, `copy-diagnostic`, `open-vscode`, plain URLs | Draw to Facts: `host{copy|open}`, if Facts owns all programs |
-| `tmux-status-click` | Facts to Draw: `linkClicked{url, via}`, sent to the Draw that drew the frame |
 | `repo-config` | Draw to Facts: the answer, so Facts knows which sources may run |
 | All clicks | Facts to Draw: `requestFacts{sid, origin, hints}`, because verbs fail with "has not rendered yet" without them |
 
@@ -153,11 +146,8 @@ Other points:
 - `src/renderer/settings-history.ts`
 - `src/renderer/navigation-history.ts`
 - `src/renderer/config-file-store.ts`
-- `src/config/repo-configs.ts`
+- `src/daemon/config-discovery/repo-configs.ts`
 - `src/daemon/runs.ts`
-- `src/daemon/update-notice.ts`
-- `src/daemon/tmux-status.ts`
 - `src/renderer/render-cache.ts`
-- `src/doctor/edge.ts`
 - `src/claude-input/edge.ts`
 - `src/click/read.ts` (`HOST_VERBS` is an existing, narrower list of the same idea)

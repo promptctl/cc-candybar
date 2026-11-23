@@ -107,7 +107,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 ## 3. Repo gate
 
-**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called from `resolveDslConfig` in `src/config/loader/discovery.ts`. Answers come from `repoConfigs().read()` (`src/config/repo-configs.ts`) in `loadFromDisk`; `durableConfig` uses the same resolve.
+**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called where config discovery resolves an origin (`src/daemon/config-discovery/discover.ts`). Answers come from `repoConfigs()` (`src/daemon/config-discovery/repo-configs.ts`).
 
 **What it gates:**
 - cwd and project config layers, filtered by `repos.approved` *before merge*
@@ -132,7 +132,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 **A shell declaration from a Draw:** provenance is lost at merge, because a variable carries no source file. The honest flow:
 1. Facts sends the answer book to Draw.
-2. Draw's load calls the same `resolveDslConfig`, so unapproved layers never exist.
+2. Draw's load reads the same discovery result, so unapproved layers never exist.
 3. The declaration message carries the chain's layers (`path`, `scope`) and each source's identity.
 4. Facts re-runs `gateRepos` over those layers and refuses repo-scope layers not approved, returning a failed reading that names the repository.
 5. Facts re-runs a declaration validator: absolute path, regex capture, shell floor. Sharing the loader's specs avoids a second definition.
@@ -161,8 +161,8 @@ Today the path is read → parse → publish, in `declareSource`.
 | Repo answer book, plus changes (`answersWatch`) | `loadFromDisk`, `RenderCache` | Facts, **wire** |
 | `projectDir`, `cwd`, hook data, hints | Request | Facts, **wire** |
 | `configFile` (pick > `--config` > `configEnv`) | `sessionRenderOrigin` | **Wire**, or a Draw override |
-| Config files, candidates, collisions | `discovery.ts`, `dsl-loader.ts` | Draw |
-| `XDG_CONFIG_HOME`, `XDG_DATA_DIRS`, `XDG_DATA_HOME`, `HOMEBREW_PREFIX`, homedir | `discovery.ts`, `plugin-folders.ts` (process env) | Draw, so a dev Draw may differ from prod |
+| Config files, candidates, collisions | `src/daemon/config-discovery/discover.ts`, `src/config/dsl-loader.ts` | Draw |
+| `XDG_CONFIG_HOME`, `XDG_DATA_DIRS`, `XDG_DATA_HOME`, `HOMEBREW_PREFIX`, homedir | `src/daemon/config-discovery/config-search.ts`, `plugin-folders.ts` (process env) | Draw, so a dev Draw may differ from prod |
 | Plugin roots, definitions, `{checkout}` paths (`checkoutOf`, `worktreeLink`: fs, no spawn seen) | `plugins.ts`, `git-root.ts` | Draw |
 | `DEFAULT_DSL_CONFIG`, themes, presets, `BUNDLED_PRESETS` | Code; no fs found in `src/themes` | Draw (per build) |
 | `storage.hold` and `release` (mkdir, generation, watch) | `RenderCache` | Facts, **wire** (folder paths under a hold id) |
@@ -251,9 +251,8 @@ Also, a config's first request compiles in its arrival turn, which the memory sa
 - `settlePayload` wait composition follows from which lanes were declared.
 - `sourcesRead` chooses which plugin sources are held. The payload reader `sourceReading` treats a missing name as a failure, so holds must cover every declared source.
 - `openView`'s preset reaction, and `ViewDeclared.preset`, exist to redeclare on a preset move.
-- `src/doctor/data-needs.ts` uses `segmentInputPaths`, `anyPathStartsWith`, `gitOptionsFromClosure`.
-- `src/demo/dsl.ts`, `session-source.ts`, `setUpDraw` pass it through.
-- Tests: `test/render-payload-gating.test.ts`, `test/frame-payload.test.ts`, `test/one-fold.test.ts`, `test/slash-gate.test.ts`, `test/helpers/payload-owners.ts`.
+- `session-source.ts` and `setUpDraw` pass it through.
+- Tests: `test/frame-payload.test.ts`, `test/slash-gate.test.ts`, `test/helpers/payload-owners.ts`.
 
 **Delete:**
 - `buildNeededPrefixes`, `neededPrefixesByPreset`, `wanted`, `wantedOf`, `wantsOf`, `sourcesRead`

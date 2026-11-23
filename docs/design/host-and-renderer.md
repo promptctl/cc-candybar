@@ -56,7 +56,7 @@ From general knowledge of each system; the details are not checked against curre
 ## 5. Architecture
 
 ```
-            launchd (owns the host's lifetime)
+            launchd (planned owner of the host's lifetime, A-4)
                        │
                        ▼
  Claude Code client ─┐ ┌───────────────────── host ─────────────────────┐
@@ -84,7 +84,7 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 
 **Router** (host, prototype)
 - **Responsibility:** turns each input into an event for the renderer it names, and keeps one mailbox per renderer.
-- **Inputs and outputs:** a request names its renderer by the `renderer` field of its session context; a click by the `to/<name>` in its link. Out: one input at a time to each renderer. Ordinary inputs retain their arrival order. A renderer start can lead the waiting inputs, and a scheduled turn gets a slot after at most eight ordinary slots while it waits. A request draws right after its session's `context` turn, and the draw reports what it still owes: `settled`, `owed` (the names it drew pending for a first answer) or `stalled` (the world state it drew carries a stamp failure), each with the `seq` of the world state it drew. The host waits only for what a draw owes, until a later world state reaches the renderer, and then asks for another draw. The wait ends once a draw owes nothing that can still land, or at the client's deadline, so a renderer's turn never waits. The wait holds no place in the mailbox: other inputs go ahead of it, and a retire that drops the session ends the wait. The `context` turn comes first so that the subscriptions the draw needs are with the host, and their readings in the wait, before the request's turn; an origin it names first has its `config` turn in that slot. If preparing that origin fails, the host answers the original client before waiting for sources. A new context can retry a snapshot that failed to reach the renderer. On success, the host retains the original request ID and encoding across the source wait and settles the request's one present when its client takes or declines the reply.
+- **Inputs and outputs:** a request names its renderer by the `renderer` field of its session context; a click by the `to/<name>` in its link. Out: one input at a time to each renderer. Ordinary inputs retain their arrival order. A renderer start can lead the waiting inputs, and a scheduled turn gets a slot after at most eight ordinary slots while it waits. A request draws right after its session's `context` turn, and the draw reports what it still owes: `settled`, `owed` (the names it drew pending for a first answer) or `stalled` (the world state it drew carries a stamp failure), each with the `seq` of the world state it drew. The host waits only for what a draw owes, until a later world state reaches the renderer, and then asks for another draw. The wait ends once a draw owes nothing that can still land, or at the client's deadline, so a renderer's turn never waits. A redraw that reads no world state newer than the draw before it ends the request as stale, answered with the frame it drew. The wait holds no place in the mailbox: other inputs go ahead of it, and a retire that drops the session ends the wait. The `context` turn comes first so that the subscriptions the draw needs are with the host, and their readings in the wait, before the request's turn; an origin it names first has its `config` turn in that slot. If preparing that origin fails, the host answers the original client before waiting for sources. A new context can retry a snapshot that failed to reach the renderer. On success, the host retains the original request ID and encoding across the source wait and settles the request's one present when its client takes or declines the reply.
 
 **Collector** (host, production for what exists)
 - **Responsibility:** reads the world into one complete world state per session, as Proposal 1 §12 specifies.
@@ -134,102 +134,13 @@ The in-process and child-process transports use the same renderer contract. The 
 
 The first event is `start`. It carries the live session contexts, their world states, their viewers, and config snapshots by origin. A replacement can receive the authorized revision its predecessor selected alongside the latest observation. Subsequent inputs deliver requests, admitted clicks, world or config changes, scheduled draws, viewer changes, effect completions and session retirement. Inspection and shutdown use the same mailbox and turn clock.
 
-Every completed event returns its outcome, frames, effects, record, store writes, subscriptions, next wake and any diagnostics. A failed turn can still have writes or effects from work it completed. The `stats`, `debug`, `close-journal` and `close-views` events add a typed reply to the same result on success. The host accepts the reply for the event it sent. Private wire v13 carries the host’s resolved locale and time zone at boot. Each input and its answer share a sequence number. The renderer transport measures the turn with its own monotonic clock. The host measures the round trip, reports the time beyond the turn as transport overhead, and performs the effects. The host records an interrupted input when a worker exits before answering.
+Every completed event returns its outcome, frames, effects, record, store writes, subscriptions, next wake and any diagnostics. A failed turn can still have writes or effects from work it completed. The `stats`, `debug`, `close-journal` and `close-views` events add a typed reply to the same result on success. The host accepts the reply for the event it sent. The private wire carries the host’s resolved locale and time zone at boot. Each input and its answer share a sequence number. The renderer transport measures the turn with its own monotonic clock. The host measures the round trip, reports the time beyond the turn as transport overhead, and performs the effects. The host records an interrupted input when a worker exits before answering.
 
-```ts
-interface Subscriptions {
-  readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
-  // Managed storage folders named by retained configs, including idle configs.
-  readonly managedFolders: readonly string[];
-  // The lanes each viewed session switches on. The host gates subscribers on
-  // them and reconciles the tmux bar pane for each session with a pane target.
-  readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
-  // The origins whose config the renderer holds: each live session's, and
-  // each a parked event waits on. The host discovers an origin as it is first
-  // named, follows its files while it is named, and lets it go when it is not.
-  readonly configs: readonly RenderOrigin[];
-  // Authored revisions this renderer successfully retained at those origins.
-  readonly configSelections: readonly ConfigSelection[];
-}
+The interface is `src/renderer-interface/interface.ts`; an origin is `RenderOrigin` in `src/config-hint.ts`; a snapshot is `src/config/config-snapshot.ts`. The code states their fields, so this section keeps what it can't:
 
-// Where a declaration came from is what repository trust is judged on. A layer
-// or plugin is named within the snapshot of the origin it is declared at.
-interface Subscription {
-  readonly decl: SourceDecl;
-  readonly from: { kind: "bundled" } | { kind: "layer"; role: LayerRole } | { kind: "plugin"; plugin: PluginRef };
-}
-
-// Where a config is discovered: the project directory, the working directory,
-// and the file `--config` names, if any. Every session at one origin shares
-// its snapshot.
-interface RenderOrigin {
-  readonly projectDir: string | null;
-  readonly cwd: string;
-  readonly configFile: string | null;
-}
-
-// What the host's config discovery found at one origin: the imperative-shell
-// half of today's load, as a value. Parse, merge and validate are the
-// renderer's, in its functional core. The bundled layer ships in the
-// renderer's own bundle.
-// [LAW:types-are-the-program] It holds every fact a load learns from the
-// filesystem (A-2), so the renderer never asks the disk for one.
-interface ConfigSnapshot {
-  readonly chain: readonly Layer[];          // lowest precedence first; every layer in it is writable
-  readonly repo: RepoQuestion | null;        // null: the origin's directories hold nothing to ask about
-  readonly plugins: readonly PluginFile[];   // installed and the approved repository's, one per scope and name
-  readonly strays: readonly Stray[];         // loose files in a plugin root, each dropped naming where it belongs
-  readonly checkout: Checkout | null;        // the root a plugin's `data.checkout` resolves against, or a read failure named in notices
-  readonly notices: readonly string[];       // what discovery found wrong: a shadowed file, an unlistable root
-  readonly watch: string | null;             // what the config's watch cannot hear, or null
-}
-
-// A chain is user, project, local. The file `--config` names is the user layer,
-// and it replaces the chain, as today, so the chain is that one layer. A
-// repository's layers are in the chain only once it is approved.
-// A role names one layer within its origin's snapshot.
-type LayerRole = "user" | "project" | "local";
-
-interface Layer {
-  readonly role: LayerRole;
-  // Where the layer lives: messages, the directory its `run` actions start in,
-  // and the menu's link to the file. A write names the role, never this.
-  readonly path: string;
-  readonly content:
-    | { readonly kind: "text"; readonly text: string }
-    | { readonly kind: "absent" }                               // not written yet: a write creates it
-    | { readonly kind: "unreadable"; readonly error: string };  // maybe there, and not read: no layer of the merge, a notice, and no write
-  // The definitions the layer's `plugins` list names, by each entry as written.
-  // Discovery reads that one key, as a preprocessor reads its includes.
-  readonly listed: Readonly<Record<string, PluginFile>>;
-}
-
-// The one repository an origin's directories belong to. Project and local
-// share its answer, kept under `dir`: a linked worktree's main checkout.
-interface RepoQuestion {
-  readonly dir: string;
-  readonly standing: "approved" | "declined" | "awaiting" | "unread";
-  readonly unproven: string | null;          // why the directory's worktree link could not be proven
-}
-
-interface PluginFile {
-  readonly scope: "plugins" | "repo";        // installed, or the repository's, which come with its approval
-  readonly path: string;                     // the definition: its identity, its messages, its `data` path's base
-  readonly definition:
-    | { readonly kind: "text"; readonly text: string; readonly dir: string }   // dir: its folder's real path
-    | { readonly kind: "unreadable"; readonly error: string };
-}
-
-interface Checkout { readonly root: string; readonly git: boolean }
-
-// A loose file carries the scope of the root it sits in, so an unnamed drop
-// answers only for names in its own scope.
-interface Stray { readonly path: string; readonly scope: PluginFile["scope"] }
-
-// Scope and name name a plugin within its origin's snapshot.
-type PluginRef = { readonly scope: PluginFile["scope"]; readonly name: string };
-```
-
+- **A subscription says where its declaration came from** (the bundled config, a layer's role, or a plugin), because that is what repository trust is judged on.
+- **An origin is where a config is discovered:** the project directory, the working directory and the file `--config` names. Every session at one origin shares its snapshot.
+- **A snapshot holds every fact a load learns from the filesystem** (A-2), so the renderer never asks the disk for one. Parse, merge and validate are the renderer's, in its functional core. The bundled layer ships in the renderer's own bundle. [LAW:types-are-the-program]
 - **Every input gets exactly one output.** The host sends the next input to a renderer only after the last one's output arrived. That serialization is the state machine's turn, owned by the renderer's mailbox in the host. A turn is synchronous, and inputs are plain data. [LAW:no-ambient-temporal-coupling]
 - **A multi-step act is a chain.** Each step is one effect, the chain's phase is state machine state, and the state machine returns the next step when the last one's `effect-done` arrives. `type-slash` is one step because its check and its act must not be separated. A pane's identity is one function of the pane, with no per-request stamp.
 - **A request is answered by its `present` effect.** The statusline arm of `present` carries the request it answers, and only that arm does. A request whose output holds no such effect is answered with a failure naming the renderer, never with an empty bar. One mechanism delivers every frame to every surface. [LAW:one-type-per-behavior]
@@ -256,54 +167,15 @@ type PluginRef = { readonly scope: PluginFile["scope"]; readonly name: string };
 
 ### Effects
 
-```ts
-type Effect =
-  | { kind: "present"; session: SessionId; surface: "statusline"; request: RequestId; frame: Frame }
-  | { kind: "present"; session: SessionId; surface: PushedSurface; frame: Frame }
-  | { kind: "change"; target: FileTarget; changes: readonly Change[] }
-  | { kind: "store"; store: StoreName; key: string; value: JsonValue | null }
-  | { kind: "type-slash"; session: SessionId; pane: Pane; line: SlashLine }
-  | { kind: "run"; session: SessionId; program: Program; refreshes: readonly SourceId[] }
-  | { kind: "approve-repo"; session: SessionId; origin: RenderOrigin; dir: string; answer: "approved" | "declined" }   // dir: the one its signed link asked about
-  | { kind: "open"; session: SessionId | null; url: string }
-  | { kind: "copy"; session: SessionId | null; text: string };
+The effects are in `src/renderer-interface/interface.ts` (a frame to present, a config change, and the acts a click asks done in the world); a change's edits and the guard each carries are in `src/config/config-changes.ts`. A renderer names a document it was handed, never a path, so no stored effect or undo entry can hold a path (R-13). A value crosses as JSON5 text, so a copied row keeps its comments and an inline placement stays inline.
 
-type Surface = "statusline" | PushedSurface;
-type PushedSurface = "statusline" | "pane"; // a browser is future work
+`Address` is a setting's place inside its document: object keys from the document's root, and the empty address is the document. An array is addressed whole, so a layout edit is guarded per row.
 
-// [LAW:types-are-the-program] A renderer names a document it was handed, never
-// a path, so no stored effect or undo entry can hold a path (R-13).
-type FileTarget =
-  | { kind: "layer"; origin: RenderOrigin; role: LayerRole }   // any layer of a subscribed origin's chain
-  | { kind: "claude-settings"; session: SessionId };    // the session's Claude Code settings, from its session context
-
-// A value crosses as JSON5 text, so a copied row keeps its comments and an
-// inline placement stays inline. The empty address is the document.
-type Change =
-  | { op: "replace"; at: Address; text: Json5Text; read: Read }
-  | { op: "insert"; at: Address; text: Json5Text; precedes: string | null }   // the setting is absent; it goes before `precedes`, or last
-  | { op: "remove"; at: Address; read: Read };
-
-type Read =
-  | { kind: "value"; text: Json5Text }   // agrees with any text of the same value
-  | { kind: "file"; text: string }       // the whole document, byte for byte
-  | { kind: "absent" };
-
-// Today's run action, with its directory named, never spelled.
-interface Program {
-  readonly argv: readonly [string, ...string[]];
-  readonly env: Readonly<Record<string, string>>;   // laid over the session's environment
-  readonly cwd: { kind: "layer"; role: LayerRole } | { kind: "plugin"; plugin: PluginRef } | { kind: "user-home" };
-}
-```
-
-`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Pane` is a tmux pane and its server, from the client hints the renderer holds for the session.
-
-- **An act carries where it goes.** A slash line, a restart and a surface name the pane they act in, from the client hints the renderer holds for the session, so an act after a daemon restart goes where the bar the user clicked was drawn. A session that reported no pane is refused by the renderer, with the hints' own reason, and no act is sent. The band's install is the exception, because it needs no pane: it carries the session's tmux facts as reported, and only its `/reload-plugins` is refused outside tmux. The host decides nothing about where an act goes.
-- **A turn's acts follow its landing.** Every act in a turn is performed only once the turn's changes and its trust-book answers have landed, in the order the turn returned them. A turn with no changes lands at once, and the daemon's close is one more landing outcome, `closing`, so no act starts once the close has begun, and each settles `closing`. An act whose changes were refused or failed is `skipped`, holding no error of its own, since the changes' outcome already says why. An act over in its turn (copy, open, a slash line, an update) is settled before the click is answered; a run, a restart and a surface outlive the click, and their `effect-done` arrives when they end. An act's failure shows on its session's bar, joining a click error no answer has carried yet. One with no session, or whose renderer has ended, shows on every bar as the daemon's.
+- **An act carries where it goes.** A slash line names the pane it acts in, from the client hints the renderer holds for the session, so an act after a daemon restart goes where the bar the user clicked was drawn. A session that reported no pane is refused by the renderer, with the hints' own reason, and no act is sent. The host decides nothing about where an act goes.
+- **A turn's acts follow its landing.** Every act in a turn is performed only once the turn's changes and its trust-book answers have landed, in the order the turn returned them. A turn with no changes lands at once, and the daemon's close is one more landing outcome, `closing`, so no act starts once the close has begun, and each settles `closing`. An act whose changes were refused or failed is `skipped`, holding no error of its own, since the changes' outcome already says why. An act over in its turn (copy, open, a slash line) is settled before the click is answered; a run outlives the click, and their `effect-done` arrives when they end. An act's failure shows on its session's bar, joining a click error no answer has carried yet. One with no session, or whose renderer has ended, shows on every bar as the daemon's.
 - **Every effect names its operation.** There is no `tmux { args }` and no free-form command, because a raw command admits every command and the safety of a slash line or a run could not be expressed in it. A run link's program is the declaration its link signed, as today. [LAW:types-are-the-program]
-- **Every write target is named, never spelled.** A `layer` is named by an origin the renderer subscribes and its role in that origin's chain; the interpreter refuses an origin discovery does not hold. `claude-settings` is reached through a session the renderer holds. Durable state is written by `store`, so no target names a file under the profile. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
-- **Which layer a write goes to is a value.** Every action that writes config names its target: a role, or `ask`, which offers the session's approved layers. The bundled config sets today's behaviour: steppers, persist actions and edit mode write the user layer, and save asks. Changing a default is a config edit. Undo writes to the layer its step wrote.
+- **Every write target is named, never spelled.** A `layer` is named by an origin the renderer subscribes and its role in that origin's chain; the interpreter refuses an origin discovery does not hold. `claude-settings` is reached through a session the renderer holds. Durable state is written by a turn's store writes, so no target names a file under the profile. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
+- **Which layer a write goes to is a value.** Every action that writes config names its target: a role, or a choice among the session's approved layers that the click resolves to a role before any handler sees it. The bundled config sets today's behaviour: steppers, persist actions and edit mode write the user layer, and save asks. Changing a default is a config edit. Undo writes to the layer its step wrote.
 - **Save asks which layer.** It offers the layers of the session's chain:
   - **user:** the profile's config file, or the file `--config` names. With `--config-only`, the user layer is the only one.
   - **project:** the project's checked-in `.cc-candybar` file.
@@ -325,11 +197,11 @@ interface Program {
 ## 8. Addressing and lifetime
 
 - **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. Ordinary Claude Code statusline ticks currently activate and recover it. Other clients and renderers connect to the available host. A future launchd owner (A-4) must preserve that ordinary statusline cold-start path.
-- **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
+- **The host runs the bundle of the client that started it.** It exits when that bundle changes or disappears, so a rebuild takes effect without a manual restart. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
 - **Renderer startup checks the private wire version.** The host advertises it in `boot` and the renderer declares its own in `started`. Both sides require a match before the worker can take inputs. Separate worktree builds can share a host when they speak that version. The daemon still uses its bundle identity for binary currency.
 - **Diagnostic lines belong to their answers.** The private renderer wire carries lines from completed turns, including answers with a classified failure. The host writes them in order at their original level before landing the turn. Construction diagnostics travel with the compatible `started` or `refused` boot answer. The supervisor writes them before its boot record, and the in-process transport writes them before accepting inputs. A malformed diagnostic batch is reported and discarded while the rest of the answer remains usable. A rejected transport input carries its failure without a completed turn. When a worker dies, the supervisor identifies any input it sent and whose answer never arrived. Lines held inside that abandoned turn cannot be recovered.
 - **Subscription updates belong to the child connection.** On the private wire the first completed output includes the whole declaration, even when empty. Later outputs omit an unchanged declaration and still carry each wake, frame, effect and store write. A change replaces the whole per-renderer declaration. The in-process renderer and child link both hand the host the same declaration identity while it holds, so static draws repeat neither source aggregation nor config following.
-- **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
+- **The host's environment is its spawner's, so no session fact comes from it.** The host is detached, and its environment belongs to whichever shell started it. Everything a session runs uses that session's environment, which its client sends (§7). A launchd owner (A-4) would start the host with a minimal `PATH`, so it must also record where the tools the host itself runs (`node`, `tmux`, `git`, `gh`) live.
 - **Renderer startup.** The host resolves home and XDG config and data locations once. At each worker start it supplies those locations, the current stored values for the renderer, and the memory limit. The in-process and subprocess transports both construct the renderer from that data. The renderer process supplies its transport clock and reports readiness before its first numbered turn. A replacement validates its startup data before reporting ready.
 - **What needs an install.** A new built-in field of world state, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
 - **A renderer** is named by the `renderer` field of the client's session context: its name from `CC_CANDYBAR_NAME`, absent meaning the default name, `main`, and its bundle, the client's own. A session is moved to another renderer by starting Claude Code with other values (goals.md R-16). Only a Claude Code client's request binds a name to a bundle; no click, timer or later input names code.
@@ -360,7 +232,7 @@ interface Program {
 | A subscription refused | That source's cell draws its fallback; the `⚠` carries the reason | The collector, through the source's failed reading |
 | A click the host refuses: unknown renderer, gone bundle, a signed link with a bad signature | A macOS notification naming the reason | The router, through the forwarder |
 | A source failed | That source's cell draws its fallback; the `⚠` carries the collector's diagnostic | The collector, through `worldState.diagnostics` |
-| The host is down | The client's existing connect failure; launchd restarts the host | The client and launchd |
+| The host is down | The client's existing connect failure; the next statusline tick starts a host | The client |
 | A request's turn presented no statusline frame | A failure naming the renderer | The router |
 
 Nothing falls back to another renderer or another data source, and nothing draws a value where a reading is missing. [LAW:no-silent-failure]
@@ -417,7 +289,7 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 |---|---|---|---|---|---|
 | ADR-1 | One host owns every input and every effect. | Proposal 1: Gather reads, the renderer performs effects. | Proposal 1 reads the world on one side and writes it on the other, so no one orders an effect against the observation of its result, and the loop closes only through messages up to Gather. | Costly | Every effect path and the wire. |
 | ADR-2 | A renderer only answers; subscriptions are part of its answer. | Proposal 1's `follow`, `declare` and `key` messages. | Upward messages are a second loop, `key` is a data cycle, and the design invited a new upward message for each new need. | Moderate | One wire. |
-| ADR-3 | launchd owns the host's lifetime, and the install sets its bundle. | The client spawns the host from its own bundle; renderers spawn Gather (Proposal 1). If A-4 fails: the client starts the host from the bundle the install recorded, never the one beside it. | A process spawned by its dependants runs whichever bundle got there first, so a worktree's could serve the main bar; and a renderer that starts or keeps alive the host it depends on puts lifetime upstream. | Cheap | One install step and one spawn path. |
+| ADR-3 | launchd owns the host's lifetime, and the install sets its bundle. Not built: until then the client starts the host from its own bundle. | Renderers spawn Gather (Proposal 1). If A-4 fails: the client starts the host from the bundle the install recorded, never the one beside it. | A process spawned by its dependants runs whichever bundle got there first, so a worktree's could serve the main bar; and a renderer that starts or keeps alive the host it depends on puts lifetime upstream. | Cheap | One install step and one spawn path. |
 | ADR-4 | Every renderer runs in its own process. | A renderer inside the host's process, which pays no hop. | goals.md R-10 puts Events → State machine → Draw in a process of its own; a renderer crash cannot take the world boundary down with it, as in Chrome; and there is one kind of renderer, so the path every renderer runs is exercised on every tick. The cost is a hop per input (A-1). | Cheap | The in-process transport already lets tests draw through `Renderer.answer`. |
 | ADR-5 | Effects are typed operations, and a config write is a `change` guarded by the value it read at each setting. | Proposal 1's `tmux { args }`, `launch { spec }` and unconditional `write-config-text`; a whole-file guard. | A raw command admits every command; an unconditional write overwrites what undo must refuse to; a whole-file guard fails on every unrelated write to a file many sessions share. | Moderate | Every effect site. |
 | ADR-6 | A profile is derived from the name alone. | Proposal 1's name plus root from two variables. | Two values that must agree are two clocks. | Cheap | The path functions. |
@@ -431,7 +303,7 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 |---|---|---|
 | decomposition | The host's purpose is one sentence, the bar's boundary with the world, and each of its parts has one: accept, route, read world state, discover config, carry out effects, run a surface, supervise, record. A renderer's is "answer each input". | The host holds everything world-facing and is the part most likely to become a god process. Its parts must stay apart, and a part that learns a verb's meaning or a renderer's state has broken the boundary. Its parts meet only through interfaces, so one can move to its own process, as Chrome's services did. |
 | effects-at-boundaries | The renderer is pure in the full sense: no I/O, no clock, no log. The host is the only edge. | — |
-| one-way-deps | Host → renderer, launchd → host. Nothing points up. | — |
+| one-way-deps | Host → renderer. Nothing points up. | — |
 | no-ambient-temporal-coupling | The host owns every order: per-renderer input, effects within a turn, a run before its refresh, a declared wake before its `due`. Every schedule is measured on ticks, which never run back. | — |
 | single-enforcer | The collector judges every read a renderer subscribes to, the interpreter every effect, the host every signed link; repository trust has one keeper. | — |
 | types-are-the-program | Effects are typed operations; a config write is a `change` guarded per setting; inputs and outputs are closed unions. | The wire loses types, so each side parses what it receives. That is one parser per direction at the one boundary, not a duplicate check. |
@@ -452,6 +324,8 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 ## 16. Backlog impact
 
 The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its rank order.
+
+The surfaces that stay are the ordinary statusline, including its manually launched push mode, and the tmux pane; the host publishes actionable frames for both and admits their clicks. The browser comes later and uses the same data and action contract. The Doctor is rebuilt from scratch on the shared host once these steps are done (`candybar-daemon-health-ajx0.9lu`).
 
 ## 17. Open issues
 
