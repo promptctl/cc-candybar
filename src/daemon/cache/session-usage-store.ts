@@ -56,7 +56,12 @@ import {
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
-import { addDay, dayKey, EMPTY_DAY } from "../foundations/today-facts";
+import { dayKey } from "../foundations/today-facts";
+import {
+  dayTotals,
+  DayLedgersDraft,
+  type DayLedgers,
+} from "../foundations/day-ledger";
 import type {
   DayUsage,
   SpeedObservation,
@@ -116,7 +121,7 @@ interface SessionRecord {
   // derived from mergeFolds and re-synced on every ingest — the single writer.
   files: Map<string, Folded<FileFold>>;
   usage: TranscriptUsage;
-  days: Map<string, DayUsage>;
+  days: DayLedgers;
   turnOpen: boolean;
   transcriptStamp: string;
   transcriptPath: string | undefined;
@@ -229,7 +234,7 @@ interface FileFold {
   entries: number; // responses whose usage is folded (0 ⇒ empty session, all-null)
   cost: number;
   breakdown: TokenBreakdown;
-  days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
+  days: DayLedgers; // keys >= seed cutoff only (pruned on fold)
   // An agent sidechain's entries move no turn (turnOpenAfter), so only the
   // main transcript's fold can be open.
   turnOpen: boolean;
@@ -279,8 +284,7 @@ async function foldFile(
   let turnOpen = state.turnOpen;
   let last = state.response;
   const breakdown = { ...state.breakdown };
-  const days = new Map<string, DayUsage>();
-  for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
+  const days = DayLedgersDraft.keeping(state.days, keep);
   for (const entry of entries) {
     turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
@@ -299,19 +303,26 @@ async function foldFile(
     breakdown.cacheRead += u.cache_read_input_tokens || 0;
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
     // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
     // cost — the old path mutated entry.costUSD to the priced cost before
     // bucketByDay read it, so an un-costed entry contributed its priced value to
     // `today`, not 0. Using `priced` here preserves that (session and day agree).
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
+    days.record(key, response, {
+      cost: priced,
+      input: u.input_tokens || 0,
+      output: u.output_tokens || 0,
+      cacheCreation: u.cache_creation_input_tokens || 0,
+      cacheRead: u.cache_read_input_tokens || 0,
+    });
   }
-  return { entries: count, cost, breakdown, days, turnOpen, response: last };
+  return {
+    entries: count,
+    cost,
+    breakdown,
+    days: days.done(),
+    turnOpen,
+    response: last,
+  };
 }
 
 // A session's files folded again: each file's fold, their merge, and the main
@@ -330,12 +341,12 @@ type Refolded = {
 // same distinction the old `entries.length === 0` arm carried.
 function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
   usage: TranscriptUsage;
-  days: Map<string, DayUsage>;
+  days: DayLedgers;
 } {
   let count = 0;
   let cost = 0;
   const bd = emptyBreakdown();
-  const days = new Map<string, DayUsage>();
+  const draft = new DayLedgersDraft();
   for (const { value: f } of files.values()) {
     count += f.entries;
     cost += f.cost;
@@ -343,12 +354,9 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
     bd.output += f.breakdown.output;
     bd.cacheCreation += f.breakdown.cacheCreation;
     bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
+    draft.union(f.days);
   }
+  const days = draft.done();
   if (count === 0) return { usage: EMPTY_USAGE, days };
   const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
@@ -368,25 +376,20 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
 }
 
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
-// record under its roots holds a bucket for, the sum of those buckets. Keyed
-// by the records' own days, so it reads no clock — the day `today` reads off
-// it is the frame's.
+// record under its roots holds a ledger for, every response in them counted
+// once, however many of the records hold a copy of it. Keyed by the records'
+// own days, so it reads no clock — the day `today` reads off it is the frame's.
 function daySumsOver(
   slots: Iterable<SessionSlot>,
   roots: readonly string[],
 ): Readonly<Record<string, DayUsage>> {
-  const sums = new Map<string, DayUsage>();
+  const sets: DayLedgers[] = [];
   for (const { record } of slots) {
-    if (record === undefined || !under(record.transcriptPath, roots)) continue;
-    for (const [day, d] of record.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
+    if (record !== undefined && under(record.transcriptPath, roots)) {
+      sets.push(record.days);
     }
   }
-  // [LAW:types-are-the-program] A record, not a Map: the day sums are a fact
-  // that crosses a process as JSON (src/facts/world-state.ts).
-  return Object.fromEntries(sums);
+  return dayTotals(sets);
 }
 
 // A directory set's `today` state beside its scan: its roots, and its day
@@ -690,7 +693,7 @@ export class SessionUsageStore {
     if (record === undefined || under(record.transcriptPath, roots)) {
       return ABSENT;
     }
-    return ok(Object.fromEntries(record.days));
+    return ok(dayTotals([record.days]));
   }
 
   // A refresh's speed sample, over its one ingest of the session: its current

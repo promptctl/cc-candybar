@@ -762,6 +762,53 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     }
   });
 
+  // A forked or resumed session's transcript copies the earlier session's
+  // responses under their original ids, with a fork mark or without one.
+  test("today counts a response once however many session files hold a copy of it", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-fork-"));
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const at = new Date();
+      const pdir = join(tree, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      const history = usageLine("h1", at, 1) + usageLine("h2", at, 2);
+      writeFileSync(join(pdir, "orig.jsonl"), history);
+      const mark =
+        JSON.stringify({
+          type: "attachment",
+          forkedFrom: { sessionId: "orig", messageUuid: "u-h2" },
+        }) + "\n";
+      writeFileSync(
+        join(pdir, "fork.jsonl"),
+        mark + history + usageLine("f1", at, 4),
+      );
+      writeFileSync(
+        join(pdir, "resumed.jsonl"),
+        history + usageLine("r1", at, 8),
+      );
+      const info = await todayInfo(
+        store,
+        holds,
+        hook("fork", join(pdir, "fork.jsonl")),
+        tree,
+        instantOf(at),
+      );
+      expect(info).toMatchObject({ kind: "ok", value: { tokens: 4 * 15 } });
+      expect(info.kind === "ok" && info.value.cost).toBeCloseTo(15, 5);
+      // Each session's own total still holds what its transcript holds.
+      expect(
+        await usageFold(store, sessionIdOf("fork"), join(pdir, "fork.jsonl")),
+      ).toMatchObject({ kind: "ok", value: { tokens: 3 * 15 } });
+    } finally {
+      store.close();
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
   // brandon-unfiled-3248.7xp: a session that never renders (headless
   // `claude -p`, the Agent SDK) reaches `today` through the next rescan, both
   // one that started after the seed and one the seed saw that kept going —
