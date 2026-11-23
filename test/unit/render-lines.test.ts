@@ -48,7 +48,7 @@ describe("retriedRender", () => {
       );
     expect(owedLandings(owing("deadline"))).toEqual([]);
     expect(retriedRender(owing("deadline"))).toBe(true);
-    expect(retriedRender(owing("untaken"))).toBe(false);
+    expect(retriedRender(owing("stale"))).toBe(false);
   });
 
   test("an answer that owed a source and ended for any other cause is not retried but is pending", () => {

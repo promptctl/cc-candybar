@@ -192,12 +192,6 @@ interface Meets {
   readonly closing?: AbortSignal;
   // Whether the client has hung up.
   readonly gone?: () => boolean;
-  // Told what the context turn landed at the renderer.
-  readonly landed?: (
-    session: unknown,
-    document: unknown,
-    untaken: string | null,
-  ) => void;
 }
 
 async function answer(
@@ -238,7 +232,6 @@ async function answer(
         return WORLD;
       },
       holding,
-      landed: meets.landed ?? (() => {}),
       // A draw that owes nothing never waits.
       moved: meets.moved ?? (async () => ({ kind: "gone" })),
     },
@@ -623,7 +616,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     const { answered, facts } = await answer(renderer, [], [], undefined, {
       moved: async (_session, after) => {
         waits.push(after);
-        return { kind: "landed" };
+        return { kind: "moved" };
       },
       waitEndsAt: 5000,
     });
@@ -690,19 +683,21 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     expect(facts.get("cause")).toBe("the owners could not be read");
   });
 
-  test("a world state the renderer did not take ends the request, naming why, since no later draw can read it", async () => {
-    const { renderer, requests } = scripted(output([owing(1, OWED)]));
+  test("a redraw that reads no later world state than the draw before it ends the request, naming why, since what was stamped never reached the renderer", async () => {
+    const { renderer, requests } = scripted([
+      output([owing(1, OWED)]),
+      output([owing(2, { kind: "owed", seq: 1, names: ["slow"] })]),
+    ]);
     const { answered, facts } = await answer(renderer, [], [], undefined, {
-      moved: async () => ({
-        kind: "untaken",
-        reason: "no view of the session",
-      }),
+      moved: async () => ({ kind: "moved" }),
       waitEndsAt: 5000,
     });
     expect(answered.resp).toEqual({ ok: true, frame: FRAME });
-    expect(requests).toHaveLength(1);
-    expect(facts.get("ended")).toBe("untaken");
-    expect(facts.get("cause")).toBe("no view of the session");
+    expect(requests).toHaveLength(2);
+    expect(facts.get("ended")).toBe("stale");
+    expect(facts.get("cause")).toMatch(/world state 1 again/);
+    // What the first draw owed is what held the request.
+    expect(facts.get("waitedFor")).toBe("slow");
   });
 
   test("a client gone before any draw is answered abandoned, and no draw is sent", async () => {
@@ -723,7 +718,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
       gone: () => left,
       moved: async () => {
         left = true;
-        return { kind: "landed" };
+        return { kind: "moved" };
       },
       waitEndsAt: 5000,
     });
@@ -755,28 +750,6 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     expect(heard).toMatchObject([
       { kind: "effect-done", of: 1, outcome: { kind: "failed" } },
     ]);
-  });
-
-  test("the context turn's world state is told landed with the turn's own outcome", async () => {
-    const told: Array<[unknown, unknown, string | null]> = [];
-    const { renderer } = scripted(output([present(1)]));
-    await answer(renderer, [], [], undefined, {
-      landed: (session, document, untaken) =>
-        void told.push([session, document, untaken]),
-    });
-    expect(told).toEqual([[SESSION, WORLD, null]]);
-    const refused: Array<[unknown, unknown, string | null]> = [];
-    await answer(
-      scripted(output([present(1)]), threwWith([], "no view")).renderer,
-      [],
-      [],
-      undefined,
-      {
-        landed: (session, document, untaken) =>
-          void refused.push([session, document, untaken]),
-      },
-    );
-    expect(refused).toEqual([[SESSION, WORLD, "no view"]]);
   });
 
   test("a session no longer read ends the request with the frame it drew", async () => {
@@ -900,7 +873,6 @@ describe("the request's draws, and its wait for what a draw owes", () => {
       {
         requested: () => WORLD,
         holding: () => () => {},
-        landed: () => {},
         moved: wait.moved,
       },
       CLOCK,
@@ -918,7 +890,7 @@ describe("the request's draws, and its wait for what a draw owes", () => {
       () => ({ kind: "event", event: { kind: "retire", session: SESSION } }),
       [],
     );
-    wait.end({ kind: "landed" });
+    wait.end({ kind: "moved" });
     await answering;
     // The first draw's frame is replaced, so it is refused once the wait ends.
     expect(order).toEqual([

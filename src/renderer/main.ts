@@ -89,7 +89,6 @@ import {
   type RendererBoot,
   type RendererConstruction,
   type Subscriptions,
-  WORLD_STATE_UNTAKEN,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
 import { Kept } from "../var-system/store.js";
@@ -424,7 +423,7 @@ export function mainRenderer(
       }
       case "world-state":
         if (!parts.worldStates.take(event.worldState))
-          record.push(WORLD_STATE_UNTAKEN);
+          record.push(["world-state", "no-live-session"]);
         return;
       case "retire":
         opening.delete(event.session);

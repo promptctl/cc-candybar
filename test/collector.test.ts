@@ -21,7 +21,6 @@ import {
   Collector,
   SESSION_SWEEP_MS,
   type HandedIn,
-  type Untaken,
 } from "../src/daemon/collector";
 import { stampFailureOf } from "../src/facts/world-state";
 import { judgeRun, type Judged } from "../src/daemon/foundations/judge-run";
@@ -116,8 +115,7 @@ function handLanded() {
   return { owners, held, land };
 }
 
-// A renderer that took what it was handed.
-const ANSWERED: Untaken = null;
+const ANSWERED = { kind: "answered" } as const;
 
 // A collector over `owners`, on a clock the case moves, with a renderer that
 // records each hand-in and answers it at once. `watched` is which sessions an
@@ -128,13 +126,10 @@ function collectorOver(
     fileEvents = () => [],
     watched = new Set<SessionId>(),
     retired = async () => ANSWERED,
-    taken = () => ANSWERED,
   }: {
     readonly fileEvents?: () => DaemonFacts["fileEvents"];
     readonly watched?: ReadonlySet<SessionId>;
-    readonly retired?: () => Promise<Untaken>;
-    // Why the renderer did not take a world state, or null: it did.
-    readonly taken?: () => Untaken | Promise<Untaken>;
+    readonly retired?: () => Promise<unknown>;
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -148,7 +143,7 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
-      return event.kind === "retire" ? retired() : await taken();
+      return event.kind === "retire" ? retired() : ANSWERED;
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -177,7 +172,7 @@ function heldRetires() {
   const answers: Array<() => void> = [];
   return {
     retired: () =>
-      new Promise<Untaken>((resolve) => answers.push(() => resolve(ANSWERED))),
+      new Promise<unknown>((resolve) => answers.push(() => resolve(ANSWERED))),
     answer: (i: number) => answers[i]!(),
   };
 }
@@ -306,7 +301,7 @@ async function opened(
 }
 
 describe("a request's wait for a later world state", () => {
-  test("ends once a world state after the draw's reaches the renderer, and one already past it at once", async () => {
+  test("ends once the session is stamped after the draw's world state, and one already past it at once", async () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
@@ -319,13 +314,13 @@ describe("a request's wait for a later world state", () => {
     expect(ended).toBeNull();
     land("host.name", ok("box"));
     await waiting;
-    expect(ended).toEqual({ kind: "landed" });
+    expect(ended).toEqual({ kind: "moved" });
     expect(
       await collector.moved(SID, drawn.seq, new AbortController().signal),
-    ).toEqual({ kind: "landed" });
+    ).toEqual({ kind: "moved" });
   });
 
-  test("ends when its signal does, with no world state", async () => {
+  test("ends when its signal does, saying so", async () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
@@ -336,7 +331,7 @@ describe("a request's wait for a later world state", () => {
     expect(await waiting).toEqual({ kind: "aborted" });
   });
 
-  test("a world state a later request's own context carries wakes a wait on an older draw once that turn lands it", async () => {
+  test("a world state a later request's own context carries ends a wait on an older draw", async () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
@@ -351,20 +346,12 @@ describe("a request's wait for a later world state", () => {
     land("git:/b", ok({}));
     const carried = collector.requested(requestAt("/b"), TEST_ENVIRONMENT);
     expect(carried.seq).toBeGreaterThan(drawn.seq);
-    // The stamp alone is only what the collector holds.
-    let ended = false;
-    void waiting.then(() => (ended = true));
-    await drained();
-    expect(ended).toBe(false);
-    collector.landed(SID, carried, null);
-    expect(await waiting).toEqual({ kind: "landed" });
+    expect(await waiting).toEqual({ kind: "moved" });
   });
 
-  test("ends saying why when the renderer did not take the world state, so no later draw reads it", async () => {
+  test("ends as gone once the session is no longer read", async () => {
     const { owners, land } = handLanded();
-    const { collector, clock } = collectorOver(owners, {
-      taken: () => "the renderer holds no view of the session",
-    });
+    const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
     const drawn = await opened(collector, clock);
     const waiting = collector.moved(
@@ -372,52 +359,8 @@ describe("a request's wait for a later world state", () => {
       drawn.seq,
       new AbortController().signal,
     );
-    land("host.name", ok("box"));
-    expect(await waiting).toEqual({
-      kind: "untaken",
-      reason: "the renderer holds no view of the session",
-    });
-  });
-
-  test("ends saying why when the delivery itself rejects, never at the request's deadline", async () => {
-    const { owners, land } = handLanded();
-    const { collector, clock, logged } = collectorOver(owners, {
-      taken: () => Promise.reject(new Error("the mailbox broke")),
-    });
-    land("host.name", UNREAD);
-    const drawn = await opened(collector, clock);
-    const waiting = collector.moved(
-      SID,
-      drawn.seq,
-      new AbortController().signal,
-    );
-    land("host.name", ok("box"));
-    expect(await waiting).toMatchObject({
-      kind: "untaken",
-      reason: expect.stringContaining("the mailbox broke"),
-    });
-    expect(logged.join("\n")).toContain("the mailbox broke");
-  });
-
-  test("never moves back: a delivery that settles after a later one leaves what the later one landed", async () => {
-    const { owners, land } = handLanded();
-    const settles: Array<(untaken: Untaken) => void> = [];
-    const { collector, clock } = collectorOver(owners, {
-      taken: () => new Promise<Untaken>((settle) => settles.push(settle)),
-    });
-    land("host.name", UNREAD);
-    const drawn = await opened(collector, clock);
-    const before = settles.length;
-    land("host.name", ok("one"));
-    land("host.name", ok("two"));
-    expect(settles).toHaveLength(before + 2);
-    // The later world state is taken, then the earlier one is refused.
-    settles[before + 1]!(null);
-    settles[before]!("the renderer holds no view of the session");
-    await drained();
-    expect(
-      await collector.moved(SID, drawn.seq, new AbortController().signal),
-    ).toEqual({ kind: "landed" });
+    collector.close();
+    expect(await waiting).toEqual({ kind: "gone" });
   });
 });
 

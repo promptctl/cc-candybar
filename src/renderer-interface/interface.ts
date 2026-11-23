@@ -352,9 +352,8 @@ export interface Present {
   readonly frame: WireFrame;
   readonly displayedEvents?: readonly DaemonEvent[];
   // [LAW:single-enforcer] What the draw says the frame still owes, about the
-  // world state it drew from: the host waits for a later world state to land
-  // at the renderer (`Collector.moved`) while it is owed, and for nothing
-  // else.
+  // world state it drew from: the host waits for a later world state to be
+  // stamped (`Collector.moved`) while it is owed, and for nothing else.
   readonly awaiting: Awaiting;
 }
 
@@ -561,23 +560,6 @@ export type TurnOutcome = {
   | { readonly kind: "answered"; readonly reply?: CommandReply }
   | TurnFailure
 );
-
-// [LAW:single-enforcer] What the renderer records when a world state names a
-// session it holds no view of, and the one reading of whether a turn took the
-// world state it was handed: why it did not, or null.
-export const WORLD_STATE_UNTAKEN: Field = ["world-state", "no-live-session"];
-
-export function untakenBy(turn: TurnOutcome): string | null {
-  // `message`, not `detail`: this lands on a one-line field of the request's
-  // record, and a detail carries an Error's stack.
-  if (turn.kind === "threw") return turn.failure.message;
-  return turn.record.some(
-    ([key, value]) =>
-      key === WORLD_STATE_UNTAKEN[0] && value === WORLD_STATE_UNTAKEN[1],
-  )
-    ? "the renderer holds no view of the session"
-    : null;
-}
 
 // [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
 // output names the open views' subscriptions as they stand after it, however

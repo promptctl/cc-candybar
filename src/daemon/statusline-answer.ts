@@ -65,7 +65,8 @@ const DRAW_ABANDONED: Failure = {
 type Ending =
   // A frame answers: it owes nothing, or what it owes will not come in time
   // (`deadline`; `gone`, the session no longer read) or at all (`stalled`, a
-  // failed stamp; `untaken`, a world state the renderer refused), `cause`
+  // failed stamp; `stale`, a redraw that read no world state newer than the
+  // draw before it, so what was stamped never reached the renderer), `cause`
   // saying why for the last two.
   | {
       readonly kind: "settled" | "deadline" | "gone";
@@ -73,7 +74,7 @@ type Ending =
       readonly answer: Present;
     }
   | {
-      readonly kind: "stalled" | "untaken";
+      readonly kind: "stalled" | "stale";
       readonly turn: HostTurn;
       readonly answer: Present;
       readonly cause: string;
@@ -93,6 +94,8 @@ interface Drawing {
   readonly ending: Ending;
   readonly draws: number;
   readonly waited: number;
+  // What the first draw owed, the names this request waited for.
+  readonly waitedFor: readonly string[];
 }
 
 // [LAW:no-silent-failure] A request whose turn did not answer it is answered
@@ -162,7 +165,7 @@ export async function answerStatusline(
   publish: PublishFrame,
   collector: Pick<
     Collector<CheckedRenderRequest>,
-    "requested" | "holding" | "moved" | "landed"
+    "requested" | "holding" | "moved"
   >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
@@ -234,6 +237,10 @@ export async function answerStatusline(
     const draw = unlessClosing({ kind: "request", id, context: req });
     let draws = 0;
     let waited = 0;
+    let waitedFor: readonly string[] = [];
+    // The world state the draw before read: a redraw that reads no later one
+    // after a wait that ended on a stamp was not handed what was stamped.
+    let drewSeq = -1;
     for (;;) {
       // [LAW:no-ambient-temporal-coupling] Admit a draw only while the reply
       // has a recipient. A closure or deadline can land while the mailbox is
@@ -243,7 +250,12 @@ export async function answerStatusline(
       );
       draws++;
       const answer = presentedBy(turn);
-      const ended = (ending: Ending): Drawing => ({ ending, draws, waited });
+      const ended = (ending: Ending): Drawing => ({
+        ending,
+        draws,
+        waited,
+        waitedFor,
+      });
       if (turn.kind === "threw") {
         // A draw refused for the recipient's leaving, or for the close, is
         // those endings: neither is a throw of the renderer's, and a throw
@@ -270,6 +282,15 @@ export async function answerStatusline(
       const { awaiting } = answer;
       if (awaiting.kind === "settled")
         return answers({ kind: "settled", turn, answer });
+      if (draws === 1) waitedFor = awaiting.names;
+      if (awaiting.seq <= drewSeq)
+        return answers({
+          kind: "stale",
+          turn,
+          answer,
+          cause: `the renderer drew world state ${awaiting.seq} again after a wait for one later than ${drewSeq}`,
+        });
+      drewSeq = awaiting.seq;
       if (awaiting.kind === "stalled")
         return answers({
           kind: "stalled",
@@ -305,14 +326,7 @@ export async function answerStatusline(
           return answers({ kind: "deadline", turn, answer });
         case "gone":
           return answers({ kind: "gone", turn, answer });
-        case "untaken":
-          return answers({
-            kind: "untaken",
-            turn,
-            answer,
-            cause: wait.value.reason,
-          });
-        case "landed":
+        case "moved":
           // A frame replaced is never shown: refused, so the renderer commits
           // nothing of it.
           turn.settlePresentation(
@@ -340,14 +354,6 @@ export async function answerStatusline(
     // session, which the event's readers key on (`render sid=`), and says
     // what the context was, whether or not a request turn runs after it.
     recorded(facts, configured);
-    // [LAW:single-enforcer] The world state this turn carried reached the
-    // renderer with it, so a request waiting on an older draw wakes to read
-    // it: only a delivery moved what landed before, and this one is none.
-    collector.landed(
-      session,
-      worldState,
-      configured.kind === "threw" ? configured.failure.message : null,
-    );
     // [LAW:no-silent-failure] A failed lookup leaves the location unknown.
     // The request says why, and the bar does not offer to initialize Git.
     if (checkoutError !== null) noteFacts(facts, { checkoutError });
@@ -372,6 +378,7 @@ export async function answerStatusline(
       noteFacts(facts, {
         draws: String(drawing.draws),
         waited: `${drawing.waited}ms`,
+        waitedFor: drawing.waitedFor.join(",") || "-",
         ended: drawing.ending.kind,
         cause: "cause" in drawing.ending ? drawing.ending.cause : "-",
       });

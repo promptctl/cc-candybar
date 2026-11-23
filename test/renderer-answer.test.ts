@@ -1975,7 +1975,6 @@ test("overlapping requests draw the latest pane with each client's width, then a
   const earlierCollector = {
     requested: collector.requested.bind(collector),
     holding: collector.holding.bind(collector),
-    landed: collector.landed.bind(collector),
     moved: async (...args: Parameters<typeof collector.moved>) => {
       const moved = await collector.moved(...args);
       olderSourcesReady = true;
