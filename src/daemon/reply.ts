@@ -23,7 +23,6 @@ import {
   UNKNOWN_REQUEST_KIND,
   URL_FRAME_VERSIONS,
   awaitsVerdict,
-  type ClickRequest,
   type Inbound,
   type Request,
   type Response,
@@ -148,12 +147,7 @@ function closingResponse(
   rawKind: unknown,
   accepted: Acceptance,
 ): Response {
-  const kind =
-    rawKind === SESSION_RENDER_KIND
-      ? "render"
-      : rawKind === "render" || rawKind === "click"
-        ? rawKind
-        : "request";
+  const kind = eventOf(rawKind);
   const failure = failureOf(new DaemonClosing(kind));
   if (kind === "render" || kind === "click") {
     if (kind === "render") {
@@ -195,18 +189,27 @@ export function refuseClosingInbound(
 }
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
-// but a subscribe, the compiler naming one added to the protocol until it is.
+// but a subscribe, the compiler naming one added to the protocol until it is,
+// and the event its outcome is written as.
 export type ReplyRequest = Exclude<Request, SubscribeRequest>;
-const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
-  recording: true,
-  render: true,
-  [SESSION_RENDER_KIND]: true,
-  "pane-session": true,
-  shutdown: true,
-  stats: true,
-  click: true,
-  debug: true,
+const REPLY_EVENTS: Readonly<
+  Record<ReplyRequest["kind"], "render" | "click" | "request">
+> = {
+  recording: "request",
+  render: "render",
+  [SESSION_RENDER_KIND]: "render",
+  "pane-session": "request",
+  shutdown: "request",
+  stats: "request",
+  click: "click",
+  debug: "request",
 };
+
+// The kind is untrusted JSON, and one no reply is for leaves no event of its own.
+const eventOf = (kind: unknown): "render" | "click" | "request" =>
+  typeof kind === "string" && Object.hasOwn(REPLY_EVENTS, kind)
+    ? REPLY_EVENTS[kind as ReplyRequest["kind"]]
+    : "request";
 
 // [LAW:single-enforcer] The checkpoint's one refusal: the request is
 // answered, never streamed, and the connection stays up.
@@ -305,7 +308,7 @@ export async function handleRequest(
   // carries — a name no kind has, or no name at all, which `Object.hasOwn`
   // would coerce into one — is refused here, so replyTo is total over the
   // kinds it is typed for.
-  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
+  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_EVENTS, req.kind))
     return refuse("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
@@ -689,9 +692,8 @@ async function clickEvent(
   // arm it took, so every click writes its event.
   const outcome = await run(facts, click).catch(failureOf);
   // Whether the client was told TIMEOUT, and whether a client that waited
-  // hung up, while the click ran: its effect lands though the client reported
-  // a failure. One still waiting for its turn at either moment was refused
-  // (`abandoned`).
+  // hung up, by the time the click was done. Only a url frame's click, whose
+  // writer waits for no answer, can land with `timedOut=Y`.
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N",
@@ -714,12 +716,12 @@ async function clickEvent(
 // recorded with the stack that says which.
 async function clickOutcome(
   parts: DaemonParts,
-  req: ClickRequest,
+  req: { readonly url: unknown },
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
   noteFacts(facts, { via: "cli" });
-  const { url } = req as { url: unknown };
+  const { url } = req;
   if (typeof url !== "string")
     return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(

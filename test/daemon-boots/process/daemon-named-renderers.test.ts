@@ -14,7 +14,6 @@ import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
 import {
   click,
-  clickAnswer,
   findUrl,
   frameRequest,
   hookData,
@@ -22,6 +21,7 @@ import {
   renderBody,
   renderRequest,
   saidOf,
+  sendClick,
   urlWriting,
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
@@ -549,14 +549,7 @@ test("a conflicting save keeps the named renderer's draft undo and redo until ca
     expect(JSON5.parse(winner)).toMatchObject({
       root: { h: ["source", "right"] },
     });
-    let refused = "";
-    // [LAW:no-ambient-temporal-coupling] A click that the daemon dropped
-    // before it ran can be sent again. A taken click's outcome is final.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const answer = await clickAnswer(daemon.sockPath, secondSave);
-      refused = saidOf(answer);
-      if (answer.kind !== "timed-out" || answer.outcome !== "abandoned") break;
-    }
+    const refused = saidOf(await sendClick(daemon.sockPath, secondSave));
     expect(bytes()).toBe(winner);
     expect(refused).toMatch(
       /\broot\.h\b.*changed (while editing|since it was read)/,

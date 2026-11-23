@@ -11,18 +11,18 @@ import os from "node:os";
 import path from "node:path";
 
 import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
-import { linksOf } from "../../../src/click/read";
-import { textOf, type Frame } from "../../../src/render/frame";
+import type { Frame } from "../../../src/render/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import type { TmuxHint } from "../../../src/tmux-hint";
 import {
   answeredEvents,
   click,
-  clickAnswer,
   frameRequest,
   hookData,
+  linkTo,
   render,
   saidOf,
+  sendClick,
 } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { environmentKey } from "../../../src/daemon/foundations/session-env";
@@ -38,13 +38,6 @@ jest.setTimeout(30_000);
 const [PALETTE] = listResolvablePaletteNames();
 const SID = "restart-click";
 const READY_SCREEN = ["─".repeat(30), "❯ ", "─".repeat(30)];
-
-const linkTo = (frame: Frame, text: string): string => {
-  const hit = linksOf(frame).find((l) => l.text === text);
-  if (hit === undefined)
-    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
-  return hit.url;
-};
 
 const paneOf = (pane: string): TmuxHint => ({
   socket: "/tmp/ccb-restart-click/default",
@@ -101,7 +94,7 @@ test("a click after a restart writes the session's own config, and types into no
     ).globals?.palette;
     expect(palette).toBe(PALETTE);
 
-    const refused = await clickAnswer(second, linkTo(bar, "COMPACT"));
+    const refused = await sendClick(second, linkTo(bar, "COMPACT"));
     expect(saidOf(refused)).toMatch(
       /the daemon holds no request of session .*\(BAD_REQUEST\)$/,
     );

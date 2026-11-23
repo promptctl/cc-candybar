@@ -26,8 +26,8 @@
 // whose verb acts on the developer's machine
 // (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
 // checkout) is never sent: it comes back as not sent, naming its effects, and
-// the bar renders as it was. A click the daemon answers TIMEOUT is told by
-// its own click event, which says whether it landed.
+// the bar renders as it was. A click the daemon answers TIMEOUT did not run
+// its action, so it is sent again, and what became of it is the answer it gets.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -38,7 +38,7 @@ import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
 import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
 import { withStamp } from "../../scripts/version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
-import { clickAnswer, frameRequest, saidOf, toldOf } from "./daemon-e2e";
+import { frameRequest, saidOf, sendClick } from "./daemon-e2e";
 import type { DaemonTarget } from "./daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
@@ -254,9 +254,9 @@ export async function startBar(
           rendered: await render(),
         };
       }
-      const answer = await clickAnswer(daemon.target, hit.url, REPLY_BUDGET_MS);
+      const answer = await sendClick(daemon.target, hit.url, REPLY_BUDGET_MS);
       return {
-        refused: toldOf(answer) === "ok" ? null : saidOf(answer),
+        refused: answer.ok ? null : saidOf(answer),
         rendered: await render(),
       };
     };

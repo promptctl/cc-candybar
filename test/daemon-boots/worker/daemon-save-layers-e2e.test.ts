@@ -18,10 +18,10 @@ import {
   openFrameStream,
   type StreamEnd,
 } from "../../../src/daemon/client-frames";
-import { textOf, type Frame } from "../../../src/render/frame";
+import { textOf } from "../../../src/render/frame";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { click, render, renderUntil } from "../../helpers/daemon-e2e";
+import { click, linkTo, render, renderUntil } from "../../helpers/daemon-e2e";
 import {
   startDaemon,
   type InWorkerDaemon,
@@ -95,13 +95,6 @@ const globalsOf = (file: string): Record<string, unknown> =>
         }
       ).globals ?? {})
     : {};
-
-const linkTo = (frame: Frame, text: string): string => {
-  const hit = linksOf(frame).find((l) => l.text === text);
-  if (hit === undefined)
-    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
-  return hit.url;
-};
 
 const SID = "save-layers";
 

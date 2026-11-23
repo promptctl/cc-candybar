@@ -10,13 +10,44 @@ import type { RequestId } from "../../renderer-interface/interface.js";
 import {
   CONNECT_TIMEOUT_MS,
   PROTOCOL_VERSION,
+  SESSION_RENDER_KIND,
   TOTAL_BUDGET_MS,
   type Refusal,
+  type Request,
 } from "./protocol";
 
-// [LAW:single-enforcer] Every handler's backstop: the connection's own timer
-// answers TIMEOUT at this, whatever its request is still doing.
+// [LAW:single-enforcer] The one backstop: the connection's own timer answers
+// TIMEOUT at this, whatever its request is still doing. A frame not yet read is
+// always bounded by it, and one read is bounded for the kinds
+// `BACKSTOP_BOUNDS_READ` names.
 export const REQUEST_TIMEOUT_MS = 200;
+
+// [LAW:types-are-the-program] Whether the backstop still answers for a request
+// once its frame is read, by kind: the compiler names a kind added to the
+// protocol until it says. A click read in time is answered with its own
+// outcome however long its turn takes, so a TIMEOUT to a click means its frame
+// was unread when the backstop fired: it was refused at its turn, its action did
+// not run, and it can be sent again (src/daemon/reply.ts). A render's TIMEOUT stays
+// bounded, since the statusline client relies on it for a draw that is slow.
+export const BACKSTOP_BOUNDS_READ: Readonly<Record<Request["kind"], boolean>> =
+  {
+    render: true,
+    [SESSION_RENDER_KIND]: true,
+    subscribe: true,
+    "pane-session": true,
+    shutdown: true,
+    stats: true,
+    click: false,
+    recording: true,
+    debug: true,
+  };
+
+// [LAW:parse-dont-validate] The kind is untrusted JSON: one no request carries
+// is refused at once, so the backstop still bounds it.
+export const backstopBoundsRead = (kind: unknown): boolean =>
+  typeof kind !== "string" ||
+  !Object.hasOwn(BACKSTOP_BOUNDS_READ, kind) ||
+  BACKSTOP_BOUNDS_READ[kind as Request["kind"]];
 
 // [LAW:single-enforcer] The timeout sent by the connection backstop or by
 // the render that learned its reply cannot arrive within its own deadline.

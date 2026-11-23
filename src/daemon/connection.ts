@@ -22,6 +22,7 @@ import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
   REQUEST_TIMEOUT_MS,
+  backstopBoundsRead,
   timeoutResponse,
 } from "./foundations/request-deadline.js";
 
@@ -38,12 +39,18 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 
 // [LAW:types-are-the-program] A connection's one state.
 // - `awaiting`: no frame yet; a client is taken to wait.
-// - `answering`: a request is read, and its client waits for the answer.
+// - `answering`: a request is read, and its client waits for the answer under
+//   the backstop.
+// - `held`: a request the backstop does not bound once read, per its kind
+//   (`BACKSTOP_BOUNDS_READ`): its client waits for the answer, however long it
+//   takes.
 // - `unattended`: a url frame is read. The URL handler app waits for no
 //   outcome, reading the verdict on its link at most, so its hanging up is its
 //   design, not a peer leaving: the frame stays in flight until its click is
-//   handled, under the same deadline every request has (a click past it is
-//   refused, so a repeat click cannot revert it, src/daemon/reply.ts).
+//   handled, under the backstop's deadline, which a click read in time is the
+//   one request to escape (`BACKSTOP_BOUNDS_READ`): a url frame's click whose
+//   turn starts past it is refused, so a repeat click cannot revert it
+//   (src/daemon/reply.ts).
 //   `lapsed`: the deadline passed, and no one was told. `told`: its writer
 //   was written its verdict, the socket's one answer.
 // - `answered`: the socket's one answer is written: the reply (a refusal of
@@ -55,6 +62,7 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 type Open =
   | { readonly kind: "awaiting" }
   | { readonly kind: "answering" }
+  | { readonly kind: "held" }
   | {
       readonly kind: "unattended";
       readonly lapsed: boolean;
@@ -66,7 +74,7 @@ type Phase = Open | { readonly kind: "closed"; readonly from: Open };
 
 // What happens to a connection, carrying the answer it would send.
 type Event =
-  | { readonly kind: "read"; readonly frame: Inbound["kind"] }
+  | { readonly kind: "read"; readonly opens: Open }
   | { readonly kind: "unparsed"; readonly answer: Reply }
   | { readonly kind: "deadline"; readonly answer: Reply }
   | { readonly kind: "replied"; readonly answer: Reply }
@@ -111,7 +119,8 @@ type Step = readonly [Phase, Act];
 const inFlight = (p: Phase): boolean =>
   p.kind !== "streaming" && p.kind !== "closed";
 
-// While the backstop is armed: an answer is owed under the deadline.
+// While the backstop is armed: an answer is owed under the deadline. `held`
+// is not armed: reading it disarms the backstop.
 const armed = (p: Phase): boolean =>
   p.kind === "awaiting" ||
   p.kind === "answering" ||
@@ -128,6 +137,7 @@ function lapsed(p: Phase): boolean {
       return lapsed(p.from);
     case "awaiting":
     case "answering":
+    case "held":
     case "streaming":
       return false;
   }
@@ -137,7 +147,18 @@ function lapsed(p: Phase): boolean {
 // up before it came. A url frame's writer never waited, so it never left.
 const left = (p: Phase): boolean =>
   p.kind === "closed" &&
-  (p.from.kind === "awaiting" || p.from.kind === "answering");
+  (p.from.kind === "awaiting" ||
+    p.from.kind === "answering" ||
+    p.from.kind === "held");
+
+// [LAW:dataflow-not-control-flow] What a frame puts a waiting connection in is
+// a fact of what was sent.
+const opened = (inbound: Inbound): Open =>
+  inbound.kind === "url"
+    ? { kind: "unattended", lapsed: false, told: false }
+    : backstopBoundsRead(inbound.req?.kind)
+      ? { kind: "answering" }
+      : { kind: "held" };
 
 const NONE: Act = { kind: "none" };
 const write = (answer: Reply): Act => ({ kind: "write", answer });
@@ -163,15 +184,7 @@ const STEP: {
   // a fact of what it sent. A frame read in any later phase moves nothing:
   // its work runs, and its answer goes nowhere. A render read late warms the
   // next tick, and a click read late writes its refused click event.
-  read: (p, e) =>
-    p.kind === "awaiting"
-      ? [
-          e.frame === "request"
-            ? { kind: "answering" }
-            : { kind: "unattended", lapsed: false, told: false },
-          NONE,
-        ]
-      : [p, NONE],
+  read: (p, e) => (p.kind === "awaiting" ? [e.opens, NONE] : [p, NONE]),
   unparsed: (p, e) =>
     p.kind === "awaiting"
       ? [{ kind: "answered", by: "reply" }, write(e.answer)]
@@ -184,6 +197,9 @@ const STEP: {
       // A url frame's click still runs, and is refused at its turn.
       case "unattended":
         return [{ ...p, lapsed: true }, NONE];
+      // The backstop is not armed in `held` (`armed`), so no deadline reaches
+      // it; a click's wait ends with its own outcome or its client.
+      case "held":
       case "answered":
       case "streaming":
       case "closed":
@@ -197,12 +213,13 @@ const STEP: {
   replied: (p, e) => {
     switch (p.kind) {
       case "answering":
+      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       // [LAW:no-silent-failure] A client that hung up waiting is written to
       // all the same: the flush fails, and the exit the reply carries runs on
       // that failure as it would on success.
       case "closed":
-        return p.from.kind === "answering"
+        return p.from.kind === "answering" || p.from.kind === "held"
           ? [p, write(e.answer)]
           : [p, dropped(p, e.answer)];
       case "awaiting":
@@ -229,6 +246,7 @@ const STEP: {
   failed: (p, e) => {
     switch (p.kind) {
       case "answering":
+      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       case "unattended":
         return [
@@ -252,6 +270,7 @@ const STEP: {
   refused: (p, e) => {
     switch (p.kind) {
       case "answering":
+      case "held":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       case "streaming":
         return [{ kind: "closed", from: p }, write(e.answer)];
@@ -291,6 +310,7 @@ const STEP: {
         ];
       case "awaiting":
       case "answering":
+      case "held":
       case "answered":
         return [{ kind: "closed", from: p }, NONE];
       // A url frame's writer hangs up by design: it stays in flight until its
@@ -418,7 +438,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
 
   function receivedFrame(frame: unknown): "done" {
     const inbound = classifyInbound(frame);
-    on({ kind: "read", frame: inbound.kind });
+    on({ kind: "read", opens: opened(inbound) });
     // [LAW:single-enforcer] A handler that throws before its promise is one
     // that rejects: both are answered by the one catch below.
     new Promise<HandledRequest>((resolve) =>

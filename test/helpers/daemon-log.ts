@@ -3,6 +3,7 @@ import { hostOf } from "./host";
 import { logPath } from "../../src/daemon/paths";
 import { fieldsOf, valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
+import type { RequestId } from "../../src/renderer-interface/interface";
 
 // [LAW:no-ambient-temporal-coupling] The daemon writes its log off the event
 // loop (src/daemon/log.ts), so a line a request logged can land just after the
@@ -51,6 +52,20 @@ export const renderEventsOf = (
   sessionId: string,
 ): string[] =>
   lines.filter((l) => l.includes(`] render sid=${valueOf(sessionId)} `));
+
+// The click event a request's id names, which a TIMEOUT carries back, among the
+// lines from `from` on: ids restart with each daemon, and a log outlives it.
+export const clickEventOf = (
+  lines: readonly string[],
+  from: number,
+  request: RequestId,
+): string | undefined =>
+  lines
+    .slice(from)
+    .find(
+      (l) =>
+        l.includes("] click ") && fieldsOf(l).get("req") === String(request),
+    );
 
 // [LAW:one-source-of-truth] Count the session's render answers. A backstop
 // or an abandoned draw can log an attempt that only produced a timeout.

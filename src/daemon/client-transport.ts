@@ -43,8 +43,8 @@ export interface RoundTripBudgets {
 // because the next daemon will refuse the same request the same way. `busy`
 // means a daemon is listening and out of time: its own TIMEOUT reply, or our
 // clock running out on the connect or the deadline. A kick cannot cure it —
-// the candidate loses the bind to the live owner (socket-lease.ts) — and the
-// request may or may not have reached it. The caller's branch is no longer
+// the candidate loses the bind to the live owner (socket-lease.ts) — and
+// whether the request reached it is the `phase`. The caller's branch is no longer
 // uniform: it matches on `kind` and routes kick vs. show-error off the type,
 // not off a stringified `reason`.
 // This asymmetry was missing in the previous shape and is the root of the
@@ -59,12 +59,20 @@ export interface TransientOutcome {
   message: string;
 }
 
-// `phase` is whether the request got to the listener: "connect" — it never
-// did, so a click is undelivered; "deadline" — it was sent and no answer came
-// in time, whether our clock or the daemon's own TIMEOUT reply ended the wait.
+// `phase` is whose clock ended the wait, and how far the request had got. Only
+// a click request's reader (url-handle) reads it: a render's TIMEOUT means a
+// draw the daemon dropped or a guard that fired, and its callers act on `busy`
+// alone.
+// - "connect": our clock, before the listener accepted the request.
+// - "deadline": our clock, after the request was sent.
+// - "backstop": the daemon answered TIMEOUT. A click's TIMEOUT has one sender,
+//   the guard, so to a click it means the frame was read after the guard
+//   fired and the click was refused (request-deadline.ts).
+export type BusyPhase = TimeoutPhase | "backstop";
+
 export interface BusyOutcome {
   kind: "busy";
-  phase: TimeoutPhase;
+  phase: BusyPhase;
   message: string;
 }
 
@@ -223,8 +231,9 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but didn't answer in time: the request reached it.
-      return { kind: "busy", phase: "deadline", message: errorMessage };
+      // Daemon is alive, and it ended the wait. The phase is read for a click
+      // only (see BusyPhase), which is why one value covers every sender.
+      return { kind: "busy", phase: "backstop", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":

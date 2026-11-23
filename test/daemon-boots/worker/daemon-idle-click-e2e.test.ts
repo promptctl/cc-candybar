@@ -11,11 +11,9 @@ import JSON5 from "json5";
 import os from "node:os";
 import path from "node:path";
 
-import { linksOf } from "../../../src/click/read";
 import { SESSION_SWEEP_MS } from "../../../src/daemon/collector";
-import { textOf, type Frame } from "../../../src/render/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { click, render } from "../../helpers/daemon-e2e";
+import { click, linkTo, render } from "../../helpers/daemon-e2e";
 import { loggedWhen, logLines } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
@@ -26,13 +24,6 @@ jest.setTimeout(30_000);
 
 const [PALETTE] = listResolvablePaletteNames();
 const SID = "idle-click";
-
-const linkTo = (frame: Frame, text: string): string => {
-  const hit = linksOf(frame).find((l) => l.text === text);
-  if (hit === undefined)
-    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
-  return hit.url;
-};
 
 test("a click on a session the sweep retired lands its write without waiting for a config", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-idle-click");

@@ -511,7 +511,8 @@ export type Response =
   // A TIMEOUT also carries `request`, the request's id: a TIMEOUT abandons
   // the reply, not the work, and a render's or a click's event records the
   // id where its outcome is told. Other kinds write no event, and nor does a
-  // request whose frame never arrived.
+  // request whose frame never arrived. A click's TIMEOUT is the exception to
+  // abandoning the reply and not the work: the click was refused unread.
   | {
       ok: false;
       error: string;

@@ -207,6 +207,76 @@ describe("a connection over a stream", () => {
     expect(settle.mock.calls).toEqual([[false]]);
   });
 
+  // [LAW:verifiable-goals] A TIMEOUT to a click means its action did not run, so a
+  // click that was read in time is answered with its own outcome, however long
+  // it takes, and a click read after the backstop is the one refused.
+  describe("a click request", () => {
+    const CLICK: Request = {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      url: "cc-candybar://x",
+    };
+
+    test("read in time outlives the backstop and is answered with its own reply", async () => {
+      const request = held();
+      const daemon = standIn({ handle: request.handle });
+      const { send, received, ended } = open(daemon);
+      send(CLICK);
+      await settled();
+
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS * 3);
+      await settled();
+      expect(received).toEqual([]);
+      expect(request.timedOut()).toBe(false);
+      expect(daemon.stats.requestsTimedOut).toBe(0);
+      expect(daemon.stats.inFlight).toBe(1);
+
+      const settle = jest.fn();
+      request.answer(replyWith({ settled: settle }));
+      await settled();
+      expect(received).toEqual([ANSWER]);
+      expect(ended()).toBe(true);
+      expect(settle.mock.calls).toEqual([[true]]);
+      expect(daemon.stats.inFlight).toBe(0);
+    });
+
+    test("read after the backstop answered is told it was timed out, and its reply goes nowhere", async () => {
+      const request = held();
+      const daemon = standIn({ handle: request.handle });
+      const { client, received } = open(daemon);
+      // Open on its side after the TIMEOUT, as a client still waiting for its
+      // answer is.
+      client.allowHalfOpen = true;
+      jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+      await settled();
+      expect(received).toMatchObject([{ ok: false, code: "TIMEOUT" }]);
+
+      client.write(encodeFrame(CLICK));
+      await settled();
+      expect(request.timedOut()).toBe(true);
+      expect(request.clientLeft()).toBe(false);
+
+      const settle = jest.fn();
+      request.answer(replyWith({ settled: settle }));
+      await settled();
+      expect(received).toHaveLength(1);
+      expect(settle.mock.calls).toEqual([[false]]);
+      expect(daemon.stats.requestsTimedOut).toBe(1);
+    });
+
+    test("whose client hangs up while it is held is said to have left", async () => {
+      const request = held();
+      const { client, send } = open(standIn({ handle: request.handle }));
+      send(CLICK);
+      await settled();
+      expect(request.clientLeft()).toBe(false);
+
+      client.destroy();
+      await settled();
+      expect(request.clientLeft()).toBe(true);
+    });
+  });
+
   test("each TIMEOUT names the request its handler was handed, however many are in flight", async () => {
     const requests = [held(), held()];
     let next = 0;
