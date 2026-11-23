@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-937",
+      "ref": "refs/pull/937/merge",
+      "sha": "7199892f002fa85bbae173ed221cee8217d3d9c3",
+      "timestamp": "2026-11-23T14:23:40.956Z",
+      "commits": [
+        {
+          "sha": "7199892f002fa85bbae173ed221cee8217d3d9c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T07:21:22-07:00",
+          "message": "Merge 419fe269ad918d024737ce02d5235df251508609 into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+        },
+        {
+          "sha": "419fe269ad918d024737ce02d5235df251508609",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T07:21:00-07:00",
+          "message": "fix(sources): a request waits for what its frame draws as pending, and a text source is pending until its first run answers\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2ebca655424d1cb92bea5a0befbfe9c07e01f696",
