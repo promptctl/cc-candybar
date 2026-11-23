@@ -1,8 +1,9 @@
 // [LAW:behavior-not-structure] What url-handle tells its reader when the daemon
-// did not answer a click with its outcome. No busy answer confirms the click
-// ran, so each exits 1, and the text says what became of the click: refused or
-// never sent (click again), or cut off by the client's own clock (unknown,
-// claiming neither result, since a second click on one that ran can revert it).
+// did not answer a click with its outcome. The text says what became of the
+// click and the exit follows whether it can have run: refused or never sent
+// exits 1 (click again), and cut off by the client's own clock exits 0, as the
+// click may have landed, claiming neither result (a second click on one that
+// ran can revert it).
 
 import { urlHandlePlan } from "../../src/install/index";
 
@@ -34,7 +35,7 @@ describe("urlHandlePlan on a busy daemon", () => {
       phase: "deadline",
       message: "TIMEOUT",
     });
-    expect(plan.code).toBe(1);
+    expect(plan.code).toBe(0);
     expect(plan.stderr).toMatch(/may or may not have run/);
     expect(plan.stderr).not.toMatch(/refused|never sent|\bclick again|landed/);
   });

@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { interpretResponse } from "../../../src/daemon/client-transport";
+import type { Response } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { urlHandlePlan } from "../../../src/install/index";
@@ -79,7 +80,7 @@ test("a click read after the guard fired is answered TIMEOUT and ran nothing; ur
     await until(() => opened.received.length > 0, "the click's answer");
     const [answer] = opened.received;
     expect(answer).toMatchObject({ ok: false, code: "TIMEOUT" });
-    const { request } = answer as { request: unknown };
+    const { request } = answer as Extract<Response, { code: "TIMEOUT" }>;
 
     const lines = await loggedWhen(
       env,

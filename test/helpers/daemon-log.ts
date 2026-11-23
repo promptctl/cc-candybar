@@ -3,6 +3,7 @@ import { hostOf } from "./host";
 import { logPath } from "../../src/daemon/paths";
 import { fieldsOf, valueOf } from "../../src/utils/logfmt";
 import { until } from "./until";
+import type { RequestId } from "../../src/renderer-interface/interface";
 
 // [LAW:no-ambient-temporal-coupling] The daemon writes its log off the event
 // loop (src/daemon/log.ts), so a line a request logged can land just after the
@@ -55,7 +56,7 @@ export const renderEventsOf = (
 // The click event a request's id names, which a TIMEOUT carries back.
 export const clickEventOf = (
   lines: readonly string[],
-  request: unknown,
+  request: RequestId,
 ): string | undefined =>
   lines.find(
     (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(request),

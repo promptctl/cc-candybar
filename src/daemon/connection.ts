@@ -145,6 +145,8 @@ const left = (p: Phase): boolean =>
 
 // [LAW:dataflow-not-control-flow] What a frame puts a waiting connection in is
 // a fact of what was sent.
+// [LAW:single-enforcer] exception: a click request is the one request the
+// backstop leaves unbounded once read (request-deadline.ts).
 const READ: { readonly [K in Inbound["kind"]]: Open } = {
   request: { kind: "answering", bounded: true },
   click: { kind: "answering", bounded: false },

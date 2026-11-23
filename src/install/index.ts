@@ -481,21 +481,28 @@ export async function runUrlHandle(
 // line and the exit code. runUrlHandle performs it.
 export interface UrlHandlePlan {
   readonly stderr: string;
-  readonly code: 1;
+  readonly code: 0 | 1;
 }
 
 // [LAW:dataflow-not-control-flow] What a busy daemon's answer tells the reader of
-// the click, by whose clock ended the wait (`BusyPhase`). Every one exits 1,
-// since none confirms the click ran. Two say it did not run, so clicking again
-// is safe; the third cannot, because our own clock ends while a click may be
-// queued, running, done or refused, and a second click on one that ran can
-// revert it.
-const BUSY_WHY: { readonly [P in BusyPhase]: string } = {
-  connect: "the click was never sent; click again",
-  backstop:
-    "the daemon read the click after its deadline and refused it; click again",
-  deadline:
-    "the click may or may not have run; check the bar before clicking again",
+// the click, by whose clock ended the wait (`BusyPhase`). A non-zero exit
+// reports a failure, so it follows whether the click can have run. Two phases
+// know it did not, so they exit 1 and say to click again. The third cannot say:
+// our own clock ends while a click may be queued, running, done or refused, and
+// a second click on one that ran can revert it. It exits 0, as the click may
+// well have landed, and the text claims neither result.
+const BUSY: {
+  readonly [P in BusyPhase]: { readonly why: string; readonly code: 0 | 1 };
+} = {
+  connect: { why: "the click was never sent; click again", code: 1 },
+  backstop: {
+    why: "the daemon read the click after its deadline and refused it; click again",
+    code: 1,
+  },
+  deadline: {
+    why: "the click may or may not have run; check the bar before clicking again",
+    code: 0,
+  },
 };
 
 export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
@@ -504,8 +511,8 @@ export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
     // mid-click.
     case "busy":
       return {
-        stderr: `url-handle: daemon busy (${outcome.message}): ${BUSY_WHY[outcome.phase]}\n`,
-        code: 1,
+        stderr: `url-handle: daemon busy (${outcome.message}): ${BUSY[outcome.phase].why}\n`,
+        code: BUSY[outcome.phase].code,
       };
     case "transient":
       return {
