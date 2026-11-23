@@ -1,3 +1,9 @@
+## [1.236.10](https://github.com/promptctl/cc-candybar/compare/v1.236.9...v1.236.10) (2026-11-23)
+
+### Bug Fixes
+
+* **usage:** today counts each API response once, however many session files hold a copy of it ([#939](https://github.com/promptctl/cc-candybar/issues/939)) ([65b8127](https://github.com/promptctl/cc-candybar/commit/65b812767561b997ca5949478dde770145835dd0))
+
 ## [1.236.9](https://github.com/promptctl/cc-candybar/compare/v1.236.8...v1.236.9) (2026-11-23)
 
 ### Bug Fixes
