@@ -1,3 +1,9 @@
+## [1.236.6](https://github.com/promptctl/cc-candybar/compare/v1.236.5...v1.236.6) (2026-11-23)
+
+### Bug Fixes
+
+* **daemon:** a launcher pipe event leaves the daemon's facts once no bar can show it ([#934](https://github.com/promptctl/cc-candybar/issues/934)) ([eb860ac](https://github.com/promptctl/cc-candybar/commit/eb860acbc953e33fd8f7fb0253cd5f1cbb3a289e))
+
 ## [1.236.5](https://github.com/promptctl/cc-candybar/compare/v1.236.4...v1.236.5) (2026-11-21)
 
 ### Bug Fixes
