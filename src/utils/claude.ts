@@ -396,10 +396,11 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   };
 }
 
-// [LAW:one-source-of-truth] The one reading of a transcript line: blank lines
-// are none, and a line that is not a JSON object is `unparsed`. The bar's
-// parse skips those lines; nothing counts them today. Per line, so no reader holds more
-// than one line's full object at once — makeEntry drops it straight away.
+// [LAW:one-source-of-truth] The one reading of a transcript line in this
+// file's transcript parse (the segment cache parses its own lines, apart from it):
+// blank lines are none, and a line that is not a JSON object is `unparsed`. The
+// bar's parse skips those lines; nothing counts them today. Per line, so no
+// reader holds more than one line's full object at once — makeEntry drops it straight away.
 // [LAW:effects-at-boundaries] Pure: a reader that wants the reason logs it.
 export type JsonLine =
   | { readonly kind: "blank" }

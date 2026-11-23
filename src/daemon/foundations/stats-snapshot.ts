@@ -175,24 +175,16 @@ export interface StatsSnapshot {
   // sweep never retires.
   collector: CollectorStats;
   effectCache: RendererStats["effectCache"];
-  // Sessions whose idle clock the renderer keeps, and those whose menus it
-  // will close when their idle period runs out (src/renderer/menu-idle.ts).
+  // The renderer's own portions below are described at `RendererStats`.
   menuIdle: MenuIdleStats;
   // The renderer's mailbox (src/daemon/renderer-host.ts): the input in its
   // turn and for how long, and how many wait behind it. A holder held long is
   // a turn the renderer has not answered.
   mailbox: MailboxStats;
-  // [LAW:nothing-unseen] Renderer work awaiting config, an effect result,
-  // or a future tick. Growth without new inputs signals a stuck lifetime.
   rendererTurns: RendererStats["rendererTurns"];
   // `run` acts (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, and runs in flight now.
   runs: RunStats;
-  // The per-session click store: how many sessions it holds, how many
-  // derivations are subscribed to it, and its revision — how many changes it
-  // has taken. Observers climbing while renderCache holds steady is a
-  // disposed config's store still held; the revision climbing while nobody
-  // clicks is something writing session state on every render.
   sessionState: RendererStats["sessionState"];
   // Subscribed sessions, their subscribers, and the frames drawn for them and
   // pushed (a drawn frame identical to the last is not pushed).
