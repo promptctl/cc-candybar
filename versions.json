@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-940",
+      "ref": "refs/pull/940/merge",
+      "sha": "e1e4a8c892f0efcafce65ccf7a8b506f9bd931a6",
+      "timestamp": "2026-11-23T18:19:18.590Z",
+      "commits": [
+        {
+          "sha": "e1e4a8c892f0efcafce65ccf7a8b506f9bd931a6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:18:14-07:00",
+          "message": "Merge 98b1fc2c48c0e36b5ce851cea035aba6733c2f8d into 65b812767561b997ca5949478dde770145835dd0\n"
+        },
+        {
+          "sha": "98b1fc2c48c0e36b5ce851cea035aba6733c2f8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:17:08-07:00",
+          "message": "fix(render): a request waits for exactly what its frame draws pending, and an unanswered source draws as pending\n\nThe draw reports what it still owes with every frame (settled, owed names, or stalled by a failed stamp), each with the seq of the world state it drew. The host waits for that and nothing it recomputes, redraws when a later world state reaches the renderer, and ends on a draw that owes nothing, a stalled stamp, a turn that threw or was refused, or the client's deadline, recording what held a wait that ran out. Text, file and json variables are pending until their first run answers; their fallback stands in only for a run that read nothing. Today's day sums and the branch's PR draw deferred, which no request waits on.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "65b812767561b997ca5949478dde770145835dd0",
