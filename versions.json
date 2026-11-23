@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-941",
+      "ref": "refs/pull/941/merge",
+      "sha": "54be10f198f85ea43d5578c3459f4cdb9b1ed6f4",
+      "timestamp": "2026-11-23T21:37:48.937Z",
+      "commits": [
+        {
+          "sha": "54be10f198f85ea43d5578c3459f4cdb9b1ed6f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T21:36:39Z",
+          "message": "Merge 9234b9ee98bb27ada375ef14ce743a03f70abef2 into 3763dd05489840ead63be1c83351a0e51a0c63f3\n"
+        },
+        {
+          "sha": "9234b9ee98bb27ada375ef14ce743a03f70abef2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T14:35:11-07:00",
+          "message": "fix(docs): the stats comments live once, and the transcript-line comment says who parses what\n"
+        },
+        {
+          "sha": "fefea5a2649ab49cbe315d3afdb872b6cde3af24",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T14:27:21-07:00",
+          "message": "fix(docs): the document path check is withdrawn from this change, and the comment and memory wording it left is corrected\n\nRemoves the path-existence test and everything only it used, and restores the global setup as on main. Puts the one-type-per-behavior marker back on the Present comment, says the interface header's failure converters as they are, mends two broken sentences, drops a ticket id, restates the statusLine probe note in present tense, and restores the resume trap the code still has.\n"
+        },
+        {
+          "sha": "1b5851484f3bd4e72cdeb7afb521ddcd9fa191ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T13:52:25-07:00",
+          "message": "fix(docs): the path check asks git what the checkout holds, and the renderer's stats shape lives below both sides\n\nThe document path check read the disk and a hand-written .gitignore parser, so it failed on a built checkout and passed ignored names under directories nothing holds. The unit global setup now asks git once (tracked and untracked-not-ignored files, and which cited paths git ignores), and the test is a lookup over that answer. Top-level files are citations too, and the header says which documents are covered.\n\nThe renderer portion of the stats reply moves to its own module that both the renderer interface and the host's stats snapshot import, so the import cycle and its marked exception are gone.\n"
+        },
+        {
+          "sha": "43d5623aa861de3687a89665e8e384486dc53076",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T13:28:55-07:00",
+          "message": "fix(docs): the docs and comments stop describing removed features, and the path check covers every living doc\n\nSweeps the edited design docs and memory files for the update notice, the tmux status line, the Doctor and the restart of Claude Code. Names the real consumer or none in the Doctor-era comments, states the one-way-deps rule the lint enforces with the interface/stats-snapshot cycle as a marked exception, restores the per-feed-key frame memory and tmux OSC 8 traps, and makes the path check derive its documents, prefixes and relative links from the tree and require a glob to match a file.\n"
+        },
+        {
+          "sha": "eac50581fd73bb6c8d482e8d9af8f26e0fa86255",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T13:12:51-07:00",
+          "message": "fix(docs): living docs cite only paths that exist, and the Doctor is named as retired wherever it was a live reader\n\nA unit test now reads the memory files, CLAUDE.md and the host/renderer design\ndocs and fails on any cited repo path that is not on disk.\n\nDesign docs: host-and-renderer states what the interface carries (subscription\nkinds, origin, write targets, how frames reach a surface, the one-way-deps\nexception) and drops the false claims; the gather gap and clicks docs no longer\ndescribe a tmux click binding nothing writes; the inventory files keep only\nwhat the code still does.\n\nMemory: the decisions book, refresh interval, lane-held-by-declaration reason\nand diagnostic identity say what is true, with identifiers removed.\n\nComment-only edits in src, scripts and rust-client replace the retired Doctor\nas a named reader with the readers that exist.\n"
+        },
+        {
+          "sha": "190f18e4c73c958e73ca5b367d7010b65401117f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:26:53-07:00",
+          "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3763dd05489840ead63be1c83351a0e51a0c63f3",
@@ -13,49 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T14:03:52-07:00",
           "message": "fix(daemon): a TIMEOUT to a click means it ran nothing, and url-handle and the click helpers act on that (#942)\n\n* fix(daemon): a TIMEOUT to a click means it ran nothing, and url-handle and the click helpers act on that\n\nA click request read in time is answered with its own outcome instead of\nbeing bounded by the request guard, so a TIMEOUT now means the frame was read\nafter the guard fired and the click was refused at its turn. url-handle tells\na refused click to be clicked again and a click its own clock cut off that the\noutcome is unknown. The e2e click helper sends again on TIMEOUT and no longer\nreads the daemon log for an outcome.\n\n* fix(daemon): review pass 1 — bounded flag on answering, backstop phase named by whose clock, linkTo and click-event helpers shared\n\n* fix(daemon): url-handle exits 0 when its own clock ended the wait, and the click exception is marked where the table takes it\n\n* fix(daemon): the backstop's policy per request kind is one table, and a click read in time waits in its own phase\n\n* docs(daemon): comments and docs say a click read in time escapes the backstop, and that its action did not run when refused"
-        }
-      ]
-    },
-    {
-      "version": "pr-941",
-      "ref": "refs/pull/941/merge",
-      "sha": "90f4814429934b032bbf1b57c25ee01cddaf2453",
-      "timestamp": "2026-11-23T20:53:56.334Z",
-      "commits": [
-        {
-          "sha": "90f4814429934b032bbf1b57c25ee01cddaf2453",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T20:52:44Z",
-          "message": "Merge c3d1373ff54c18aa6d633932767b7b275f94b136 into a3da8f9db90b8e27fb883db81e687a3e39f1ea9f\n"
-        },
-        {
-          "sha": "c3d1373ff54c18aa6d633932767b7b275f94b136",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:52:25-07:00",
-          "message": "fix(docs): the path check asks git what the checkout holds, and the renderer's stats shape lives below both sides\n\nThe document path check read the disk and a hand-written .gitignore parser, so it failed on a built checkout and passed ignored names under directories nothing holds. The unit global setup now asks git once (tracked and untracked-not-ignored files, and which cited paths git ignores), and the test is a lookup over that answer. Top-level files are citations too, and the header says which documents are covered.\n\nThe renderer portion of the stats reply moves to its own module that both the renderer interface and the host's stats snapshot import, so the import cycle and its marked exception are gone.\n"
-        },
-        {
-          "sha": "fa96d466aeda97ee7d5deb8db87c62d0c8be901d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:28:55-07:00",
-          "message": "fix(docs): the docs and comments stop describing removed features, and the path check covers every living doc\n\nSweeps the edited design docs and memory files for the update notice, the tmux status line, the Doctor and the restart of Claude Code. Names the real consumer or none in the Doctor-era comments, states the one-way-deps rule the lint enforces with the interface/stats-snapshot cycle as a marked exception, restores the per-feed-key frame memory and tmux OSC 8 traps, and makes the path check derive its documents, prefixes and relative links from the tree and require a glob to match a file.\n"
-        },
-        {
-          "sha": "a59499a03b0c184ee1b94e27a4722f0a8d7a2e87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:12:51-07:00",
-          "message": "fix(docs): living docs cite only paths that exist, and the Doctor is named as retired wherever it was a live reader\n\nA unit test now reads the memory files, CLAUDE.md and the host/renderer design\ndocs and fails on any cited repo path that is not on disk.\n\nDesign docs: host-and-renderer states what the interface carries (subscription\nkinds, origin, write targets, how frames reach a surface, the one-way-deps\nexception) and drops the false claims; the gather gap and clicks docs no longer\ndescribe a tmux click binding nothing writes; the inventory files keep only\nwhat the code still does.\n\nMemory: the decisions book, refresh interval, lane-held-by-declaration reason\nand diagnostic identity say what is true, with identifiers removed.\n\nComment-only edits in src, scripts and rust-client replace the retired Doctor\nas a named reader with the readers that exist.\n"
-        },
-        {
-          "sha": "a23f7887f22dab28b0335d7924c7d78af1cc9f58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:26:53-07:00",
-          "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
         }
       ]
     }
