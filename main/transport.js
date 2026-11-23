@@ -40932,6 +40932,9 @@ var MENU_NS = "menus.";
 var MENU_PAGE_NS = "menupages.";
 var EDIT_NS = "edit.";
 var SETTINGS_NS = "candybar.";
+var CLICK_ERROR_KEY = `${SETTINGS_NS}clickError`;
+var EDIT_MODE_KEY = `${EDIT_NS}mode`;
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 var RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
@@ -40939,8 +40942,17 @@ var RESERVED_NAMESPACES = [
   EDIT_NS,
   SETTINGS_NS
 ];
+function reservedNamespaceOf(name) {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+}
+function isEditNamespaced(name) {
+  return name.startsWith(EDIT_NS);
+}
+function isMenuStateKey(key) {
+  return key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS);
+}
 function isReservedName(name) {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return reservedNamespaceOf(name) !== void 0;
 }
 
 // src/config/door.ts
@@ -40954,499 +40966,13 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
-// src/daemon/foundations/session-id.ts
-init_globals();
-var SESSION_ID_MAX_BYTES = 250;
-function parseSessionId(raw) {
-  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : isArrayIndex(raw) ? `is ${JSON.stringify(raw)}, an array index, which is never a session id` : raw === "__proto__" ? `is "__proto__", which is never a session id` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
-  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
-}
-function isArrayIndex(raw) {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0 && n < 2 ** 32 - 1 && String(n) === raw;
-}
-function sessionKeyed(record2, refused2) {
-  const keyed = /* @__PURE__ */ new Map();
-  for (const [key, value] of Object.entries(record2)) {
-    const id2 = parseSessionId(key);
-    if (id2.ok) keyed.set(id2.id, value);
-    else refused2(key, id2.problem);
-  }
-  return keyed;
-}
-function sessionIdOf(raw) {
-  const parsed2 = parseSessionId(raw);
-  if (!parsed2.ok) throw new Error(`session id ${parsed2.problem}`);
-  return parsed2.id;
-}
-
-// src/click/wire.ts
-var URL_SCHEME = "cc-candybar";
-var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
-var VERB_DISPATCH = "dispatch";
-var VERB_SET_STATE = "set-state";
-var VERB_STEP_STATE = "step-state";
-var VERB_COPY = "copy";
-var VERB_OPEN_VSCODE = "open-vscode";
-var VERB_SET_CONFIG = "set-config";
-var VERB_STEP_CONFIG = "step-config";
-var VERB_SAVE = "save";
-var VERB_SAVE_PRESET = "save-preset";
-var VERB_SAVE_THEME_DEFAULT = "save-theme-default";
-var VERB_DELETE_PRESET = "delete-preset";
-var VERB_RESET_CONFIG = "reset-config";
-var VERB_APPLY_LAYOUT_OP = "apply-layout-op";
-var VERB_UNDO = "undo";
-var VERB_REDO = "redo";
-var VERB_BACK = "back";
-var VERB_REWIND = "rewind";
-var VERB_SLASH = "slash";
-var VERB_RUN = "run";
-var VERB_REPO_CONFIG = "repo-config";
-function repoAnswerFields(sessionId2, dir, answer2) {
-  return {
-    sessionId: sessionId2,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer2
-  };
-}
-var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
-function runLinkFields({
-  session,
-  action: action2,
-  declaration
-}, evaluated2) {
-  return { sessionId: session, action: action2, declaration, evaluated: evaluated2 };
-}
-function configWriteEffect(verb, session, role, ...payload) {
-  return { verb, args: [session, role, ...payload] };
-}
-var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
-var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
-function sayWrite(key, value) {
-  if (key === DIAGNOSTICS_VIEWING)
-    return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
-  const set2 = `set ${key} to ${value}`;
-  if (!isReservedName(key)) return set2;
-  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
-  if (key.startsWith(MENU_PAGE_NS))
-    return `turn ${menu} to page ${Number(value) + 1}`;
-  if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
-  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
-  return key.startsWith(MENU_NS) ? `open ${value}` : set2;
-}
-var COPIED_LENGTH = 60;
-var ELISION = "...";
-function saidCopy(text4) {
-  const chars = [...text4];
-  const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
-  return chars.length <= COPIED_LENGTH ? text4 : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
-}
-var SAYS = {
-  [VERB_SET_STATE]: ([, ...pairs2]) => pairs2.flatMap(
-    (key, i2) => i2 % 2 === 0 ? [sayWrite(key, pairs2[i2 + 1])] : []
-  ),
-  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
-  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
-  // A config write says the layer of the session's chain it writes.
-  [VERB_SET_CONFIG]: ([, layer, key, value]) => [
-    `save ${key} as ${value} in ${layer} config`
-  ],
-  [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
-    `save ${sayStep(key, by)} in ${layer} config`
-  ],
-  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
-  [VERB_SAVE_PRESET]: ([, layer]) => [
-    `save as a new preset in ${layer} config`
-  ],
-  [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
-    `save this look for the theme in ${layer} config`
-  ],
-  [VERB_DELETE_PRESET]: ([, layer, name]) => [
-    `delete preset ${name} from ${layer} config`
-  ],
-  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => `reset ${key} in ${layer} config`),
-  [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
-    `edit ${op} in ${key} of ${layer} config`
-  ],
-  [VERB_UNDO]: () => ["undo"],
-  [VERB_REDO]: () => ["redo"],
-  [VERB_BACK]: () => ["go back"],
-  [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_SLASH]: ([, line]) => [`type ${line}`],
-  [VERB_RUN]: ([, action2]) => [`run ${action2}`],
-  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
-  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
-};
-var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
-function clickDoes(effects) {
-  const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
-  const [face = "nothing", ...rest2] = [
-    ...effects.filter((e) => !writesSession(e)),
-    ...effects.filter(writesSession)
-  ].flatMap((e) => SAYS[e.verb](e.args));
-  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
-}
-function encodeSegments(parts) {
-  return parts.map(encodeURIComponent).join("/");
-}
-function decodeSegments(value) {
-  return value.length === 0 ? [] : value.split("/").map(decodeURIComponent);
-}
-function decodeFirstSegment(value) {
-  return decodeURIComponent(value.split("/", 1)[0]);
-}
-function effectsUrl(effects, says = clickDoes(effects)) {
-  const params = effects.map(
-    (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`
-  );
-  const qs = [`does=${spell(says)}`, ...params].join("&");
-  return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
-}
-function parseEffects(rawValue) {
-  return new S(rawValue).getAll("e").map(splitVerb);
-}
-var BATCHED_VERBS = /* @__PURE__ */ new Map([
-  [VERB_SET_STATE, 1],
-  [VERB_RESET_CONFIG, 2]
-]);
-function batchAdjacentWrites(effects) {
-  return effects.reduce((out, e) => {
-    const prev = out.at(-1);
-    const joined = prev && joinWrites(prev, e);
-    return joined ? [...out.slice(0, -1), joined] : [...out, e];
-  }, []);
-}
-function joinWrites(a, b) {
-  const width = BATCHED_VERBS.get(a.verb);
-  if (a.verb !== b.verb || width === void 0) return void 0;
-  const [x, y] = [a.value.split("/"), b.value.split("/")];
-  const head = x.slice(0, width).join("/");
-  return head === y.slice(0, width).join("/") ? { verb: a.verb, value: [...x, ...y.slice(width)].join("/") } : void 0;
-}
-function splitVerb(s) {
-  const i2 = s.indexOf("/");
-  return i2 === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i2), value: s.slice(i2 + 1) };
-}
-function parseHandlerUrl(rawUrl) {
-  const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
-    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
-  }
-  const rest2 = rawUrl.slice(prefix.length);
-  const slash2 = rest2.indexOf("/");
-  if (slash2 === -1) {
-    return { ok: true, verb: VERB_COPY, value: rest2 };
-  }
-  const encoded = rest2.slice(0, slash2);
-  try {
-    return {
-      ok: true,
-      verb: decodeURIComponent(encoded),
-      value: rest2.slice(slash2 + 1)
-    };
-  } catch {
-    return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
-  }
-}
-var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
-]);
-var VERB_NAMES = Object.freeze([
-  ...Object.keys(SAYS),
-  VERB_DISPATCH
-]);
-function isEffectVerb(verb) {
-  return Object.hasOwn(SAYS, verb);
-}
-function admitClick(verb, value, signer) {
-  if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
-    throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-  const global2 = [];
-  const runEvidence = [];
-  let scoped;
-  for (const step4 of batchAdjacentWrites(raw)) {
-    const name = step4.verb;
-    if (!isEffectVerb(name)) {
-      (scoped?.steps ?? global2).push({
-        kind: "invalid",
-        reason: `unknown effect verb "${name}"`
-      });
-      continue;
-    }
-    if (name === VERB_COPY || name === VERB_OPEN_VSCODE) {
-      try {
-        (scoped?.steps ?? global2).push({
-          kind: "global",
-          verb: name,
-          value: decodeWire(() => decodeURIComponent(step4.value))
-        });
-      } catch (e) {
-        if (!(e instanceof BadVerbArgs)) throw e;
-        (scoped?.steps ?? global2).push({
-          kind: "invalid",
-          reason: `${name}: ${e.message}`
-        });
-      }
-      continue;
-    }
-    const segmented = SEGMENTED_VERBS.has(name);
-    const claimed = decodeWire(
-      () => segmented ? decodeFirstSegment(step4.value) : decodeURIComponent(step4.value)
-    );
-    if (scoped === void 0) {
-      const parsed2 = parseSessionId(claimed);
-      if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
-      scoped = { id: parsed2.id, steps: [...global2] };
-    } else if (scoped.id !== claimed) {
-      throw new BadVerbArgs("a click cannot name more than one session");
-    }
-    const separator = segmented ? step4.value.indexOf("/") : -1;
-    try {
-      const args = separator === -1 ? [] : decodeWire(
-        () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
-      );
-      switch (name) {
-        case VERB_REPO_CONFIG:
-          scoped.steps.push(admitRepoAnswer(scoped.id, args, signer));
-          break;
-        case VERB_RUN: {
-          const [action2 = "", evaluated2 = "", mac = ""] = args;
-          const capture4 = runEvidence.length;
-          runEvidence.push({ session: scoped.id, action: action2, evaluated: evaluated2, mac });
-          scoped.steps.push({
-            kind: "run",
-            verb: name,
-            action: action2,
-            capture: capture4
-          });
-          break;
-        }
-        default:
-          scoped.steps.push({ kind: "session", verb: name, args });
-      }
-    } catch (e) {
-      if (!(e instanceof BadVerbArgs)) throw e;
-      scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
-    }
-  }
-  const click2 = scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
-  return { click: click2, runEvidence };
-}
-function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
-  const answer2 = REPO_ANSWERS.find((known) => known === value);
-  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
-}
-
-// src/render/diagnostic-text.ts
-init_globals();
-var NEUTRALIZED_RANGES = [
-  [0, 31],
-  [127, 159],
-  [8234, 8238],
-  [8294, 8303]
-];
-function isControlChar(code2) {
-  return NEUTRALIZED_RANGES.some(([lo, hi]) => code2 >= lo && code2 <= hi);
-}
-function sanitizeText(text4) {
-  let sanitized = "";
-  for (const ch of text4) {
-    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
-  }
-  return sanitized.replace(/\s+/g, " ").trim();
-}
-
-// src/render/diagnostic-style.ts
-init_globals();
-var DIAGNOSTIC_ERROR_COLORS = {
-  fg: "#ffffff",
-  bg: "#c82828"
-};
-var DIAGNOSTIC_WARNING_COLORS = {
-  fg: "#000000",
-  bg: "#dca028"
-};
-var DIAGNOSTIC_INFO_COLORS = {
-  fg: "#ffffff",
-  bg: "#2f6db5"
-};
-function sgrOf(layer, hex) {
-  const channels = [1, 3, 5].map(
-    (at) => Number.parseInt(hex.slice(at, at + 2), 16)
-  );
-  return `\x1B[${layer};2;${channels.join(";")}m`;
-}
-var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
-var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
-
-// src/render/drawn-link.ts
-init_globals();
-function actionTarget(effects, description) {
-  return {
-    kind: "action",
-    effects,
-    ...description === void 0 ? {} : { description }
-  };
-}
-function hrefOfDrawnLink(link) {
-  return drawnHref(link, () => "");
-}
-function publishedHref(link, proof) {
-  return drawnHref(link, proof);
-}
-function drawnHref(link, proof) {
-  if (typeof link === "string") return link;
-  switch (link.kind) {
-    case "href":
-      return link.url;
-    case "repo-answer": {
-      const { session, dir, answer: answer2 } = link;
-      return effectsUrl([
-        {
-          verb: VERB_REPO_CONFIG,
-          args: [
-            session,
-            dir,
-            answer2,
-            proof(repoAnswerFields(session, dir, answer2))
-          ]
-        }
-      ]);
-    }
-    case "action":
-      return effectsUrl(
-        link.effects.map((effect) => emitted(effect, proof)),
-        link.description
-      );
-  }
-}
-function emitted(effect, proof) {
-  if ("verb" in effect) return effect;
-  const { session, action: action2 } = effect;
-  const evaluated2 = JSON.stringify(effect.evaluated);
-  const mac = proof(runLinkFields(effect, evaluated2));
-  return { verb: VERB_RUN, args: [session, action2, evaluated2, mac] };
-}
-
-// src/render/link-style.ts
-init_globals();
-var PROOF = /* @__PURE__ */ Symbol("Candybar link target");
-var MARKER = "candybar-span:";
-function capture(effect) {
-  if ("verb" in effect)
-    return Object.freeze({ ...effect, args: Object.freeze([...effect.args]) });
-  const { run: run2, env: env2 } = effect.evaluated;
-  return Object.freeze({
-    ...effect,
-    evaluated: Object.freeze({
-      run: Object.freeze([...run2]),
-      env: Object.freeze({ ...env2 })
-    })
-  });
-}
-var LinkProof = class {
-  marker;
-  target;
-  constructor(target) {
-    this.target = target.kind === "action" ? Object.freeze({
-      ...target,
-      effects: Object.freeze(target.effects.map(capture))
-    }) : Object.freeze({ ...target });
-    this.marker = MARKER + encodeURIComponent(JSON.stringify(this.target));
-  }
-};
-function styleWithLink(style, link) {
-  if (typeof link === "string") return style.withLink(link);
-  const proof = new LinkProof(link);
-  return style.add(new Style({ link: proof.marker, meta: { [PROOF]: proof } }));
-}
-function linkFromStyle(style) {
-  const { link, meta } = style;
-  const proof = meta === void 0 ? void 0 : Reflect.get(meta, PROOF);
-  if (proof instanceof LinkProof && proof.marker === link) return proof.target;
-  return link?.startsWith(MARKER) ? void 0 : link;
-}
-function authoredLinks(funcs) {
-  const link = funcs.link;
-  const style = funcs.style;
-  if (link === void 0 || style === void 0) {
-    throw new Error("rich-js is missing its link or style template binding");
-  }
-  const project = (binding, input, child, setsLink) => {
-    const result = Reflect.apply(binding.fn, void 0, [
-      input,
-      child
-    ]);
-    if (!(result instanceof RichText)) {
-      throw new TypeError(
-        "rich-js link and style bindings must return RichText"
-      );
-    }
-    if (!setsLink || typeof result.style === "string") return result;
-    const layered = result.style;
-    const base = layered instanceof Style ? layered : layered.over;
-    const url = base.link;
-    if (url?.startsWith(MARKER)) {
-      const quoted2 = styleWithLink(base, { kind: "href", url });
-      result.style = layered instanceof Style ? quoted2 : { ...layered, over: quoted2 };
-    }
-    return result;
-  };
-  return {
-    ...funcs,
-    link: {
-      ...link,
-      fn: (url, child) => project(link, url, child, url !== "")
-    },
-    style: {
-      ...style,
-      fn: (spec, child) => project(style, spec, child, Style.parse(spec).link !== void 0)
-    }
-  };
-}
-
-// src/render/strip.ts
+// src/config/session-key.ts
 init_globals();
 
-// src/render/rich-theme.ts
+// src/config/setting-projections.ts
 init_globals();
-var RENDER_THEME = new Theme({
-  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
-  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
-  // slot some terminal themes paint as that ground. The terminal's own text on
-  // its own ground is the one pair known to read there.
-  "strip.separator": "default",
-  "strip.rail": "default"
-});
-function resolvedStyle(style) {
-  return RENDER_THEME.resolve(style);
-}
 
-// src/render/effect.ts
+// src/config/globals-fields.ts
 init_globals();
 
 // src/themes/policy.ts
@@ -42139,6 +41665,1294 @@ function parseSessionInt(raw, range) {
   return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
 }
 
+// src/config/loader/validate-core.ts
+init_globals();
+
+// src/config/dsl-types.ts
+init_globals();
+var DIRECTIONS = ["vertical", "horizontal"];
+var AXIS_OF = {
+  vertical: "row",
+  horizontal: "cell"
+};
+function placementId(node) {
+  return node.id ?? node.name;
+}
+function placementIdentityOf(preset, node) {
+  return { preset, id: placementId(node), segment: node.name };
+}
+function placementIds(tree) {
+  return [...walkNodes(tree)].flatMap(
+    (n) => n.kind === "segment" ? [placementId(n)] : []
+  );
+}
+function mapOpens(node, f) {
+  return node.opens === void 0 ? node : { ...node, opens: { ...node.opens, body: f(node.opens.body) } };
+}
+function* walkNodes(node) {
+  yield node;
+  for (const child of childrenOf(node)) yield* walkNodes(child);
+}
+var childPath = (path31, i2) => `${path31}.children[${i2}]`;
+var bodyPath = (path31) => `${path31}.opens.body`;
+function* walkNodePaths(node, path31) {
+  yield [node, path31];
+  if (node.kind === "container") {
+    for (const [i2, child] of node.children.entries()) {
+      yield* walkNodePaths(child, childPath(path31, i2));
+    }
+  } else if (node.opens !== void 0) {
+    yield* walkNodePaths(node.opens.body, bodyPath(path31));
+  }
+}
+function childrenOf(node) {
+  return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
+}
+function parseArm(parse3) {
+  if (parse3 === void 0 || "text" in parse3) return "text";
+  return "regex" in parse3 ? "regex" : "json";
+}
+var CACHE_KEYS = [
+  "ttl",
+  "watch_file",
+  "depends_on",
+  "key",
+  "never"
+];
+function hasCacheField(v) {
+  return v.kind === "file" || v.kind === "shell";
+}
+function mapVariableTemplates(v, f) {
+  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache ? {
+    ...body,
+    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
+  } : body;
+}
+function variableTemplates(v) {
+  const found2 = [];
+  mapVariableTemplates(v, (template, field) => {
+    found2.push([field, template]);
+    return template;
+  });
+  return found2;
+}
+function* stateVarDecls(config) {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "state") yield [name, decl];
+  }
+  for (const [segName, seg2] of Object.entries(config.segments)) {
+    if (!seg2.vars) continue;
+    for (const [varName, decl] of Object.entries(seg2.vars)) {
+      if (decl.kind === "state") yield [`${segName}.${varName}`, decl];
+    }
+  }
+}
+var THEME_SETTING = "theme";
+var EFFECT_SETTING = "effect";
+var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
+function settingsOf(seg2) {
+  return {
+    ...seg2.settings,
+    [THEME_SETTING]: {
+      label: THEME_SETTING,
+      domain: "theme",
+      default: seg2.palette ?? FOLLOW_BAR
+    },
+    // [LAW:one-type-per-behavior] A closed list of names, so the word-list arm
+    // every authored setting uses: the loader's membership test, configure
+    // mode's picker and save need nothing of their own for it.
+    [EFFECT_SETTING]: {
+      label: EFFECT_SETTING,
+      domain: PLACEMENT_EFFECTS,
+      default: FOLLOW_BAR
+    }
+  };
+}
+function rangeOf(decl) {
+  const domain = decl?.domain;
+  return typeof domain === "object" && "min" in domain ? domain : void 0;
+}
+function settingOrderProblems(decls, values2) {
+  return Object.entries(decls).flatMap(([name, decl]) => {
+    const floor3 = rangeOf(decl)?.atLeast;
+    if (floor3 === void 0) return [];
+    const value = values2[name];
+    const least = values2[floor3];
+    return value >= least ? [] : [
+      {
+        setting: name,
+        message: `"${name}" (${value}) is below "${floor3}" (${least}) \u2014 ${decl.label} must be at least ${decls[floor3].label}`
+      }
+    ];
+  });
+}
+function inSettingDomain(decl, value) {
+  const { domain } = decl;
+  if (domain === "bool") return typeof value === "boolean";
+  if (domain === "theme") {
+    return typeof value === "string" && isPlacementThemeName(value);
+  }
+  if ("min" in domain) {
+    return typeof value === "number" && Number.isInteger(value) && value >= domain.min && value <= domain.max;
+  }
+  return typeof value === "string" && domain.includes(value);
+}
+function settingSpelling(value) {
+  return String(value);
+}
+function parseSettingSpelling(decl, raw) {
+  const { domain } = decl;
+  if (typeof domain === "object" && "min" in domain) {
+    return parseSessionInt(raw, domain) ?? void 0;
+  }
+  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
+  return inSettingDomain(decl, value) ? value : void 0;
+}
+function placementSetting(node, name, decl, pick2) {
+  const saved = node.settings?.[name] ?? decl.default;
+  const draft = node.drafts?.[name];
+  const raw = draft === void 0 ? null : pick2(draft);
+  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
+}
+function describeSettingDomain(decl) {
+  const { domain } = decl;
+  if (domain === "bool") return "true or false";
+  if (domain === "theme") {
+    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
+  }
+  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
+  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
+}
+var JUSTIFY_MODES = [
+  "left",
+  "center",
+  "right"
+];
+var TRUNCATE_MODES = [
+  "right",
+  "left",
+  "middle"
+];
+
+// src/config/loader/diagnostics.ts
+init_globals();
+var import_json52 = __toESM(require_dist(), 1);
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf2(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path31) {
+  let node = root;
+  for (const key of path31) {
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i2) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path31, valueText, dialect) {
+  const [head, ...rest2] = path31;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i2 = end;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
+  if (commaEnd !== -1) i2 = commaEnd;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  LINE_TRAILER.lastIndex = i2;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next2 = i2 + m[0].length;
+  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path31, valueText, dialect) {
+  if (path31.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path31, valueText, dialect);
+}
+function insertValue(text4, path31, valueText, dialect, precedes) {
+  const parentPath = path31.slice(0, -1);
+  if (/^\s*$/.test(text4) && parentPath.length === 0)
+    return setValue(text4, path31, valueText, dialect);
+  const leaf = path31[path31.length - 1];
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  if (leaf === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf2(parent, leaf) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next2 === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next2.span.start))
+    return splice(text4, next2.span.start, next2.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next2.span.start);
+  const eol = eolOf(text4);
+  const at = lineStartOf(text4, next2.span.start);
+  return splice(
+    text4,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
+function setBelow(text4, start, path31, valueText, dialect) {
+  let node = start;
+  for (let i2 = 0; i2 < path31.length; i2++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf2(node, path31[i2]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path31.slice(i2), valueText, dialect),
+        dialect
+      );
+    }
+    if (i2 === path31.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path31, keep = 0) {
+  if (path31.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path31.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path31[path31.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf2(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf2(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row.value,
+      bareAt === null ? null : [...bareAt, "rows", row.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/config/loader/diagnostics.ts
+function parseJson5Syntax(source) {
+  try {
+    return { kind: "parsed", value: import_json52.default.parse(source) };
+  } catch (e) {
+    const error = e;
+    return {
+      kind: "invalid",
+      issue: {
+        path: "",
+        message: `JSON5 syntax error: ${error.message}`,
+        line: error.lineNumber,
+        col: error.columnNumber
+      }
+    };
+  }
+}
+var ConfigError = class extends Error {
+  file;
+  issues;
+  /** Advisories the file earned before it failed — reported beside the error. */
+  warnings;
+  constructor(file, issues, warnings = []) {
+    super(formatIssues(file, issues));
+    this.name = "ConfigError";
+    this.file = file;
+    this.issues = issues;
+    this.warnings = warnings;
+  }
+};
+var DroppedFileError = class extends ConfigError {
+  prompt;
+  constructor(file, issues) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
+    ].join("\n\n");
+  }
+};
+function findKeyLine(source, pathParts) {
+  return keyLocator(source)(pathParts);
+}
+function keyLocator(source) {
+  let parsed2;
+  const document = () => {
+    parsed2 ??= { node: parseOrUndefined(source) };
+    return parsed2.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+function parseOrUndefined(source) {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+}
+function keyLine(source, document, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
+  if (indexed !== void 0) return indexed;
+  let cursor = 0;
+  let foundCursor;
+  for (const part of pathParts) {
+    if (part === "" || /^\d+$/.test(part)) continue;
+    const found2 = findKeyOccurrence(source, cursor, part);
+    if (found2 === -1) {
+      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+    }
+    cursor = found2;
+    foundCursor = found2;
+  }
+  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+}
+function elementPathLine(source, document, pathParts) {
+  if (document === void 0) return void 0;
+  let node = document;
+  let reached;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
+    if (next2 === void 0) break;
+    indexed ||= element;
+    node = next2;
+    reached = next2;
+  }
+  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
+}
+function findKeyOccurrence(source, from, key) {
+  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
+  re.lastIndex = from;
+  const m = re.exec(source);
+  return m ? m.index : -1;
+}
+function lineFromOffset(source, offset) {
+  let line = 1;
+  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
+    if (source.charCodeAt(i2) === 10) line++;
+  }
+  return line;
+}
+function editabilityNotice(filePath2, source) {
+  try {
+    parseDocument(source);
+    return null;
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
+  }
+}
+function formatIssues(file, issues) {
+  if (issues.length === 0) return `${file}: invalid config (no details)`;
+  const lines2 = [
+    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
+  ];
+  for (const issue3 of issues) {
+    const locParts = [];
+    if (issue3.line !== void 0) {
+      locParts.push(
+        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
+      );
+    }
+    if (issue3.path) locParts.push(issue3.path);
+    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
+    lines2.push(`  ${loc}${issue3.message}`);
+  }
+  return lines2.join("\n");
+}
+
+// src/config/loader/validate-core.ts
+function requireString(ctx, path31, raw, field) {
+  const v = raw[field];
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return null;
+  }
+  return v;
+}
+function optionalTypedDefault(ctx, path31, raw, type3) {
+  const v = raw.default;
+  if (v === void 0) return void 0;
+  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
+  if (!ok3) {
+    ctx.issues.push({
+      path: `${path31}.default`,
+      message: `default must be a ${type3}, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), "default"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalStringField(ctx, path31, raw, field) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function validatePaletteName(ctx, path31, raw) {
+  const v = optionalStringField(ctx, path31, raw, "palette");
+  if (v === void 0) return void 0;
+  if (!ctx.allowedPalettes.has(v)) {
+    ctx.issues.push({
+      path: `${path31}.palette`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalEnum(ctx, path31, raw, field, allowed) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string" || !allowed.includes(v)) {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function describeType(v) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+function describeValue(v) {
+  if (typeof v === "string") return JSON.stringify(v);
+  if (v === void 0) return "undefined";
+  return String(v);
+}
+function record(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${path31} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  rejectUnknownKeys(
+    ctx,
+    path31,
+    raw,
+    schema.noun,
+    new Set(Object.keys(schema.fields)),
+    refuseRemoved(ctx, schema.removed ?? {}, path31, raw)
+  );
+  return fields(ctx, schema.fields, path31, raw);
+}
+function refuseRemoved(ctx, removed, path31, raw) {
+  const present = Object.entries(removed).filter(
+    ([key]) => raw[key] !== void 0
+  );
+  for (const [key, pointer] of present) {
+    reject(ctx, `${path31}.${key}`, `${path31}.${key} was removed: ${pointer}`);
+  }
+  return new Set(present.map(([key]) => `${path31}.${key}`));
+}
+function fields(ctx, fieldMap, path31, raw) {
+  const specs = fieldMap;
+  const out = {};
+  let ok3 = true;
+  for (const [field, spec] of Object.entries(specs)) {
+    const value = spec.parse(ctx, path31, field, raw);
+    if (value !== void 0) out[field] = value;
+    else if (spec.required) ok3 = false;
+  }
+  return ok3 ? out : null;
+}
+var EMPTY_PATHS = /* @__PURE__ */ new Set();
+function rejectUnknownKeys(ctx, path31, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path31}.${key}`)) {
+      ctx.issues.push({
+        path: `${path31}.${key}`,
+        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path31.split("."), key])
+      });
+    }
+  }
+}
+function reject(ctx, path31, message) {
+  ctx.issues.push({
+    path: path31,
+    message,
+    line: findKeyLine(ctx.source, path31.split("."))
+  });
+  return null;
+}
+function oneOfPresent(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  const keys2 = Object.keys(arms);
+  const present = Object.keys(raw).filter((k) => k in arms);
+  const unknown = Object.keys(raw).filter((k) => !(k in arms));
+  for (const k of unknown) {
+    ctx.issues.push({
+      path: `${path31}.${k}`,
+      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), k])
+    });
+  }
+  if (present.length === 0) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  if (present.length > 1) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const key = present[0];
+  return arms[key].parse(ctx, `${path31}.${key}`, raw[key]);
+}
+function taggedUnion(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${path31} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const tagValue = raw[schema.tag];
+  if (typeof tagValue !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${schema.tag}`,
+      message: `${path31}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  if (!Object.hasOwn(arms, tagValue)) {
+    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
+    ctx.issues.push({
+      path: `${path31}.${schema.tag}`,
+      message,
+      line: findKeyLine(ctx.source, [...path31.split("."), schema.tag])
+    });
+    return null;
+  }
+  const arm2 = arms[tagValue];
+  const before = ctx.issues.length;
+  const parsed2 = arm2.parse(ctx, path31, raw);
+  const spokenFor = new Set(ctx.issues.slice(before).map((i2) => i2.path));
+  rejectUnknownKeys(
+    ctx,
+    path31,
+    raw,
+    `${tagValue} ${schema.memberNoun} key`,
+    arm2.keys,
+    spokenFor
+  );
+  return parsed2;
+}
+function armFacets(tag, tagValue, fieldMap) {
+  return {
+    json: withConst(objectJson(fieldMap), tag, tagValue),
+    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
+  };
+}
+function lazy(thunk) {
+  return (...args) => thunk()(...args);
+}
+function refine(inner, ...checks) {
+  return (ctx, path31, raw) => {
+    const value = inner(ctx, path31, raw);
+    if (value === null) return null;
+    for (const check of checks) {
+      if (check.ok(value)) continue;
+      const { field, message } = check.issue(value);
+      const at = field === "" ? path31 : `${path31}.${field}`;
+      ctx.issues.push({
+        path: at,
+        message,
+        line: findKeyLine(ctx.source, at.split("."))
+      });
+      return null;
+    }
+    return value;
+  };
+}
+function optionalStringSpec() {
+  return {
+    required: false,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => optionalStringField(ctx, path31, raw, field)
+  };
+}
+var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function optionalEnvNamesSpec() {
+  return {
+    required: false,
+    json: {
+      type: "array",
+      items: { type: "string", pattern: ENV_NAME.source }
+    },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalBooleanSpec() {
+  return {
+    required: false,
+    json: { type: "boolean" },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "boolean") {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be a boolean, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalIntSpec(bounds) {
+  const { min: min3, max: max3 } = bounds;
+  return {
+    required: false,
+    json: { type: "integer", minimum: min3, maximum: max3 },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min3 || v > max3) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalNumberSpec(bounds = {}) {
+  const { min: min3 } = bounds;
+  return {
+    required: false,
+    json: { type: "number", ...min3 !== void 0 && { minimum: min3 } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const bad = typeof v !== "number" || !Number.isFinite(v) || min3 !== void 0 && v < min3;
+      if (bad) {
+        const shape = min3 !== void 0 ? `a finite number >= ${min3}` : "a finite number";
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be ${shape}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function paletteSpec() {
+  return {
+    required: false,
+    // Palette NAME membership is semantic (the allowed set is resolved at load
+    // from installed palettes, not a closed compile-time enum), so the schema
+    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    json: { type: "string" },
+    parse: (ctx, path31, _field, raw) => validatePaletteName(ctx, path31, raw)
+  };
+}
+function requireStringSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => requireString(ctx, path31, raw, field) ?? void 0
+  };
+}
+function optionalEnumSpec(allowed) {
+  return {
+    required: false,
+    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
+    // membership against it, `json` lists it as the schema `enum`.
+    json: { enum: [...allowed] },
+    parse: (ctx, path31, field, raw) => optionalEnum(ctx, path31, raw, field, allowed)
+  };
+}
+function objectJson(fieldMap, opts = { closed: true }) {
+  const specs = fieldMap;
+  const properties = {};
+  const required = [];
+  for (const [field, spec] of Object.entries(specs)) {
+    properties[field] = spec.json;
+    if (spec.required) required.push(field);
+  }
+  return {
+    type: "object",
+    properties,
+    ...required.length > 0 && { required },
+    ...opts.closed && { additionalProperties: false }
+  };
+}
+function recordJson(schema) {
+  return objectJson(schema.fields);
+}
+function withConst(base, key, value) {
+  const b = base;
+  const properties = {
+    [key]: { const: value },
+    ...b.properties
+  };
+  const required = [key, ...b.required ?? []];
+  return { ...b, properties, required };
+}
+function taggedUnionJson(schema) {
+  const arms = schema.arms;
+  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
+}
+function oneOfPresentJson(schema) {
+  const arms = schema.arms;
+  return {
+    anyOf: Object.entries(arms).map(([key, arm2]) => ({
+      type: "object",
+      properties: { [key]: arm2.json },
+      required: [key],
+      additionalProperties: false
+    }))
+  };
+}
+
+// src/config/lanes.ts
+init_globals();
+var IN_TMUX = 'ne .tmux.pane ""';
+var LANES = {
+  statusline: {
+    switch: { setting: "experimentalStatusline", on: true },
+    label: "\u{1F9EA} statusline (B)",
+    handsOff: false
+  },
+  pane: {
+    switch: { setting: "experimentalPane", on: true },
+    label: "\u{1F9EA} tmux pane (C)",
+    handsOff: true
+  }
+};
+var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
+var MOVING_FPS = 30;
+var ANSWERING = { by: "request" };
+var DRAWING_VAR = "drawing";
+var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
+var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
+var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
+function perLane(value) {
+  return Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, value(lane)])
+  );
+}
+var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
+}
+function feedsFact(feeds) {
+  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
+    const { subscribers, fps, shown } = feeds[lane];
+    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+  }).join(",") || "-";
+}
+
 // src/config/menu-timeout.ts
 init_globals();
 var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i2) => ({ lit: i2 % 2 === 0, seconds }));
@@ -42155,7 +42969,1045 @@ var MENU_TIMEOUT_DEFAULT = 120;
 var closesAt = (since, timeoutS) => since + timeoutS;
 var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
+// src/config/globals-fields.ts
+var control = (label2, place, {
+  previews = [],
+  shown = "true"
+} = {}) => ({ label: label2, place, previews, shown });
+var enumValues = (members, optionDomain, facets = {}) => ({
+  spec: optionalEnumSpec(members),
+  domain: { from: members },
+  parse: (raw) => members.includes(raw) ? raw : null,
+  ...optionDomain !== void 0 && {
+    optionDomain: {
+      name: optionDomain,
+      members,
+      ...facets
+    }
+  }
+});
+var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
+var boolValues = {
+  spec: optionalBooleanSpec(),
+  domain: "bool",
+  parse: parseSessionBoolean
+};
+var intValues = (range) => ({
+  spec: optionalIntSpec(range),
+  domain: range,
+  parse: (raw) => parseSessionInt(raw, range)
+});
+function enumSetting(members, floor3, shown, extra = {}) {
+  return {
+    kind: "session",
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf
+    }),
+    floor: floor3,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+function boolSetting(floor3, shown) {
+  return {
+    kind: "session",
+    ...boolValues,
+    floor: floor3,
+    control: shown,
+    themeDefault: false
+  };
+}
+function intSetting(range, floor3, shown) {
+  return {
+    kind: "session",
+    ...intValues(range),
+    floor: floor3,
+    control: shown,
+    themeDefault: false
+  };
+}
+function selection(sessionKey, spec, domain, shown, extra = {}) {
+  return {
+    kind: "selection",
+    sessionKey,
+    spec,
+    domain,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+var text2 = (spec) => ({
+  kind: "text",
+  spec
+});
+var colorCompatibilitySpec = {
+  required: false,
+  json: { enum: [...COLOR_COMPATIBILITIES] },
+  parse: (ctx, path31, field, raw) => {
+    if (raw[field] === "auto") {
+      ctx.issues.push({
+        path: `${path31}.${field}`,
+        message: `${path31}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path31.split("."), field])
+      });
+      return void 0;
+    }
+    return optionalEnum(ctx, path31, raw, field, COLOR_COMPATIBILITIES);
+  }
+};
+var paletteOrRuleSpec = {
+  required: false,
+  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
+  // are resolved at load from installed palettes, and a rule is a string too.
+  json: { type: "string" },
+  parse: (ctx, path31, field, raw) => {
+    const v = optionalStringField(ctx, path31, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path31, raw);
+  }
+};
+var effectOrRuleSpec = {
+  required: false,
+  json: {
+    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
+  },
+  parse: (ctx, path31, field, raw) => {
+    const v = raw[field];
+    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path31, raw, field, EFFECT_NAMES);
+  }
+};
+var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
+var CLOSE_GLYPH = new RegExp(
+  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
+  "u"
+);
+var menuGlyphSpec = {
+  required: false,
+  json: {
+    type: "string",
+    pattern: MENU_GLYPH.source,
+    not: { pattern: CLOSE_GLYPH.source }
+  },
+  parse: (ctx, path31, field, raw) => {
+    const v = optionalStringField(ctx, path31, raw, field);
+    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
+      return v;
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+};
+var LANE_ROWS = Object.fromEntries(
+  TOGGLED_LANES.map((lane) => [
+    LANES[lane].switch.setting,
+    boolSetting(false, control(LANES[lane].label, "toggles"))
+  ])
+);
+var GLOBAL_FIELDS = {
+  // The config default for the base theme: a theme NAME, or a rule choosing
+  // one per render (brandon-themes-dzl). A placement's `theme` setting other
+  // than `bar` ignores it.
+  palette: selection(
+    "theme",
+    paletteOrRuleSpec,
+    { themes: "themes" },
+    control("\u{1F3A8} theme", "door")
+  ),
+  // The config default for the PRESET — a named fragment from `presets:`
+  // whose globals and root the session renders. Membership in the merged
+  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
+  // globals may NOT carry it: a
+  // preset selecting a preset is a second, cyclic authority over which is
+  // active. Its control sits on the door's first line, one click away:
+  // switching arrangement is what people open the menu for.
+  preset: selection(
+    "preset",
+    optionalStringSpec(),
+    { from: "presets" },
+    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
+  ),
+  // The config default for the STYLE (a named theme adaptation from
+  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
+  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
+  style: selection(
+    "style",
+    optionalStringSpec(),
+    { from: "styles" },
+    control("\u25D0 style", "gear", { previews: ["palette"] }),
+    { themeDefault: true }
+  ),
+  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
+  // or a rich-js catalogue loop name, or a rule rendering one.
+  effect: selection(
+    "effect",
+    effectOrRuleSpec,
+    { from: EFFECT_NAMES },
+    control("\u2728 effect", "look")
+  ),
+  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
+  endcaps: enumSetting(
+    ENDCAPS_SHAPES,
+    "powerline",
+    control("\u2726 endcaps", "look"),
+    {
+      optionDomain: "endcaps"
+    }
+  ),
+  // Which theme role each ROW of the closed bar wears, in order — a named
+  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
+  // `accent` by default (brandon-theme-picker-bgw.7g6).
+  variation: enumSetting(
+    VARIATION_NAMES,
+    "accent",
+    control("\u{1F3BC} variation", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Which of its role's shades each CELL of the closed bar wears — a named
+  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
+  // role's darkenings and lightenings, or its muted form. The default is the
+  // window centred on each role's own colour — "the default will be 'middle'
+  // (standard role)" (candybar-theme-colours-6fq5.e5n).
+  shade: enumSetting(
+    SHADE_NAMES,
+    "middle",
+    control("\u{1F506} shade", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Whether a placement that appears mid-session fades in over 20 s
+  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
+  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
+  transitions: boolSetting(false, control("fade in/out", "look")),
+  // How fast every decorative animation runs — the effects above, fades and
+  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
+  // the rate the session's animation clock advances against the wall clock
+  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
+  animationSpeed: enumSetting(
+    ANIMATION_SPEED_NAMES,
+    "1x",
+    control("speed", "look")
+  ),
+  // Whether a root row that exceeds the usable width soft-wraps, between
+  // cells and through a cell wider than a line (the legacy display.autoWrap).
+  // False renders each row as one unbounded line, overflow off-screen.
+  autoWrap: boolSetting(true, control("wrap", "config")),
+  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
+  // the bg fill — the legacy display.padding). Templates author content; this
+  // chrome is applied structurally at the cell-formation seam. Bounded above
+  // so a config value can never drive an unbounded `" ".repeat` in the daemon
+  // [LAW:no-silent-failure] — the file, the click and the session pick all
+  // honour PADDING_RANGE.
+  padding: intSetting(
+    { ...PADDING_RANGE, step: 1 },
+    1,
+    control("padding", "config")
+  ),
+  // Seconds without a click before every open menu flashes and closes
+  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
+  menuTimeout: intSetting(
+    MENU_TIMEOUT_RANGE,
+    MENU_TIMEOUT_DEFAULT,
+    control("menu timeout", "config")
+  ),
+  ...LANE_ROWS,
+  // The color depth rich-js downsamples output to (the legacy
+  // display.colorCompatibility) — truecolor by default, deliberately NOT the
+  // legacy "auto", which the detached daemon cannot honour (see
+  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
+  // control (brandon-menu-ia-q30.5y4).
+  colorCompatibility: {
+    kind: "config",
+    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
+    // Its own spec only for the migration-pointing "auto" refusal above.
+    spec: colorCompatibilitySpec,
+    floor: "truecolor"
+  },
+  // The text segments render when their value is empty.
+  default_empty_value: text2(optionalStringSpec()),
+  // The cell separator `plain` draws between segments. Absent means the glyph
+  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
+  // would be a second copy of a constant that lives in rich-js.
+  default_separator: text2(optionalStringSpec()),
+  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
+  menuGlyph: text2(menuGlyphSpec)
+};
+function settingNameOf(field) {
+  const row = GLOBAL_FIELDS[field];
+  return row.kind === "selection" ? row.sessionKey : field;
+}
+var ROWS = Object.entries(GLOBAL_FIELDS);
+var VALUED_FIELDS = ROWS.filter(
+  ([, row]) => row.kind === "session" || row.kind === "config"
+).map(([field]) => field);
+var CONTROLLED_FIELDS = ROWS.filter(
+  ([, row]) => row.kind === "session" || row.kind === "selection"
+).map(([field]) => field);
+var THEME_DEFAULT_FIELDS = ROWS.filter(
+  ([, row]) => (row.kind === "session" || row.kind === "selection") && row.themeDefault
+).map(([field]) => field);
+var NAMED_DOMAINS = ROWS.flatMap(
+  ([, row]) => "optionDomain" in row && row.optionDomain !== void 0 ? [row.optionDomain] : []
+);
+function valuedRow(field) {
+  return GLOBAL_FIELDS[field];
+}
+var floorOf2 = (field) => valuedRow(field).floor;
+function wireKindOf(field) {
+  const row = GLOBAL_FIELDS[field];
+  if (row.kind === "text") return "string";
+  const { domain } = row;
+  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+}
+
+// src/config/setting-projections.ts
+var effectiveVarOf = (name) => `${name}.effective`;
+var SETTINGS = Object.fromEntries(
+  CONTROLLED_FIELDS.map((field) => {
+    const name = settingNameOf(field);
+    return [
+      name,
+      {
+        configKey: field,
+        sessionKey: name,
+        effectiveVar: effectiveVarOf(name),
+        ...GLOBAL_FIELDS[field].control
+      }
+    ];
+  })
+);
+var SETTING_NAMES = Object.keys(SETTINGS);
+var SETTING_PROJECTIONS = Object.values(SETTINGS);
+var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
+  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
+);
+var CONFIG_ONLY_KEYS = new Set(
+  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
+);
+var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
+  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
+    p2.configKey,
+    p2.effectiveVar
+  ])
+);
+var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
+function perSetting(value) {
+  return Object.fromEntries(
+    SETTING_NAMES.map((name) => [name, value(name)])
+  );
+}
+var SESSION_KEY_TO_SETTING = new Map(
+  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
+);
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/session-key.ts
+function sessionKeyKind(key) {
+  if (isEditNamespaced(key))
+    return {
+      kind: "edit",
+      part: key === EDIT_MODE_KEY ? "mode" : key.startsWith(PLACEMENT_DRAFT_NS) ? "draft" : "view"
+    };
+  if (SESSION_KEY_TO_SETTING.has(key)) return { kind: "setting" };
+  if (isMenuStateKey(key)) return { kind: "menu" };
+  if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
+  if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
+  if (key === CLICK_ERROR_KEY) return { kind: "record" };
+  return reservedNamespaceOf(key) === void 0 ? { kind: "plain" } : { kind: "menu" };
+}
+var isEditModeKey = (key) => sessionKeyKind(key).kind === "edit";
+var isSettingKey = (key) => sessionKeyKind(key).kind === "setting";
+var isPlacementDraftKey = (key) => {
+  const k = sessionKeyKind(key);
+  return k.kind === "edit" && k.part === "draft";
+};
+var isHeldByEdit = (key) => sessionKeyKind(key).kind !== "record";
+function isUndoStepKey(key) {
+  return isSettingKey(key) || isPlacementDraftKey(key);
+}
+function isNavigationKey(key) {
+  const k = sessionKeyKind(key);
+  return k.kind === "menu" || k.kind === "plain" || k.kind === "edit" && k.part === "view";
+}
+
+// src/config/menu-keys.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+var ESCAPE = "Z";
+var MAX_CODE_POINT = 1114111;
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
+function unescapedIdent(spelled2) {
+  const name = spelled2.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    (escape, hex) => parseInt(hex, 16) > MAX_CODE_POINT ? escape : String.fromCodePoint(parseInt(hex, 16))
+  );
+  return escapedIdent(name) === spelled2 ? name : void 0;
+}
+
+// src/config/placement-identity.ts
+init_globals();
+function placementKeyScope(identity2) {
+  return `p${escapedIdent(identity2.preset)}.d${escapedIdent(identity2.id)}.s${escapedIdent(identity2.segment)}`;
+}
+function placementOfKeyScope(scope) {
+  const [preset, id2, segment, ...more] = scope.split(".");
+  if (preset === void 0 || id2 === void 0 || segment === void 0 || more.length > 0 || !preset.startsWith("p") || !id2.startsWith("d") || !segment.startsWith("s"))
+    return void 0;
+  const parts = [preset, id2, segment].map(
+    (part) => unescapedIdent(part.slice(1))
+  );
+  return parts.includes(void 0) ? void 0 : {
+    preset: parts[0],
+    id: parts[1],
+    segment: parts[2]
+  };
+}
+
+// src/config/menu-keys.ts
+var PAGE_HOLDING_CURRENT = "-1";
+function menuMember(applyName) {
+  return applyName;
+}
+function menuScope(host) {
+  return isEditNamespaced(host) ? EDIT_NS : "";
+}
+function menuStateKey(host, applyName, sharedKey) {
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : `${menuScope(host.id)}${MENU_NS}${placementKeyScope(host)}.${escapedIdent(applyName)}`;
+}
+function sharedMenuStateKey(sharedKey) {
+  return `${menuScope(sharedKey)}${MENU_NS}_${escapedIdent(sharedKey)}`;
+}
+function menuOfKey(key) {
+  const scoped = key.slice(menuScope(key).length);
+  const page2 = scoped.startsWith(MENU_PAGE_NS);
+  const ns = page2 ? `${MENU_PAGE_NS}${MENU_NS}` : MENU_NS;
+  if (!scoped.startsWith(ns)) return void 0;
+  const rest2 = scoped.slice(ns.length);
+  if (rest2.startsWith("_")) {
+    const shared = unescapedIdent(rest2.slice(1));
+    return shared === void 0 ? void 0 : { menu: shared, page: page2 };
+  }
+  const parts = rest2.split(".");
+  const host = placementOfKeyScope(parts.slice(0, 3).join("."));
+  const apply2 = unescapedIdent(parts[3] ?? "");
+  return host === void 0 || apply2 === void 0 || parts.length !== 4 ? void 0 : { menu: `${apply2} on ${host.id}`, page: page2 };
+}
+function menuActionName(stateKey, member) {
+  return `${stateKey}.${escapedIdent(member)}`;
+}
+function menuPageKey(stateKey) {
+  const scope = menuScope(stateKey);
+  return `${scope}${MENU_PAGE_NS}${stateKey.slice(scope.length)}`;
+}
+var MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution"
+];
+var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
+var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
+function parseMenuOptions(entries) {
+  for (const name of Object.keys(entries)) {
+    if (!isMenuOptionName(name)) {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
+      );
+    }
+  }
+  const bool = (name, def) => {
+    const v = entries[name];
+    if (v === void 0) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== void 0 && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
+    );
+  }
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
+    );
+  }
+  const distribution = entries["distribution"];
+  if (distribution !== void 0 && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+    distribution: placedBy(distribution)
+  };
+}
+
+// src/daemon/foundations/session-id.ts
+init_globals();
+var SESSION_ID_MAX_BYTES = 250;
+function parseSessionId(raw) {
+  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : isArrayIndex(raw) ? `is ${JSON.stringify(raw)}, an array index, which is never a session id` : raw === "__proto__" ? `is "__proto__", which is never a session id` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
+  return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+function isArrayIndex(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n < 2 ** 32 - 1 && String(n) === raw;
+}
+function sessionKeyed(record2, refused2) {
+  const keyed = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(record2)) {
+    const id2 = parseSessionId(key);
+    if (id2.ok) keyed.set(id2.id, value);
+    else refused2(key, id2.problem);
+  }
+  return keyed;
+}
+
+// src/click/wire.ts
+var URL_SCHEME = "cc-candybar";
+var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
+var VERB_DISPATCH = "dispatch";
+var VERB_SET_STATE = "set-state";
+var VERB_STEP_STATE = "step-state";
+var VERB_COPY = "copy";
+var VERB_OPEN_VSCODE = "open-vscode";
+var VERB_SET_CONFIG = "set-config";
+var VERB_STEP_CONFIG = "step-config";
+var VERB_SAVE = "save";
+var VERB_SAVE_PRESET = "save-preset";
+var VERB_SAVE_THEME_DEFAULT = "save-theme-default";
+var VERB_DELETE_PRESET = "delete-preset";
+var VERB_RESET_CONFIG = "reset-config";
+var VERB_APPLY_LAYOUT_OP = "apply-layout-op";
+var VERB_UNDO = "undo";
+var VERB_REDO = "redo";
+var VERB_BACK = "back";
+var VERB_REWIND = "rewind";
+var VERB_SLASH = "slash";
+var VERB_RUN = "run";
+var VERB_REPO_CONFIG = "repo-config";
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
+var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
+function runLinkFields({
+  session,
+  action: action2,
+  declaration
+}, evaluated2) {
+  return { sessionId: session, action: action2, declaration, evaluated: evaluated2 };
+}
+function configWriteEffect(verb, session, role, ...payload) {
+  return { verb, args: [session, role, ...payload] };
+}
+var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
+function sayWrite(key, value) {
+  const { kind } = sessionKeyKind(key);
+  if (kind === "viewer")
+    return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
+  const set2 = `set ${key} to ${value}`;
+  if (kind !== "menu" && kind !== "edit") return set2;
+  const menu = menuOfKey(key);
+  if (menu?.page === true)
+    return `turn ${menu.menu} to page ${Number(value) + 1}`;
+  const name = menu?.menu ?? key;
+  if (value === DISCLOSURE_CLOSED) return `close ${name}`;
+  if (value === DISCLOSURE_OPEN) return `open ${name}`;
+  return menu !== void 0 ? `open ${value}` : set2;
+}
+var COPIED_LENGTH = 60;
+var ELISION = "...";
+function saidCopy(text4) {
+  const chars = [...text4];
+  const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
+  return chars.length <= COPIED_LENGTH ? text4 : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
+}
+var SAYS = {
+  [VERB_SET_STATE]: ([, ...pairs2]) => pairs2.flatMap(
+    (key, i2) => i2 % 2 === 0 ? [sayWrite(key, pairs2[i2 + 1])] : []
+  ),
+  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
+  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
+  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  // A config write says the layer of the session's chain it writes.
+  [VERB_SET_CONFIG]: ([, layer, key, value]) => [
+    `save ${key} as ${value} in ${layer} config`
+  ],
+  [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
+    `save ${sayStep(key, by)} in ${layer} config`
+  ],
+  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
+  [VERB_SAVE_PRESET]: ([, layer]) => [
+    `save as a new preset in ${layer} config`
+  ],
+  [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
+    `save this look for the theme in ${layer} config`
+  ],
+  [VERB_DELETE_PRESET]: ([, layer, name]) => [
+    `delete preset ${name} from ${layer} config`
+  ],
+  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => `reset ${key} in ${layer} config`),
+  [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
+    `edit ${op} in ${key} of ${layer} config`
+  ],
+  [VERB_UNDO]: () => ["undo"],
+  [VERB_REDO]: () => ["redo"],
+  [VERB_BACK]: () => ["go back"],
+  [VERB_REWIND]: () => ["cancel edits"],
+  [VERB_SLASH]: ([, line]) => [`type ${line}`],
+  [VERB_RUN]: ([, action2]) => [`run ${action2}`],
+  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
+  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
+};
+var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
+function clickDoes(effects) {
+  const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
+  const [face = "nothing", ...rest2] = [
+    ...effects.filter((e) => !writesSession(e)),
+    ...effects.filter(writesSession)
+  ].flatMap((e) => SAYS[e.verb](e.args));
+  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
+}
+function encodeSegments(parts) {
+  return parts.map(encodeURIComponent).join("/");
+}
+function decodeSegments(value) {
+  return value.length === 0 ? [] : value.split("/").map(decodeURIComponent);
+}
+function decodeFirstSegment(value) {
+  return decodeURIComponent(value.split("/", 1)[0]);
+}
+function effectsUrl(effects, says = clickDoes(effects)) {
+  const params = effects.map(
+    (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`
+  );
+  const qs = [`does=${spell(says)}`, ...params].join("&");
+  return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
+}
+function parseEffects(rawValue) {
+  return new S(rawValue).getAll("e").map(splitVerb);
+}
+var BATCHED_VERBS = /* @__PURE__ */ new Map([
+  [VERB_SET_STATE, 1],
+  [VERB_RESET_CONFIG, 2]
+]);
+function batchAdjacentWrites(effects) {
+  return effects.reduce((out, e) => {
+    const prev = out.at(-1);
+    const joined = prev && joinWrites(prev, e);
+    return joined ? [...out.slice(0, -1), joined] : [...out, e];
+  }, []);
+}
+function joinWrites(a, b) {
+  const width = BATCHED_VERBS.get(a.verb);
+  if (a.verb !== b.verb || width === void 0) return void 0;
+  const [x, y] = [a.value.split("/"), b.value.split("/")];
+  const head = x.slice(0, width).join("/");
+  return head === y.slice(0, width).join("/") ? { verb: a.verb, value: [...x, ...y.slice(width)].join("/") } : void 0;
+}
+function splitVerb(s) {
+  const i2 = s.indexOf("/");
+  return i2 === -1 ? { verb: s, value: "" } : { verb: s.slice(0, i2), value: s.slice(i2 + 1) };
+}
+function parseHandlerUrl(rawUrl) {
+  const prefix = `${URL_SCHEME}://`;
+  if (!rawUrl.startsWith(prefix)) {
+    return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
+  }
+  const rest2 = rawUrl.slice(prefix.length);
+  const slash2 = rest2.indexOf("/");
+  if (slash2 === -1) {
+    return { ok: true, verb: VERB_COPY, value: rest2 };
+  }
+  const encoded = rest2.slice(0, slash2);
+  try {
+    return {
+      ok: true,
+      verb: decodeURIComponent(encoded),
+      value: rest2.slice(slash2 + 1)
+    };
+  } catch {
+    return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
+  }
+}
+var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_SAVE,
+  VERB_SAVE_PRESET,
+  VERB_SAVE_THEME_DEFAULT,
+  VERB_DELETE_PRESET,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_UNDO,
+  VERB_REDO,
+  VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
+  VERB_COPY_DIAGNOSTIC
+]);
+var VERB_NAMES = Object.freeze([
+  ...Object.keys(SAYS),
+  VERB_DISPATCH
+]);
+function isEffectVerb(verb) {
+  return Object.hasOwn(SAYS, verb);
+}
+function admitClick(verb, value, signer) {
+  if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
+    throw new BadVerbArgs(`unknown click verb: ${verb}`);
+  const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+  const global2 = [];
+  const runEvidence = [];
+  let scoped;
+  for (const step4 of batchAdjacentWrites(raw)) {
+    const name = step4.verb;
+    if (!isEffectVerb(name)) {
+      (scoped?.steps ?? global2).push({
+        kind: "invalid",
+        reason: `unknown effect verb "${name}"`
+      });
+      continue;
+    }
+    if (name === VERB_COPY || name === VERB_OPEN_VSCODE) {
+      try {
+        (scoped?.steps ?? global2).push({
+          kind: "global",
+          verb: name,
+          value: decodeWire(() => decodeURIComponent(step4.value))
+        });
+      } catch (e) {
+        if (!(e instanceof BadVerbArgs)) throw e;
+        (scoped?.steps ?? global2).push({
+          kind: "invalid",
+          reason: `${name}: ${e.message}`
+        });
+      }
+      continue;
+    }
+    const segmented = SEGMENTED_VERBS.has(name);
+    const claimed = decodeWire(
+      () => segmented ? decodeFirstSegment(step4.value) : decodeURIComponent(step4.value)
+    );
+    if (scoped === void 0) {
+      const parsed2 = parseSessionId(claimed);
+      if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
+      scoped = { id: parsed2.id, steps: [...global2] };
+    } else if (scoped.id !== claimed) {
+      throw new BadVerbArgs("a click cannot name more than one session");
+    }
+    const separator = segmented ? step4.value.indexOf("/") : -1;
+    try {
+      const args = separator === -1 ? [] : decodeWire(
+        () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
+      );
+      switch (name) {
+        case VERB_REPO_CONFIG:
+          scoped.steps.push(admitRepoAnswer(scoped.id, args, signer));
+          break;
+        case VERB_RUN: {
+          const [action2 = "", evaluated2 = "", mac = ""] = args;
+          const capture4 = runEvidence.length;
+          runEvidence.push({ session: scoped.id, action: action2, evaluated: evaluated2, mac });
+          scoped.steps.push({
+            kind: "run",
+            verb: name,
+            action: action2,
+            capture: capture4
+          });
+          break;
+        }
+        default:
+          scoped.steps.push({ kind: "session", verb: name, args });
+      }
+    } catch (e) {
+      if (!(e instanceof BadVerbArgs)) throw e;
+      scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
+    }
+  }
+  const click2 = scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+  return { click: click2, runEvidence };
+}
+function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
+  const answer2 = REPO_ANSWERS.find((known) => known === value);
+  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
+}
+
+// src/render/diagnostic-text.ts
+init_globals();
+var NEUTRALIZED_RANGES = [
+  [0, 31],
+  [127, 159],
+  [8234, 8238],
+  [8294, 8303]
+];
+function isControlChar(code2) {
+  return NEUTRALIZED_RANGES.some(([lo, hi]) => code2 >= lo && code2 <= hi);
+}
+function sanitizeText(text4) {
+  let sanitized = "";
+  for (const ch of text4) {
+    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
+  }
+  return sanitized.replace(/\s+/g, " ").trim();
+}
+
+// src/render/diagnostic-style.ts
+init_globals();
+var DIAGNOSTIC_ERROR_COLORS = {
+  fg: "#ffffff",
+  bg: "#c82828"
+};
+var DIAGNOSTIC_WARNING_COLORS = {
+  fg: "#000000",
+  bg: "#dca028"
+};
+var DIAGNOSTIC_INFO_COLORS = {
+  fg: "#ffffff",
+  bg: "#2f6db5"
+};
+function sgrOf(layer, hex) {
+  const channels = [1, 3, 5].map(
+    (at) => Number.parseInt(hex.slice(at, at + 2), 16)
+  );
+  return `\x1B[${layer};2;${channels.join(";")}m`;
+}
+var DIAGNOSTIC_ERROR_FG = sgrOf(38, DIAGNOSTIC_ERROR_COLORS.fg);
+var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
+
+// src/render/drawn-link.ts
+init_globals();
+function actionTarget(effects, description) {
+  return {
+    kind: "action",
+    effects,
+    ...description === void 0 ? {} : { description }
+  };
+}
+function hrefOfDrawnLink(link) {
+  return drawnHref(link, () => "");
+}
+function publishedHref(link, proof) {
+  return drawnHref(link, proof);
+}
+function drawnHref(link, proof) {
+  if (typeof link === "string") return link;
+  switch (link.kind) {
+    case "href":
+      return link.url;
+    case "repo-answer": {
+      const { session, dir, answer: answer2 } = link;
+      return effectsUrl([
+        {
+          verb: VERB_REPO_CONFIG,
+          args: [
+            session,
+            dir,
+            answer2,
+            proof(repoAnswerFields(session, dir, answer2))
+          ]
+        }
+      ]);
+    }
+    case "action":
+      return effectsUrl(
+        link.effects.map((effect) => emitted(effect, proof)),
+        link.description
+      );
+  }
+}
+function emitted(effect, proof) {
+  if ("verb" in effect) return effect;
+  const { session, action: action2 } = effect;
+  const evaluated2 = JSON.stringify(effect.evaluated);
+  const mac = proof(runLinkFields(effect, evaluated2));
+  return { verb: VERB_RUN, args: [session, action2, evaluated2, mac] };
+}
+
+// src/render/link-style.ts
+init_globals();
+var PROOF = /* @__PURE__ */ Symbol("Candybar link target");
+var MARKER = "candybar-span:";
+function capture(effect) {
+  if ("verb" in effect)
+    return Object.freeze({ ...effect, args: Object.freeze([...effect.args]) });
+  const { run: run2, env: env2 } = effect.evaluated;
+  return Object.freeze({
+    ...effect,
+    evaluated: Object.freeze({
+      run: Object.freeze([...run2]),
+      env: Object.freeze({ ...env2 })
+    })
+  });
+}
+var LinkProof = class {
+  marker;
+  target;
+  constructor(target) {
+    this.target = target.kind === "action" ? Object.freeze({
+      ...target,
+      effects: Object.freeze(target.effects.map(capture))
+    }) : Object.freeze({ ...target });
+    this.marker = MARKER + encodeURIComponent(JSON.stringify(this.target));
+  }
+};
+function styleWithLink(style, link) {
+  if (typeof link === "string") return style.withLink(link);
+  const proof = new LinkProof(link);
+  return style.add(new Style({ link: proof.marker, meta: { [PROOF]: proof } }));
+}
+function linkFromStyle(style) {
+  const { link, meta } = style;
+  const proof = meta === void 0 ? void 0 : Reflect.get(meta, PROOF);
+  if (proof instanceof LinkProof && proof.marker === link) return proof.target;
+  return link?.startsWith(MARKER) ? void 0 : link;
+}
+function authoredLinks(funcs) {
+  const link = funcs.link;
+  const style = funcs.style;
+  if (link === void 0 || style === void 0) {
+    throw new Error("rich-js is missing its link or style template binding");
+  }
+  const project = (binding, input, child, setsLink) => {
+    const result = Reflect.apply(binding.fn, void 0, [
+      input,
+      child
+    ]);
+    if (!(result instanceof RichText)) {
+      throw new TypeError(
+        "rich-js link and style bindings must return RichText"
+      );
+    }
+    if (!setsLink || typeof result.style === "string") return result;
+    const layered = result.style;
+    const base = layered instanceof Style ? layered : layered.over;
+    const url = base.link;
+    if (url?.startsWith(MARKER)) {
+      const quoted2 = styleWithLink(base, { kind: "href", url });
+      result.style = layered instanceof Style ? quoted2 : { ...layered, over: quoted2 };
+    }
+    return result;
+  };
+  return {
+    ...funcs,
+    link: {
+      ...link,
+      fn: (url, child) => project(link, url, child, url !== "")
+    },
+    style: {
+      ...style,
+      fn: (spec, child) => project(style, spec, child, Style.parse(spec).link !== void 0)
+    }
+  };
+}
+
+// src/render/strip.ts
+init_globals();
+
+// src/render/rich-theme.ts
+init_globals();
+var RENDER_THEME = new Theme({
+  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
+  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
+  // slot some terminal themes paint as that ground. The terminal's own text on
+  // its own ground is the one pair known to read there.
+  "strip.separator": "default",
+  "strip.rail": "default"
+});
+function resolvedStyle(style) {
+  return RENDER_THEME.resolve(style);
+}
+
 // src/render/effect.ts
+init_globals();
 var STILL3 = { kind: "still" };
 var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
 var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
@@ -42607,7 +44459,7 @@ function isStringish(value) {
 function isObject(value) {
   return value !== null && typeof value === "object";
 }
-function isPlainObject(value) {
+function isPlainObject2(value) {
   if (!isObject(value)) {
     return false;
   }
@@ -42810,7 +44662,7 @@ function deepEnhancer(v, _, name) {
       name
     });
   }
-  if (isPlainObject(v)) {
+  if (isPlainObject2(v)) {
     return observable.object(v, void 0, {
       name
     });
@@ -43297,7 +45149,7 @@ function createObservable(v, arg2, arg3) {
   if (isObservable(v)) {
     return v;
   }
-  if (isPlainObject(v)) {
+  if (isPlainObject2(v)) {
     return observable.object(v, arg2, arg3);
   }
   if (Array.isArray(v)) {
@@ -43346,7 +45198,7 @@ var computed = function computed2(arg1, arg2) {
   if (arg2 && typeof arg2.kind === "string") {
     return decorateComputed20223_(computedAnnotation, arg1, arg2);
   }
-  if (isPlainObject(arg1)) {
+  if (isPlainObject2(arg1)) {
     return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
   }
   if (__MOBX_DEV__) {
@@ -43357,7 +45209,7 @@ var computed = function computed2(arg1, arg2) {
       die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
     }
   }
-  const opts = isPlainObject(arg2) ? arg2 : {};
+  const opts = isPlainObject2(arg2) ? arg2 : {};
   opts.get = arg1;
   opts.name || (opts.name = arg1.name || "");
   return new ComputedValue(opts);
@@ -44565,7 +46417,7 @@ function reaction(expression, effect, opts = EMPTY_OBJECT) {
     if (!isFunction(expression) || !isFunction(effect)) {
       die("First and second argument to reaction should be functions");
     }
-    if (!isPlainObject(opts)) {
+    if (!isPlainObject2(opts)) {
       die("Third argument of reactions should be an object");
     }
   }
@@ -44629,7 +46481,7 @@ function extendObservable(target, properties, annotations, options) {
     if (isObservableMap(target)) {
       die("'extendObservable' should not be used on maps, use map.merge instead");
     }
-    if (!isPlainObject(properties)) {
+    if (!isPlainObject2(properties)) {
       die(`'extendObservable' only accepts plain objects as second argument`);
     }
     if (isObservable(properties) || isObservable(annotations)) {
@@ -45671,7 +47523,7 @@ var ObservableMap = class {
       other = new Map(other);
     }
     transaction(() => {
-      if (isPlainObject(other)) {
+      if (isPlainObject2(other)) {
         getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
       } else if (Array.isArray(other)) {
         other.forEach(([key, value]) => this.set(key, value));
@@ -45768,7 +47620,7 @@ function convertToMap(dataStructure) {
     return dataStructure;
   } else if (Array.isArray(dataStructure)) {
     return new Map(dataStructure);
-  } else if (isPlainObject(dataStructure)) {
+  } else if (isPlainObject2(dataStructure)) {
     const map = /* @__PURE__ */ new Map();
     for (const key in dataStructure) {
       map.set(key, dataStructure[key]);
@@ -46033,7 +47885,7 @@ var ObservableObjectAdministration = class {
     this.name_ = name_;
     this.defaultAnnotation_ = defaultAnnotation_;
     this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
-    this.isPlainObject_ = isPlainObject(this.target_);
+    this.isPlainObject_ = isPlainObject2(this.target_);
     if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
       die(`defaultAnnotation must be valid annotation`);
     }
@@ -46443,7 +48295,7 @@ Extending builtins is not supported.`);
   if (__MOBX_DEV__ && !Object.isExtensible(target)) {
     die("Cannot make the designated object observable; it is not extensible");
   }
-  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
+  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject2(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
   const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
   addHiddenProp(target, $mobx, adm);
   return target;
@@ -47204,1604 +49056,6 @@ function chainName(paths2, none2 = "bundled default (no config file loaded)") {
 // src/renderer/setting-drafts.ts
 init_globals();
 
-// src/config/dsl-types.ts
-init_globals();
-var DIRECTIONS = ["vertical", "horizontal"];
-var AXIS_OF = {
-  vertical: "row",
-  horizontal: "cell"
-};
-function placementId(node) {
-  return node.id ?? node.name;
-}
-function placementIds(tree) {
-  return [...walkNodes(tree)].flatMap(
-    (n) => n.kind === "segment" ? [placementId(n)] : []
-  );
-}
-function freePlacementId(segment, taken2) {
-  if (!taken2.has(segment)) return segment;
-  let n = 2;
-  while (taken2.has(`${segment}-${n}`)) n++;
-  return `${segment}-${n}`;
-}
-function mapOpens(node, f) {
-  return node.opens === void 0 ? node : { ...node, opens: { ...node.opens, body: f(node.opens.body) } };
-}
-function* walkNodes(node) {
-  yield node;
-  for (const child of childrenOf(node)) yield* walkNodes(child);
-}
-var childPath = (path31, i2) => `${path31}.children[${i2}]`;
-var bodyPath = (path31) => `${path31}.opens.body`;
-function* walkNodePaths(node, path31) {
-  yield [node, path31];
-  if (node.kind === "container") {
-    for (const [i2, child] of node.children.entries()) {
-      yield* walkNodePaths(child, childPath(path31, i2));
-    }
-  } else if (node.opens !== void 0) {
-    yield* walkNodePaths(node.opens.body, bodyPath(path31));
-  }
-}
-function childrenOf(node) {
-  return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
-}
-function parseArm(parse3) {
-  if (parse3 === void 0 || "text" in parse3) return "text";
-  return "regex" in parse3 ? "regex" : "json";
-}
-var CACHE_KEYS = [
-  "ttl",
-  "watch_file",
-  "depends_on",
-  "key",
-  "never"
-];
-function hasCacheField(v) {
-  return v.kind === "file" || v.kind === "shell";
-}
-function mapVariableTemplates(v, f) {
-  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
-  return hasCacheField(body) && "key" in body.cache ? {
-    ...body,
-    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
-  } : body;
-}
-function variableTemplates(v) {
-  const found2 = [];
-  mapVariableTemplates(v, (template, field) => {
-    found2.push([field, template]);
-    return template;
-  });
-  return found2;
-}
-function* stateVarDecls(config) {
-  for (const [name, decl] of Object.entries(config.variables)) {
-    if (decl.kind === "state") yield [name, decl];
-  }
-  for (const [segName, seg2] of Object.entries(config.segments)) {
-    if (!seg2.vars) continue;
-    for (const [varName, decl] of Object.entries(seg2.vars)) {
-      if (decl.kind === "state") yield [`${segName}.${varName}`, decl];
-    }
-  }
-}
-var THEME_SETTING = "theme";
-var EFFECT_SETTING = "effect";
-var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
-function settingsOf(seg2) {
-  return {
-    ...seg2.settings,
-    [THEME_SETTING]: {
-      label: THEME_SETTING,
-      domain: "theme",
-      default: seg2.palette ?? FOLLOW_BAR
-    },
-    // [LAW:one-type-per-behavior] A closed list of names, so the word-list arm
-    // every authored setting uses: the loader's membership test, configure
-    // mode's picker and save need nothing of their own for it.
-    [EFFECT_SETTING]: {
-      label: EFFECT_SETTING,
-      domain: PLACEMENT_EFFECTS,
-      default: FOLLOW_BAR
-    }
-  };
-}
-function rangeOf(decl) {
-  const domain = decl?.domain;
-  return typeof domain === "object" && "min" in domain ? domain : void 0;
-}
-function settingOrderProblems(decls, values2) {
-  return Object.entries(decls).flatMap(([name, decl]) => {
-    const floor3 = rangeOf(decl)?.atLeast;
-    if (floor3 === void 0) return [];
-    const value = values2[name];
-    const least = values2[floor3];
-    return value >= least ? [] : [
-      {
-        setting: name,
-        message: `"${name}" (${value}) is below "${floor3}" (${least}) \u2014 ${decl.label} must be at least ${decls[floor3].label}`
-      }
-    ];
-  });
-}
-function inSettingDomain(decl, value) {
-  const { domain } = decl;
-  if (domain === "bool") return typeof value === "boolean";
-  if (domain === "theme") {
-    return typeof value === "string" && isPlacementThemeName(value);
-  }
-  if ("min" in domain) {
-    return typeof value === "number" && Number.isInteger(value) && value >= domain.min && value <= domain.max;
-  }
-  return typeof value === "string" && domain.includes(value);
-}
-function settingSpelling(value) {
-  return String(value);
-}
-function parseSettingSpelling(decl, raw) {
-  const { domain } = decl;
-  if (typeof domain === "object" && "min" in domain) {
-    return parseSessionInt(raw, domain) ?? void 0;
-  }
-  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
-  return inSettingDomain(decl, value) ? value : void 0;
-}
-function placementSetting(node, name, decl, pick2) {
-  const saved = node.settings?.[name] ?? decl.default;
-  const draft = node.drafts?.[name];
-  const raw = draft === void 0 ? null : pick2(draft);
-  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
-}
-function describeSettingDomain(decl) {
-  const { domain } = decl;
-  if (domain === "bool") return "true or false";
-  if (domain === "theme") {
-    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
-  }
-  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
-  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
-}
-var JUSTIFY_MODES = [
-  "left",
-  "center",
-  "right"
-];
-var TRUNCATE_MODES = [
-  "right",
-  "left",
-  "middle"
-];
-
-// src/config/globals-fields.ts
-init_globals();
-
-// src/config/loader/validate-core.ts
-init_globals();
-
-// src/config/loader/diagnostics.ts
-init_globals();
-var import_json52 = __toESM(require_dist(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf2(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path31) {
-  let node = root;
-  for (const key of path31) {
-    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i2) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path31, valueText, dialect) {
-  const [head, ...rest2] = path31;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i2 = end;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
-  if (commaEnd !== -1) i2 = commaEnd;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  LINE_TRAILER.lastIndex = i2;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next2 = i2 + m[0].length;
-  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path31, valueText, dialect) {
-  if (path31.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path31, valueText, dialect);
-}
-function insertValue(text4, path31, valueText, dialect, precedes) {
-  const parentPath = path31.slice(0, -1);
-  if (/^\s*$/.test(text4) && parentPath.length === 0)
-    return setValue(text4, path31, valueText, dialect);
-  const leaf = path31[path31.length - 1];
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  if (leaf === void 0 || parent?.kind !== "object")
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: its parent is not an object`,
-      parent?.span.start ?? 0
-    );
-  if (entryOf2(parent, leaf) !== void 0)
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: it is already there`,
-      parent.span.start
-    );
-  const member = entryText([leaf], valueText, dialect);
-  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next2 === void 0) return appendMember(text4, parent, member, dialect);
-  if (!startsLine(text4, next2.span.start))
-    return splice(text4, next2.span.start, next2.span.start, `${member}, `);
-  const indent2 = indentOfLine(text4, next2.span.start);
-  const eol = eolOf(text4);
-  const at = lineStartOf(text4, next2.span.start);
-  return splice(
-    text4,
-    at,
-    at,
-    `${indent2}${reindent(member, indent2, eol)},${eol}`
-  );
-}
-function setBelow(text4, start, path31, valueText, dialect) {
-  let node = start;
-  for (let i2 = 0; i2 < path31.length; i2++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf2(node, path31[i2]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path31.slice(i2), valueText, dialect),
-        dialect
-      );
-    }
-    if (i2 === path31.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path31, keep = 0) {
-  if (path31.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path31.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf2(parent, path31[path31.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf2(node, "seg")?.value;
-  const kind = entryOf2(node, "kind")?.value;
-  const name = entryOf2(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf2(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf2(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row.value,
-      bareAt === null ? null : [...bareAt, "rows", row.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/config/loader/diagnostics.ts
-function parseJson5Syntax(source) {
-  try {
-    return { kind: "parsed", value: import_json52.default.parse(source) };
-  } catch (e) {
-    const error = e;
-    return {
-      kind: "invalid",
-      issue: {
-        path: "",
-        message: `JSON5 syntax error: ${error.message}`,
-        line: error.lineNumber,
-        col: error.columnNumber
-      }
-    };
-  }
-}
-var ConfigError = class extends Error {
-  file;
-  issues;
-  /** Advisories the file earned before it failed — reported beside the error. */
-  warnings;
-  constructor(file, issues, warnings = []) {
-    super(formatIssues(file, issues));
-    this.name = "ConfigError";
-    this.file = file;
-    this.issues = issues;
-    this.warnings = warnings;
-  }
-};
-var DroppedFileError = class extends ConfigError {
-  prompt;
-  constructor(file, issues) {
-    super(file, issues);
-    this.name = "DroppedFileError";
-    this.prompt = [
-      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
-      `Config file to edit: ${file}`,
-      this.message,
-      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
-    ].join("\n\n");
-  }
-};
-function findKeyLine(source, pathParts) {
-  return keyLocator(source)(pathParts);
-}
-function keyLocator(source) {
-  let parsed2;
-  const document = () => {
-    parsed2 ??= { node: parseOrUndefined(source) };
-    return parsed2.node;
-  };
-  return (pathParts) => keyLine(source, document, pathParts);
-}
-function parseOrUndefined(source) {
-  try {
-    return parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return void 0;
-    throw e;
-  }
-}
-function keyLine(source, document, pathParts) {
-  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
-  if (indexed !== void 0) return indexed;
-  let cursor = 0;
-  let foundCursor;
-  for (const part of pathParts) {
-    if (part === "" || /^\d+$/.test(part)) continue;
-    const found2 = findKeyOccurrence(source, cursor, part);
-    if (found2 === -1) {
-      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-    }
-    cursor = found2;
-    foundCursor = found2;
-  }
-  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-}
-function elementPathLine(source, document, pathParts) {
-  if (document === void 0) return void 0;
-  let node = document;
-  let reached;
-  let indexed = false;
-  for (const part of pathParts) {
-    const element = node.kind === "array" && /^\d+$/.test(part);
-    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
-    if (next2 === void 0) break;
-    indexed ||= element;
-    node = next2;
-    reached = next2;
-  }
-  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
-}
-function findKeyOccurrence(source, from, key) {
-  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
-  re.lastIndex = from;
-  const m = re.exec(source);
-  return m ? m.index : -1;
-}
-function lineFromOffset(source, offset) {
-  let line = 1;
-  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
-    if (source.charCodeAt(i2) === 10) line++;
-  }
-  return line;
-}
-function editabilityNotice(filePath2, source) {
-  try {
-    parseDocument(source);
-    return null;
-  } catch (e) {
-    if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
-  }
-}
-function formatIssues(file, issues) {
-  if (issues.length === 0) return `${file}: invalid config (no details)`;
-  const lines2 = [
-    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
-  ];
-  for (const issue3 of issues) {
-    const locParts = [];
-    if (issue3.line !== void 0) {
-      locParts.push(
-        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
-      );
-    }
-    if (issue3.path) locParts.push(issue3.path);
-    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
-    lines2.push(`  ${loc}${issue3.message}`);
-  }
-  return lines2.join("\n");
-}
-
-// src/config/loader/validate-core.ts
-function requireString(ctx, path31, raw, field) {
-  const v = raw[field];
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return null;
-  }
-  return v;
-}
-function optionalTypedDefault(ctx, path31, raw, type3) {
-  const v = raw.default;
-  if (v === void 0) return void 0;
-  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
-  if (!ok3) {
-    ctx.issues.push({
-      path: `${path31}.default`,
-      message: `default must be a ${type3}, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), "default"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalStringField(ctx, path31, raw, field) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function validatePaletteName(ctx, path31, raw) {
-  const v = optionalStringField(ctx, path31, raw, "palette");
-  if (v === void 0) return void 0;
-  if (!ctx.allowedPalettes.has(v)) {
-    ctx.issues.push({
-      path: `${path31}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalEnum(ctx, path31, raw, field, allowed) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string" || !allowed.includes(v)) {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function isPlainObject2(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function describeType(v) {
-  if (v === null) return "null";
-  if (Array.isArray(v)) return "array";
-  return typeof v;
-}
-function describeValue(v) {
-  if (typeof v === "string") return JSON.stringify(v);
-  if (v === void 0) return "undefined";
-  return String(v);
-}
-function record(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${path31} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  rejectUnknownKeys(
-    ctx,
-    path31,
-    raw,
-    schema.noun,
-    new Set(Object.keys(schema.fields)),
-    refuseRemoved(ctx, schema.removed ?? {}, path31, raw)
-  );
-  return fields(ctx, schema.fields, path31, raw);
-}
-function refuseRemoved(ctx, removed, path31, raw) {
-  const present = Object.entries(removed).filter(
-    ([key]) => raw[key] !== void 0
-  );
-  for (const [key, pointer] of present) {
-    reject(ctx, `${path31}.${key}`, `${path31}.${key} was removed: ${pointer}`);
-  }
-  return new Set(present.map(([key]) => `${path31}.${key}`));
-}
-function fields(ctx, fieldMap, path31, raw) {
-  const specs = fieldMap;
-  const out = {};
-  let ok3 = true;
-  for (const [field, spec] of Object.entries(specs)) {
-    const value = spec.parse(ctx, path31, field, raw);
-    if (value !== void 0) out[field] = value;
-    else if (spec.required) ok3 = false;
-  }
-  return ok3 ? out : null;
-}
-var EMPTY_PATHS = /* @__PURE__ */ new Set();
-function rejectUnknownKeys(ctx, path31, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key) && !spokenFor.has(`${path31}.${key}`)) {
-      ctx.issues.push({
-        path: `${path31}.${key}`,
-        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path31.split("."), key])
-      });
-    }
-  }
-}
-function reject(ctx, path31, message) {
-  ctx.issues.push({
-    path: path31,
-    message,
-    line: findKeyLine(ctx.source, path31.split("."))
-  });
-  return null;
-}
-function oneOfPresent(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  const keys2 = Object.keys(arms);
-  const present = Object.keys(raw).filter((k) => k in arms);
-  const unknown = Object.keys(raw).filter((k) => !(k in arms));
-  for (const k of unknown) {
-    ctx.issues.push({
-      path: `${path31}.${k}`,
-      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), k])
-    });
-  }
-  if (present.length === 0) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  if (present.length > 1) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const key = present[0];
-  return arms[key].parse(ctx, `${path31}.${key}`, raw[key]);
-}
-function taggedUnion(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${path31} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const tagValue = raw[schema.tag];
-  if (typeof tagValue !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${schema.tag}`,
-      message: `${path31}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  if (!Object.hasOwn(arms, tagValue)) {
-    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
-    ctx.issues.push({
-      path: `${path31}.${schema.tag}`,
-      message,
-      line: findKeyLine(ctx.source, [...path31.split("."), schema.tag])
-    });
-    return null;
-  }
-  const arm2 = arms[tagValue];
-  const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path31, raw);
-  const spokenFor = new Set(ctx.issues.slice(before).map((i2) => i2.path));
-  rejectUnknownKeys(
-    ctx,
-    path31,
-    raw,
-    `${tagValue} ${schema.memberNoun} key`,
-    arm2.keys,
-    spokenFor
-  );
-  return parsed2;
-}
-function armFacets(tag, tagValue, fieldMap) {
-  return {
-    json: withConst(objectJson(fieldMap), tag, tagValue),
-    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
-  };
-}
-function lazy(thunk) {
-  return (...args) => thunk()(...args);
-}
-function refine(inner, ...checks) {
-  return (ctx, path31, raw) => {
-    const value = inner(ctx, path31, raw);
-    if (value === null) return null;
-    for (const check of checks) {
-      if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
-      const at = field === "" ? path31 : `${path31}.${field}`;
-      ctx.issues.push({
-        path: at,
-        message,
-        line: findKeyLine(ctx.source, at.split("."))
-      });
-      return null;
-    }
-    return value;
-  };
-}
-function optionalStringSpec() {
-  return {
-    required: false,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => optionalStringField(ctx, path31, raw, field)
-  };
-}
-var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-function optionalEnvNamesSpec() {
-  return {
-    required: false,
-    json: {
-      type: "array",
-      items: { type: "string", pattern: ENV_NAME.source }
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalBooleanSpec() {
-  return {
-    required: false,
-    json: { type: "boolean" },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "boolean") {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be a boolean, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalIntSpec(bounds) {
-  const { min: min3, max: max3 } = bounds;
-  return {
-    required: false,
-    json: { type: "integer", minimum: min3, maximum: max3 },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "number" || !Number.isInteger(v) || v < min3 || v > max3) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalNumberSpec(bounds = {}) {
-  const { min: min3 } = bounds;
-  return {
-    required: false,
-    json: { type: "number", ...min3 !== void 0 && { minimum: min3 } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const bad = typeof v !== "number" || !Number.isFinite(v) || min3 !== void 0 && v < min3;
-      if (bad) {
-        const shape = min3 !== void 0 ? `a finite number >= ${min3}` : "a finite number";
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be ${shape}, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function paletteSpec() {
-  return {
-    required: false,
-    // Palette NAME membership is semantic (the allowed set is resolved at load
-    // from installed palettes, not a closed compile-time enum), so the schema
-    // checks only `type: string` — the same shape/meaning split the loader keeps.
-    json: { type: "string" },
-    parse: (ctx, path31, _field, raw) => validatePaletteName(ctx, path31, raw)
-  };
-}
-function requireStringSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => requireString(ctx, path31, raw, field) ?? void 0
-  };
-}
-function optionalEnumSpec(allowed) {
-  return {
-    required: false,
-    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
-    // membership against it, `json` lists it as the schema `enum`.
-    json: { enum: [...allowed] },
-    parse: (ctx, path31, field, raw) => optionalEnum(ctx, path31, raw, field, allowed)
-  };
-}
-function objectJson(fieldMap, opts = { closed: true }) {
-  const specs = fieldMap;
-  const properties = {};
-  const required = [];
-  for (const [field, spec] of Object.entries(specs)) {
-    properties[field] = spec.json;
-    if (spec.required) required.push(field);
-  }
-  return {
-    type: "object",
-    properties,
-    ...required.length > 0 && { required },
-    ...opts.closed && { additionalProperties: false }
-  };
-}
-function recordJson(schema) {
-  return objectJson(schema.fields);
-}
-function withConst(base, key, value) {
-  const b = base;
-  const properties = {
-    [key]: { const: value },
-    ...b.properties
-  };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
-}
-function taggedUnionJson(schema) {
-  const arms = schema.arms;
-  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
-}
-function oneOfPresentJson(schema) {
-  const arms = schema.arms;
-  return {
-    anyOf: Object.entries(arms).map(([key, arm2]) => ({
-      type: "object",
-      properties: { [key]: arm2.json },
-      required: [key],
-      additionalProperties: false
-    }))
-  };
-}
-
-// src/config/lanes.ts
-init_globals();
-var IN_TMUX = 'ne .tmux.pane ""';
-var LANES = {
-  statusline: {
-    switch: { setting: "experimentalStatusline", on: true },
-    label: "\u{1F9EA} statusline (B)",
-    handsOff: false
-  },
-  pane: {
-    switch: { setting: "experimentalPane", on: true },
-    label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true
-  }
-};
-var LANE_NAMES = Object.keys(LANES);
-var TOGGLED_LANES = LANE_NAMES.filter(
-  (lane) => LANES[lane].switch.on === true
-);
-var MOVING_FPS = 30;
-var ANSWERING = { by: "request" };
-var DRAWING_VAR = "drawing";
-var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
-var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
-var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
-function perLane(value) {
-  return Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, value(lane)])
-  );
-}
-var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
-function parseLane(raw) {
-  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
-}
-function feedsFact(feeds) {
-  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
-    const { subscribers, fps, shown } = feeds[lane];
-    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-  }).join(",") || "-";
-}
-
-// src/config/globals-fields.ts
-var control = (label2, place, {
-  previews = [],
-  shown = "true"
-} = {}) => ({ label: label2, place, previews, shown });
-var enumValues = (members, optionDomain, facets = {}) => ({
-  spec: optionalEnumSpec(members),
-  domain: { from: members },
-  parse: (raw) => members.includes(raw) ? raw : null,
-  ...optionDomain !== void 0 && {
-    optionDomain: {
-      name: optionDomain,
-      members,
-      ...facets
-    }
-  }
-});
-var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
-var boolValues = {
-  spec: optionalBooleanSpec(),
-  domain: "bool",
-  parse: parseSessionBoolean
-};
-var intValues = (range) => ({
-  spec: optionalIntSpec(range),
-  domain: range,
-  parse: (raw) => parseSessionInt(raw, range)
-});
-function enumSetting(members, floor3, shown, extra = {}) {
-  return {
-    kind: "session",
-    ...enumValues(members, extra.optionDomain, {
-      library: extra.library,
-      labelOf: extra.labelOf
-    }),
-    floor: floor3,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-function boolSetting(floor3, shown) {
-  return {
-    kind: "session",
-    ...boolValues,
-    floor: floor3,
-    control: shown,
-    themeDefault: false
-  };
-}
-function intSetting(range, floor3, shown) {
-  return {
-    kind: "session",
-    ...intValues(range),
-    floor: floor3,
-    control: shown,
-    themeDefault: false
-  };
-}
-function selection(sessionKey, spec, domain, shown, extra = {}) {
-  return {
-    kind: "selection",
-    sessionKey,
-    spec,
-    domain,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-var text2 = (spec) => ({
-  kind: "text",
-  spec
-});
-var colorCompatibilitySpec = {
-  required: false,
-  json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path31, field, raw) => {
-    if (raw[field] === "auto") {
-      ctx.issues.push({
-        path: `${path31}.${field}`,
-        message: `${path31}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path31.split("."), field])
-      });
-      return void 0;
-    }
-    return optionalEnum(ctx, path31, raw, field, COLOR_COMPATIBILITIES);
-  }
-};
-var paletteOrRuleSpec = {
-  required: false,
-  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
-  // are resolved at load from installed palettes, and a rule is a string too.
-  json: { type: "string" },
-  parse: (ctx, path31, field, raw) => {
-    const v = optionalStringField(ctx, path31, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path31, raw);
-  }
-};
-var effectOrRuleSpec = {
-  required: false,
-  json: {
-    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
-  },
-  parse: (ctx, path31, field, raw) => {
-    const v = raw[field];
-    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path31, raw, field, EFFECT_NAMES);
-  }
-};
-var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
-var CLOSE_GLYPH = new RegExp(
-  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
-  "u"
-);
-var menuGlyphSpec = {
-  required: false,
-  json: {
-    type: "string",
-    pattern: MENU_GLYPH.source,
-    not: { pattern: CLOSE_GLYPH.source }
-  },
-  parse: (ctx, path31, field, raw) => {
-    const v = optionalStringField(ctx, path31, raw, field);
-    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
-      return v;
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-};
-var LANE_ROWS = Object.fromEntries(
-  TOGGLED_LANES.map((lane) => [
-    LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles"))
-  ])
-);
-var GLOBAL_FIELDS = {
-  // The config default for the base theme: a theme NAME, or a rule choosing
-  // one per render (brandon-themes-dzl). A placement's `theme` setting other
-  // than `bar` ignores it.
-  palette: selection(
-    "theme",
-    paletteOrRuleSpec,
-    { themes: "themes" },
-    control("\u{1F3A8} theme", "door")
-  ),
-  // The config default for the PRESET — a named fragment from `presets:`
-  // whose globals and root the session renders. Membership in the merged
-  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
-  // globals may NOT carry it: a
-  // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
-  preset: selection(
-    "preset",
-    optionalStringSpec(),
-    { from: "presets" },
-    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
-  ),
-  // The config default for the STYLE (a named theme adaptation from
-  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
-  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
-  style: selection(
-    "style",
-    optionalStringSpec(),
-    { from: "styles" },
-    control("\u25D0 style", "gear", { previews: ["palette"] }),
-    { themeDefault: true }
-  ),
-  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
-  // or a rich-js catalogue loop name, or a rule rendering one.
-  effect: selection(
-    "effect",
-    effectOrRuleSpec,
-    { from: EFFECT_NAMES },
-    control("\u2728 effect", "look")
-  ),
-  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
-  endcaps: enumSetting(
-    ENDCAPS_SHAPES,
-    "powerline",
-    control("\u2726 endcaps", "look"),
-    {
-      optionDomain: "endcaps"
-    }
-  ),
-  // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
-  // `accent` by default (brandon-theme-picker-bgw.7g6).
-  variation: enumSetting(
-    VARIATION_NAMES,
-    "accent",
-    control("\u{1F3BC} variation", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "variations",
-      labelOf: markTrials(TRIAL_VARIATION_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Which of its role's shades each CELL of the closed bar wears — a named
-  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
-  // role's darkenings and lightenings, or its muted form. The default is the
-  // window centred on each role's own colour — "the default will be 'middle'
-  // (standard role)" (candybar-theme-colours-6fq5.e5n).
-  shade: enumSetting(
-    SHADE_NAMES,
-    "middle",
-    control("\u{1F506} shade", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "shades",
-      labelOf: markTrials(TRIAL_SHADE_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Whether a placement that appears mid-session fades in over 20 s
-  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
-  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
-  // How fast every decorative animation runs — the effects above, fades and
-  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
-  // the rate the session's animation clock advances against the wall clock
-  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
-  animationSpeed: enumSetting(
-    ANIMATION_SPEED_NAMES,
-    "1x",
-    control("speed", "look")
-  ),
-  // Whether a root row that exceeds the usable width soft-wraps, between
-  // cells and through a cell wider than a line (the legacy display.autoWrap).
-  // False renders each row as one unbounded line, overflow off-screen.
-  autoWrap: boolSetting(true, control("wrap", "config")),
-  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
-  // the bg fill — the legacy display.padding). Templates author content; this
-  // chrome is applied structurally at the cell-formation seam. Bounded above
-  // so a config value can never drive an unbounded `" ".repeat` in the daemon
-  // [LAW:no-silent-failure] — the file, the click and the session pick all
-  // honour PADDING_RANGE.
-  padding: intSetting(
-    { ...PADDING_RANGE, step: 1 },
-    1,
-    control("padding", "config")
-  ),
-  // Seconds without a click before every open menu flashes and closes
-  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
-  menuTimeout: intSetting(
-    MENU_TIMEOUT_RANGE,
-    MENU_TIMEOUT_DEFAULT,
-    control("menu timeout", "config")
-  ),
-  ...LANE_ROWS,
-  // The color depth rich-js downsamples output to (the legacy
-  // display.colorCompatibility) — truecolor by default, deliberately NOT the
-  // legacy "auto", which the detached daemon cannot honour (see
-  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
-  // control (brandon-menu-ia-q30.5y4).
-  colorCompatibility: {
-    kind: "config",
-    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
-    // Its own spec only for the migration-pointing "auto" refusal above.
-    spec: colorCompatibilitySpec,
-    floor: "truecolor"
-  },
-  // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
-  // The cell separator `plain` draws between segments. Absent means the glyph
-  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
-  // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
-  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
-};
-function settingNameOf(field) {
-  const row = GLOBAL_FIELDS[field];
-  return row.kind === "selection" ? row.sessionKey : field;
-}
-var ROWS = Object.entries(GLOBAL_FIELDS);
-var VALUED_FIELDS = ROWS.filter(
-  ([, row]) => row.kind === "session" || row.kind === "config"
-).map(([field]) => field);
-var CONTROLLED_FIELDS = ROWS.filter(
-  ([, row]) => row.kind === "session" || row.kind === "selection"
-).map(([field]) => field);
-var THEME_DEFAULT_FIELDS = ROWS.filter(
-  ([, row]) => (row.kind === "session" || row.kind === "selection") && row.themeDefault
-).map(([field]) => field);
-var NAMED_DOMAINS = ROWS.flatMap(
-  ([, row]) => "optionDomain" in row && row.optionDomain !== void 0 ? [row.optionDomain] : []
-);
-function valuedRow(field) {
-  return GLOBAL_FIELDS[field];
-}
-var floorOf2 = (field) => valuedRow(field).floor;
-function wireKindOf(field) {
-  const row = GLOBAL_FIELDS[field];
-  if (row.kind === "text") return "string";
-  const { domain } = row;
-  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
-}
-
 // src/config/loader/globals.ts
 init_globals();
 var LIVE_GLOBALS_FIELDS = Object.fromEntries(
@@ -48957,7 +49211,7 @@ var THEME_DEFAULT_SCHEMA = {
   }
 };
 function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "themeDefaults",
       message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
@@ -49314,53 +49568,6 @@ init_globals();
 // src/config/default-dsl-config.ts
 init_globals();
 
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
-  const actions = {};
-  for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
 // src/config/dsl-loader.ts
 init_globals();
 var import_node_path7 = __toESM(require_path_browserify(), 1);
@@ -49370,49 +49577,6 @@ init_globals();
 
 // src/config/payload-inputs.ts
 init_globals();
-
-// src/config/setting-projections.ts
-init_globals();
-var effectiveVarOf = (name) => `${name}.effective`;
-var SETTINGS = Object.fromEntries(
-  CONTROLLED_FIELDS.map((field) => {
-    const name = settingNameOf(field);
-    return [
-      name,
-      {
-        configKey: field,
-        sessionKey: name,
-        effectiveVar: effectiveVarOf(name),
-        ...GLOBAL_FIELDS[field].control
-      }
-    ];
-  })
-);
-var SETTING_NAMES = Object.keys(SETTINGS);
-var SETTING_PROJECTIONS = Object.values(SETTINGS);
-var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
-  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
-);
-var CONFIG_ONLY_KEYS = new Set(
-  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
-);
-var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
-  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
-    p2.configKey,
-    p2.effectiveVar
-  ])
-);
-var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
-function perSetting(value) {
-  return Object.fromEntries(
-    SETTING_NAMES.map((name) => [name, value(name)])
-  );
-}
-var SESSION_KEY_TO_SETTING = new Map(
-  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
-);
-
-// src/config/payload-inputs.ts
 function effectiveInput(field, effectiveVar) {
   const row = GLOBAL_FIELDS[field];
   const kind = wireKindOf(field);
@@ -49945,7 +50109,7 @@ function retiredGitKindMessage(raw) {
 // src/config/loader/variables.ts
 function validateVariables(ctx, pathPrefix, raw) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: pathPrefix,
       message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
@@ -50085,7 +50249,7 @@ function sourceDefaultSpec() {
       type: ["string", "number", "boolean", "array", "object"],
       description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
     },
-    parse: (ctx, path31, _field, raw) => isPlainObject2(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path31, raw.default) : optionalStringField(ctx, path31, raw, "default")
+    parse: (ctx, path31, _field, raw) => isPlainObject(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path31, raw.default) : optionalStringField(ctx, path31, raw, "default")
   };
 }
 function jsonDefault(ctx, path31, value) {
@@ -50359,7 +50523,7 @@ function parseDomain(ctx, path31, raw) {
     }
     return words2;
   }
-  if (isPlainObject2(raw)) {
+  if (isPlainObject(raw)) {
     const { min: min3, max: max3, step: step4 = 1, atLeast } = raw;
     const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
     if (extra.length === 0 && Number.isInteger(min3) && Number.isInteger(max3) && min3 <= max3 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
@@ -50383,7 +50547,7 @@ function parseDomain(ctx, path31, raw) {
   );
 }
 function parseSettingDecl(ctx, path31, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     return issue(
       ctx,
       path31,
@@ -50445,7 +50609,7 @@ function settingsDeclSpec() {
       const v = raw[field];
       if (v === void 0) return void 0;
       const at = `${path31}.${field}`;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         return issue(
           ctx,
           at,
@@ -50513,7 +50677,7 @@ function placementSettingsSpec() {
       const v = raw[field];
       if (v === void 0) return void 0;
       const at = `${path31}.${field}`;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         return issue(
           ctx,
           at,
@@ -50543,7 +50707,7 @@ function inheritableSegmentNames(base) {
 }
 function validateSegments(ctx, raw, inherited) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "segments",
       message: `segments must be an object, got ${describeType(raw)}`,
@@ -50553,7 +50717,7 @@ function validateSegments(ctx, raw, inherited) {
   }
   const out = {};
   for (const [name, authored] of Object.entries(raw)) {
-    const decl = isPlainObject2(authored) && Object.hasOwn(authored, "missingData") ? Object.fromEntries(
+    const decl = isPlainObject(authored) && Object.hasOwn(authored, "missingData") ? Object.fromEntries(
       Object.entries(authored).filter(([key]) => key !== "missingData")
     ) : authored;
     const parsed2 = record(
@@ -50624,7 +50788,7 @@ function partialsSpec() {
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `${path31}.${field} must be an object, got ${describeType(v)}`,
@@ -50718,22 +50882,6 @@ init_globals();
 // src/config/loader/reserved-namespace.ts
 init_globals();
 
-// src/config/ident.ts
-init_globals();
-function ident(name) {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-var ESCAPE = "Z";
-function escapedIdent(name) {
-  return Array.from(
-    name,
-    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
-      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
-      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
-    )
-  ).join("");
-}
-
 // src/config/loader/plugin-scope.ts
 init_globals();
 var PLUGIN_SCOPES = ["plugins", "repo"];
@@ -50755,10 +50903,6 @@ function otherScopeHint(name, declared) {
 }
 
 // src/config/loader/reserved-namespace.ts
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
 function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
   for (const section of ["variables", "actions", "segments"]) {
     for (const name of Object.keys(out[section] ?? {})) {
@@ -50975,7 +51119,7 @@ var validateRoot = (ctx, path31, raw) => {
     }
     return { kind: "segment", name: raw };
   }
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: path31,
       message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
@@ -51078,7 +51222,7 @@ function rowsSpec() {
     },
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `"rows" must be an object of row name \u2192 layout node, got ${describeType(v)}`,
@@ -51111,7 +51255,7 @@ var ROWS_SCHEMA = {
   }
 };
 function validateRootFragment(ctx, path31, raw) {
-  if (isPlainObject2(raw) && "rows" in raw) {
+  if (isPlainObject(raw) && "rows" in raw) {
     return record(ctx, ROWS_SCHEMA, path31, raw) ?? { rows: {} };
   }
   return validateRoot(ctx, path31, raw);
@@ -56076,75 +56220,6 @@ function sprigStrings() {
   };
 }
 
-// src/config/menu-keys.ts
-init_globals();
-var PAGE_HOLDING_CURRENT = "-1";
-function menuMember(applyName) {
-  return applyName;
-}
-function menuStateKey(placementId2, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
-}
-function sharedMenuStateKey(sharedKey) {
-  return MENU_NS + ident(sharedKey);
-}
-function menuActionName(stateKey, member) {
-  return stateKey + "." + member;
-}
-function menuPageKey(stateKey) {
-  return MENU_PAGE_NS + stateKey;
-}
-var MENU_OPTION_NAMES = [
-  "closeOnPick",
-  "paged",
-  "key",
-  "distribution"
-];
-var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
-var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
-function parseMenuOptions(entries) {
-  for (const name of Object.keys(entries)) {
-    if (!isMenuOptionName(name)) {
-      throw new Error(
-        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
-      );
-    }
-  }
-  const bool = (name, def) => {
-    const v = entries[name];
-    if (v === void 0) return def;
-    if (typeof v !== "boolean") {
-      throw new Error(
-        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
-      );
-    }
-    return v;
-  };
-  const key = entries["key"];
-  if (key !== void 0 && typeof key !== "string") {
-    throw new Error(
-      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
-    );
-  }
-  if (key === "") {
-    throw new Error(
-      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
-    );
-  }
-  const distribution = entries["distribution"];
-  if (distribution !== void 0 && !isDistributionName(distribution)) {
-    throw new Error(
-      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
-    );
-  }
-  return {
-    closeOnPick: bool("closeOnPick", false),
-    paged: bool("paged", true),
-    key,
-    distribution: placedBy(distribution)
-  };
-}
-
 // src/config/loader/menu-synth.ts
 var MENU_FUNC = "menu";
 var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
@@ -56191,15 +56266,6 @@ function analyzeMenuCall(call) {
   } catch (e) {
     return issue3(`with invalid options \u2014 ${e.message}`);
   }
-  const sharedKey = options.key;
-  if (sharedKey !== void 0) {
-    const reserved = reservedNamespaceOf(sharedKey);
-    if (reserved !== void 0) {
-      return issue3(
-        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
-      );
-    }
-  }
   return { kind: "ok", apply: applyArg.value, options };
 }
 function parseCalls(template) {
@@ -56210,8 +56276,7 @@ function parseCalls(template) {
     return "parse-failed";
   }
 }
-function hostedMenus(template, placement) {
-  const calls = parseCalls(template);
+function hostedMenus(calls, placement) {
   return calls === "parse-failed" ? [] : calls.flatMap(
     (call) => call.kind === "ok" ? [
       {
@@ -56282,11 +56347,17 @@ function checkMenuDecls(ctx, out) {
       }
     }
   }
+  const keys2 = [];
   for (const [segName, { template }] of Object.entries(segments)) {
     if (template === void 0 || !segmentReferencesMenu(template)) continue;
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
+      if (call.kind === "ok" && call.options.key !== void 0)
+        keys2.push({
+          path: `segments.${segName}.template`,
+          key: call.options.key
+        });
       const message = call.kind === "issue" ? call.message : identityIssue(call.apply);
       if (message !== void 0) {
         menuIssue(
@@ -56297,6 +56368,7 @@ function checkMenuDecls(ctx, out) {
       }
     }
   }
+  return keys2;
 }
 function identityIssue(apply2) {
   if (apply2 === "") {
@@ -56319,7 +56391,6 @@ function synthesizePlacementMenus(config, issues) {
     issues.push({ path: path31, message });
   };
   for (const preset of presetNames(config.presets)) {
-    const ownerBySynthKey = /* @__PURE__ */ new Map();
     const claimed = /* @__PURE__ */ new Map();
     for (const node of walkNodes(presetRoot(config, preset).node)) {
       if (node.kind !== "segment") continue;
@@ -56330,29 +56401,15 @@ function synthesizePlacementMenus(config, issues) {
       }
       const calls = callsOf.get(node.name);
       if (calls === "parse-failed") continue;
-      const id2 = placementId(node);
+      const placement = placementIdentityOf(preset, node);
       for (const [index, call] of calls.entries()) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
         const { apply: apply2, options } = call;
         const member = menuMember(apply2);
-        const stateKey = menuStateKey(id2, apply2, options.key);
+        const stateKey = menuStateKey(placement, apply2, options.key);
         const pageKey2 = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply2}`;
-        const clashKey = [stateKey, pageKey2].find((k) => {
-          const prior2 = ownerBySynthKey.get(k);
-          return prior2 !== void 0 && prior2 !== owner;
-        });
-        if (clashKey !== void 0) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey2, owner);
         const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity2);
@@ -56386,14 +56443,12 @@ init_globals();
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
 // src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
 var EDIT_CONFIGURE_KEY = "edit.configure";
 var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(preset, id2) {
-  return `${escapedIdent(preset)}:${id2}`;
+function configureMember(placement) {
+  return placementKeyScope(placement);
 }
 var EDIT_MODE_REF = {
   variable: EDIT_MODE_KEY,
@@ -56466,505 +56521,295 @@ function editModeArtifacts() {
   };
 }
 
-// src/config/edit-chrome.ts
-init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-
-// src/config/option-domain.ts
+// src/config/loader/authored-keys.ts
 init_globals();
 
-// src/themes/palette-resolvers.ts
+// src/config/loader/refs.ts
 init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
+var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
+function* templateBlocks(template) {
+  let open2 = template.indexOf("{{");
+  while (open2 !== -1) {
+    let block = "";
+    let i2 = open2 + 2;
+    const spans = [[0, i2]];
+    while (i2 < template.length && !template.startsWith("}}", i2)) {
+      if (template.startsWith("/*", i2)) {
+        const close = template.indexOf("*/", i2 + 2);
+        i2 = close === -1 ? template.length : close + 2;
+        spans.push([block.length, i2]);
+        continue;
+      }
+      const start = i2;
+      const quote2 = template[i2];
+      i2 += 1;
+      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
+        while (i2 < template.length && template[i2] !== quote2) {
+          i2 += template[i2] === "\\" && quote2 !== "`" ? 2 : 1;
+        }
+        i2 += 1;
+      }
+      block += template.slice(start, i2);
+    }
+    if (i2 >= template.length) return;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0];
+        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
+        return to + index - from;
+      }
+    };
+    open2 = template.indexOf("{{", i2 + 2);
   }
-  return palette;
 }
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
+var OPERAND_RE = new RegExp(
+  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
+);
+function operandAt(text4, dot, root) {
+  const m = OPERAND_RE.exec(text4.trimStart());
+  if (m === null) return null;
+  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
+  if (base === null) return null;
+  return field === void 0 ? base : `${base}${field}.`;
 }
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
+var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
+function* scopedBlocks(template, root) {
+  const stack = [root];
+  for (const block of templateBlocks(template)) {
+    const code2 = block.text.replace(/^-(?=\s)/, "").trim();
+    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code2) ?? [];
+    const top = stack[stack.length - 1];
+    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
+    if (keyword === "end") {
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+    if (keyword === "else") {
+      yield { code: code2, dot: outer, block };
+      const chained = /^with\b([\s\S]*)$/.exec(rest2);
+      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
+      continue;
+    }
+    yield { code: code2, dot: top, block };
+    if (keyword === "if") stack.push(top);
+    if (keyword === "with") stack.push(operandAt(rest2, top, root));
+    if (keyword === "range" || keyword === "define" || keyword === "block")
+      stack.push(null);
+  }
 }
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
-  );
+var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
+function* helperCalls(code2, dot, root) {
+  let cursor = 0;
+  for (const s of [...code2.matchAll(STRING_LITERAL_RE)]) {
+    const end = s.index + s[0].length;
+    if (TEMPLATE_KEYWORD_RE.test(code2.slice(cursor, s.index))) {
+      yield {
+        name: s[0].slice(1, -1),
+        at: operandAt(code2.slice(end), dot, root),
+        index: s.index
+      };
+    }
+    cursor = end;
+  }
 }
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
+function* callGraphBlocks(template, helpers) {
+  const walked = /* @__PURE__ */ new Set();
+  function* walk3(src, root, via, chain2) {
+    for (const { code: code2, dot } of [...scopedBlocks(src, root)]) {
+      yield { code: code2, dot, root, via };
+      for (const call of [...helperCalls(code2, dot, root)]) {
+        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
+        const key = `${call.name}\0${call.at ?? "\0"}`;
+        if (body === void 0 || chain2.has(call.name) || walked.has(key))
+          continue;
+        walked.add(key);
+        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
+      }
+    }
+  }
+  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
 }
-function decideThemeName(name, where, onUnresolvable) {
-  const named2 = namedTheme(name);
-  if (named2 !== null) return named2;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
+function perTemplate(answer2) {
+  const answers = /* @__PURE__ */ new Map();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer2(template));
+    return answers.get(template);
+  };
+}
+var WALKS = /* @__PURE__ */ new WeakMap();
+function callGraph(template, helpers) {
+  let walks = WALKS.get(helpers);
+  if (walks === void 0) {
+    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
+    WALKS.set(helpers, walks);
+  }
+  return walks(template);
+}
+var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
+function* dotRefs({ code: code2, dot, root }) {
+  const text4 = code2.replace(STRING_LITERAL_RE, "");
+  for (const r of [...text4.matchAll(REF_RE)]) {
+    const base = r[1] === "$" ? root : dot;
+    if (base !== null) yield `${base}${r[2]}`;
+  }
+}
+function templateReads(template, helpers) {
+  const reads = /* @__PURE__ */ new Map();
+  for (const block of callGraph(template, helpers)) {
+    for (const ref of dotRefs(block)) {
+      if (!reads.has(ref)) reads.set(ref, block.via);
+    }
+  }
+  return reads;
+}
+var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
+var NAME_ARGS = {
+  action: 1,
+  picker: 2,
+  menu: 1,
+  carousel: 2,
+  swatch: 1,
+  swatches: 2,
+  themePreview: 1
+};
+function* actionBindings(code2) {
+  let cursor = 0;
+  let pending2 = 0;
+  let site = "action";
+  for (const s of [...code2.matchAll(STRING_LITERAL_RE)]) {
+    const between = code2.slice(cursor, s.index);
+    const kw = BINDING_KEYWORD_RE.exec(between);
+    if (kw !== null) {
+      pending2 = NAME_ARGS[kw[1]];
+      site = kw[1] === "action" ? "action" : "options";
+    } else if (between.trim() !== "") {
+      pending2 = 0;
+    }
+    if (pending2 > 0) {
+      yield { name: s[0].slice(1, -1), site, index: s.index };
+      pending2--;
+    }
+    cursor = s.index + s[0].length;
+  }
+}
+function templateActionRefs(template, helpers) {
+  const refs = /* @__PURE__ */ new Map();
+  for (const { code: code2, via } of callGraph(template, helpers)) {
+    for (const { name, site } of actionBindings(code2)) {
+      const key = `${name}\0${via ?? "\0"}`;
+      if (!refs.has(key)) refs.set(key, { name, site, via });
+    }
+  }
+  return [...refs.values()];
+}
+var namesTaking = (min3) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min3).join("|");
+var COMPUTED_BINDING_RE = new RegExp(
+  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
+);
+function bindsComputedAction(template, helpers) {
+  for (const { code: code2 } of callGraph(template, helpers)) {
+    if (COMPUTED_BINDING_RE.test(code2.replace(STRING_LITERAL_RE, '""'))) {
+      return true;
+    }
+  }
+  return false;
+}
+var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+function templateFunctions(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code: code2 } of callGraph(template, helpers)) {
+    for (const [name] of code2.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
+      called.add(name);
+    }
+  }
+  return called;
+}
+function templateHelperRefs(template, helpers) {
+  return new Set(
+    [...templateHelperCalls(template, helpers)].filter(
+      (name) => Object.hasOwn(helpers, name)
     )
   );
-  return themeFloor();
 }
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
+function templateHelperCalls(template, helpers) {
+  const called = /* @__PURE__ */ new Set();
+  for (const { code: code2, dot, root } of callGraph(template, helpers)) {
+    for (const { name } of helperCalls(code2, dot, root)) called.add(name);
+  }
+  return called;
+}
+var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
+function bindSelf(template, self2, ns) {
+  const refRe = SELF_REF_RE(self2);
+  const named2 = ownedBy(self2);
+  const starts = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code2 = block.text.replace(
+      STRING_LITERAL_RE,
+      (s) => " ".repeat(s.length)
+    );
+    for (const r of code2.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text)
+    ]) {
+      if (named2(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)].sort((a, b) => b - a).reduce(
+    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
+    template
   );
 }
-function themeFloor() {
-  return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
-  };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve2, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
-      {
-        members: Object.keys(config.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
-      }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config.presets) }]
-  ]);
-}
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
+function* declarationsAt(config) {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    yield [name, decl, ["variables", name]];
   }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/setting-control.ts
-init_globals();
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
+  for (const [segName, seg2] of Object.entries(config.segments)) {
+    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
+      yield [
+        `${segName}.${varName}`,
+        decl,
+        ["segments", segName, "vars", varName]
+      ];
+    }
   }
-  return parseSessionInt(value, domain) !== null;
 }
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted2 = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
-    const named2 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+function* declaredVariables(config) {
+  for (const [name, decl] of declarationsAt(config)) yield [name, decl];
+}
+function variableRead(path31, names) {
+  const parts = path31.split(".");
+  for (let n = parts.length; n > 0; n--) {
+    const name = parts.slice(0, n).join(".");
+    if (names.has(name)) return [name];
   }
-  return `an integer from ${domain.min} to ${domain.max}`;
+  const namespace = `${path31}.`;
+  return [...names].filter((name) => name.startsWith(namespace));
 }
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
-    variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
-    },
-    list: { ref, rows }
-  };
-}
-
-// src/config/help.ts
-init_globals();
-var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within3, out) {
-  const self2 = {
-    variable: name,
-    key: name,
-    member: DISCLOSURE_OPEN
-  };
-  out.variables[name] = {
-    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within3.length > 0 && { within: within3 }
-  };
-  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
-  out.segments[name] = {
-    template: disclosureTrigger(
-      name,
-      HELP_GLYPH_CLOSED,
-      DISCLOSURE_GLYPH_CLOSE
-    ),
-    // The trigger is visible wherever its host surface is. An unnested `(?)`
-    // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within3)
-  };
-  const children2 = lines2.map((line, i2) => {
-    const lineName = `${name}.${i2}`;
-    out.segments[lineName] = { template: line };
-    return { kind: "segment", name: lineName };
-  });
-  return disclosureNode(
-    name,
-    self2,
-    { kind: "container", direction: "horizontal", children: children2 },
-    "drop"
+function refResolves(ref, scope) {
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
   );
 }
-function gateOf(within3) {
-  const [first2, ...rest2] = within3;
-  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+function templateScopeOf(cfg) {
+  const names = /* @__PURE__ */ new Set();
+  const documents = /* @__PURE__ */ new Set();
+  const declare = (name, v) => {
+    names.add(name);
+    if (isDocumentDecl(v)) documents.add(name);
+  };
+  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
+  return { names, documents, helpers: cfg.helpers };
 }
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
+function isDocumentDecl(v) {
+  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
 }
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
-}
-
-// src/help-text.ts
-init_globals();
-
-// src/config/edit-glyphs.ts
-init_globals();
-var REMOVE_GLYPH = "\u2716";
-var ADD_GLYPH = "\u271A";
-var CONFIGURE_GLYPH = "\u{1F527}";
-
-// src/cli-flags.ts
-init_globals();
-var NODE_FLAGS = {
-  help: ["-h", "--help"],
-  version: ["-V", "--version"]
-};
-
-// src/config/menu-places.ts
-init_globals();
-var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" }
-];
-var TAB_LABEL = Object.fromEntries(
-  TABS.map((t2) => [t2.member, t2.label])
-);
-var SUBMENUS = {
-  gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "padding", trigger: "\u{1F9EA} toggles" }
-};
-var SUBMENU_NAMES = Object.keys(SUBMENUS);
-var PLACE = perSetting(
-  (name) => SETTINGS[name].place
-);
-var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
-var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
-var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
-  top,
-  ...SUBMENU_NAMES.filter((s) => within(s, top))
-]).map((place) => ({
-  path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
-})).filter(({ names }) => names.length > 0);
-var laneOffReason = (lane) => {
-  const { setting, on: on2 } = LANES[lane].switch;
-  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}`;
-};
-
-// src/help-text.ts
-var LANE_PLACES = [
-  ...new Set(
-    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
-  )
-].join(" or ");
-var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
-var EDIT_MODE_HELP = [
-  `${ADD_GLYPH} inserts`,
-  `${REMOVE_GLYPH} removes`,
-  `${CONFIGURE_GLYPH} configures`,
-  "\u21BA resets layout"
-];
-var LANE_HELP = {
-  statusline: [
-    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "launch Claude Code with the command printed by cc-candybar --help"
-  ],
-  pane: [
-    "animates the bar in a tmux pane under this session's",
-    "on: opens that pane \xB7 off: closes it"
-  ]
-};
-var HELP_TEXT = `
-cc-candybar - Beautiful powerline statusline for Claude Code
-
-Usage: cc-candybar [options]
-
-Standalone Commands:
-  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
-  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
-
-Debugging:
-  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
-
-Configuration:
-  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
-  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
-  --config PATH            Use PATH as the user layer. Approved project
-                           config and repository plugins still load.
-  --config-only PATH       Load only PATH over the bundled base. Installed
-                           plugins and definitions listed in PATH still load.
-  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
-  To see the effective merged config:
-    cc-candybar config
-
-  Every bar carries a settings menu, whatever your config says \u2014 no config
-  needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
-  A change applies to this session at once.
-  Where each setting is in the menu: the globals field that sets it in a
-  config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path31, names }) => [
-  `    ${path31}`,
-  ...names.map(
-    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
-  )
-]).join("\n")}
-  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
-  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
-
-Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
-${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
-
-Subcommands:
-  install                  One-shot setup: stages the runtime (native render
-                           binary + dist bundle) at a stable path, creates the
-                           URL handler app + cc-candybar:// scheme (macOS), and
-                           writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
-  install-url-handler      Just stage the runtime and create + register the URL
-                           handler app (macOS only).
-  url-handle URL           Send a cc-candybar:// link to the daemon as a
-                           click. Terminal links use the URL handler app.
-  plugin install SOURCE    Install a repository's plugins into
-                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
-                           local path, a GitHub slug (owner/repo) or a git URL,
-                           and its plugins are the folders under
-                           .cc-candybar/plugins/. A definition the bar would
-                           drop installs nothing. Re-run to update.
-  daemon-stats [--json]    Query the running daemon for runtime stats:
-                           uptime, RSS, cache hit rates, watcher count,
-                           request totals. Does not spawn a daemon.
-  record start FILE [--renderer NAME]
-  record stop [--renderer NAME]
-                           Record one renderer on the running daemon.
-                           Stop publishes the recording to FILE. NAME
-                           defaults to CC_CANDYBAR_NAME or main.
-  replay FILE [--frames]   Verify a recording offline with its renderer
-                           build. --frames prints verified frames as JSON
-                           lines, up to 32 MiB.
-  frames --lane LANE [--config PATH | --config-only PATH]
-                           One session's bar as the daemon pushes it \u2014 up to
-                           30 frames a second while it moves, at once on a
-                           click \u2014 one JSON message per stdout line. Reads
-                           Claude Code's statusline JSON from stdin (one object
-                           a line) and sends it as the session's data
-                           (config flags ride with it). LANE is one of
-                           ${LANE_NAMES.join(", ")}:
-                           the experimental lane this stream serves,
-                           which streams only while its toggle in the settings
-                           menu's ${LANE_PLACES} is on.
-  bar-pane PANE            Draw the bar of the Claude Code session in tmux
-                           pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. The bar is
-                           drawn at PANE's width, so split PANE with -v for a
-                           pane under it that fits. Experimental:
-                           runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
-
-Config tooling:
-  schema                   Print the JSON Schema for the config file shape
-                           (.cc-candybar.json5). Point an editor's $schema at it
-                           for autocomplete + structural validation.
-  vars [--json]            Declared variables: source kind, value, last error.
-  segments [--json]        Segment templates and their last rendered output.
-  config [--json]          The effective merged config. (All three query the
-                           running daemon; none spawn one.)
-
-`;
 
 // src/config/settings-menu.ts
 init_globals();
@@ -57115,6 +56960,464 @@ function layerRoleOf(raw) {
   return LAYER_ROLES.find((role) => role === raw) ?? null;
 }
 
+// src/config/menu-places.ts
+init_globals();
+var TABS = [
+  { member: "session", label: "\u26A1 session" },
+  { member: "look", label: "\u{1F3A8} look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "\u{1F4D0} layout" },
+  { member: "config", label: "\u2699 config" }
+];
+var TAB_LABEL = Object.fromEntries(
+  TABS.map((t2) => [t2.member, t2.label])
+);
+var SUBMENUS = {
+  gear: { beside: "theme", trigger: "\u2699" },
+  toggles: { beside: "padding", trigger: "\u{1F9EA} toggles" }
+};
+var SUBMENU_NAMES = Object.keys(SUBMENUS);
+var PLACE = perSetting(
+  (name) => SETTINGS[name].place
+);
+var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
+var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var settingMenuPath = (name) => placePath(PLACE[name]);
+var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+  top,
+  ...SUBMENU_NAMES.filter((s) => within(s, top))
+]).map((place) => ({
+  path: placePath(place),
+  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+})).filter(({ names }) => names.length > 0);
+var laneOffReason = (lane) => {
+  const { setting, on: on2 } = LANES[lane].switch;
+  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}`;
+};
+
+// src/config/setting-control.ts
+init_globals();
+
+// src/config/option-domain.ts
+init_globals();
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
+  }
+  return palette;
+}
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function basePaletteFor(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) return null;
+  baseCache.set(name, palette);
+  return palette;
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named2 = namedTheme(name);
+  if (named2 !== null) return named2;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
+}
+
+// src/config/option-domain.ts
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve2, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
+
+// src/config/setting-control.ts
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function controlDomainAdmits(domain, value, perConfigDomains) {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    ).members.includes(value);
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function describeControlDomain(domain, perConfigDomains) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
+    const quoted2 = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
+    const named2 = typeof from === "string" ? ` "${from}"` : "";
+    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/help.ts
+init_globals();
+var HELP_GLYPH_CLOSED = "(?)";
+function declareHelp(name, lines2, within3, out) {
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...within3.length > 0 && { within: within3 }
+  };
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
+  out.segments[name] = {
+    template: disclosureTrigger(
+      name,
+      HELP_GLYPH_CLOSED,
+      DISCLOSURE_GLYPH_CLOSE
+    ),
+    // The trigger is visible wherever its host surface is. An unnested `(?)`
+    // (`within` empty) is always visible, and declares no `when` at all.
+    ...gateOf(within3)
+  };
+  const children2 = lines2.map((line, i2) => {
+    const lineName = `${name}.${i2}`;
+    out.segments[lineName] = { template: line };
+    return { kind: "segment", name: lineName };
+  });
+  return disclosureNode(
+    name,
+    self2,
+    { kind: "container", direction: "horizontal", children: children2 },
+    "drop"
+  );
+}
+function gateOf(within3) {
+  const [first2, ...rest2] = within3;
+  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+}
+
+// src/help-text.ts
+init_globals();
+
+// src/config/edit-glyphs.ts
+init_globals();
+var REMOVE_GLYPH = "\u2716";
+var ADD_GLYPH = "\u271A";
+var CONFIGURE_GLYPH = "\u{1F527}";
+
+// src/cli-flags.ts
+init_globals();
+var NODE_FLAGS = {
+  help: ["-h", "--help"],
+  version: ["-V", "--version"]
+};
+
+// src/help-text.ts
+var LANE_PLACES = [
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
+].join(" or ");
+var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+var EDIT_MODE_HELP = [
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
+  "\u21BA resets layout"
+];
+var LANE_HELP = {
+  statusline: [
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "launch Claude Code with the command printed by cc-candybar --help"
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane \xB7 off: closes it"
+  ]
+};
+var HELP_TEXT = `
+cc-candybar - Beautiful powerline statusline for Claude Code
+
+Usage: cc-candybar [options]
+
+Standalone Commands:
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
+
+Debugging:
+  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
+
+Configuration:
+  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
+  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
+  --config PATH            Use PATH as the user layer. Approved project
+                           config and repository plugins still load.
+  --config-only PATH       Load only PATH over the bundled base. Installed
+                           plugins and definitions listed in PATH still load.
+  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
+  To see the effective merged config:
+    cc-candybar config
+
+  Every bar carries a settings menu, whatever your config says \u2014 no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
+  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t2) => t2.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace().flatMap(({ path: path31, names }) => [
+  `    ${path31}`,
+  ...names.map(
+    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
+  )
+]).join("\n")}
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
+
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
+  url-handle URL           Send a cc-candybar:// link to the daemon as a
+                           click. Terminal links use the URL handler app.
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
+  record start FILE [--renderer NAME]
+  record stop [--renderer NAME]
+                           Record one renderer on the running daemon.
+                           Stop publishes the recording to FILE. NAME
+                           defaults to CC_CANDYBAR_NAME or main.
+  replay FILE [--frames]   Verify a recording offline with its renderer
+                           build. --frames prints verified frames as JSON
+                           lines, up to 32 MiB.
+  frames --lane LANE [--config PATH | --config-only PATH]
+                           One session's bar as the daemon pushes it \u2014 up to
+                           30 frames a second while it moves, at once on a
+                           click \u2014 one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (config flags ride with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ${LANE_PLACES} is on.
+  bar-pane PANE            Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, as the daemon
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
+
+Config tooling:
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
+`;
+
 // src/config/settings-menu.ts
 var EDIT_SEG = `${SETTINGS_NS}edit`;
 var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
@@ -57164,6 +57467,9 @@ var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
 var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
 var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
+var SETTINGS_ACCORDIONS = new Set(
+  Object.values(PLACE).map(accordionOf)
+);
 var submenuRef = (name) => {
   const key = accordionOf(PLACE[SUBMENUS[name].beside]);
   return { variable: key, key, member: name };
@@ -57658,6 +57964,97 @@ function synthesizeSettingsMenu(config) {
   };
 }
 
+// src/config/loader/authored-keys.ts
+function refuseMintedKeys(ctx, out, accordions) {
+  const declared = declarationsAt({
+    variables: out.variables ?? {},
+    segments: out.segments ?? {}
+  });
+  const raw = [
+    ...[...declared].flatMap(
+      ([, decl, at]) => decl.kind === "state" ? [{ path: [...at, "key"].join("."), key: decl.key }] : []
+    ),
+    ...Object.entries(out.actions ?? {}).flatMap(
+      ([name, action2]) => "set" in action2 ? [{ path: `actions.${name}.set`, key: action2.set }] : []
+    ),
+    ...ctx.groups.flatMap(
+      (g) => g.key === void 0 ? [] : [{ path: `${g.path}.key`, key: g.key }]
+    )
+  ];
+  const refuse4 = ({ path: path31, key }, why) => {
+    ctx.issues.push({
+      path: path31,
+      message: `session key "${key}" ${why} \u2014 rename it`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+  };
+  for (const authored of raw) {
+    const ns = reservedNamespaceOf(authored.key);
+    if (ns !== void 0)
+      refuse4(
+        authored,
+        `is in the "${ns}" namespace, where the bar mints its own keys, so it could read or overwrite one of them`
+      );
+  }
+  for (const authored of accordions) {
+    const ns = reservedNamespaceOf(authored.key);
+    if (isEditModeKey(authored.key))
+      refuse4(
+        authored,
+        `names an accordion in the "${ns}" namespace, edit mode's, whose state ends with every edit`
+      );
+    else if (SETTINGS_ACCORDIONS.has(sharedMenuStateKey(authored.key)))
+      refuse4(
+        authored,
+        `names the settings menu's own accordion, in the "${ns}" namespace`
+      );
+  }
+}
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+
+// src/template-engine/colors.ts
+init_globals();
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
+}
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
+  }
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
+}
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
+}
+
 // src/config/edit-chrome.ts
 var EDIT_LIVE_KEY = `${EDIT_NS}live`;
 var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
@@ -57750,14 +58147,15 @@ function configureRefsIn(nodes) {
     )
   );
 }
-function placementDraftKey(presetIdent, id2, setting) {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
+function placementDraftKey(placement, setting) {
+  return `${PLACEMENT_DRAFT_NS}${placementKeyScope(placement)}.${setting}`;
 }
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
+  const identity2 = placementIdentityOf(ctx.preset, node);
   const placement = escapedIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id2);
+  const member = configureMember(identity2);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
   const listKey = sharedMenuStateKey(enter);
@@ -57772,8 +58170,8 @@ function configureParts(ctx, node, decls) {
   };
   const drafts = {};
   const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    const key = placementDraftKey(identity2, name);
+    const variable = key;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
@@ -57942,7 +58340,15 @@ function insertGap(preset, anchor, relation) {
   const gap = `${relation}.${escapedIdent(anchor)}`;
   const apply2 = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply: apply2, host, stateKey: menuStateKey(host, apply2, void 0) };
+  return {
+    apply: apply2,
+    host,
+    stateKey: menuStateKey(
+      { preset, id: host, segment: host },
+      apply2,
+      void 0
+    )
+  };
 }
 function spliceContainer(node, ctx) {
   const children2 = [];
@@ -58089,7 +58495,7 @@ function synthesizeEditChrome(config) {
   artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${TO_KEEP} }}`
   };
   const lead = [
     { kind: "segment", name: EDIT_DONE_SEG },
@@ -58189,7 +58595,7 @@ init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       "actions",
@@ -58212,7 +58618,7 @@ function issue2(ctx, path31, message) {
   });
 }
 function validateActionDecl(ctx, path31, raw, home) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       path31,
@@ -58421,7 +58827,7 @@ function runArm(home) {
       );
     }
     const env2 = raw.env ?? {};
-    if (!isPlainObject2(env2) || Object.entries(env2).some(
+    if (!isPlainObject(env2) || Object.entries(env2).some(
       ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
     )) {
       issue2(
@@ -58906,7 +59312,7 @@ var STYLE_SCHEMA = {
   }
 };
 function validateStyles(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "styles",
       message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
@@ -58955,7 +59361,7 @@ var PRESET_SCHEMA = {
   fields: { root: presetRootSpec, globals: presetGlobalsSpec }
 };
 function validatePresets(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "presets",
       message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
@@ -58983,7 +59389,7 @@ function validatePresets(ctx, raw) {
 init_globals();
 function validateHelpers(ctx, raw) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "helpers",
       message: `helpers must be an object, got ${describeType(raw)}`,
@@ -60029,293 +60435,6 @@ function createCcCandybarEngine(opts) {
   });
 }
 
-// src/config/loader/refs.ts
-init_globals();
-var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
-function* templateBlocks(template) {
-  let open2 = template.indexOf("{{");
-  while (open2 !== -1) {
-    let block = "";
-    let i2 = open2 + 2;
-    const spans = [[0, i2]];
-    while (i2 < template.length && !template.startsWith("}}", i2)) {
-      if (template.startsWith("/*", i2)) {
-        const close = template.indexOf("*/", i2 + 2);
-        i2 = close === -1 ? template.length : close + 2;
-        spans.push([block.length, i2]);
-        continue;
-      }
-      const start = i2;
-      const quote2 = template[i2];
-      i2 += 1;
-      if (quote2 === '"' || quote2 === "'" || quote2 === "`") {
-        while (i2 < template.length && template[i2] !== quote2) {
-          i2 += template[i2] === "\\" && quote2 !== "`" ? 2 : 1;
-        }
-        i2 += 1;
-      }
-      block += template.slice(start, i2);
-    }
-    if (i2 >= template.length) return;
-    yield {
-      text: block,
-      at: (index) => {
-        let [from, to] = spans[0];
-        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
-        return to + index - from;
-      }
-    };
-    open2 = template.indexOf("{{", i2 + 2);
-  }
-}
-var PATH = "[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*";
-var OPERAND_RE = new RegExp(
-  `^(?:(\\$)(?:\\.(${PATH}))?|\\.(${PATH})?)(?=[\\s)]|$)`
-);
-function operandAt(text4, dot, root) {
-  const m = OPERAND_RE.exec(text4.trimStart());
-  if (m === null) return null;
-  const [base, field] = m[1] !== void 0 ? [root, m[2]] : [dot, m[3]];
-  if (base === null) return null;
-  return field === void 0 ? base : `${base}${field}.`;
-}
-var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
-function* scopedBlocks(template, root) {
-  const stack = [root];
-  for (const block of templateBlocks(template)) {
-    const code2 = block.text.replace(/^-(?=\s)/, "").trim();
-    const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code2) ?? [];
-    const top = stack[stack.length - 1];
-    const outer = stack.length > 1 ? stack[stack.length - 2] : top;
-    if (keyword === "end") {
-      if (stack.length > 1) stack.pop();
-      continue;
-    }
-    if (keyword === "else") {
-      yield { code: code2, dot: outer, block };
-      const chained = /^with\b([\s\S]*)$/.exec(rest2);
-      stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
-      continue;
-    }
-    yield { code: code2, dot: top, block };
-    if (keyword === "if") stack.push(top);
-    if (keyword === "with") stack.push(operandAt(rest2, top, root));
-    if (keyword === "range" || keyword === "define" || keyword === "block")
-      stack.push(null);
-  }
-}
-var TEMPLATE_KEYWORD_RE = /(?<![.$])\btemplate\s+$/;
-function* helperCalls(code2, dot, root) {
-  let cursor = 0;
-  for (const s of [...code2.matchAll(STRING_LITERAL_RE)]) {
-    const end = s.index + s[0].length;
-    if (TEMPLATE_KEYWORD_RE.test(code2.slice(cursor, s.index))) {
-      yield {
-        name: s[0].slice(1, -1),
-        at: operandAt(code2.slice(end), dot, root),
-        index: s.index
-      };
-    }
-    cursor = end;
-  }
-}
-function* callGraphBlocks(template, helpers) {
-  const walked = /* @__PURE__ */ new Set();
-  function* walk3(src, root, via, chain2) {
-    for (const { code: code2, dot } of [...scopedBlocks(src, root)]) {
-      yield { code: code2, dot, root, via };
-      for (const call of [...helperCalls(code2, dot, root)]) {
-        const body = Object.hasOwn(helpers, call.name) ? helpers[call.name] : void 0;
-        const key = `${call.name}\0${call.at ?? "\0"}`;
-        if (body === void 0 || chain2.has(call.name) || walked.has(key))
-          continue;
-        walked.add(key);
-        yield* walk3(body, call.at, call.name, /* @__PURE__ */ new Set([...chain2, call.name]));
-      }
-    }
-  }
-  yield* walk3(template, "", null, /* @__PURE__ */ new Set());
-}
-function perTemplate(answer2) {
-  const answers = /* @__PURE__ */ new Map();
-  return (template) => {
-    if (!answers.has(template)) answers.set(template, answer2(template));
-    return answers.get(template);
-  };
-}
-var WALKS = /* @__PURE__ */ new WeakMap();
-function callGraph(template, helpers) {
-  let walks = WALKS.get(helpers);
-  if (walks === void 0) {
-    walks = perTemplate((t2) => [...callGraphBlocks(t2, helpers)]);
-    WALKS.set(helpers, walks);
-  }
-  return walks(template);
-}
-var REF_RE = new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.(${PATH})`, "g");
-function* dotRefs({ code: code2, dot, root }) {
-  const text4 = code2.replace(STRING_LITERAL_RE, "");
-  for (const r of [...text4.matchAll(REF_RE)]) {
-    const base = r[1] === "$" ? root : dot;
-    if (base !== null) yield `${base}${r[2]}`;
-  }
-}
-function templateReads(template, helpers) {
-  const reads = /* @__PURE__ */ new Map();
-  for (const block of callGraph(template, helpers)) {
-    for (const ref of dotRefs(block)) {
-      if (!reads.has(ref)) reads.set(ref, block.via);
-    }
-  }
-  return reads;
-}
-var BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
-var NAME_ARGS = {
-  action: 1,
-  picker: 2,
-  menu: 1,
-  carousel: 2,
-  swatch: 1,
-  swatches: 2,
-  themePreview: 1
-};
-function* actionBindings(code2) {
-  let cursor = 0;
-  let pending2 = 0;
-  let site = "action";
-  for (const s of [...code2.matchAll(STRING_LITERAL_RE)]) {
-    const between = code2.slice(cursor, s.index);
-    const kw = BINDING_KEYWORD_RE.exec(between);
-    if (kw !== null) {
-      pending2 = NAME_ARGS[kw[1]];
-      site = kw[1] === "action" ? "action" : "options";
-    } else if (between.trim() !== "") {
-      pending2 = 0;
-    }
-    if (pending2 > 0) {
-      yield { name: s[0].slice(1, -1), site, index: s.index };
-      pending2--;
-    }
-    cursor = s.index + s[0].length;
-  }
-}
-function templateActionRefs(template, helpers) {
-  const refs = /* @__PURE__ */ new Map();
-  for (const { code: code2, via } of callGraph(template, helpers)) {
-    for (const { name, site } of actionBindings(code2)) {
-      const key = `${name}\0${via ?? "\0"}`;
-      if (!refs.has(key)) refs.set(key, { name, site, via });
-    }
-  }
-  return [...refs.values()];
-}
-var namesTaking = (min3) => Object.keys(NAME_ARGS).filter((keyword) => NAME_ARGS[keyword] >= min3).join("|");
-var COMPUTED_BINDING_RE = new RegExp(
-  `(?<![\\w.$])(?:(?:${namesTaking(1)})\\s+|(?:${namesTaking(2)})\\s+""\\s+)(?=[^\\s"\`)|}])`
-);
-function bindsComputedAction(template, helpers) {
-  for (const { code: code2 } of callGraph(template, helpers)) {
-    if (COMPUTED_BINDING_RE.test(code2.replace(STRING_LITERAL_RE, '""'))) {
-      return true;
-    }
-  }
-  return false;
-}
-var BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
-function templateFunctions(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code: code2 } of callGraph(template, helpers)) {
-    for (const [name] of code2.replace(STRING_LITERAL_RE, "").matchAll(BARE_NAME_RE)) {
-      called.add(name);
-    }
-  }
-  return called;
-}
-function templateHelperRefs(template, helpers) {
-  return new Set(
-    [...templateHelperCalls(template, helpers)].filter(
-      (name) => Object.hasOwn(helpers, name)
-    )
-  );
-}
-function templateHelperCalls(template, helpers) {
-  const called = /* @__PURE__ */ new Set();
-  for (const { code: code2, dot, root } of callGraph(template, helpers)) {
-    for (const { name } of helperCalls(code2, dot, root)) called.add(name);
-  }
-  return called;
-}
-var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
-function bindSelf(template, self2, ns) {
-  const refRe = SELF_REF_RE(self2);
-  const named2 = ownedBy(self2);
-  const starts = [];
-  for (const { dot, block } of scopedBlocks(template, "")) {
-    const code2 = block.text.replace(
-      STRING_LITERAL_RE,
-      (s) => " ".repeat(s.length)
-    );
-    for (const r of code2.matchAll(refRe)) {
-      const base = r[1] === "$" ? "" : dot;
-      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
-    }
-    for (const { name, index } of [
-      ...helperCalls(block.text, dot, ""),
-      ...actionBindings(block.text)
-    ]) {
-      if (named2(name)) starts.push(block.at(index + 1));
-    }
-  }
-  return [...new Set(starts)].sort((a, b) => b - a).reduce(
-    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
-    template
-  );
-}
-function* declarationsAt(config) {
-  for (const [name, decl] of Object.entries(config.variables)) {
-    yield [name, decl, ["variables", name]];
-  }
-  for (const [segName, seg2] of Object.entries(config.segments)) {
-    for (const [varName, decl] of Object.entries(seg2.vars ?? {})) {
-      yield [
-        `${segName}.${varName}`,
-        decl,
-        ["segments", segName, "vars", varName]
-      ];
-    }
-  }
-}
-function* declaredVariables(config) {
-  for (const [name, decl] of declarationsAt(config)) yield [name, decl];
-}
-function variableRead(path31, names) {
-  const parts = path31.split(".");
-  for (let n = parts.length; n > 0; n--) {
-    const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return [name];
-  }
-  const namespace = `${path31}.`;
-  return [...names].filter((name) => name.startsWith(namespace));
-}
-function refResolves(ref, scope) {
-  return variableRead(ref, scope.names).some(
-    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name)
-  );
-}
-function templateScopeOf(cfg) {
-  const names = /* @__PURE__ */ new Set();
-  const documents = /* @__PURE__ */ new Set();
-  const declare = (name, v) => {
-    names.add(name);
-    if (isDocumentDecl(v)) documents.add(name);
-  };
-  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
-  return { names, documents, helpers: cfg.helpers };
-}
-function isDocumentDecl(v) {
-  return v.kind === "dropped" || v.kind === "source" || (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json";
-}
-
 // src/config/loader/value-reads.ts
 init_globals();
 function valueReads({ names, helpers, actions }) {
@@ -60825,7 +60944,7 @@ function fragmentOf(file, { dir, storage }, id2, { source, json: json2 }, { chec
   const fail2 = () => {
     throw new ConfigError(file, issues);
   };
-  if (!isPlainObject2(json2)) {
+  if (!isPlainObject(json2)) {
     issues.push({
       path: "",
       message: `a plugin definition must be an object, got ${describeType(json2)}`
@@ -60908,6 +61027,7 @@ function fragmentOf(file, { dir, storage }, id2, { source, json: json2 }, { chec
   };
   issues.push(...wrongScopeRefs(authored, id2));
   const fragment = boundToSelf(ns, authored);
+  refuseMintedKeys(ctx, fragment, checkMenuDecls(ctx, fragment));
   for (const [where, template] of fragmentTemplates(fragment)) {
     try {
       SYNTAX_ENGINE.parse(template);
@@ -61108,7 +61228,7 @@ var BUILT_SOURCE = {
   read: { file: { json: true } }
 };
 function sourcesOf(sources, storage, issues) {
-  if (!isPlainObject2(sources)) {
+  if (!isPlainObject(sources)) {
     issues.push({
       path: "sources",
       message: `"sources" must be an object of named sources, got ${describeType(sources)}`
@@ -61157,7 +61277,7 @@ function sourceFileOf(source) {
   return import_node_path5.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
-  if (!isPlainObject2(built) || !isPlainObject2(authored)) {
+  if (!isPlainObject(built) || !isPlainObject(authored)) {
     return JSON.stringify(authored) === JSON.stringify(built) ? [] : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
   }
   return [
@@ -61173,7 +61293,7 @@ function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
     return resolveUserPath(import_node_path5.default.dirname(file), data, home);
   }
-  if (isPlainObject2(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
+  if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
     if (import_node_path5.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path5.default.normalize(rel).split(import_node_path5.default.sep)[0] === "..") {
       issues.push({
@@ -61191,7 +61311,7 @@ function dataPathOf(data, file, checkout, home, issues) {
     }
     return import_node_path5.default.resolve(checkout.root, rel);
   }
-  if (isPlainObject2(data) && "project" in data) {
+  if (isPlainObject(data) && "project" in data) {
     issues.push({
       path: "data.project",
       message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`
@@ -61313,11 +61433,9 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     }
     for (const [id2, nodes] of byId) {
       if (nodes.length < 2) continue;
-      const seg2 = nodes[1].name;
-      const free = freePlacementId(seg2, new Set(byId.keys()));
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg2}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each placement a distinct id. A placement without an "id" takes its segment's name.`,
         line: layoutLine
       });
     }
@@ -62620,7 +62738,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     ...payloadDeclarationNotices(
       filePath2,
       source,
-      isPlainObject2(json2) && isPlainObject2(json2.variables) ? Object.keys(json2.variables) : []
+      isPlainObject(json2) && isPlainObject(json2.variables) ? Object.keys(json2.variables) : []
     )
   ];
   const issues = [];
@@ -62632,7 +62750,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     unplaced: [],
     inherited: []
   };
-  if (!isPlainObject2(json2)) {
+  if (!isPlainObject(json2)) {
     throw new ConfigError(
       filePath2,
       [
@@ -62646,7 +62764,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
   }
   const { inherited, layer } = under2(
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
-    isPlainObject2(json2.segments) ? Object.keys(json2.segments) : []
+    isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
   const raw = validateTopLevel(
     ctx,
@@ -62712,8 +62830,8 @@ function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
     out.helpers = validateHelpers(ctx, raw.helpers);
   if (raw.plugins !== void 0)
     out.plugins = validatePluginRefs(ctx, raw.plugins);
+  refuseMintedKeys(ctx, out, checkMenuDecls(ctx, out));
   synthesizeGroupDecls(ctx, out);
-  checkMenuDecls(ctx, out);
   synthesizeEditModeToggle(ctx, out);
   reservedNamespaceCollisions(
     ctx,
@@ -64285,14 +64403,18 @@ function durableLanding(config, sessionPick, key) {
     globals: presetGlobals(config, preset)
   };
 }
-function placementDrafts(config, sessionPick) {
-  const { preset } = sessionGlobals(config, sessionPick);
+function placementDraftsIn(config, preset, sessionPick) {
   return slotsOf(config, preset).flatMap(
     ({ id: id2, setting, key, decl, saved }) => {
       const pick2 = sessionPick(key);
       const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
       return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
     }
+  );
+}
+function placementDrafts(config, sessionPick) {
+  return presetNames(config.presets).flatMap(
+    (preset) => placementDraftsIn(config, preset, sessionPick)
   );
 }
 function placementPickProblems(config, sessionPick, writes) {
@@ -64353,7 +64475,9 @@ function presetSnapshot(config, sessionPick) {
       baseOf(config, sessionPick),
       (row) => row.configKey
     ),
-    placements: placementDrafts(config, sessionPick)
+    // The copy is of the preset the session is in, so a draft filed under
+    // another preset is not part of it.
+    placements: placementDraftsIn(config, session.preset, sessionPick)
   };
 }
 function themeOwnLook(config, theme24) {
@@ -64404,6 +64528,9 @@ function fileHeldSettings(raw) {
     )
   );
 }
+function unsavedCount(config, sessionPick) {
+  return settingDrafts(config, sessionPick).length + placementDrafts(config, sessionPick).length;
+}
 function settingCounts(config, fileHeld, sessionPick) {
   const drafts = settingDrafts(config, sessionPick);
   const drafted = new Set(drafts.map((d) => d.configKey));
@@ -64412,7 +64539,7 @@ function settingCounts(config, fileHeld, sessionPick) {
   );
   const themeDefault = themeDefaultSave(config, sessionPick);
   return {
-    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    unsaved: unsavedCount(config, sessionPick),
     resettable,
     themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
   };
@@ -66431,12 +66558,21 @@ function decodeLayoutOp(token) {
   }
   return null;
 }
-function mintPlacement(segment, anchor, trees) {
+function mintPlacement(segment, anchor, trees, suffix) {
   const taken2 = new Set(
     trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
   );
-  const id2 = freePlacementId(segment, taken2);
-  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
+  return { seg: segment, id: mintPlacementId(segment, taken2, suffix) };
+}
+var MINT_TRIES = 16;
+function mintPlacementId(segment, taken2, suffix) {
+  for (let tries = 0; tries < MINT_TRIES; tries++) {
+    const id2 = `${segment}-${suffix()}`;
+    if (!taken2.has(id2)) return id2;
+  }
+  throw new Error(
+    `no free id for a placement of "${segment}" after ${MINT_TRIES} suffixes`
+  );
 }
 
 // src/render/action.ts
@@ -67228,10 +67364,9 @@ init_globals();
 function createActiveSegmentRef(drawnAt) {
   return { current: null, drawnAt };
 }
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+function openSegment(ref, placement, palette, disclosure, tint, text4) {
   const active2 = {
-    segName,
-    placementId: placementId2,
+    placement,
     palette,
     disclosure,
     tint,
@@ -67248,8 +67383,7 @@ function inSegment(ref, place, run2) {
     () => run2(
       openSegment(
         ref,
-        place.segName,
-        place.placementId,
+        place.placement,
         place.palette,
         place.disclosure,
         place.tint,
@@ -67503,7 +67637,7 @@ function pickerFuncs(runtime, activeSegment) {
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
-            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
+            `{{ picker }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
           );
         }
         const drawnAt = activeSegment.drawnAt();
@@ -67702,7 +67836,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
         if (active2.bg === void 0) {
           throw new Error(
-            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
+            `{{ swatches }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
           );
         }
         const drawnAt = activeSegment.drawnAt();
@@ -67910,7 +68044,7 @@ init_globals();
 function renderMenu(applyName, displays, options, runtime) {
   const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
   const action2 = runtime.action;
-  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
+  const stateKey = menuStateKey(placement.placement, applyName, options.key);
   const pageKey2 = menuPageKey(stateKey);
   const member = menuMember(applyName);
   const store = renderBinding(action2, "menu").store;
@@ -68035,7 +68169,7 @@ function segmentColorFuncs(ref) {
       const active2 = requireActiveSegment(ref, "{{ bgOf }}");
       if (active2.bg === void 0) {
         throw new Error(
-          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
+          `{{ bgOf }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
         );
       }
       return active2.bg.hex;
@@ -68347,7 +68481,7 @@ var segmentType = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
-      id: placementId(node),
+      placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
@@ -68375,7 +68509,7 @@ var segmentType = {
   // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
   // hidden, gated off, drawn, broken — is reported to the session's record, so
   // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+  render: (node, ctx) => ctx.placed(node.placement.id, drawSegment(node, ctx))
 };
 function drawSegment(node, ctx) {
   const seg2 = ctx.lookupSegment(node.name);
@@ -68401,7 +68535,7 @@ function drawSegment(node, ctx) {
     }
     const palette = placementPalette(node.settings.theme, ctx.palette);
     const placement = {
-      id: node.id,
+      id: node.placement.id,
       effect: node.settings.effect,
       ground: groundOf(palette)
     };
@@ -68462,7 +68596,7 @@ function drawSegment(node, ctx) {
     }));
     const laidLines = [...stays, ...dropLines];
     ctx.segments.set(
-      node.id,
+      node.placement.id,
       [
         ...laidLines.flatMap((line) => line.cells),
         ...bodyLines.flatMap(leadOf)
@@ -68522,7 +68656,7 @@ function drawnRows2(segment, layoutOf) {
 var LOADING_GLYPH = "\u2026";
 function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
   ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
+  const last2 = ctx.lastDrawn(node.placement.id);
   if (last2?.kind === "hidden") return null;
   const styles = ctx.decorations(node, palette);
   const style = bodyOpen ? styles.trigger : styles.closed;
@@ -68561,12 +68695,12 @@ function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
 function brokenSegment(node, scope, ctx, message) {
-  ctx.brokenPlacement(node.id, message);
+  ctx.brokenPlacement(node.placement.id, message);
   const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        [new RichText(`\u26A0 ${node.placement.id}: ${oneLine}`, { end: "" })],
         {
           width: "auto",
           justify: "left",
@@ -68576,7 +68710,7 @@ function brokenSegment(node, scope, ctx, message) {
           // failure it reports may be the read of this placement's own
           // settings.
           placement: {
-            id: node.id,
+            id: node.placement.id,
             effect: FOLLOW_BAR,
             ground: groundOf(ctx.palette)
           },
@@ -68596,7 +68730,11 @@ function errorAffix(affix, node, scope, ctx) {
   } catch (err) {
     const pending2 = readPending(err);
     if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.brokenPlacement(node.id, err.message ?? String(err));
+    else
+      ctx.brokenPlacement(
+        node.placement.id,
+        err.message ?? String(err)
+      );
     return [];
   }
 }
@@ -69038,17 +69176,17 @@ var Placement = class {
     const { lead, trail } = node;
     const opens = node.opens?.open;
     this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
+      `${node.placement.id} when`,
       view.readsInstant(when2),
       () => outsideSegments(ref, () => gateOf2(when2, scope))
     );
     this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
+      `${node.placement.id} body gate`,
       view.readsInstant(opens),
       () => outsideSegments(ref, () => gateOf2(opens, view.scope))
     );
     this.colours = view.derive(
-      `${node.id} colours`,
+      `${node.placement.id} colours`,
       view.readsInstant(bg, fg),
       () => {
         const { palette, region } = this.where.get();
@@ -69065,7 +69203,7 @@ var Placement = class {
       }
     );
     this.body = view.derive(
-      `${node.id} body`,
+      `${node.placement.id} body`,
       view.readsInstant(template),
       () => {
         const { colours, bodyOpen } = this.ground.get();
@@ -69073,7 +69211,7 @@ var Placement = class {
       }
     );
     this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
+      `${node.placement.id} affixes`,
       view.readsInstant(lead, trail),
       () => {
         const { colours, open: open2 } = this.opened.get();
@@ -69121,8 +69259,7 @@ var sameDealt = sameBy({
 });
 function placeOf(node, colours) {
   return {
-    segName: node.name,
-    placementId: node.id,
+    placement: node.placement,
     palette: colours.palette,
     disclosure: colours.disclosure,
     tint: colours.tint,
@@ -69518,21 +69655,25 @@ function compileDslConfig({
     }
     return Object.freeze(out);
   };
-  const compileNode = (node, path31, at) => {
-    const cctx = {
-      path: path31,
-      at,
-      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path31, "when"),
-      parse: (src, field) => parseNodeField(src, path31, field),
-      compileChild: compileNode,
-      placementSettings: resolvedSettings
+  const compilerFor = (preset) => {
+    const compileNode = (node, path31, at) => {
+      const cctx = {
+        path: path31,
+        at,
+        preset,
+        when: node.when === void 0 ? void 0 : parseNodeField(node.when, path31, "when"),
+        parse: (src, field) => parseNodeField(src, path31, field),
+        compileChild: compileNode,
+        placementSettings: resolvedSettings
+      };
+      return nodeType(node.kind).compile(node, cctx);
     };
-    return nodeType(node.kind).compile(node, cctx);
+    return compileNode;
   };
   const roots = /* @__PURE__ */ new Map();
   for (const name of presetOptions) {
     const { node, path: path31 } = presetRoot(config, name);
-    roots.set(name, compileNode(node, path31, void 0));
+    roots.set(name, compilerFor(name)(node, path31, void 0));
   }
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
@@ -69654,7 +69795,7 @@ function ruleName(slot, rule, outcome, warn, frame2) {
   }
 }
 function placementsUnder(node) {
-  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
+  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.placement.id);
 }
 function segmentsUnder(node) {
   if (node.kind === "container") return node.children.flatMap(segmentsUnder);
@@ -72473,7 +72614,7 @@ function projectGitInfo(info, pullRequest, pending2) {
 
 // src/daemon/foundations/click-error.ts
 init_globals();
-var KEY = "click.error";
+var KEY = CLICK_ERROR_KEY;
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
   const record2 = joinedEvent(
@@ -72498,23 +72639,20 @@ function clickErrorAt(state, sessionId2, at, render3) {
   const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
   return kind === "over" ? { kind } : { kind, error: last2 };
 }
-function recordOf(raw) {
-  let value;
+function isClickErrorRecord(raw) {
   try {
-    value = JSON.parse(raw);
+    recordOf(raw);
+    return true;
   } catch {
-    return null;
+    return false;
   }
-  if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered, revision } = value;
-  if (typeof text4 !== "string" || typeof at !== "number" || answered !== void 0 && typeof answered !== "boolean")
-    return null;
-  return {
-    text: heldEventText(text4),
-    at,
-    answered: answered === true,
-    ...typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0 ? { revision } : {}
-  };
+}
+function recordOf(raw) {
+  const value = JSON.parse(raw);
+  const { text: text4, at, answered, revision } = value ?? {};
+  if (typeof text4 !== "string" || typeof at !== "number" || typeof answered !== "boolean" || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1)
+    throw new Error(`click error record ${raw} is not one this build writes`);
+  return { text: text4, at, answered, revision };
 }
 
 // src/daemon/foundations/request-event.ts
@@ -73573,192 +73711,8 @@ init_globals();
 // src/renderer/verbs/index.ts
 init_globals();
 
-// src/renderer/verbs/key-seeds.ts
+// src/renderer/edit-transaction.ts
 init_globals();
-function stateKeySeed(config, sessionPick, key) {
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting !== void 0) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  for (const [, decl] of stateVarDecls(config)) {
-    if (decl.key === key) return decl.default ?? null;
-  }
-  return null;
-}
-function configKeySeed(globals, key) {
-  const seed = numericGlobalsSeeds(globals).get(key);
-  return seed === void 0 ? null : String(seed);
-}
-
-// src/config/disclosure-nest.ts
-init_globals();
-var NO_NEST = {
-  inside: () => [],
-  defaultOf: () => DISCLOSURE_CLOSED,
-  menus: []
-};
-var idOf2 = (d) => `${d.key}\0${d.member}`;
-function buildDisclosureNest(config) {
-  const menus = /* @__PURE__ */ new Map();
-  const hostedBy = (node) => {
-    const id2 = `${node.name}\0${placementId(node)}`;
-    const memo = menus.get(id2);
-    if (memo !== void 0) return memo;
-    const template = config.segments[node.name]?.template;
-    const found2 = template === void 0 ? [] : hostedMenus(template, placementId(node));
-    menus.set(id2, found2);
-    return found2;
-  };
-  const triggeredBy = (node) => [
-    ...node.opens === void 0 ? [] : [node.opens.ref],
-    ...hostedBy(node)
-  ];
-  const defaults = /* @__PURE__ */ new Map();
-  const declaredWithin = /* @__PURE__ */ new Map();
-  for (const decl of Object.values(config.variables)) {
-    if (decl.kind !== "state") continue;
-    if (decl.default !== void 0) defaults.set(decl.key, decl.default);
-    if (decl.within !== void 0) declaredWithin.set(decl.key, decl.within);
-  }
-  const inside = /* @__PURE__ */ new Map();
-  const members = /* @__PURE__ */ new Map();
-  const hung = /* @__PURE__ */ new Map();
-  const known = (d) => {
-    members.set(d.key, (members.get(d.key) ?? /* @__PURE__ */ new Set()).add(d.member));
-  };
-  const note = (parent, child) => {
-    const children2 = inside.get(idOf2(parent)) ?? /* @__PURE__ */ new Map();
-    children2.set(idOf2(child), child);
-    inside.set(idOf2(parent), children2);
-  };
-  const walk3 = (node, enclosing) => {
-    if (node.kind === "container") {
-      for (const child of node.children) walk3(child, enclosing);
-      return;
-    }
-    for (const child of triggeredBy(node)) {
-      known(child);
-      hung.set(idOf2(child), child);
-      for (const parent of enclosing) note(parent, child);
-    }
-    if (node.opens !== void 0) {
-      walk3(node.opens.body, [...enclosing, node.opens.ref]);
-    }
-  };
-  for (const preset of presetNames(config.presets)) {
-    walk3(presetRoot(config, preset).node, []);
-  }
-  for (const decl of Object.values(config.actions)) {
-    const toggled = disclosureOfAction(decl);
-    if (toggled !== void 0) known(toggled);
-  }
-  for (const [key, parents] of declaredWithin) {
-    for (const member of members.get(key) ?? []) {
-      for (const parent of parents) note(parent, { key, member });
-    }
-  }
-  const closures = /* @__PURE__ */ new Map();
-  const closure = (parent) => {
-    const memo = closures.get(idOf2(parent));
-    if (memo !== void 0) return memo;
-    const found2 = /* @__PURE__ */ new Map();
-    const visit = (d) => {
-      for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
-        if (found2.has(id2)) continue;
-        found2.set(id2, child);
-        visit(child);
-      }
-    };
-    visit(parent);
-    const within3 = /* @__PURE__ */ new Map();
-    for (const { key, member } of found2.values()) {
-      within3.set(key, (within3.get(key) ?? /* @__PURE__ */ new Set()).add(member));
-    }
-    const keys2 = [...within3].map(([key, held]) => ({
-      key,
-      outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
-    }));
-    closures.set(idOf2(parent), keys2);
-    return keys2;
-  };
-  return {
-    inside: closure,
-    menus: [...hung.values()],
-    // A disclosure that declares no default starts closed: its toggle counts
-    // an unknown value as its first member, `closed`.
-    defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED
-  };
-}
-var NESTS = /* @__PURE__ */ new WeakMap();
-function disclosureNest(config) {
-  const memo = NESTS.get(config);
-  if (memo !== void 0) return memo;
-  const nest = buildDisclosureNest(config);
-  NESTS.set(config, nest);
-  return nest;
-}
-function closeNested(nest, read2, writes) {
-  const written2 = new Set(writes.map((w) => w.key));
-  const held = (key) => read2(key) ?? nest.defaultOf(key);
-  const folds = /* @__PURE__ */ new Set();
-  for (const { key, value } of writes) {
-    const was = held(key);
-    if (was === value) continue;
-    for (const nested of nest.inside({ key, member: was })) {
-      const now2 = held(nested.key);
-      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written2.has(nested.key);
-      if (closes) folds.add(nested.key);
-    }
-  }
-  return [...folds];
-}
-function openRoots(nest, read2) {
-  const open2 = ({ key, member }) => (read2(key) ?? nest.defaultOf(key)) === member;
-  const within3 = (child, parent) => nest.inside(parent).some(
-    ({ key, outside }) => key === child.key && !outside.has(child.member)
-  );
-  return nest.menus.filter(open2).filter((d) => {
-    const parents = nest.menus.filter((p2) => p2 !== d && within3(d, p2));
-    const leftByParent = parents.length > 0 && nest.defaultOf(d.key) === d.member;
-    return !parents.some(open2) && !leftByParent;
-  });
-}
-
-// src/renderer/closing-view.ts
-init_globals();
-function closingView(store, nestOf2, log) {
-  const write = (sessionId2, writes, land) => {
-    const folds = closeNested(
-      nestOf2(sessionId2),
-      (key) => store.get(sessionId2, key),
-      writes
-    );
-    runInAction(() => {
-      land();
-      for (const key of folds) store.clear(sessionId2, key);
-    });
-    if (folds.length > 0) {
-      log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
-    }
-  };
-  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
-  return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
-    setBatch,
-    // A cleared key reads its default, so it closes what its old value held.
-    clear: (sessionId2, key) => write(
-      sessionId2,
-      [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
-      () => store.clear(sessionId2, key)
-    )
-  };
-}
-
-// src/renderer/config-file-store.ts
-init_globals();
-var import_json55 = __toESM(require_dist(), 1);
 
 // src/renderer/config-writes.ts
 init_globals();
@@ -74105,7 +74059,1190 @@ var ConfigWrites = class {
   }
 };
 
+// src/renderer/navigation-history.ts
+init_globals();
+function followedBy(timeline, visit) {
+  if (movedKeys(visit.from, visit.to).length === 0) return timeline;
+  const visits = [...timeline.visits.slice(0, timeline.cursor), visit].slice(
+    -MAX_VISITS
+  );
+  return { visits, cursor: visits.length };
+}
+var EMPTY = { visits: [], cursor: 0 };
+var MAX_VISITS = 20;
+var MAX_SESSIONS2 = 32;
+var menuKeys = /* @__PURE__ */ new WeakMap();
+function capture2(store, sid, { gate: gate2 }) {
+  let keys2 = menuKeys.get(gate2);
+  if (keys2 === void 0) {
+    keys2 = gate2.listKeys().filter(isNavigationKey);
+    menuKeys.set(gate2, keys2);
+  }
+  const values2 = /* @__PURE__ */ new Map();
+  for (const key of keys2) {
+    const value = store.get(sid, key);
+    if (value !== null) values2.set(key, value);
+  }
+  return { values: values2 };
+}
+function movedKeys(from, to) {
+  return [.../* @__PURE__ */ new Set([...from.values.keys(), ...to.values.keys()])].filter(
+    (key) => from.values.get(key) !== to.values.get(key)
+  );
+}
+function previous(timeline, current, context) {
+  const invalid = /* @__PURE__ */ new Set();
+  const values2 = new Map(current.values);
+  let destination = null;
+  let depth = 0;
+  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
+    const visit = timeline.visits[cursor];
+    const step4 = movedKeys(visit.from, visit.to).map((key) => ({
+      key,
+      from: visit.from.values.get(key),
+      to: visit.to.values.get(key)
+    }));
+    if (!step4.every(
+      ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
+    )) {
+      invalid.add(visit);
+      continue;
+    }
+    for (const { key, from } of step4) {
+      if (from === void 0) values2.delete(key);
+      else values2.set(key, from);
+    }
+    destination ??= { values: new Map(values2) };
+    depth++;
+  }
+  return { destination, depth, invalid };
+}
+var NavigationHistory = class {
+  timelines = observable.map(void 0, {
+    deep: false
+  });
+  depth(sessionId2, store, context) {
+    const timeline = this.timelines.get(sessionId2);
+    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
+  }
+  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
+  // cursor are staged alongside the click's settings. A guarded write that
+  // does not land publishes neither.
+  begin(store, choose) {
+    const before = /* @__PURE__ */ new Map();
+    const next2 = /* @__PURE__ */ new Map();
+    const ended = /* @__PURE__ */ new Map();
+    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY;
+    const endVisit = (sid) => {
+      const start = before.get(sid);
+      if (start === void 0) return;
+      before.delete(sid);
+      const visit = {
+        from: start.view,
+        to: capture2(store, sid, start.context)
+      };
+      if (movedKeys(visit.from, visit.to).length === 0) return;
+      ended.set(sid, visit);
+      next2.set(sid, followedBy(timelineOf(sid), visit));
+    };
+    return {
+      choose: (sid, writes, contextOf) => {
+        if (!before.has(sid) && writes.some(({ key }) => isNavigationKey(key))) {
+          const context = contextOf();
+          before.set(sid, { view: capture2(store, sid, context), context });
+        }
+        choose(sid, writes);
+      },
+      back: (sid, context) => {
+        endVisit(sid);
+        const timeline = timelineOf(sid);
+        const at = capture2(store, sid, context);
+        const { destination, invalid } = previous(timeline, at, context);
+        const discarded = invalid.size;
+        const cursor = Math.max(0, timeline.cursor - discarded - 1);
+        next2.set(sid, {
+          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
+          cursor
+        });
+        if (destination === null)
+          throw new BadVerbArgs(
+            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
+          );
+        const writes = movedKeys(at, destination).map((key) => ({
+          key,
+          value: destination.values.get(key) ?? null
+        }));
+        runInAction(() => {
+          store.setBatch(
+            sid,
+            writes.flatMap(
+              ({ key, value }) => value === null ? [] : [{ key, value }]
+            )
+          );
+          for (const { key, value } of writes)
+            if (value === null) store.clear(sid, key);
+        });
+        return { writes, discarded };
+      },
+      commit: () => {
+        for (const sid of before.keys()) endVisit(sid);
+        this.publish(next2);
+        next2.clear();
+        return ended;
+      }
+    };
+  }
+  // [LAW:one-source-of-truth] The visit of a click that ends an edit, as its
+  // writes land: outside the edit, without edit mode's keys, which end with
+  // it. Every other visit the edit held ends with it.
+  landOutsideEdit(visits) {
+    const outside = (view) => ({
+      values: new Map([...view.values].filter(([key]) => !isEditModeKey(key)))
+    });
+    const next2 = /* @__PURE__ */ new Map();
+    for (const [sid, visit] of visits) {
+      const landed = { from: outside(visit.from), to: outside(visit.to) };
+      next2.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
+    }
+    this.publish(next2);
+  }
+  publish(timelines) {
+    runInAction(() => {
+      for (const [sid, timeline] of timelines) {
+        this.timelines.delete(sid);
+        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
+      }
+      while (this.timelines.size > MAX_SESSIONS2)
+        this.timelines.delete(this.timelines.keys().next().value);
+    });
+  }
+};
+
+// src/renderer/settings-history.ts
+init_globals();
+
+// src/renderer/session-state.ts
+init_globals();
+function recordingView(store, records, onChange) {
+  const recorded2 = (sessionId2, keys2, write) => {
+    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
+    write();
+    for (const { key, before: b } of before) {
+      onChange(sessionId2, key, b, store.get(sessionId2, key));
+    }
+  };
+  return {
+    get: (sessionId2, key) => store.get(sessionId2, key),
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => recorded2(sessionId2, [key], () => store.set(sessionId2, key, value)),
+    setBatch: (sessionId2, pairs2) => recorded2(
+      sessionId2,
+      pairs2.map((p2) => p2.key),
+      () => store.setBatch(sessionId2, pairs2)
+    ),
+    clear: (sessionId2, key) => recorded2(sessionId2, [key], () => store.clear(sessionId2, key))
+  };
+}
+var DEFAULT_MAX_SESSIONS = 256;
+var SessionState = class {
+  // `loaded` is what the profile holds, oldest first, as the host handed it in.
+  constructor(loaded = {}, maxSessions = DEFAULT_MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
+    this.sessions = new Map(
+      Object.entries(loaded).map(([id2, kv]) => [
+        id2,
+        { values: new Map(Object.entries(kv)), revision: ++this.head }
+      ])
+    );
+    this.evictOldest();
+  }
+  maxSessions;
+  // [LAW:types-are-the-program] Insertion order is recency order, the order
+  // of writes: the store cannot hold more than maxSessions, so the bound is
+  // structural, not dependent on an external prune caller. A read moves
+  // nothing, so the host's copy, which hears only writes, keeps the same order.
+  sessions;
+  // [LAW:one-source-of-truth] The sessions whose state moved since the host
+  // was last told, in the order they last moved: what the turn's stored
+  // writes carry (`drain`).
+  moved = /* @__PURE__ */ new Set();
+  // [LAW:single-enforcer] The store's revision: counts every change any
+  // writer makes, so it never repeats while the store lives.
+  head = 0;
+  // [LAW:single-enforcer] One atom; every read reports observed against it,
+  // every mutation reports changed. Coarse-grained reactivity is correct for
+  // session-state's load — mutations are rare and computeds are cheap.
+  atom = createAtom("SessionState");
+  get(sessionId2, key) {
+    this.atom.reportObserved();
+    return this.sessions.get(sessionId2)?.values.get(key) ?? null;
+  }
+  revision(sessionId2) {
+    this.atom.reportObserved();
+    return this.sessions.get(sessionId2)?.revision ?? 0;
+  }
+  // How many derivations are subscribed to this store right now — every
+  // computed that read session state and has not been released. Live configs
+  // keep a bounded number; a count that climbs while the render cache does not
+  // is a disposed store still held, which nothing else would show short of a
+  // heap snapshot. [LAW:nothing-unseen]
+  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
+  // dependency-tree API reads), `null` once nothing observes it. The other
+  // public view, `getObserverTree`, materialises the whole recursive tree —
+  // one node per observer per path — to answer this direct count, on the
+  // daemon's request thread.
+  observers() {
+    return this.atom.observers_?.size ?? 0;
+  }
+  // The store's revision: how many changes any writer has made to it.
+  latestRevision() {
+    return this.head;
+  }
+  // How many sessions the store holds.
+  size() {
+    return this.sessions.size;
+  }
+  stats() {
+    return {
+      sessions: this.size(),
+      observers: this.observers(),
+      revision: this.latestRevision()
+    };
+  }
+  // [LAW:one-source-of-truth] set is the degenerate single-pair form of
+  // setBatch — one write path through the store.
+  set(sessionId2, key, value) {
+    this.setBatch(sessionId2, [{ key, value }]);
+  }
+  // [LAW:no-silent-failure] Atomic commit of N pairs: every write lands
+  // BEFORE the single reportChanged() that marks the transaction complete, so
+  // no observer sees half of it. A batch that writes only values already held
+  // changes nothing, and moves no session in the recency order.
+  setBatch(sessionId2, pairs2) {
+    const held = this.sessions.get(sessionId2);
+    if (!pairs2.some(({ key, value }) => held?.values.get(key) !== value))
+      return;
+    runInAction(() => {
+      const session = held ?? {
+        values: /* @__PURE__ */ new Map(),
+        revision: 0
+      };
+      for (const { key, value } of pairs2) session.values.set(key, value);
+      this.changed(sessionId2, session);
+      this.evictOldest();
+      this.atom.reportChanged();
+    });
+  }
+  clear(sessionId2, key) {
+    const session = this.sessions.get(sessionId2);
+    if (session === void 0 || !session.values.has(key)) return;
+    runInAction(() => {
+      session.values.delete(key);
+      if (session.values.size === 0) this.dropped(sessionId2);
+      else this.changed(sessionId2, session);
+      this.atom.reportChanged();
+    });
+  }
+  // What the host has not yet been told: each session that moved, as it now
+  // stands, null for one dropped, in the order they last moved, so the host's
+  // copy keeps this store's recency order.
+  drain() {
+    const writes = [...this.moved].map(
+      (key) => ({
+        store: "session-state",
+        key,
+        value: this.valuesOf(key)
+      })
+    );
+    this.moved.clear();
+    return writes;
+  }
+  valuesOf(sessionId2) {
+    const session = this.sessions.get(sessionId2);
+    return session === void 0 ? null : Object.fromEntries(session.values);
+  }
+  // Move-to-end: re-inserting at the tail makes this the most recently
+  // written, here and in what the host is told.
+  changed(sessionId2, session) {
+    session.revision = ++this.head;
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, session);
+    this.told(sessionId2);
+  }
+  dropped(sessionId2) {
+    this.head++;
+    this.sessions.delete(sessionId2);
+    this.told(sessionId2);
+  }
+  told(sessionId2) {
+    this.moved.delete(sessionId2);
+    this.moved.add(sessionId2);
+  }
+  evictOldest() {
+    let overflow = this.sessions.size - this.maxSessions;
+    if (overflow <= 0) return;
+    for (const id2 of this.sessions.keys()) {
+      this.dropped(id2);
+      if (--overflow === 0) break;
+    }
+  }
+};
+
+// src/renderer-interface/history-storage.ts
+init_globals();
+function isChange(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  const state = (x) => x === null || typeof x === "string";
+  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
+}
+function isSteps(v) {
+  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
+}
+function parseSessionHistory(v) {
+  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
+  if (!isSteps(v.past))
+    return {
+      kind: "failed",
+      reason: "has a 'past' that is not a list of steps"
+    };
+  if (!isSteps(v.future))
+    return {
+      kind: "failed",
+      reason: "has a 'future' that is not a list of steps"
+    };
+  return { kind: "ok", value: { past: v.past, future: v.future } };
+}
+var holdsNothing = ({ past, future }) => past.length + future.length === 0;
+
+// src/renderer/settings-history.ts
+var MAX_STEPS = 50;
+var MAX_SESSIONS3 = 32;
+var MAX_BYTES = 8 * 1024 * 1024;
+var EMPTY2 = { past: [], future: [] };
+var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
+var SettingsHistory = class {
+  // `loaded` is what the profile holds, oldest first, as the host handed it
+  // in: held to the same bounds as every step that lands.
+  constructor(sessionState, logger, loaded = {}) {
+    this.sessionState = sessionState;
+    this.logger = logger;
+    this.adopt(
+      new Map(Object.entries(loaded))
+    );
+  }
+  sessionState;
+  logger;
+  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
+  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
+  // refused `↶` that drops steps included, which moves no pick. Per key: a
+  // whole next state is adopted by `replace`, which keeps its order (the
+  // recency) and moves only the sessions whose history changed, so one
+  // session's click recomputes no other session's payload.
+  held = observable.map(void 0, {
+    deep: false
+  });
+  get state() {
+    return this.held;
+  }
+  set state(next2) {
+    runInAction(() => this.held.replace(next2));
+  }
+  // [LAW:one-source-of-truth] The sessions whose history moved since the
+  // host was last told, in the order they last moved (`drain`).
+  moved = /* @__PURE__ */ new Set();
+  // What the host has not yet been told: each session whose history moved, as
+  // it now stands, null for one gone, in the order they last moved.
+  drain() {
+    const writes = [...this.moved].map(
+      (key) => ({
+        store: "settings-history",
+        key,
+        value: this.state.get(key) ?? null
+      })
+    );
+    this.moved.clear();
+    return writes;
+  }
+  depth(sessionId2) {
+    const { past, future } = this.history(sessionId2);
+    return {
+      undo: past.length,
+      redo: future.length,
+      sinceEdit: 0
+    };
+  }
+  history(sessionId2) {
+    return this.state.get(sessionId2) ?? EMPTY2;
+  }
+  begin(files) {
+    const held = heldWrites(this.sessionState);
+    const working = /* @__PURE__ */ new Map();
+    const click2 = {
+      held,
+      files,
+      historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
+      move: (sessionId2, history) => working.set(sessionId2, history)
+    };
+    const pending2 = /* @__PURE__ */ new Map();
+    const note = (sessionId2, change) => {
+      const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
+      const earlier = changes.get(identity(change));
+      changes.set(
+        identity(change),
+        earlier === void 0 ? change : { ...change, before: earlier.before }
+      );
+      pending2.set(sessionId2, changes);
+    };
+    const sessionState = recordingView(
+      held,
+      isUndoStepKey,
+      (sessionId2, key, before, after) => {
+        note(sessionId2, { kind: "session", key, before, after });
+      }
+    );
+    const step4 = () => {
+      for (const [sessionId2, pendingChanges] of pending2) {
+        const changes = [...pendingChanges.values()].filter(
+          (c) => c.before !== c.after
+        );
+        if (changes.length > 0)
+          click2.move(sessionId2, {
+            past: capped([...click2.historyOf(sessionId2).past, changes]),
+            future: []
+          });
+      }
+      pending2.clear();
+    };
+    return {
+      sessionState,
+      writes: held.writes,
+      file: (sessionId2, file, before, after) => {
+        note(sessionId2, {
+          kind: "layer",
+          role: files.roleOf(file),
+          digest: digestOf(file),
+          before,
+          after
+        });
+        files.land(file, before, after);
+      },
+      undo: (sessionId2) => {
+        step4();
+        return this.undo(click2, sessionId2);
+      },
+      redo: (sessionId2) => {
+        step4();
+        return this.redo(click2, sessionId2);
+      },
+      commit: () => {
+        step4();
+        const moved2 = new Map(working);
+        working.clear();
+        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
+        return held.flush();
+      }
+    };
+  }
+  undo(click2, sessionId2) {
+    const history = click2.historyOf(sessionId2);
+    const step4 = history.past.at(-1);
+    if (step4 === void 0) {
+      throw new BadVerbArgs("undo: nothing to undo");
+    }
+    this.apply(
+      click2,
+      sessionId2,
+      step4,
+      "before",
+      "undo",
+      afterUndo(history, step4)
+    );
+    return step4;
+  }
+  redo(click2, sessionId2) {
+    const history = click2.historyOf(sessionId2);
+    const { past, future } = history;
+    const step4 = future.at(-1);
+    if (step4 === void 0) {
+      throw new BadVerbArgs("redo: nothing to redo");
+    }
+    const all2 = [...past, step4];
+    const kept = capped(all2);
+    this.apply(click2, sessionId2, step4, "after", "redo", {
+      past: kept,
+      future: future.slice(0, -1)
+    });
+    return step4;
+  }
+  // [LAW:no-silent-failure] A step is refused whole when a target it steps
+  // has moved, a session pick or a setting of a file: what moved is named,
+  // and the target's now-unreachable changes leave both stacks (see the
+  // header). Otherwise each pick is written through the click, and each file
+  // is written as the changes between the texts the step recorded, applied
+  // over the file as the click reads it, so a write to another setting of the
+  // file never stops it. [LAW:single-enforcer] That text has not been loaded
+  // by anyone, so it passes the gate every click's write passes before it
+  // lands.
+  apply(click2, sessionId2, step4, to, verb, then) {
+    const stepped2 = step4.map((c) => stepOf(click2, sessionId2, c, to));
+    const stale = stepped2.flatMap((s) => s.kind === "moved" ? [s] : []);
+    if (stale.length > 0) {
+      click2.move(
+        sessionId2,
+        forgotten(
+          click2.historyOf(sessionId2),
+          new Set(stale.map((s) => s.target))
+        )
+      );
+      throw new BadVerbArgs(
+        `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
+      );
+    }
+    const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
+    const stepTexts = new Map(files.map(({ file, text: text4 }) => [file, text4]));
+    const read2 = (file) => {
+      const text4 = stepTexts.get(file);
+      return text4 === void 0 ? click2.files.read(file) : contentOfText(text4);
+    };
+    for (const { file, text: text4 } of files) click2.files.prove(file, text4, read2);
+    for (const { file, text: text4 } of files)
+      click2.files.land(
+        file,
+        requireLayerText(file, click2.files.read(file)),
+        text4
+      );
+    for (const s of stepped2)
+      if (s.kind === "session")
+        if (s.value === null) click2.held.clear(sessionId2, s.key);
+        else click2.held.set(sessionId2, s.key, s.value);
+    click2.move(sessionId2, then);
+  }
+  // Move-to-end keeps insertion order as recency, so the bounds drop the
+  // session that changed least recently.
+  put(sessionId2, history) {
+    const next2 = new Map(this.state);
+    next2.delete(sessionId2);
+    if (!holdsNothing(history)) next2.set(sessionId2, history);
+    this.moved.delete(sessionId2);
+    this.moved.add(sessionId2);
+    this.adopt(next2);
+  }
+  // [LAW:single-enforcer] The one enforcer of the bounds, over what the
+  // profile handed in and over every step: each session the bounds trim or
+  // drop is told.
+  adopt(next2) {
+    const before = new Map(next2);
+    this.bound(next2);
+    for (const [sessionId2, history] of before)
+      if (next2.get(sessionId2) !== history) {
+        this.moved.delete(sessionId2);
+        this.moved.add(sessionId2);
+      }
+    this.state = next2;
+  }
+  bound(next2) {
+    while (next2.size > MAX_SESSIONS3 || weight(next2) > MAX_BYTES) {
+      const [oldest, h] = next2.entries().next().value;
+      if (next2.size > 1) {
+        next2.delete(oldest);
+        continue;
+      }
+      const trimmed = withoutOldestStep(h);
+      if (holdsNothing(trimmed)) next2.delete(oldest);
+      else next2.set(oldest, trimmed);
+      this.logger(
+        "info",
+        `settings-history: trimmed an old step for session ${oldest}`
+      );
+    }
+  }
+};
+function weight(state) {
+  let bytes = 0;
+  for (const { past, future } of state.values()) {
+    for (const step4 of [...past, ...future]) {
+      for (const c of step4) {
+        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
+      }
+    }
+  }
+  return bytes;
+}
+function withoutOldestStep({ past, future }) {
+  return past.length > 0 ? { past: past.slice(1), future } : { past, future: future.slice(1) };
+}
+function capped(steps2) {
+  return steps2.slice(-MAX_STEPS);
+}
+function afterUndo(history, step4) {
+  return {
+    past: history.past.slice(0, -1),
+    future: capped([...history.future, step4])
+  };
+}
+function without2(steps2, gone) {
+  return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
+}
+function describeStep(step4) {
+  return step4.map(describe2).join(", ");
+}
+function describe2(change) {
+  return change.kind === "session" ? `session setting "${change.key}"` : `the ${change.role} layer`;
+}
+function stepOf(click2, sessionId2, change, to) {
+  const from = to === "before" ? "after" : "before";
+  if (change.kind === "session")
+    return click2.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
+      kind: "moved",
+      target: identity(change),
+      what: `session setting "${change.key}"`
+    };
+  const file = click2.files.pathOf(change.role);
+  if (file === null || digestOf(file) !== change.digest)
+    return {
+      kind: "moved",
+      target: identity(change),
+      what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`
+    };
+  const applied3 = applyChanges(
+    requireLayerText(file, click2.files.read(file)),
+    diffChanges(change[from], change[to])
+  );
+  return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
+    kind: "moved",
+    target: identity(change),
+    what: `${addressText(applied3.at)} in the ${change.role} layer`
+  };
+}
+function forgotten({ past, future }, gone) {
+  return { past: without2(past, gone), future: without2(future, gone) };
+}
+function heldWrites(store) {
+  const held = /* @__PURE__ */ new Map();
+  const put = (sessionId2, key, value) => {
+    const writes = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    writes.set(key, value);
+    held.set(sessionId2, writes);
+  };
+  return {
+    get: (sessionId2, key) => {
+      const writes = held.get(sessionId2);
+      return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
+    },
+    revision: (sessionId2) => store.revision(sessionId2),
+    writes: (sessionId2) => held.get(sessionId2) ?? /* @__PURE__ */ new Map(),
+    set: (sessionId2, key, value) => put(sessionId2, key, value),
+    setBatch: (sessionId2, pairs2) => {
+      for (const { key, value } of pairs2) put(sessionId2, key, value);
+    },
+    clear: (sessionId2, key) => put(sessionId2, key, null),
+    // One transaction, so no observer sees half a click.
+    flush: () => {
+      const landed = new Map(held);
+      runInAction(() => {
+        for (const [sessionId2, writes] of held) {
+          const sets = [...writes].flatMap(
+            ([key, value]) => value === null ? [] : [{ key, value }]
+          );
+          if (sets.length > 0) store.setBatch(sessionId2, sets);
+          for (const [key, value] of writes)
+            if (value === null) store.clear(sessionId2, key);
+        }
+        held.clear();
+      });
+      return landed;
+    }
+  };
+}
+
+// src/renderer/edit-transaction.ts
+function routedWrites(store, draftOf, unheld) {
+  const write = (sid, pairs2) => {
+    const draft = draftOf(sid);
+    const stored = [];
+    const flush = () => {
+      if (stored.length > 0) store.setBatch(sid, stored.splice(0));
+    };
+    runInAction(() => {
+      for (const { key, value } of pairs2)
+        if (draft !== null && isHeldByEdit(key)) draft.put(key, value);
+        else if (isEditModeKey(key)) unheld.put(sid, key, value);
+        else if (value === null) {
+          flush();
+          store.clear(sid, key);
+        } else stored.push({ key, value });
+      flush();
+    });
+  };
+  return {
+    get: (sid, key) => {
+      const draft = draftOf(sid);
+      return draft !== null && isHeldByEdit(key) ? draft.read(key) : isEditModeKey(key) ? unheld.get(sid, key) : store.get(sid, key);
+    },
+    revision: (sid) => store.revision(sid),
+    set: (sid, key, value) => write(sid, [{ key, value }]),
+    setBatch: write,
+    clear: (sid, key) => write(sid, [{ key, value: null }]),
+    write
+  };
+}
+function heldAside() {
+  const aside = /* @__PURE__ */ new Map();
+  return {
+    get: (sid, key) => aside.get(sid)?.get(key) ?? null,
+    put: (sid, key, value) => aside.set(sid, (aside.get(sid) ?? /* @__PURE__ */ new Map()).set(key, value)),
+    held: (sid) => aside.get(sid) ?? /* @__PURE__ */ new Map()
+  };
+}
+function staleEdit(what) {
+  return new BadVerbArgs(
+    `edit: dropped ${[...what].join(",")} \u2014 no edit is open`
+  );
+}
+var ENDED = { get: () => null, put: () => {
+} };
+var EditDraft = class {
+  constructor(session, origin, base, committed, sessions, log, first2) {
+    this.session = session;
+    this.origin = origin;
+    this.base = base;
+    this.committed = committed;
+    this.writes = new Map(first2);
+    this.latest = base;
+    this.#revision = revisionOf(base);
+    this.history = new SettingsHistory(sessions, log, {});
+  }
+  session;
+  origin;
+  base;
+  committed;
+  // Every write this session made inside the edit, as the edit reads it,
+  // from the writes of the click that opened it on.
+  writes;
+  files = /* @__PURE__ */ new Map();
+  history;
+  navigation = new NavigationHistory();
+  latest;
+  // [LAW:one-source-of-truth] Derived from `latest`, `base` and the draft's
+  // files, and retaken whenever one of them changes: never assigned from
+  // outside the draft.
+  #revision;
+  // [LAW:effects-at-boundaries] A transaction pins the content it edits.
+  // The host's current layer identities and plugin discovery still decide
+  // what it can load, including when the user revokes repository trust.
+  updated(latest) {
+    this.latest = latest;
+    this.refreshSnapshot();
+  }
+  // The config the draft previews: the host's latest layers, each holding
+  // the draft's text for its file.
+  get revision() {
+    return this.#revision;
+  }
+  refreshSnapshot() {
+    this.#revision = revisionOf({
+      ...this.latest,
+      chain: this.latest.chain.flatMap((layer) => {
+        const base = layerAtPath(this.base.chain, layer.path);
+        if (base?.role !== layer.role) return [];
+        const value = this.files.get(layer.path);
+        const content = value === void 0 ? base.content : value === null ? { kind: "absent" } : { kind: "text", text: value };
+        return [{ ...layer, content }];
+      })
+    });
+  }
+  // The files the edit changed. Its settings and drafts are the save's own
+  // count, derived over the config as the save derives them.
+  depth() {
+    return {
+      ...this.history.depth(this.session),
+      sinceEdit: this.files.size
+    };
+  }
+  // [LAW:one-source-of-truth] Whether edit mode is open is the draft's
+  // existence, so an edit with no write of its mode reads `arrange`; a write
+  // of it (the click that leaves) is the request the click's consequence
+  // consumes, and reads as written until then.
+  read(key) {
+    if (this.writes.has(key)) return this.writes.get(key);
+    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
+    return this.committed.get(this.session, key);
+  }
+  put(key, value) {
+    if (this.committed.get(this.session, key) === value)
+      this.writes.delete(key);
+    else this.writes.set(key, value);
+  }
+  begin(prove) {
+    const working = new Map(this.files);
+    const layerAt = (file) => {
+      const layer = layerAtPath(this.base.chain, file);
+      if (layer === void 0)
+        throw new BadVerbArgs(`${file} is not a layer of this edit`);
+      return layer;
+    };
+    const files = {
+      read: (file) => working.has(file) ? contentOfText(working.get(file)) : layerAt(file).content,
+      land: (file, _before, after) => {
+        if (after === requireLayerText(file, layerAt(file).content))
+          working.delete(file);
+        else working.set(file, after);
+      },
+      roleOf: (file) => layerAt(file).role,
+      pathOf: (role) => layerForRole(this.base.chain, role)?.path ?? null,
+      prove
+    };
+    const journal = this.history.begin(files);
+    return {
+      files,
+      journal,
+      navigation: this.navigation,
+      commit: () => {
+        const before = new Map(this.writes);
+        const clicked = journal.commit().get(this.session) ?? /* @__PURE__ */ new Map();
+        const stateMoved = !sameEntries(before, this.writes);
+        if (sameEntries(working, this.files))
+          return { moved: stateMoved, clicked };
+        this.files = working;
+        this.refreshSnapshot();
+        return { moved: true, clicked };
+      },
+      save: (committedJournal, destination, latest) => {
+        const rewritten2 = /* @__PURE__ */ new Map();
+        for (const [path31, after] of working) {
+          const source = layerAt(path31);
+          const target = layerForRole(latest.chain, source.role);
+          if (target?.path !== path31)
+            throw new BadVerbArgs(
+              `save: the ${source.role} layer for this edit moved`
+            );
+          const applied3 = applyChanges(
+            requireLayerText(path31, target.content),
+            diffChanges(requireLayerText(path31, source.content), after)
+          );
+          if (applied3.kind !== "applied")
+            throw new BadVerbArgs(
+              `save: ${addressText(applied3.at)} in the ${source.role} layer changed while editing`
+            );
+          rewritten2.set(path31, applied3.text);
+        }
+        const read2 = (file) => rewritten2.has(file) ? contentOfText(rewritten2.get(file)) : destination.read(file);
+        for (const [file, text4] of rewritten2)
+          destination.prove(file, text4, read2);
+        for (const [file, text4] of rewritten2)
+          committedJournal.file(
+            this.session,
+            file,
+            requireLayerText(file, destination.read(file)),
+            text4
+          );
+        this.land(
+          committedJournal.sessionState,
+          new Map([...this.writes, ...journal.writes(this.session)])
+        );
+      },
+      leave: (clicked) => this.land(this.committed, clicked)
+    };
+  }
+  // The edit's writes, landed past it, through the router as for a session
+  // with no edit: edit mode's own keys end with the edit, and the rest
+  // persist.
+  land(into, writes) {
+    routedWrites(into, () => null, ENDED).write(
+      this.session,
+      [...writes].map(([key, value]) => ({ key, value }))
+    );
+  }
+};
+function sameEntries(left, right) {
+  return left.size === right.size && [...left].every(([key, value]) => right.get(key) === value);
+}
+var EditTransactions = class {
+  constructor(committed, log) {
+    this.committed = committed;
+    this.log = log;
+    const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
+      get: () => null,
+      put: (sid, key) => log("warn", `${staleEdit([key]).message} (session=${sid})`)
+    });
+    this.view = {
+      get: routed.get,
+      set: routed.set,
+      setBatch: routed.setBatch,
+      clear: routed.clear,
+      revision: (sid) => committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0)
+    };
+  }
+  committed;
+  log;
+  entries = observable.map(void 0, {
+    deep: false
+  });
+  // [LAW:one-source-of-truth] The session's state as every reader and every
+  // writer outside a click's journal sees it: its open edit's, else the
+  // store's, through the one router. An edit-mode key written with no edit
+  // open (a stale click's) is dropped, said.
+  view;
+  draft(sid) {
+    return this.entries.get(sid)?.draft ?? null;
+  }
+  // The session's open edit as the router writes into it: each write a
+  // change the session's view shows.
+  draftWrites(sid) {
+    const draft = this.draft(sid);
+    return draft === null ? null : {
+      read: (key) => draft.read(key),
+      put: (key, value) => {
+        draft.put(key, value);
+        this.changed(sid);
+      }
+    };
+  }
+  revision(origin, sid) {
+    const draft = this.draft(sid);
+    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.revision : null;
+  }
+  configured(origin, snapshot) {
+    const key = originKey(origin);
+    const refreshed = [];
+    for (const [sid, { draft }] of this.entries) {
+      if (draft === null || originKey(draft.origin) !== key) continue;
+      draft.updated(snapshot);
+      refreshed.push(sid);
+    }
+    return refreshed;
+  }
+  depth(sid, committed) {
+    return this.draft(sid)?.depth() ?? committed.depth(sid);
+  }
+  // `first` is what the click that opens it wrote to edit mode's keys.
+  open(sid, origin, snapshot, first2) {
+    this.update(
+      sid,
+      new EditDraft(
+        sid,
+        origin,
+        snapshot,
+        this.committed,
+        this.view,
+        this.log,
+        first2
+      )
+    );
+  }
+  close(sid) {
+    this.update(sid, null);
+  }
+  changed(sid) {
+    this.update(sid, this.draft(sid));
+  }
+  moved(sid, origin) {
+    const draft = this.draft(sid);
+    if (draft === null || originKey(draft.origin) === originKey(origin))
+      return false;
+    this.log(
+      "info",
+      `edit: draft discarded after the session changed config origin (session=${sid})`
+    );
+    this.close(sid);
+    return true;
+  }
+  retire(sid) {
+    runInAction(() => this.entries.delete(sid));
+  }
+  update(sid, draft) {
+    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision }));
+  }
+};
+
+// src/renderer/verbs/key-seeds.ts
+init_globals();
+function stateKeySeed(config, sessionPick, key) {
+  const setting = SESSION_KEY_TO_SETTING.get(key);
+  if (setting !== void 0) {
+    return sessionSettingValue(config, sessionPick, setting);
+  }
+  for (const [, decl] of stateVarDecls(config)) {
+    if (decl.key === key) return decl.default ?? null;
+  }
+  return null;
+}
+function configKeySeed(globals, key) {
+  const seed = numericGlobalsSeeds(globals).get(key);
+  return seed === void 0 ? null : String(seed);
+}
+
+// src/config/disclosure-nest.ts
+init_globals();
+var NO_NEST = {
+  inside: () => [],
+  defaultOf: () => DISCLOSURE_CLOSED,
+  menus: []
+};
+var idOf2 = (d) => `${d.key}\0${d.member}`;
+function buildDisclosureNest(config) {
+  const calls = /* @__PURE__ */ new Map();
+  const hostedBy = (preset, node) => {
+    const template = config.segments[node.name]?.template;
+    if (template === void 0) return [];
+    if (!calls.has(node.name)) calls.set(node.name, parseCalls(template));
+    return hostedMenus(
+      calls.get(node.name),
+      placementIdentityOf(preset, node)
+    );
+  };
+  const triggeredBy = (preset, node) => [
+    ...node.opens === void 0 ? [] : [node.opens.ref],
+    ...hostedBy(preset, node)
+  ];
+  const defaults = /* @__PURE__ */ new Map();
+  const declaredWithin = /* @__PURE__ */ new Map();
+  for (const decl of Object.values(config.variables)) {
+    if (decl.kind !== "state") continue;
+    if (decl.default !== void 0) defaults.set(decl.key, decl.default);
+    if (decl.within !== void 0) declaredWithin.set(decl.key, decl.within);
+  }
+  const inside = /* @__PURE__ */ new Map();
+  const members = /* @__PURE__ */ new Map();
+  const hung = /* @__PURE__ */ new Map();
+  const known = (d) => {
+    members.set(d.key, (members.get(d.key) ?? /* @__PURE__ */ new Set()).add(d.member));
+  };
+  const note = (parent, child) => {
+    const children2 = inside.get(idOf2(parent)) ?? /* @__PURE__ */ new Map();
+    children2.set(idOf2(child), child);
+    inside.set(idOf2(parent), children2);
+  };
+  const walk3 = (preset, node, enclosing) => {
+    if (node.kind === "container") {
+      for (const child of node.children) walk3(preset, child, enclosing);
+      return;
+    }
+    for (const child of triggeredBy(preset, node)) {
+      known(child);
+      hung.set(idOf2(child), child);
+      for (const parent of enclosing) note(parent, child);
+    }
+    if (node.opens !== void 0) {
+      walk3(preset, node.opens.body, [...enclosing, node.opens.ref]);
+    }
+  };
+  for (const preset of presetNames(config.presets)) {
+    walk3(preset, presetRoot(config, preset).node, []);
+  }
+  for (const decl of Object.values(config.actions)) {
+    const toggled = disclosureOfAction(decl);
+    if (toggled !== void 0) known(toggled);
+  }
+  for (const [key, parents] of declaredWithin) {
+    for (const member of members.get(key) ?? []) {
+      for (const parent of parents) note(parent, { key, member });
+    }
+  }
+  const closures = /* @__PURE__ */ new Map();
+  const closure = (parent) => {
+    const memo = closures.get(idOf2(parent));
+    if (memo !== void 0) return memo;
+    const found2 = /* @__PURE__ */ new Map();
+    const visit = (d) => {
+      for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
+        if (found2.has(id2)) continue;
+        found2.set(id2, child);
+        visit(child);
+      }
+    };
+    visit(parent);
+    const within3 = /* @__PURE__ */ new Map();
+    for (const { key, member } of found2.values()) {
+      within3.set(key, (within3.get(key) ?? /* @__PURE__ */ new Set()).add(member));
+    }
+    const keys2 = [...within3].map(([key, held]) => ({
+      key,
+      outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
+    }));
+    closures.set(idOf2(parent), keys2);
+    return keys2;
+  };
+  return {
+    inside: closure,
+    menus: [...hung.values()],
+    // A disclosure that declares no default starts closed: its toggle counts
+    // an unknown value as its first member, `closed`.
+    defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED
+  };
+}
+var NESTS = /* @__PURE__ */ new WeakMap();
+function disclosureNest(config) {
+  const memo = NESTS.get(config);
+  if (memo !== void 0) return memo;
+  const nest = buildDisclosureNest(config);
+  NESTS.set(config, nest);
+  return nest;
+}
+function closeNested(nest, read2, writes) {
+  const written2 = new Set(writes.map((w) => w.key));
+  const held = (key) => read2(key) ?? nest.defaultOf(key);
+  const folds = /* @__PURE__ */ new Set();
+  for (const { key, value } of writes) {
+    const was = held(key);
+    if (was === value) continue;
+    for (const nested of nest.inside({ key, member: was })) {
+      const now2 = held(nested.key);
+      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written2.has(nested.key);
+      if (closes) folds.add(nested.key);
+    }
+  }
+  return [...folds];
+}
+function openRoots(nest, read2) {
+  const open2 = ({ key, member }) => (read2(key) ?? nest.defaultOf(key)) === member;
+  const within3 = (child, parent) => nest.inside(parent).some(
+    ({ key, outside }) => key === child.key && !outside.has(child.member)
+  );
+  return nest.menus.filter(open2).filter((d) => {
+    const parents = nest.menus.filter((p2) => p2 !== d && within3(d, p2));
+    const leftByParent = parents.length > 0 && nest.defaultOf(d.key) === d.member;
+    return !parents.some(open2) && !leftByParent;
+  });
+}
+
+// src/renderer/closing-view.ts
+init_globals();
+function closingView(store, nestOf2, log) {
+  const write = (sessionId2, writes, land) => {
+    const folds = closeNested(
+      nestOf2(sessionId2),
+      (key) => store.get(sessionId2, key),
+      writes
+    );
+    runInAction(() => {
+      land();
+      for (const key of folds) store.clear(sessionId2, key);
+    });
+    if (folds.length > 0) {
+      log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
+    }
+  };
+  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
+  return {
+    get: (sessionId2, key) => store.get(sessionId2, key),
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
+    setBatch,
+    // A cleared key reads its default, so it closes what its old value held.
+    clear: (sessionId2, key) => write(
+      sessionId2,
+      [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
+      () => store.clear(sessionId2, key)
+    )
+  };
+}
+
 // src/renderer/config-file-store.ts
+init_globals();
+var import_json55 = __toESM(require_dist(), 1);
 var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
 var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
@@ -74474,15 +75611,25 @@ function writeDrafts(store, layer, pairs2, placements) {
   );
 }
 function withPlacements(text4, under2, file, placements, own2) {
+  const landed = /* @__PURE__ */ new Map();
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
     const acc = own2(prior, under2, preset, id2);
     const placement = layoutPlacementOf(docOf(acc), under2, preset, id2);
+    const spelled2 = json5Text(value);
+    const slot = `${placement.path.join(".")}\0${id2}\0${setting}`;
+    const rival = landed.get(slot);
+    if (rival !== void 0 && rival.value !== spelled2) {
+      throw new BadVerbArgs(
+        `presets "${rival.preset}" and "${preset}" both render ${placement.path.join(".")} in ${file} and hold different values for ${id2}.${setting}: reset one of the drafts`
+      );
+    }
+    landed.set(slot, { preset, value: spelled2 });
     const set2 = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
       id2,
       setting,
-      json5Text(value)
+      spelled2
     );
     if (set2 === null) {
       throw new BadVerbArgs(
@@ -74629,7 +75776,7 @@ function deletePreset(store, layer, name) {
     releases
   );
 }
-function applyLayoutOp(store, layer, key, op) {
+function applyLayoutOp(store, layer, key, op, suffix) {
   const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -74643,569 +75790,38 @@ function applyLayoutOp(store, layer, key, op) {
     () => layoutPlacementOf(docOf(before ?? ""), under2, target.preset, subject)
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
-    const config = loadOrRefuse(into, authored).config;
-    return presetNames(config.presets).map(
-      (preset) => presetRoot(config, preset).node
-    );
-  });
+  const { after, placed: placed2 } = spliceOp(
+    authored,
+    placement.path,
+    op,
+    suffix,
+    () => {
+      const config = loadOrRefuse(into, authored).config;
+      return presetNames(config.presets).map(
+        (preset) => presetRoot(config, preset).node
+      );
+    }
+  );
   if (after === null) {
     throw new BadVerbArgs(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
     );
   }
-  return { placed: placed2, config: commit2(store, into, before, after, refuseHidden) };
+  commit2(store, into, before, after, refuseHidden);
+  return placed2;
 }
-function spliceOp(text4, path31, op, rendered) {
+function spliceOp(text4, path31, op, suffix, rendered) {
   switch (op.op) {
     case "remove":
       return { after: removeSegmentRef(text4, path31, op.target), placed: null };
     case "insert": {
-      const placed2 = mintPlacement(op.segment, op.anchor, rendered());
+      const placed2 = mintPlacement(op.segment, op.anchor, rendered(), suffix);
       return {
         after: insertSegmentRef(text4, path31, placed2, op.anchor, op.relation),
         placed: placed2
       };
     }
   }
-}
-
-// src/renderer/settings-history.ts
-init_globals();
-
-// src/renderer/session-state.ts
-init_globals();
-function recordingView(store, records, onChange) {
-  const recorded2 = (sessionId2, keys2, write) => {
-    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
-    write();
-    for (const { key, before: b } of before) {
-      onChange(sessionId2, key, b, store.get(sessionId2, key));
-    }
-  };
-  return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => recorded2(sessionId2, [key], () => store.set(sessionId2, key, value)),
-    setBatch: (sessionId2, pairs2) => recorded2(
-      sessionId2,
-      pairs2.map((p2) => p2.key),
-      () => store.setBatch(sessionId2, pairs2)
-    ),
-    clear: (sessionId2, key) => recorded2(sessionId2, [key], () => store.clear(sessionId2, key))
-  };
-}
-var DEFAULT_MAX_SESSIONS = 256;
-var SessionState = class {
-  // `loaded` is what the profile holds, oldest first, as the host handed it in.
-  constructor(loaded = {}, maxSessions = DEFAULT_MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-    this.sessions = new Map(
-      Object.entries(loaded).map(([id2, kv]) => [
-        id2,
-        { values: new Map(Object.entries(kv)), revision: ++this.head }
-      ])
-    );
-    this.evictOldest();
-  }
-  maxSessions;
-  // [LAW:types-are-the-program] Insertion order is recency order, the order
-  // of writes: the store cannot hold more than maxSessions, so the bound is
-  // structural, not dependent on an external prune caller. A read moves
-  // nothing, so the host's copy, which hears only writes, keeps the same order.
-  sessions;
-  // [LAW:one-source-of-truth] The sessions whose state moved since the host
-  // was last told, in the order they last moved: what the turn's stored
-  // writes carry (`drain`).
-  moved = /* @__PURE__ */ new Set();
-  // [LAW:single-enforcer] The store's revision: counts every change any
-  // writer makes, so it never repeats while the store lives.
-  head = 0;
-  // [LAW:single-enforcer] One atom; every read reports observed against it,
-  // every mutation reports changed. Coarse-grained reactivity is correct for
-  // session-state's load — mutations are rare and computeds are cheap.
-  atom = createAtom("SessionState");
-  get(sessionId2, key) {
-    this.atom.reportObserved();
-    return this.sessions.get(sessionId2)?.values.get(key) ?? null;
-  }
-  revision(sessionId2) {
-    this.atom.reportObserved();
-    return this.sessions.get(sessionId2)?.revision ?? 0;
-  }
-  // How many derivations are subscribed to this store right now — every
-  // computed that read session state and has not been released. Live configs
-  // keep a bounded number; a count that climbs while the render cache does not
-  // is a disposed store still held, which nothing else would show short of a
-  // heap snapshot. [LAW:nothing-unseen]
-  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
-  // dependency-tree API reads), `null` once nothing observes it. The other
-  // public view, `getObserverTree`, materialises the whole recursive tree —
-  // one node per observer per path — to answer this direct count, on the
-  // daemon's request thread.
-  observers() {
-    return this.atom.observers_?.size ?? 0;
-  }
-  // The store's revision: how many changes any writer has made to it.
-  latestRevision() {
-    return this.head;
-  }
-  // How many sessions the store holds.
-  size() {
-    return this.sessions.size;
-  }
-  stats() {
-    return {
-      sessions: this.size(),
-      observers: this.observers(),
-      revision: this.latestRevision()
-    };
-  }
-  // [LAW:one-source-of-truth] set is the degenerate single-pair form of
-  // setBatch — one write path through the store.
-  set(sessionId2, key, value) {
-    this.setBatch(sessionId2, [{ key, value }]);
-  }
-  // [LAW:no-silent-failure] Atomic commit of N pairs: every write lands
-  // BEFORE the single reportChanged() that marks the transaction complete, so
-  // no observer sees half of it. A batch that writes only values already held
-  // changes nothing, and moves no session in the recency order.
-  setBatch(sessionId2, pairs2) {
-    const held = this.sessions.get(sessionId2);
-    if (!pairs2.some(({ key, value }) => held?.values.get(key) !== value))
-      return;
-    runInAction(() => {
-      const session = held ?? {
-        values: /* @__PURE__ */ new Map(),
-        revision: 0
-      };
-      for (const { key, value } of pairs2) session.values.set(key, value);
-      this.changed(sessionId2, session);
-      this.evictOldest();
-      this.atom.reportChanged();
-    });
-  }
-  clear(sessionId2, key) {
-    const session = this.sessions.get(sessionId2);
-    if (session === void 0 || !session.values.has(key)) return;
-    runInAction(() => {
-      session.values.delete(key);
-      if (session.values.size === 0) this.dropped(sessionId2);
-      else this.changed(sessionId2, session);
-      this.atom.reportChanged();
-    });
-  }
-  // What the host has not yet been told: each session that moved, as it now
-  // stands, null for one dropped, in the order they last moved, so the host's
-  // copy keeps this store's recency order.
-  drain() {
-    const writes = [...this.moved].map(
-      (key) => ({
-        store: "session-state",
-        key,
-        value: this.valuesOf(key)
-      })
-    );
-    this.moved.clear();
-    return writes;
-  }
-  valuesOf(sessionId2) {
-    const session = this.sessions.get(sessionId2);
-    return session === void 0 ? null : Object.fromEntries(session.values);
-  }
-  // Move-to-end: re-inserting at the tail makes this the most recently
-  // written, here and in what the host is told.
-  changed(sessionId2, session) {
-    session.revision = ++this.head;
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, session);
-    this.told(sessionId2);
-  }
-  dropped(sessionId2) {
-    this.head++;
-    this.sessions.delete(sessionId2);
-    this.told(sessionId2);
-  }
-  told(sessionId2) {
-    this.moved.delete(sessionId2);
-    this.moved.add(sessionId2);
-  }
-  evictOldest() {
-    let overflow = this.sessions.size - this.maxSessions;
-    if (overflow <= 0) return;
-    for (const id2 of this.sessions.keys()) {
-      this.dropped(id2);
-      if (--overflow === 0) break;
-    }
-  }
-};
-
-// src/renderer-interface/history-storage.ts
-init_globals();
-function isChange(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  const state = (x) => x === null || typeof x === "string";
-  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
-}
-function isSteps(v) {
-  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
-}
-function parseSessionHistory(v) {
-  if (!isPlainObject2(v)) return { kind: "failed", reason: "is not an object" };
-  if (!isSteps(v.past))
-    return {
-      kind: "failed",
-      reason: "has a 'past' that is not a list of steps"
-    };
-  if (!isSteps(v.future))
-    return {
-      kind: "failed",
-      reason: "has a 'future' that is not a list of steps"
-    };
-  return { kind: "ok", value: { past: v.past, future: v.future } };
-}
-var holdsNothing = ({ past, future }) => past.length + future.length === 0;
-var SETTING_SESSION_KEYS = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey)
-);
-var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
-
-// src/renderer/settings-history.ts
-var MAX_STEPS = 50;
-var MAX_SESSIONS2 = 32;
-var MAX_BYTES = 8 * 1024 * 1024;
-var EMPTY = { past: [], future: [] };
-var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
-var SettingsHistory = class {
-  // `loaded` is what the profile holds, oldest first, as the host handed it
-  // in: held to the same bounds as every step that lands.
-  constructor(sessionState, logger, loaded = {}) {
-    this.sessionState = sessionState;
-    this.logger = logger;
-    this.adopt(
-      new Map(Object.entries(loaded))
-    );
-  }
-  sessionState;
-  logger;
-  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
-  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
-  // refused `↶` that drops steps included, which moves no pick. Per key: a
-  // whole next state is adopted by `replace`, which keeps its order (the
-  // recency) and moves only the sessions whose history changed, so one
-  // session's click recomputes no other session's payload.
-  held = observable.map(void 0, {
-    deep: false
-  });
-  get state() {
-    return this.held;
-  }
-  set state(next2) {
-    runInAction(() => this.held.replace(next2));
-  }
-  // [LAW:one-source-of-truth] The sessions whose history moved since the
-  // host was last told, in the order they last moved (`drain`).
-  moved = /* @__PURE__ */ new Set();
-  // What the host has not yet been told: each session whose history moved, as
-  // it now stands, null for one gone, in the order they last moved.
-  drain() {
-    const writes = [...this.moved].map(
-      (key) => ({
-        store: "settings-history",
-        key,
-        value: this.state.get(key) ?? null
-      })
-    );
-    this.moved.clear();
-    return writes;
-  }
-  depth(sessionId2) {
-    const { past, future } = this.history(sessionId2);
-    return {
-      undo: past.length,
-      redo: future.length,
-      sinceEdit: 0
-    };
-  }
-  history(sessionId2) {
-    return this.state.get(sessionId2) ?? EMPTY;
-  }
-  begin(files) {
-    const held = heldWrites(this.sessionState);
-    const working = /* @__PURE__ */ new Map();
-    const click2 = {
-      held,
-      files,
-      historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
-      move: (sessionId2, history) => working.set(sessionId2, history)
-    };
-    const pending2 = /* @__PURE__ */ new Map();
-    const note = (sessionId2, change) => {
-      const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
-      const earlier = changes.get(identity(change));
-      changes.set(
-        identity(change),
-        earlier === void 0 ? change : { ...change, before: earlier.before }
-      );
-      pending2.set(sessionId2, changes);
-    };
-    const sessionState = recordingView(
-      held,
-      isSettingKey,
-      (sessionId2, key, before, after) => {
-        note(sessionId2, { kind: "session", key, before, after });
-      }
-    );
-    const step4 = () => {
-      for (const [sessionId2, pendingChanges] of pending2) {
-        const changes = [...pendingChanges.values()].filter(
-          (c) => c.before !== c.after
-        );
-        if (changes.length > 0)
-          click2.move(sessionId2, {
-            past: capped([...click2.historyOf(sessionId2).past, changes]),
-            future: []
-          });
-      }
-      pending2.clear();
-    };
-    return {
-      sessionState,
-      writes: held.writes,
-      file: (sessionId2, file, before, after) => {
-        note(sessionId2, {
-          kind: "layer",
-          role: files.roleOf(file),
-          digest: digestOf(file),
-          before,
-          after
-        });
-        files.land(file, before, after);
-      },
-      undo: (sessionId2) => {
-        step4();
-        return this.undo(click2, sessionId2);
-      },
-      redo: (sessionId2) => {
-        step4();
-        return this.redo(click2, sessionId2);
-      },
-      commit: () => {
-        step4();
-        const moved2 = new Map(working);
-        working.clear();
-        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
-        held.flush();
-      }
-    };
-  }
-  undo(click2, sessionId2) {
-    const history = click2.historyOf(sessionId2);
-    const step4 = history.past.at(-1);
-    if (step4 === void 0) {
-      throw new BadVerbArgs("undo: nothing to undo");
-    }
-    this.apply(
-      click2,
-      sessionId2,
-      step4,
-      "before",
-      "undo",
-      afterUndo(history, step4)
-    );
-    return step4;
-  }
-  redo(click2, sessionId2) {
-    const history = click2.historyOf(sessionId2);
-    const { past, future } = history;
-    const step4 = future.at(-1);
-    if (step4 === void 0) {
-      throw new BadVerbArgs("redo: nothing to redo");
-    }
-    const all2 = [...past, step4];
-    const kept = capped(all2);
-    this.apply(click2, sessionId2, step4, "after", "redo", {
-      past: kept,
-      future: future.slice(0, -1)
-    });
-    return step4;
-  }
-  // [LAW:no-silent-failure] A step is refused whole when a target it steps
-  // has moved, a session pick or a setting of a file: what moved is named,
-  // and the target's now-unreachable changes leave both stacks (see the
-  // header). Otherwise each pick is written through the click, and each file
-  // is written as the changes between the texts the step recorded, applied
-  // over the file as the click reads it, so a write to another setting of the
-  // file never stops it. [LAW:single-enforcer] That text has not been loaded
-  // by anyone, so it passes the gate every click's write passes before it
-  // lands.
-  apply(click2, sessionId2, step4, to, verb, then) {
-    const stepped2 = step4.map((c) => stepOf(click2, sessionId2, c, to));
-    const stale = stepped2.flatMap((s) => s.kind === "moved" ? [s] : []);
-    if (stale.length > 0) {
-      click2.move(
-        sessionId2,
-        forgotten(
-          click2.historyOf(sessionId2),
-          new Set(stale.map((s) => s.target))
-        )
-      );
-      throw new BadVerbArgs(
-        `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
-      );
-    }
-    const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
-    const stepTexts = new Map(files.map(({ file, text: text4 }) => [file, text4]));
-    const read2 = (file) => {
-      const text4 = stepTexts.get(file);
-      return text4 === void 0 ? click2.files.read(file) : contentOfText(text4);
-    };
-    for (const { file, text: text4 } of files) click2.files.prove(file, text4, read2);
-    for (const { file, text: text4 } of files)
-      click2.files.land(
-        file,
-        requireLayerText(file, click2.files.read(file)),
-        text4
-      );
-    for (const s of stepped2)
-      if (s.kind === "session")
-        if (s.value === null) click2.held.clear(sessionId2, s.key);
-        else click2.held.set(sessionId2, s.key, s.value);
-    click2.move(sessionId2, then);
-  }
-  // Move-to-end keeps insertion order as recency, so the bounds drop the
-  // session that changed least recently.
-  put(sessionId2, history) {
-    const next2 = new Map(this.state);
-    next2.delete(sessionId2);
-    if (!holdsNothing(history)) next2.set(sessionId2, history);
-    this.moved.delete(sessionId2);
-    this.moved.add(sessionId2);
-    this.adopt(next2);
-  }
-  // [LAW:single-enforcer] The one enforcer of the bounds, over what the
-  // profile handed in and over every step: each session the bounds trim or
-  // drop is told.
-  adopt(next2) {
-    const before = new Map(next2);
-    this.bound(next2);
-    for (const [sessionId2, history] of before)
-      if (next2.get(sessionId2) !== history) {
-        this.moved.delete(sessionId2);
-        this.moved.add(sessionId2);
-      }
-    this.state = next2;
-  }
-  bound(next2) {
-    while (next2.size > MAX_SESSIONS2 || weight(next2) > MAX_BYTES) {
-      const [oldest, h] = next2.entries().next().value;
-      if (next2.size > 1) {
-        next2.delete(oldest);
-        continue;
-      }
-      const trimmed = withoutOldestStep(h);
-      if (holdsNothing(trimmed)) next2.delete(oldest);
-      else next2.set(oldest, trimmed);
-      this.logger(
-        "info",
-        `settings-history: trimmed an old step for session ${oldest}`
-      );
-    }
-  }
-};
-function weight(state) {
-  let bytes = 0;
-  for (const { past, future } of state.values()) {
-    for (const step4 of [...past, ...future]) {
-      for (const c of step4) {
-        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
-      }
-    }
-  }
-  return bytes;
-}
-function withoutOldestStep({ past, future }) {
-  return past.length > 0 ? { past: past.slice(1), future } : { past, future: future.slice(1) };
-}
-function capped(steps2) {
-  return steps2.slice(-MAX_STEPS);
-}
-function afterUndo(history, step4) {
-  return {
-    past: history.past.slice(0, -1),
-    future: capped([...history.future, step4])
-  };
-}
-function without2(steps2, gone) {
-  return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
-}
-function describeStep(step4) {
-  return step4.map(describe2).join(", ");
-}
-function describe2(change) {
-  return change.kind === "session" ? `session setting "${change.key}"` : `the ${change.role} layer`;
-}
-function stepOf(click2, sessionId2, change, to) {
-  const from = to === "before" ? "after" : "before";
-  if (change.kind === "session")
-    return click2.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
-      kind: "moved",
-      target: identity(change),
-      what: `session setting "${change.key}"`
-    };
-  const file = click2.files.pathOf(change.role);
-  if (file === null || digestOf(file) !== change.digest)
-    return {
-      kind: "moved",
-      target: identity(change),
-      what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`
-    };
-  const applied3 = applyChanges(
-    requireLayerText(file, click2.files.read(file)),
-    diffChanges(change[from], change[to])
-  );
-  return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
-    kind: "moved",
-    target: identity(change),
-    what: `${addressText(applied3.at)} in the ${change.role} layer`
-  };
-}
-function forgotten({ past, future }, gone) {
-  return { past: without2(past, gone), future: without2(future, gone) };
-}
-function heldWrites(store) {
-  const held = /* @__PURE__ */ new Map();
-  const put = (sessionId2, key, value) => {
-    const writes = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    writes.set(key, value);
-    held.set(sessionId2, writes);
-  };
-  return {
-    get: (sessionId2, key) => {
-      const writes = held.get(sessionId2);
-      return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
-    },
-    revision: (sessionId2) => store.revision(sessionId2),
-    writes: (sessionId2) => held.get(sessionId2) ?? /* @__PURE__ */ new Map(),
-    set: (sessionId2, key, value) => put(sessionId2, key, value),
-    setBatch: (sessionId2, pairs2) => {
-      for (const { key, value } of pairs2) put(sessionId2, key, value);
-    },
-    clear: (sessionId2, key) => put(sessionId2, key, null),
-    // One transaction, so no observer sees half a click.
-    flush: () => runInAction(() => {
-      for (const [sessionId2, writes] of held) {
-        const sets = [...writes].flatMap(
-          ([key, value]) => value === null ? [] : [{ key, value }]
-        );
-        if (sets.length > 0) store.setBatch(sessionId2, sets);
-        for (const [key, value] of writes)
-          if (value === null) store.clear(sessionId2, key);
-      }
-      held.clear();
-    })
-  };
 }
 
 // src/claude-input/typing.ts
@@ -75373,7 +75989,7 @@ var stepState = (args, ctx) => {
   );
 };
 function refuseDisorderedPicks(ctx, verb, writes) {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => isPlacementDraftKey(w.key));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -75440,9 +76056,7 @@ function sessionConfig(ctx) {
 }
 function menuContext(ctx, sid, config) {
   return {
-    gate: ctx.gates.state.gateFor(config),
-    nest: () => disclosureNest(config),
-    edit: ctx.edits.draft(sid)?.navigationScope ?? null
+    gate: ctx.gates.state.gateFor(config)
   };
 }
 function nestOf(ctx, origin) {
@@ -75705,28 +76319,6 @@ var resetConfig = (args, ctx) => {
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${into.path} (session=${sid})`
   );
 };
-function endedPlacements(before, after) {
-  const placed2 = (config, preset) => [...walkNodes(presetRoot(config, preset).node)].filter(
-    (n) => n.kind === "segment"
-  );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map((n) => configureMember(preset, placementId(n)))
-    )
-  );
-  return presetNames(before.presets).flatMap(
-    (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(preset, placementId(node)),
-      node
-    })).filter(({ member }) => !survivors.has(member))
-  );
-}
-function endedSessionKeys(ended, configuring) {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
-  ]);
-}
 var applyLayoutOp2 = (args, ctx) => {
   const sid = ctx.session;
   const {
@@ -75734,8 +76326,7 @@ var applyLayoutOp2 = (args, ctx) => {
     args: [key = "", opToken = ""]
   } = configArgs("apply-layout-op", args);
   const origin = sessionOrigin(ctx);
-  const before = ctx.configFor(origin);
-  const gate2 = ctx.gates.config.gateFor(before);
+  const gate2 = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate2.listKeys().join(", ")})`
@@ -75750,20 +76341,16 @@ var applyLayoutOp2 = (args, ctx) => {
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const { placed: placed2, config } = applyLayoutOp(
+  const placed2 = applyLayoutOp(
     editStore(ctx, sid),
     into,
     key,
-    op
+    op,
+    () => randomBytes(3).toString("hex")
   );
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
-  for (const key2 of released) ctx.sessionState.clear(sid, key2);
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
+    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} (session=${sid})`
   );
 };
 var undo = (_args, ctx) => {
@@ -75919,14 +76506,16 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     (file, text4, read2) => proveLoadsAsLayer(scoped, origin, file, text4, read2)
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
+  const aside = heldAside();
+  const writes = edit !== void 0 ? journal.sessionState : routedWrites(journal.sessionState, () => null, aside);
   const requested = {};
   const failures = [];
   const sessionState = closingView(
-    journal.sessionState,
+    writes,
     (target) => target === sid ? nestOf(scoped, origin) : NO_NEST,
     (line) => ctx.log("info", line)
   );
-  const navigation = ctx.navigation.begin(
+  const navigation = (edit?.navigation ?? ctx.navigation).begin(
     journal.sessionState,
     sessionState.setBatch
   );
@@ -75963,26 +76552,40 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   const consequence = () => {
     if (requested.finish === "save" && saved === null) return;
     const failed3 = [];
+    let visits = /* @__PURE__ */ new Map();
     try {
-      navigation.commit();
+      visits = navigation.commit();
     } catch (e) {
       failed3.push(e);
     }
+    const end = () => {
+      ctx.navigation.landOutsideEdit(visits);
+      ctx.edits.close(sid);
+      ctx.editViewChanged(sid);
+    };
     try {
-      const writes = journal.writes(sid);
-      const mode = writes?.get(EDIT_MODE_KEY);
-      let moved2 = false;
-      if (edit === void 0) journal.commit();
-      else if (saved !== null) saved.commit();
-      else moved2 = edit.commit();
-      if (origin !== null) {
-        if (edit !== void 0 && (saved !== null || mode !== void 0 && mode !== EDIT_MODE_ARRANGE)) {
-          ctx.edits.close(sid);
+      if (edit === void 0) {
+        const clicked = new Map([
+          ...journal.commit().get(sid) ?? [],
+          ...aside.held(sid)
+        ]);
+        const entering = clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
+        const edited = new Map(
+          [...clicked].filter(([key]) => isEditModeKey(key))
+        );
+        if (entering) {
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edit === void 0 && mode === EDIT_MODE_ARRANGE) {
-          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
-          ctx.editViewChanged(sid);
+        } else if (edited.size > 0) failed3.push(staleEdit(edited.keys()));
+      } else if (saved !== null) {
+        saved.commit();
+        end();
+      } else {
+        const { moved: moved2, clicked } = edit.commit();
+        const mode = clicked.get(EDIT_MODE_KEY);
+        if (mode !== void 0 && mode !== EDIT_MODE_ARRANGE) {
+          edit.leave(clicked);
+          end();
         } else if (moved2) {
           ctx.edits.changed(sid);
           ctx.editViewChanged(sid);
@@ -76044,7 +76647,7 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const nest = nestOf(c, c.context?.durable.origin ?? null);
     const depth = c.edits.draft(sid)?.depth();
-    const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo > 0;
+    const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo + unsavedCount(sessionConfig(c), (key) => c.sessionState.get(sid, key)) > 0;
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key)).filter(
       (root) => !hasWork || !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY)
     );
@@ -76086,385 +76689,6 @@ function heardContextOf(req) {
     live: req
   };
 }
-
-// src/renderer/edit-transaction.ts
-init_globals();
-var EditDraft = class {
-  constructor(session, origin, base, committed, log) {
-    this.session = session;
-    this.origin = origin;
-    this.base = base;
-    this.committed = committed;
-    this.latest = base;
-    this.#revision = revisionOf(base);
-    this.history = new SettingsHistory(
-      {
-        get: (sid, key) => sid === session ? this.read(key) : committed.get(sid, key),
-        revision: (sid) => committed.revision(sid),
-        set: (sid, key, value) => this.put(sid, key, value),
-        setBatch: (sid, pairs2) => runInAction(() => {
-          for (const { key, value } of pairs2) this.put(sid, key, value);
-        }),
-        clear: (sid, key) => this.put(sid, key, null)
-      },
-      log
-    );
-  }
-  session;
-  origin;
-  base;
-  committed;
-  navigationScope = /* @__PURE__ */ Symbol();
-  picks = /* @__PURE__ */ new Map();
-  files = /* @__PURE__ */ new Map();
-  history;
-  latest;
-  // [LAW:one-source-of-truth] Derived from `latest`, `base` and the draft's
-  // files, and retaken whenever one of them changes: never assigned from
-  // outside the draft.
-  #revision;
-  // [LAW:effects-at-boundaries] A transaction pins the content it edits.
-  // The host's current layer identities and plugin discovery still decide
-  // what it can load, including when the user revokes repository trust.
-  updated(latest) {
-    this.latest = latest;
-    this.refreshSnapshot();
-  }
-  // The config the draft previews: the host's latest layers, each holding
-  // the draft's text for its file.
-  get revision() {
-    return this.#revision;
-  }
-  refreshSnapshot() {
-    this.#revision = revisionOf({
-      ...this.latest,
-      chain: this.latest.chain.flatMap((layer) => {
-        const base = layerAtPath(this.base.chain, layer.path);
-        if (base?.role !== layer.role) return [];
-        const value = this.files.get(layer.path);
-        const content = value === void 0 ? base.content : value === null ? { kind: "absent" } : { kind: "text", text: value };
-        return [{ ...layer, content }];
-      })
-    });
-  }
-  depth() {
-    return {
-      ...this.history.depth(this.session),
-      sinceEdit: this.picks.size + this.files.size
-    };
-  }
-  read(key) {
-    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
-    if (this.picks.has(key)) return this.picks.get(key);
-    return this.committed.get(this.session, key);
-  }
-  put(sid, key, value) {
-    if (sid === this.session) {
-      if (key === EDIT_MODE_KEY) return;
-      if (isSettingKey(key)) {
-        if (this.committed.get(sid, key) === value) this.picks.delete(key);
-        else this.picks.set(key, value);
-        return;
-      }
-    }
-    if (value === null) this.committed.clear(sid, key);
-    else this.committed.set(sid, key, value);
-  }
-  begin(prove) {
-    const working = new Map(this.files);
-    const layerAt = (file) => {
-      const layer = layerAtPath(this.base.chain, file);
-      if (layer === void 0)
-        throw new BadVerbArgs(`${file} is not a layer of this edit`);
-      return layer;
-    };
-    const files = {
-      read: (file) => working.has(file) ? contentOfText(working.get(file)) : layerAt(file).content,
-      land: (file, _before, after) => {
-        if (after === requireLayerText(file, layerAt(file).content))
-          working.delete(file);
-        else working.set(file, after);
-      },
-      roleOf: (file) => layerAt(file).role,
-      pathOf: (role) => layerForRole(this.base.chain, role)?.path ?? null,
-      prove
-    };
-    const journal = this.history.begin(files);
-    return {
-      files,
-      journal,
-      commit: () => {
-        const picksMoved = [...journal.writes(this.session)].some(
-          ([key, value]) => isSettingKey(key) && this.read(key) !== value
-        );
-        journal.commit();
-        if (sameFiles(working, this.files)) return picksMoved;
-        this.files = working;
-        this.refreshSnapshot();
-        return true;
-      },
-      save: (committedJournal, destination, latest) => {
-        const rewritten2 = /* @__PURE__ */ new Map();
-        for (const [path31, after] of working) {
-          const source = layerAt(path31);
-          const target = layerForRole(latest.chain, source.role);
-          if (target?.path !== path31)
-            throw new BadVerbArgs(
-              `save: the ${source.role} layer for this edit moved`
-            );
-          const applied3 = applyChanges(
-            requireLayerText(path31, target.content),
-            diffChanges(requireLayerText(path31, source.content), after)
-          );
-          if (applied3.kind !== "applied")
-            throw new BadVerbArgs(
-              `save: ${addressText(applied3.at)} in the ${source.role} layer changed while editing`
-            );
-          rewritten2.set(path31, applied3.text);
-        }
-        const read2 = (file) => rewritten2.has(file) ? contentOfText(rewritten2.get(file)) : destination.read(file);
-        for (const [file, text4] of rewritten2)
-          destination.prove(file, text4, read2);
-        for (const [file, text4] of rewritten2)
-          committedJournal.file(
-            this.session,
-            file,
-            requireLayerText(file, destination.read(file)),
-            text4
-          );
-        for (const [key, value] of new Map([
-          ...this.picks,
-          ...journal.writes(this.session)
-        ])) {
-          if (key === EDIT_MODE_KEY) continue;
-          if (value === null)
-            committedJournal.sessionState.clear(this.session, key);
-          else committedJournal.sessionState.set(this.session, key, value);
-        }
-      }
-    };
-  }
-};
-function sameFiles(left, right) {
-  return left.size === right.size && [...left].every(([key, value]) => right.get(key) === value);
-}
-var EditTransactions = class {
-  constructor(committed, log) {
-    this.committed = committed;
-    this.log = log;
-  }
-  committed;
-  log;
-  entries = observable.map(void 0, {
-    deep: false
-  });
-  view = {
-    get: (sid, key) => {
-      const draft = this.draft(sid);
-      if (draft !== null) return draft.read(key);
-      return key === EDIT_MODE_KEY ? null : this.committed.get(sid, key);
-    },
-    revision: (sid) => this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
-    set: (sid, key, value) => this.committed.set(sid, key, value),
-    setBatch: (sid, pairs2) => this.committed.setBatch(sid, pairs2),
-    clear: (sid, key) => this.committed.clear(sid, key)
-  };
-  draft(sid) {
-    return this.entries.get(sid)?.draft ?? null;
-  }
-  revision(origin, sid) {
-    const draft = this.draft(sid);
-    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.revision : null;
-  }
-  configured(origin, snapshot) {
-    const key = originKey(origin);
-    const refreshed = [];
-    for (const [sid, { draft }] of this.entries) {
-      if (draft === null || originKey(draft.origin) !== key) continue;
-      draft.updated(snapshot);
-      refreshed.push(sid);
-    }
-    return refreshed;
-  }
-  depth(sid, committed) {
-    return this.draft(sid)?.depth() ?? committed.depth(sid);
-  }
-  open(sid, origin, snapshot) {
-    this.update(
-      sid,
-      new EditDraft(sid, origin, snapshot, this.committed, this.log)
-    );
-  }
-  close(sid) {
-    this.update(sid, null);
-  }
-  changed(sid) {
-    this.update(sid, this.draft(sid));
-  }
-  moved(sid, origin) {
-    const draft = this.draft(sid);
-    if (draft === null || originKey(draft.origin) === originKey(origin))
-      return false;
-    this.log(
-      "info",
-      `edit: draft discarded after the session changed config origin (session=${sid})`
-    );
-    this.close(sid);
-    return true;
-  }
-  retire(sid) {
-    runInAction(() => this.entries.delete(sid));
-  }
-  update(sid, draft) {
-    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
-    runInAction(() => this.entries.set(sid, { draft, revision }));
-  }
-};
-
-// src/renderer/navigation-history.ts
-init_globals();
-var EMPTY2 = { visits: [], cursor: 0 };
-var MAX_VISITS = 20;
-var MAX_SESSIONS3 = 32;
-var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
-var menuKeys = /* @__PURE__ */ new WeakMap();
-function capture2(store, sid, { gate: gate2, edit }) {
-  let keys2 = menuKeys.get(gate2);
-  if (keys2 === void 0) {
-    keys2 = gate2.listKeys().filter(isMenuKey);
-    menuKeys.set(gate2, keys2);
-  }
-  const values2 = /* @__PURE__ */ new Map();
-  for (const key of keys2) {
-    const value = store.get(sid, key);
-    if (value !== null) values2.set(key, value);
-  }
-  return { values: values2, edit };
-}
-function movedKeys(from, to) {
-  return [.../* @__PURE__ */ new Set([...from.values.keys(), ...to.values.keys()])].filter(
-    (key) => from.values.get(key) !== to.values.get(key)
-  );
-}
-function inView(view, context, key) {
-  const value = view.values.get(key);
-  if (value === void 0 || view.edit === context.edit) return value;
-  const nested = context.nest().inside(EDIT_MODE_REF).find((at) => at.key === key);
-  return nested === void 0 || nested.outside.has(value) ? value : void 0;
-}
-function previous(timeline, current, context) {
-  const invalid = /* @__PURE__ */ new Set();
-  const values2 = new Map(current.values);
-  let destination = null;
-  let depth = 0;
-  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
-    const visit = timeline.visits[cursor];
-    const keys2 = movedKeys(visit.from, visit.to);
-    const step4 = keys2.flatMap((key) => {
-      const from = inView(visit.from, context, key);
-      const to = inView(visit.to, context, key);
-      return from === to ? [] : [{ key, from, to }];
-    });
-    if (step4.length === 0 || !step4.every(
-      ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
-    )) {
-      invalid.add(visit);
-      continue;
-    }
-    for (const { key, from } of step4) {
-      if (from === void 0) values2.delete(key);
-      else values2.set(key, from);
-    }
-    destination ??= { values: new Map(values2), edit: context.edit };
-    depth++;
-  }
-  return { destination, depth, invalid };
-}
-var NavigationHistory = class {
-  timelines = observable.map(void 0, {
-    deep: false
-  });
-  depth(sessionId2, store, context) {
-    const timeline = this.timelines.get(sessionId2);
-    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
-  }
-  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
-  // cursor are staged alongside the click's settings. A guarded write that
-  // does not land publishes neither.
-  begin(store, choose) {
-    const before = /* @__PURE__ */ new Map();
-    const next2 = /* @__PURE__ */ new Map();
-    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY2;
-    const endVisit = (sid) => {
-      const start = before.get(sid);
-      if (start === void 0) return;
-      before.delete(sid);
-      const to = capture2(store, sid, start.context);
-      if (movedKeys(start.view, to).length === 0) return;
-      const { visits, cursor } = timelineOf(sid);
-      const followed = [
-        ...visits.slice(0, cursor),
-        { from: start.view, to }
-      ].slice(-MAX_VISITS);
-      next2.set(sid, { visits: followed, cursor: followed.length });
-    };
-    return {
-      choose: (sid, writes, contextOf) => {
-        if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
-          const context = contextOf();
-          before.set(sid, { view: capture2(store, sid, context), context });
-        }
-        choose(sid, writes);
-      },
-      back: (sid, context) => {
-        endVisit(sid);
-        const timeline = timelineOf(sid);
-        const at = capture2(store, sid, context);
-        const { destination, invalid } = previous(timeline, at, context);
-        const discarded = invalid.size;
-        const cursor = Math.max(0, timeline.cursor - discarded - 1);
-        next2.set(sid, {
-          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
-          cursor
-        });
-        if (destination === null)
-          throw new BadVerbArgs(
-            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
-          );
-        const writes = movedKeys(at, destination).map((key) => ({
-          key,
-          value: destination.values.get(key) ?? null
-        }));
-        runInAction(() => {
-          store.setBatch(
-            sid,
-            writes.flatMap(
-              ({ key, value }) => value === null ? [] : [{ key, value }]
-            )
-          );
-          for (const { key, value } of writes)
-            if (value === null) store.clear(sid, key);
-        });
-        return { writes, discarded };
-      },
-      commit: () => {
-        for (const sid of before.keys()) endVisit(sid);
-        this.publish(next2);
-        next2.clear();
-      }
-    };
-  }
-  publish(timelines) {
-    runInAction(() => {
-      for (const [sid, timeline] of timelines) {
-        this.timelines.delete(sid);
-        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
-      }
-      while (this.timelines.size > MAX_SESSIONS3)
-        this.timelines.delete(this.timelines.keys().next().value);
-    });
-  }
-};
 
 // src/renderer/acts.ts
 init_globals();
@@ -77260,12 +77484,11 @@ function build2(inputs, turnLog) {
   const time = new TurnTime();
   const now2 = () => time.at;
   const log = turnLog.add;
-  const sessionState = new SessionState(inputs.stored.sessions);
-  for (const sid of Object.keys(inputs.stored.sessions))
-    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
-  const edits = new EditTransactions(sessionState, log);
+  const store = new SessionState(inputs.stored.sessions);
+  const edits = new EditTransactions(store, log);
+  const sessionState = edits.view;
   const settingsHistory = new SettingsHistory(
-    sessionState,
+    store,
     log,
     inputs.stored.history
   );
@@ -77295,11 +77518,13 @@ function build2(inputs, turnLog) {
         home: inputs.locations.home,
         history: (sessionId2) => edits.depth(sessionId2, settingsHistory),
         // Measured against the gate of the config the view draws with.
-        navigation: (sessionId2, config) => navigationHistory.depth(sessionId2, sessionState, {
-          gate: gates.state.gateFor(config),
-          nest: () => disclosureNest(config),
-          edit: edits.draft(sessionId2)?.navigationScope ?? null
-        })
+        navigation: (sessionId2, config) => (edits.draft(sessionId2)?.navigation ?? navigationHistory).depth(
+          sessionId2,
+          sessionState,
+          {
+            gate: gates.state.gateFor(config)
+          }
+        )
       })
     },
     {
@@ -77389,10 +77614,10 @@ function build2(inputs, turnLog) {
       mint,
       acts,
       configWrites,
-      sessionStats: () => sessionState.stats()
+      sessionStats: () => store.stats()
     },
     {
-      "session-state": () => sessionState.drain(),
+      "session-state": () => store.drain(),
       "settings-history": () => settingsHistory.drain()
     }
   );
@@ -82363,7 +82588,7 @@ function isDebugWhat(v) {
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
 function recordingCommandOf(value) {
-  if (!isPlainObject2(value) || typeof value.renderer !== "string")
+  if (!isPlainObject(value) || typeof value.renderer !== "string")
     throw new BadVerbArgs("recording needs a renderer name");
   let name;
   try {
@@ -87103,8 +87328,8 @@ function missingFields(reference, value, at = "") {
     return typeof value === "number" && Number.isFinite(value) ? [] : [label2];
   }
   if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label2];
-  if (!isPlainObject2(reference)) return [];
-  if (!isPlainObject2(value)) return [label2];
+  if (!isPlainObject(reference)) return [];
+  if (!isPlainObject(value)) return [label2];
   if ("kind" in reference) return [];
   const missing = [];
   for (const key of Object.keys(reference)) {
@@ -89648,15 +89873,15 @@ init_globals();
 // src/daemon/foundations/inspection-reply.ts
 init_globals();
 function variableRow(value) {
-  if (!isPlainObject2(value)) return false;
+  if (!isPlainObject(value)) return false;
   const { name, source, type: type3, ageMs, lastError } = value;
-  return typeof name === "string" && (source === null || typeof source === "string") && typeof type3 === "string" && value.value !== void 0 && (ageMs === null || typeof ageMs === "number" && Number.isFinite(ageMs)) && (lastError === null || isPlainObject2(lastError) && typeof lastError.message === "string");
+  return typeof name === "string" && (source === null || typeof source === "string") && typeof type3 === "string" && value.value !== void 0 && (ageMs === null || typeof ageMs === "number" && Number.isFinite(ageMs)) && (lastError === null || isPlainObject(lastError) && typeof lastError.message === "string");
 }
 function segmentRow(value) {
-  if (!isPlainObject2(value)) return false;
+  if (!isPlainObject(value)) return false;
   const { name, description, template, referencedVars, placements } = value;
   return typeof name === "string" && (description === null || typeof description === "string") && typeof template === "string" && Array.isArray(referencedVars) && referencedVars.every((name2) => typeof name2 === "string") && Array.isArray(placements) && placements.every(
-    (each) => isPlainObject2(each) && typeof each.id === "string" && (each.lastRender === null || typeof each.lastRender === "string")
+    (each) => isPlainObject(each) && typeof each.id === "string" && (each.lastRender === null || typeof each.lastRender === "string")
   );
 }
 function inspectionPayloadProblem(reply) {
@@ -89666,14 +89891,14 @@ function inspectionPayloadProblem(reply) {
   }
   if (reply.kind !== "debug") return null;
   const { snapshot } = reply;
-  if (!isPlainObject2(snapshot)) return "invalid debug snapshot";
+  if (!isPlainObject(snapshot)) return "invalid debug snapshot";
   switch (snapshot.what) {
     case "vars":
       return Array.isArray(snapshot.vars) && snapshot.vars.every(variableRow) ? null : "invalid vars snapshot";
     case "segments":
       return Array.isArray(snapshot.segments) && snapshot.segments.every(segmentRow) ? null : "invalid segments snapshot";
     case "config":
-      return snapshot.config === null || isPlainObject2(snapshot.config) ? null : "invalid config snapshot";
+      return snapshot.config === null || isPlainObject(snapshot.config) ? null : "invalid config snapshot";
     default:
       return "invalid debug snapshot";
   }
@@ -90866,16 +91091,59 @@ var stampedOf = (clock) => (made) => ({
 
 // src/daemon/held-stores.ts
 init_globals();
+
+// src/renderer-interface/stored-state.ts
+init_globals();
+function parseSessionPicks(value) {
+  if (!isPlainObject(value))
+    return { kind: "failed", reason: "is not an object" };
+  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
+  return bad === void 0 ? { kind: "ok", value } : {
+    kind: "failed",
+    reason: `has a ${JSON.stringify(bad)} that is not a string`
+  };
+}
+function retiredBecause(key, value) {
+  if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if (isMenuStateKey(key) && menuOfKey(key) === void 0)
+    return "no menu is keyed that way now";
+  if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
+    return "not a record of a failed click";
+  return void 0;
+}
+function withoutRetiredKeys(sessions, log) {
+  return new Map(
+    [...sessions].flatMap(([session, picks]) => {
+      const judged = Object.entries(picks).map(
+        ([key, value]) => [key, value, retiredBecause(key, value)]
+      );
+      const dropped = judged.filter(([, , why]) => why !== void 0);
+      if (dropped.length === 0) return [[session, picks]];
+      log(
+        "info",
+        `session-state load: dropped ${dropped.map(([key, , why]) => `${key} (${why})`).join(", ")} (session=${session})`
+      );
+      const kept = judged.flatMap(
+        ([key, value, why]) => why === void 0 ? [[key, value]] : []
+      );
+      return kept.length === 0 ? [] : [[session, Object.fromEntries(kept)]];
+    })
+  );
+}
+
+// src/daemon/held-stores.ts
 var EPHEMERAL_HISTORY_STORAGE = {
   load: () => /* @__PURE__ */ new Map(),
   save: () => {
   }
 };
 var HeldStores = class {
-  constructor(storage) {
+  constructor(storage, log) {
     this.storage = storage;
+    this.log = log;
   }
   storage;
+  log;
   // [LAW:types-are-the-program] Insertion order is each store's recency
   // order, as the renderer's own: a write moves its entry to the end.
   sessions = /* @__PURE__ */ new Map();
@@ -90885,7 +91153,7 @@ var HeldStores = class {
   // daemon that won the socket reads what the one before it flushed in its
   // close.
   load() {
-    this.sessions = new Map(this.storage.session.load());
+    this.sessions = withoutRetiredKeys(this.storage.session.load(), this.log);
     this.history = new Map(this.storage.history.load());
   }
   // What a renderer built now is built from.
@@ -90951,20 +91219,6 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-
-// src/renderer-interface/stored-state.ts
-init_globals();
-function parseSessionPicks(value) {
-  if (!isPlainObject2(value))
-    return { kind: "failed", reason: "is not an object" };
-  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
-  return bad === void 0 ? { kind: "ok", value } : {
-    kind: "failed",
-    reason: `has a ${JSON.stringify(bad)} that is not a string`
-  };
-}
-
-// src/renderer-interface/wire.ts
 var RENDERER_WIRE_VERSION = 15;
 
 // src/daemon/recording-privacy.ts
@@ -90985,7 +91239,7 @@ function hookCarriesEnvironment(hook) {
     const value = remaining.pop();
     if (Array.isArray(value)) {
       for (const item of value) remaining.push(item);
-    } else if (isPlainObject2(value)) {
+    } else if (isPlainObject(value)) {
       for (const [key, field] of Object.entries(value)) {
         if (key === "env" || key === "environment") return true;
         remaining.push(field);
@@ -91087,12 +91341,12 @@ function recordingOutputProblem(output) {
   ) ? ACTION_ENVIRONMENT : null;
 }
 function knownPick(key, value) {
-  if (isReservedName(key)) {
+  const kind = sessionKeyKind(key).kind;
+  if (kind === "plain") return false;
+  if (kind !== "setting") {
     return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
   }
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting === void 0) return false;
-  const field = GLOBAL_FIELDS[SETTINGS[setting].configKey];
+  const field = GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)].configKey];
   if (field.kind === "session") return field.parse(value) !== null;
   const { domain } = field;
   if (typeof domain !== "object") return false;
@@ -92723,7 +92977,7 @@ function createDaemon(inputs) {
     declaredBarPanes.declare(lanes);
   };
   function prepareRenderer(name, reported, entry) {
-    const stores = new HeldStores(inputs.profile(name, log));
+    const stores = new HeldStores(inputs.profile(name, log), log);
     const boot = () => ({
       stored: stores.current(),
       locations: locs,
@@ -93490,7 +93744,7 @@ function loadSessionFile(kind, filePath2, logger) {
     logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
     return loaded;
   }
-  if (!isPlainObject2(parsed2)) {
+  if (!isPlainObject(parsed2)) {
     logger("warn", `${kind.name} load: unexpected shape, starting empty`);
     return loaded;
   }
@@ -93715,7 +93969,7 @@ init_globals();
 // src/daemon/history-file.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
-function withoutRetiredKeys(history) {
+function withoutRetiredKeys2(history) {
   const retired2 = /* @__PURE__ */ new Set();
   const keep = (change) => {
     if (change.kind === "layer" || isSettingKey(change.key)) return true;
@@ -93734,7 +93988,7 @@ var HISTORY_FILE = {
   parse: (value) => {
     const parsed2 = parseSessionHistory(value);
     if (parsed2.kind === "failed") return parsed2;
-    const stripped = withoutRetiredKeys(parsed2.value);
+    const stripped = withoutRetiredKeys2(parsed2.value);
     if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
     return {
       kind: "failed",
