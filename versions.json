@@ -4,15 +4,22 @@
     {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
-      "sha": "d5e08e198535b85d54db57749f4059faf1d159f0",
-      "timestamp": "2026-11-23T09:10:17.069Z",
+      "sha": "39b32bdfee3f79f630a366eb8fa93eb3d5753576",
+      "timestamp": "2026-11-23T09:35:10.659Z",
       "commits": [
         {
-          "sha": "d5e08e198535b85d54db57749f4059faf1d159f0",
+          "sha": "39b32bdfee3f79f630a366eb8fa93eb3d5753576",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T09:09:10Z",
-          "message": "Merge 6738750f22bbaf685d38f8c27b86b508a29da80d into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+          "timestamp": "2026-11-23T09:34:07Z",
+          "message": "Merge 7893e1fdf3508cb309c708db274ceccff5c0eaf8 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+        },
+        {
+          "sha": "7893e1fdf3508cb309c708db274ceccff5c0eaf8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T02:33:48-07:00",
+          "message": "fix(config): one identity builder, one load filter for retired keys, and a failed click's record outside the edit\n"
         },
         {
           "sha": "6738750f22bbaf685d38f8c27b86b508a29da80d",

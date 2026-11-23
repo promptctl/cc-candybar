@@ -40932,6 +40932,7 @@ var MENU_NS = "menus.";
 var MENU_PAGE_NS = "menupages.";
 var EDIT_NS = "edit.";
 var SETTINGS_NS = "candybar.";
+var CLICK_ERROR_KEY = `${SETTINGS_NS}clickError`;
 var EDIT_MODE_KEY = `${EDIT_NS}mode`;
 var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 var RESERVED_NAMESPACES = [
@@ -41670,6 +41671,9 @@ var AXIS_OF = {
 };
 function placementId(node) {
   return node.id ?? node.name;
+}
+function placementIdentityOf(preset, node) {
+  return { preset, id: placementId(node), segment: node.name };
 }
 function placementIds(tree) {
   return [...walkNodes(tree)].flatMap(
@@ -43350,24 +43354,29 @@ function confirmStep(key, labels, fires) {
 }
 
 // src/config/session-key.ts
-var SETTING_KEYS = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey)
-);
 function sessionKeyKind(key) {
   if (key.startsWith(EDIT_NS))
     return {
       kind: "edit",
       part: key === EDIT_MODE_KEY ? "mode" : key.startsWith(PLACEMENT_DRAFT_NS) ? "draft" : "view"
     };
-  if (SETTING_KEYS.has(key)) return { kind: "setting" };
+  if (SESSION_KEY_TO_SETTING.has(key)) return { kind: "setting" };
+  if (key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS))
+    return { kind: "menu" };
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
+  if (key === CLICK_ERROR_KEY) return { kind: "record" };
   return reservedNamespaceOf(key) === void 0 ? { kind: "plain" } : { kind: "menu" };
 }
 var isEditModeKey = (key) => sessionKeyKind(key).kind === "edit";
-function isUndoStepKey(key) {
+var isSettingKey = (key) => sessionKeyKind(key).kind === "setting";
+var isPlacementDraftKey = (key) => {
   const k = sessionKeyKind(key);
-  return k.kind === "setting" || k.kind === "edit" && k.part === "draft";
+  return k.kind === "edit" && k.part === "draft";
+};
+var isHeldByEdit = (key) => sessionKeyKind(key).kind !== "record";
+function isUndoStepKey(key) {
+  return isSettingKey(key) || isPlacementDraftKey(key);
 }
 function isNavigationKey(key) {
   const k = sessionKeyKind(key);
@@ -43380,6 +43389,7 @@ init_globals();
 // src/config/ident.ts
 init_globals();
 var ESCAPE = "Z";
+var MAX_CODE_POINT = 1114111;
 function escapedIdent(name) {
   return Array.from(
     name,
@@ -43392,7 +43402,7 @@ function escapedIdent(name) {
 function unescapedIdent(spelled2) {
   const name = spelled2.replace(
     new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
-    (_, hex) => String.fromCodePoint(parseInt(hex, 16))
+    (escape, hex) => parseInt(hex, 16) > MAX_CODE_POINT ? escape : String.fromCodePoint(parseInt(hex, 16))
   );
   return escapedIdent(name) === spelled2 ? name : void 0;
 }
@@ -56261,8 +56271,7 @@ function parseCalls(template) {
     return "parse-failed";
   }
 }
-function hostedMenus(template, placement) {
-  const calls = parseCalls(template);
+function hostedMenus(calls, placement) {
   return calls === "parse-failed" ? [] : calls.flatMap(
     (call) => call.kind === "ok" ? [
       {
@@ -56387,18 +56396,14 @@ function synthesizePlacementMenus(config, issues) {
       }
       const calls = callsOf.get(node.name);
       if (calls === "parse-failed") continue;
-      const id2 = placementId(node);
+      const placement = placementIdentityOf(preset, node);
       for (const [index, call] of calls.entries()) {
         if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
           continue;
         }
         const { apply: apply2, options } = call;
         const member = menuMember(apply2);
-        const stateKey = menuStateKey(
-          { preset, id: id2, segment: node.name },
-          apply2,
-          options.key
-        );
+        const stateKey = menuStateKey(placement, apply2, options.key);
         const pageKey2 = menuPageKey(stateKey);
         const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
@@ -56437,8 +56442,8 @@ var EDIT_CONFIGURE_KEY = "edit.configure";
 var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
-function configureMember(preset, id2) {
-  return `${escapedIdent(preset)}:${id2}`;
+function configureMember(placement) {
+  return placementScope(placement);
 }
 var EDIT_MODE_REF = {
   variable: EDIT_MODE_KEY,
@@ -58142,9 +58147,10 @@ function placementDraftKey(placement, setting) {
 }
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
+  const identity2 = placementIdentityOf(ctx.preset, node);
   const placement = escapedIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id2);
+  const member = configureMember(identity2);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
   const listKey = sharedMenuStateKey(enter);
@@ -58159,11 +58165,8 @@ function configureParts(ctx, node, decls) {
   };
   const drafts = {};
   const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(
-      { preset: ctx.preset, id: id2, segment: node.name },
-      name
-    );
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    const key = placementDraftKey(identity2, name);
+    const variable = key;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
@@ -64334,14 +64337,14 @@ function spelled(e, name) {
   }
 }
 var SETTING_ROWS = Object.entries(SETTINGS);
-var SETTING_KEYS2 = new Set(
+var SETTING_KEYS = new Set(
   SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
 );
 var NOT_CUSTOMIZED = () => false;
 function sessionGlobals(config, sessionPick) {
   return resolveEffectiveGlobals(
     config,
-    (key) => SETTING_KEYS2.has(key) ? sessionPick(key) : null,
+    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
     NOT_CUSTOMIZED
   );
 }
@@ -66550,7 +66553,6 @@ function mintPlacement(segment, anchor, trees, suffix) {
   );
   return { seg: segment, id: mintPlacementId(segment, taken2, suffix) };
 }
-var randomSuffix = () => randomBytes(3).toString("hex");
 var MINT_TRIES = 16;
 function mintPlacementId(segment, taken2, suffix) {
   for (let tries = 0; tries < MINT_TRIES; tries++) {
@@ -67351,11 +67353,9 @@ init_globals();
 function createActiveSegmentRef(drawnAt) {
   return { current: null, drawnAt };
 }
-function openSegment(ref, segName, placementId2, preset, palette, disclosure, tint, text4) {
+function openSegment(ref, placement, palette, disclosure, tint, text4) {
   const active2 = {
-    segName,
-    placementId: placementId2,
-    preset,
+    placement,
     palette,
     disclosure,
     tint,
@@ -67372,9 +67372,7 @@ function inSegment(ref, place, run2) {
     () => run2(
       openSegment(
         ref,
-        place.segName,
-        place.placementId,
-        place.preset,
+        place.placement,
         place.palette,
         place.disclosure,
         place.tint,
@@ -67628,7 +67626,7 @@ function pickerFuncs(runtime, activeSegment) {
         const active2 = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active2.bg === void 0) {
           throw new Error(
-            `{{ picker }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
+            `{{ picker }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 a picker is drawn on that background`
           );
         }
         const drawnAt = activeSegment.drawnAt();
@@ -67827,7 +67825,7 @@ function swatchesFuncs(runtime, activeSegment, clock) {
         const active2 = requireActiveSegment(activeSegment, "{{ swatches }}");
         if (active2.bg === void 0) {
           throw new Error(
-            `{{ swatches }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
+            `{{ swatches }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 a swatch row is drawn on that background`
           );
         }
         const drawnAt = activeSegment.drawnAt();
@@ -68035,15 +68033,7 @@ init_globals();
 function renderMenu(applyName, displays, options, runtime) {
   const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
   const action2 = runtime.action;
-  const stateKey = menuStateKey(
-    {
-      preset: placement.preset,
-      id: placement.placementId,
-      segment: placement.segName
-    },
-    applyName,
-    options.key
-  );
+  const stateKey = menuStateKey(placement.placement, applyName, options.key);
   const pageKey2 = menuPageKey(stateKey);
   const member = menuMember(applyName);
   const store = renderBinding(action2, "menu").store;
@@ -68168,7 +68158,7 @@ function segmentColorFuncs(ref) {
       const active2 = requireActiveSegment(ref, "{{ bgOf }}");
       if (active2.bg === void 0) {
         throw new Error(
-          `{{ bgOf }} is not available while segments.${active2.segName}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
+          `{{ bgOf }} is not available while segments.${active2.placement.segment}'s own "bg:" is being evaluated \u2014 the background is what that template computes. Reach for a palette color there instead, e.g. bg: '{{ darken (color "surface") 1 }}'.`
         );
       }
       return active2.bg.hex;
@@ -68481,7 +68471,7 @@ var segmentType = {
       when: cctx.when,
       name: node.name,
       id: placementId(node),
-      preset: cctx.preset,
+      placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
@@ -69255,9 +69245,7 @@ var sameDealt = sameBy({
 });
 function placeOf(node, colours) {
   return {
-    segName: node.name,
-    placementId: node.id,
-    preset: node.preset,
+    placement: node.placement,
     palette: colours.palette,
     disclosure: colours.disclosure,
     tint: colours.tint,
@@ -72612,7 +72600,7 @@ function projectGitInfo(info, pullRequest, pending2) {
 
 // src/daemon/foundations/click-error.ts
 init_globals();
-var KEY = `${SETTINGS_NS}clickError`;
+var KEY = CLICK_ERROR_KEY;
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
   const record2 = joinedEvent(
@@ -72636,6 +72624,14 @@ function clickErrorAt(state, sessionId2, at, render3) {
   if (last2 === null) return { kind: "none" };
   const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
   return kind === "over" ? { kind } : { kind, error: last2 };
+}
+function isClickErrorRecord(raw) {
+  try {
+    recordOf(raw);
+    return true;
+  } catch {
+    return false;
+  }
 }
 function recordOf(raw) {
   const value = JSON.parse(raw);
@@ -74086,13 +74082,12 @@ function previous(timeline, current, context) {
   let depth = 0;
   for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
     const visit = timeline.visits[cursor];
-    const keys2 = movedKeys(visit.from, visit.to);
-    const step4 = keys2.flatMap((key) => {
-      const from = visit.from.values.get(key);
-      const to = visit.to.values.get(key);
-      return from === to ? [] : [{ key, from, to }];
-    });
-    if (step4.length === 0 || !step4.every(
+    const step4 = movedKeys(visit.from, visit.to).map((key) => ({
+      key,
+      from: visit.from.values.get(key),
+      to: visit.to.values.get(key)
+    }));
+    if (!step4.every(
       ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
     )) {
       invalid.add(visit);
@@ -74754,7 +74749,7 @@ function routedWrites(store, draftOf, unheld) {
     const stored = [];
     runInAction(() => {
       for (const { key, value } of pairs2)
-        if (draft !== null) draft.put(key, value);
+        if (draft !== null && isHeldByEdit(key)) draft.put(key, value);
         else if (isEditModeKey(key)) unheld.put(sid, key, value);
         else if (value === null) store.clear(sid, key);
         else stored.push({ key, value });
@@ -74764,7 +74759,7 @@ function routedWrites(store, draftOf, unheld) {
   return {
     get: (sid, key) => {
       const draft = draftOf(sid);
-      return draft !== null ? draft.read(key) : isEditModeKey(key) ? unheld.get(sid, key) : store.get(sid, key);
+      return draft !== null && isHeldByEdit(key) ? draft.read(key) : isEditModeKey(key) ? unheld.get(sid, key) : store.get(sid, key);
     },
     revision: (sid) => store.revision(sid),
     set: (sid, key, value) => write(sid, [{ key, value }]),
@@ -74780,6 +74775,12 @@ function heldAside() {
     put: (sid, key, value) => aside.set(sid, (aside.get(sid) ?? /* @__PURE__ */ new Map()).set(key, value)),
     held: (sid) => aside.get(sid) ?? /* @__PURE__ */ new Map()
   };
+}
+function staleEditWrite(log, sid, what) {
+  log(
+    "warn",
+    `edit: dropped ${[...what].join(",")} \u2014 no edit is open (session=${sid})`
+  );
 }
 var ENDED = { get: () => null, put: () => {
 } };
@@ -74940,7 +74941,7 @@ var EditTransactions = class {
     this.log = log;
     const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
       get: () => null,
-      put: (sid, key) => log("warn", `edit: dropped ${key} \u2014 no edit is open (session=${sid})`)
+      put: (sid, key) => staleEditWrite(log, sid, [key])
     });
     this.view = {
       get: routed.get,
@@ -75059,16 +75060,15 @@ var NO_NEST = {
 };
 var idOf2 = (d) => `${d.key}\0${d.member}`;
 function buildDisclosureNest(config) {
-  const menus = /* @__PURE__ */ new Map();
+  const calls = /* @__PURE__ */ new Map();
   const hostedBy = (preset, node) => {
-    const placement = { preset, id: placementId(node), segment: node.name };
-    const id2 = placementScope(placement);
-    const memo = menus.get(id2);
-    if (memo !== void 0) return memo;
     const template = config.segments[node.name]?.template;
-    const found2 = template === void 0 ? [] : hostedMenus(template, placement);
-    menus.set(id2, found2);
-    return found2;
+    if (template === void 0) return [];
+    if (!calls.has(node.name)) calls.set(node.name, parseCalls(template));
+    return hostedMenus(
+      calls.get(node.name),
+      placementIdentityOf(preset, node)
+    );
   };
   const triggeredBy = (preset, node) => [
     ...node.opens === void 0 ? [] : [node.opens.ref],
@@ -75956,10 +75956,7 @@ var stepState = (args, ctx) => {
   );
 };
 function refuseDisorderedPicks(ctx, verb, writes) {
-  const picks = writes.filter((w) => {
-    const kind = sessionKeyKind(w.key);
-    return kind.kind === "edit" && kind.part === "draft";
-  });
+  const picks = writes.filter((w) => isPlacementDraftKey(w.key));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -76316,7 +76313,7 @@ var applyLayoutOp2 = (args, ctx) => {
     into,
     key,
     op,
-    randomSuffix
+    () => randomBytes(3).toString("hex")
   );
   ctx.log(
     "info",
@@ -76476,12 +76473,8 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     (file, text4, read2) => proveLoadsAsLayer(scoped, origin, file, text4, read2)
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
-  const click2 = edit === void 0 ? { kind: "outside", aside: heldAside() } : { kind: "edit", edit };
-  const writes = click2.kind === "edit" ? journal.sessionState : routedWrites(
-    journal.sessionState,
-    (s) => ctx.edits.draftWrites(s),
-    click2.aside
-  );
+  const aside = heldAside();
+  const writes = edit !== void 0 ? journal.sessionState : routedWrites(journal.sessionState, () => null, aside);
   const requested = {};
   const failures = [];
   const sessionState = closingView(
@@ -76489,7 +76482,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     (target) => target === sid ? nestOf(scoped, origin) : NO_NEST,
     (line) => ctx.log("info", line)
   );
-  const navigation = (click2.kind === "edit" ? click2.edit.navigation : ctx.navigation).begin(journal.sessionState, sessionState.setBatch);
+  const navigation = (edit?.navigation ?? ctx.navigation).begin(
+    journal.sessionState,
+    sessionState.setBatch
+  );
   try {
     handler({
       ...scoped,
@@ -76499,7 +76495,10 @@ function journaled(verb, sid, context, ctx, effects, handler) {
       journal,
       readConfigFile: (edit?.files ?? files).read,
       finishEdit: (finish) => {
-        if (edit === void 0) return;
+        if (edit === void 0) {
+          staleEditWrite(ctx.log, sid, [finish]);
+          return;
+        }
         requested.finish = finish;
         sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
       },
@@ -76529,11 +76528,16 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     } catch (e) {
       failed3.push(e);
     }
+    const end = () => {
+      ctx.navigation.landOutsideEdit(visits);
+      ctx.edits.close(sid);
+      ctx.editViewChanged(sid);
+    };
     try {
-      if (click2.kind === "outside") {
+      if (edit === void 0) {
         const clicked = new Map([
           ...journal.commit().get(sid) ?? [],
-          ...click2.aside.held(sid)
+          ...aside.held(sid)
         ]);
         const entering = clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
         const edited = new Map(
@@ -76542,24 +76546,16 @@ function journaled(verb, sid, context, ctx, effects, handler) {
         if (entering) {
           ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edited.size > 0)
-          ctx.log(
-            "warn",
-            `edit: dropped ${[...edited.keys()].join(",")} \u2014 no edit is open (session=${sid})`
-          );
+        } else if (edited.size > 0) staleEditWrite(ctx.log, sid, edited.keys());
       } else if (saved !== null) {
         saved.commit();
-        ctx.navigation.landOutsideEdit(visits);
-        ctx.edits.close(sid);
-        ctx.editViewChanged(sid);
+        end();
       } else {
-        const { moved: moved2, clicked } = click2.edit.commit();
+        const { moved: moved2, clicked } = edit.commit();
         const mode = clicked.get(EDIT_MODE_KEY);
         if (mode !== void 0 && mode !== EDIT_MODE_ARRANGE) {
-          click2.edit.leave(clicked);
-          ctx.navigation.landOutsideEdit(visits);
-          ctx.edits.close(sid);
-          ctx.editViewChanged(sid);
+          edit.leave(clicked);
+          end();
         } else if (moved2) {
           ctx.edits.changed(sid);
           ctx.editViewChanged(sid);
@@ -91077,16 +91073,32 @@ function parseSessionPicks(value) {
     reason: `has a ${JSON.stringify(bad)} that is not a string`
   };
 }
-function withoutEditModeKeys(sessions, log) {
+var RETIRED_CLICK_ERROR_KEY = "click.error";
+function retiredBecause(key, value) {
+  if (isEditModeKey(key)) return "no edit outlives the renderer";
+  if ((key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS)) && menuOfKey(key) === void 0)
+    return "no menu is keyed that way now";
+  if (key === RETIRED_CLICK_ERROR_KEY)
+    return "a failed click is recorded elsewhere now";
+  if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
+    return "not a record of a failed click";
+  return void 0;
+}
+function withoutRetiredKeys(sessions, log) {
   return new Map(
     [...sessions].flatMap(([session, picks]) => {
-      const dropped = Object.keys(picks).filter(isEditModeKey);
+      const judged = Object.entries(picks).map(
+        ([key, value]) => [key, value, retiredBecause(key, value)]
+      );
+      const dropped = judged.filter(([, , why]) => why !== void 0);
       if (dropped.length === 0) return [[session, picks]];
       log(
         "info",
-        `session-state load: dropped ${dropped.join(",")} \u2014 no edit outlives the renderer (session=${session})`
+        `session-state load: dropped ${dropped.map(([key, , why]) => `${key} (${why})`).join(", ")} (session=${session})`
       );
-      const kept = Object.entries(picks).filter(([key]) => !isEditModeKey(key));
+      const kept = judged.flatMap(
+        ([key, value, why]) => why === void 0 ? [[key, value]] : []
+      );
       return kept.length === 0 ? [] : [[session, Object.fromEntries(kept)]];
     })
   );
@@ -91114,7 +91126,7 @@ var HeldStores = class {
   // daemon that won the socket reads what the one before it flushed in its
   // close.
   load() {
-    this.sessions = withoutEditModeKeys(this.storage.session.load(), this.log);
+    this.sessions = withoutRetiredKeys(this.storage.session.load(), this.log);
     this.history = new Map(this.storage.history.load());
   }
   // What a renderer built now is built from.
@@ -91302,12 +91314,12 @@ function recordingOutputProblem(output) {
   ) ? ACTION_ENVIRONMENT : null;
 }
 function knownPick(key, value) {
-  if (isReservedName(key)) {
+  const kind = sessionKeyKind(key).kind;
+  if (kind === "plain") return false;
+  if (kind !== "setting") {
     return value === DISCLOSURE_CLOSED || value === DISCLOSURE_OPEN || TABS.some(({ member }) => member === value) || SUBMENU_NAMES.some((member) => member === value);
   }
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting === void 0) return false;
-  const field = GLOBAL_FIELDS[SETTINGS[setting].configKey];
+  const field = GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)].configKey];
   if (field.kind === "session") return field.parse(value) !== null;
   const { domain } = field;
   if (typeof domain !== "object") return false;
@@ -93930,10 +93942,10 @@ init_globals();
 // src/daemon/history-file.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
-function withoutRetiredKeys(history) {
+function withoutRetiredKeys2(history) {
   const retired2 = /* @__PURE__ */ new Set();
   const keep = (change) => {
-    if (change.kind === "layer" || isUndoStepKey(change.key)) return true;
+    if (change.kind === "layer" || isSettingKey(change.key)) return true;
     retired2.add(change.key);
     return false;
   };
@@ -93949,7 +93961,7 @@ var HISTORY_FILE = {
   parse: (value) => {
     const parsed2 = parseSessionHistory(value);
     if (parsed2.kind === "failed") return parsed2;
-    const stripped = withoutRetiredKeys(parsed2.value);
+    const stripped = withoutRetiredKeys2(parsed2.value);
     if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
     return {
       kind: "failed",
