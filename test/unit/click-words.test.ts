@@ -9,6 +9,7 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
   VERB_REPO_CONFIG,
+  VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
 } from "../../src/click/wire";
@@ -49,6 +50,17 @@ describe("the long numbers a link's words may not hold", () => {
     expect(longNumbersSaid(effectsUrl([set, copy]))).toEqual([STRAY]);
     // The copy is the face, so the words quote the checkout and say no number.
     expect(longNumbersSaid(effectsUrl([copy, set]))).toEqual([]);
+  });
+
+  test("only the quoted part of a phrase is exempt, and an effect that says nothing is not the face", () => {
+    const answer: Effect = {
+      verb: VERB_REPO_CONFIG,
+      args: [SESSION, CHECKOUT, STRAY],
+    };
+    expect(longNumbersSaid(effectsUrl([answer]))).toEqual([STRAY]);
+    const silent: Effect = { verb: VERB_RESET_CONFIG, args: [SESSION, "user"] };
+    const copy: Effect = { verb: VERB_COPY, args: [CHECKOUT] };
+    expect(longNumbersSaid(effectsUrl([silent, copy]))).toEqual([]);
   });
 
   test("a path that holds /dispatch/ does not cut the words short", () => {

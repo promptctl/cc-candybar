@@ -7,7 +7,6 @@
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { DOOR_GLYPH } from "../../../src/config/disclosure";
@@ -22,6 +21,7 @@ import {
 import { textOf, type Frame } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { doesOf, longNumbersSaid } from "../../helpers/click-words";
+import { jestTmpDir } from "../../helpers/jest-tmp";
 
 jest.setTimeout(60_000);
 
@@ -113,16 +113,13 @@ function pluginConfig(): string {
   return config;
 }
 
-// The scratch directories a run makes, removed when it ends.
-const scratch: string[] = [];
-const scratchDir = (name: string): string => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), name));
-  scratch.push(dir);
-  return dir;
-};
-afterAll(() => {
-  for (const dir of scratch) fs.rmSync(dir, { recursive: true, force: true });
-});
+// The scratch directories a run makes live under one worker-owned root, so a
+// worker that dies before cleanup leaves a directory the sweep can name.
+const scratchRoot = jestTmpDir("fixtures");
+fs.mkdirSync(scratchRoot);
+const scratchDir = (name: string): string =>
+  fs.mkdtempSync(path.join(scratchRoot, name));
+afterAll(() => fs.rmSync(scratchRoot, { recursive: true, force: true }));
 
 // A git checkout whose path holds a long run of digits, as an agent worktree's
 // name can: the bar runs from it, and the words that name it say so.
