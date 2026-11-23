@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7dea1a27bd6e661b5b96a252c21c8b713f1ccad7",
+      "timestamp": "2026-11-23T18:21:54.724Z",
+      "commits": [
+        {
+          "sha": "7dea1a27bd6e661b5b96a252c21c8b713f1ccad7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T18:19:59Z",
+          "message": "chore(release): set `package.json` to 1.236.10\n\n## [1.236.10](https://github.com/promptctl/cc-candybar/compare/v1.236.9...v1.236.10) (2026-11-23)\n\n### Bug Fixes\n\n* **usage:** today counts each API response once, however many session files hold a copy of it ([#939](https://github.com/promptctl/cc-candybar/issues/939)) ([65b8127](https://github.com/promptctl/cc-candybar/commit/65b812767561b997ca5949478dde770145835dd0))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-940",
       "ref": "refs/pull/940/merge",
       "sha": "e1e4a8c892f0efcafce65ccf7a8b506f9bd931a6",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T11:17:08-07:00",
           "message": "fix(render): a request waits for exactly what its frame draws pending, and an unanswered source draws as pending\n\nThe draw reports what it still owes with every frame (settled, owed names, or stalled by a failed stamp), each with the seq of the world state it drew. The host waits for that and nothing it recomputes, redraws when a later world state reaches the renderer, and ends on a draw that owes nothing, a stalled stamp, a turn that threw or was refused, or the client's deadline, recording what held a wait that ran out. Text, file and json variables are pending until their first run answers; their fallback stands in only for a run that read nothing. Today's day sums and the branch's PR draw deferred, which no request waits on.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "65b812767561b997ca5949478dde770145835dd0",
-      "timestamp": "2026-11-23T18:17:48.964Z",
-      "commits": [
-        {
-          "sha": "65b812767561b997ca5949478dde770145835dd0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:16:46-07:00",
-          "message": "fix(usage): today counts each API response once, however many session files hold a copy of it (#939)\n\nfix(usage): today counts each API response once, however many session files hold a copy of it (candybar-host-renderer-x96a.au0)\n\nA forked or resumed session's transcript copies the earlier session's\nresponses under their original ids, with a forkedFrom mark or without\none. Day buckets are now keyed by response, so a directory's day sums\nand a session's own days count each copy once, including when the file\nit was copied from is gone or unread. Buckets are kept only for the\ndays today reads, so the ids held grow with a day's work."
         }
       ]
     }
