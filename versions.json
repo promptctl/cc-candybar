@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-936",
-      "ref": "refs/pull/936/merge",
-      "sha": "3297a180ac8d04cdf3f55d7553ad0f1970143b55",
-      "timestamp": "2026-11-23T13:54:33.046Z",
-      "commits": [
-        {
-          "sha": "3297a180ac8d04cdf3f55d7553ad0f1970143b55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:53:29Z",
-          "message": "Merge dd37295c161bf3b109b742be059266e7cbf50d61 into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
-        },
-        {
-          "sha": "dd37295c161bf3b109b742be059266e7cbf50d61",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:53:25-07:00",
-          "message": "Merge branch 'main' into candybar-pre-migration-acxc.5o9"
-        },
-        {
-          "sha": "b2fdae56fb62fd29e3a79a284db94b25dde4b6f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:42:52-07:00",
-          "message": "docs(click): say plainly what a quoted phrase is\n"
-        },
-        {
-          "sha": "69c27ef81a69a534a55c545355d1b998e26081a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:41:49-07:00",
-          "message": "refactor(click): a phrase says what it quotes, and the face is derived once\n"
-        },
-        {
-          "sha": "da3d7d478ba21dcb68d25e47889643ca2f94142b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:36:01-07:00",
-          "message": "test(click): the click-words case reads the phrase a link says, from the product's own table\n"
-        },
-        {
-          "sha": "1bef5801d6745060232a2234daf678cc050fceba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:31:52-07:00",
-          "message": "test(click): the click-words case never reads the machine's own text as a number\n"
-        },
-        {
-          "sha": "260e536436d37854b6f604e0381d965eb0a12cc6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:22:55-07:00",
-          "message": "test(click): the click-words case treats the checkout path's own digits as the path\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1bc8a492d7f2458aaa33e154361a22475fd112b3",
-      "timestamp": "2026-11-23T13:29:14.449Z",
+      "sha": "2ebca655424d1cb92bea5a0befbfe9c07e01f696",
+      "timestamp": "2026-11-23T14:05:03.147Z",
       "commits": [
         {
-          "sha": "1bc8a492d7f2458aaa33e154361a22475fd112b3",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-23T13:28:17Z",
-          "message": "chore(release): set `package.json` to 1.236.9\n\n## [1.236.9](https://github.com/promptctl/cc-candybar/compare/v1.236.8...v1.236.9) (2026-11-23)\n\n### Bug Fixes\n\n* **config:** judge a persisted value by its setting's row at load, and refuse a step over a stored non-number ([#935](https://github.com/promptctl/cc-candybar/issues/935)) ([341c494](https://github.com/promptctl/cc-candybar/commit/341c494d0eada140f82fa3ae26638e0ef19e42de))\n"
+          "sha": "2ebca655424d1cb92bea5a0befbfe9c07e01f696",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T07:03:58-07:00",
+          "message": "test(click): the click-words case treats the checkout path's own digits as the path (#936)\n\n* test(click): the click-words case treats the checkout path's own digits as the path\n\n* test(click): the click-words case never reads the machine's own text as a number\n\n* test(click): the click-words case reads the phrase a link says, from the product's own table\n\n* refactor(click): a phrase says what it quotes, and the face is derived once\n\n* docs(click): say plainly what a quoted phrase is"
         }
       ]
     }

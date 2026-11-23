@@ -43670,51 +43670,61 @@ function saidCopy(text4) {
   const kept = Math.floor((COPIED_LENGTH - ELISION.length) / 2);
   return chars.length <= COPIED_LENGTH ? text4 : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
 }
+var said = (words2, quoted2 = "") => ({ words: words2, quoted: quoted2 });
 var SAYS = {
   [VERB_SET_STATE]: ([, ...pairs2]) => pairs2.flatMap(
-    (key, i2) => i2 % 2 === 0 ? [sayWrite(key, pairs2[i2 + 1])] : []
+    (key, i2) => i2 % 2 === 0 ? [said(sayWrite(key, pairs2[i2 + 1]))] : []
   ),
-  [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
-  [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
-  [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
+  [VERB_STEP_STATE]: ([, key, by]) => [said(sayStep(key, by))],
+  [VERB_COPY]: ([text4]) => {
+    const copied = saidCopy(text4);
+    return [said(`copy ${copied}`, copied)];
+  },
+  [VERB_OPEN_VSCODE]: ([target]) => [said(`open ${target} in vs code`, target)],
   // A config write says the layer of the session's chain it writes.
   [VERB_SET_CONFIG]: ([, layer, key, value]) => [
-    `save ${key} as ${value} in ${layer} config`
+    said(`save ${key} as ${value} in ${layer} config`)
   ],
   [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
-    `save ${sayStep(key, by)} in ${layer} config`
+    said(`save ${sayStep(key, by)} in ${layer} config`)
   ],
-  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
+  [VERB_SAVE]: ([, layer]) => [said(`save settings to ${layer} config`)],
   [VERB_SAVE_PRESET]: ([, layer]) => [
-    `save as a new preset in ${layer} config`
+    said(`save as a new preset in ${layer} config`)
   ],
   [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
-    `save this look for the theme in ${layer} config`
+    said(`save this look for the theme in ${layer} config`)
   ],
   [VERB_DELETE_PRESET]: ([, layer, name]) => [
-    `delete preset ${name} from ${layer} config`
+    said(`delete preset ${name} from ${layer} config`)
   ],
-  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => `reset ${key} in ${layer} config`),
+  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => said(`reset ${key} in ${layer} config`)),
   [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
-    `edit ${op} in ${key} of ${layer} config`
+    said(`edit ${op} in ${key} of ${layer} config`)
   ],
-  [VERB_UNDO]: () => ["undo"],
-  [VERB_REDO]: () => ["redo"],
-  [VERB_BACK]: () => ["go back"],
-  [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_SLASH]: ([, line]) => [`type ${line}`],
-  [VERB_RUN]: ([, action2]) => [`run ${action2}`],
-  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [`mark config in ${dir} ${answer2}`],
-  [VERB_COPY_DIAGNOSTIC]: () => ["copy diagnostic"]
+  [VERB_UNDO]: () => [said("undo")],
+  [VERB_REDO]: () => [said("redo")],
+  [VERB_BACK]: () => [said("go back")],
+  [VERB_REWIND]: () => [said("cancel edits")],
+  [VERB_SLASH]: ([, line]) => [said(`type ${line}`)],
+  [VERB_RUN]: ([, action2]) => [said(`run ${action2}`)],
+  [VERB_REPO_CONFIG]: ([, dir, answer2]) => [
+    said(`mark config in ${dir} ${answer2}`, dir)
+  ],
+  [VERB_COPY_DIAGNOSTIC]: () => [said("copy diagnostic")]
 };
 var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
-function clickDoes(effects) {
+function saysOf(effects) {
   const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
-  const [face = "nothing", ...rest2] = [
+  return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession)
   ].flatMap((e) => SAYS[e.verb](e.args));
-  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
+}
+function clickDoes(effects) {
+  const [face, ...rest2] = saysOf(effects);
+  if (face === void 0) return "nothing";
+  return rest2.length > 0 ? `${face.words} and ${rest2.length} more` : face.words;
 }
 function encodeSegments(parts) {
   return parts.map(encodeURIComponent).join("/");
@@ -69003,8 +69013,8 @@ var ViewParts = class {
     this.view = observable.box(view, { deep: false });
     this.scope = buildScope(store);
     this.depth = store.derive("drawn depth", "computed", () => {
-      const said2 = this.inputAt(COLOR_PATH);
-      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
+      const said3 = this.inputAt(COLOR_PATH);
+      return said3.kind === "found" && typeof said3.value === "string" && isColorCompatibility(said3.value) ? said3.value : COLOR_FLOOR;
     });
     const drawn = observable(UNDRAWN, void 0, { deep: false });
     this.facts = drawn;
@@ -73170,13 +73180,13 @@ function drawRender(parts, setup, drawing2, feeds) {
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
   const questions = repoQuestions(entry.revision.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
-  const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
+  const said3 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const { daemon: daemon2 } = document;
   const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
   const threw2 = daemonEvents.filter(isThrew);
   const errors2 = [
-    said2("refused-args", refusedArgsError(req.refusedArgs)),
-    said2("hints", hintsError),
+    said3("refused-args", refusedArgsError(req.refusedArgs)),
+    said3("hints", hintsError),
     sourced(
       "load",
       "load",
@@ -73191,7 +73201,7 @@ function drawRender(parts, setup, drawing2, feeds) {
         copy: e.prompt
       })
     ),
-    said2("click", clickShown?.text),
+    said3("click", clickShown?.text),
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
@@ -79669,8 +79679,8 @@ function saidBy(r, text4) {
   return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
 }
 function failureText(r, where = "") {
-  const said2 = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
+  const said3 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said3 === "" ? "" : `: ${said3}`}`;
 }
 
 // src/daemon/environment-output.ts
@@ -79791,13 +79801,13 @@ var Runs = class {
   // (src/daemon/acts.ts), the one line an act's outcome has.
   ended(run2, result, took, inheritsEnvironment) {
     const ended = outcomeOf(result);
-    const said2 = `program=${valueOf(run2.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run2.refreshes.map((r) => r.name).join(",") || "-"}`;
+    const said3 = `program=${valueOf(run2.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run2.refreshes.map((r) => r.name).join(",") || "-"}`;
     if (ended === "timeout") this.timedOut++;
-    if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
+    if (result.ok) return { outcome: { kind: "ok" }, said: said3 };
     if (ended === "aborted")
       return {
         outcome: { kind: "closing", reason: "the daemon closed under it" },
-        said: said2
+        said: said3
       };
     if (ended !== "timeout") this.failed++;
     const reason = failureText(result);
@@ -79806,7 +79816,7 @@ var Runs = class {
         { kind: "failed", reason },
         inheritsEnvironment && saidBy(result, result.stderr) !== ""
       ),
-      said: `${said2} \u2014 ${reason}`
+      said: `${said3} \u2014 ${reason}`
     };
   }
 };
@@ -82252,20 +82262,20 @@ var RenderSightings = class {
   // day's first seed, a PR lookup — so a request that settles after a newer
   // one of the same session and role is not its latest, and is dropped; its
   // own settling replaces its arrival.
-  see(sessionId2, said2, at, order2) {
-    const role = roleOf(said2.client);
+  see(sessionId2, said3, at, order2) {
+    const role = roleOf(said3.client);
     const key = JSON.stringify([sessionId2, role]);
     const known = this.seen.get(key);
     if (known !== void 0 && known.order > order2) return;
     this.seen.delete(key);
-    this.seen.set(key, { sessionId: sessionId2, said: { ...said2, role }, at, order: order2 });
+    this.seen.set(key, { sessionId: sessionId2, said: { ...said3, role }, at, order: order2 });
     if (this.seen.size > SIGHTINGS_KEPT) {
       this.seen.delete(this.seen.keys().next().value);
     }
   }
   list(now2) {
-    return [...this.seen.values()].map(({ sessionId: sessionId2, said: said2, at }) => ({
-      ...said2,
+    return [...this.seen.values()].map(({ sessionId: sessionId2, said: said3, at }) => ({
+      ...said3,
       sessionId: sessionId2,
       ago: now2 - at
     }));
@@ -89751,9 +89761,9 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
   args: launch.args?.slice(),
   timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
 });
-async function clickLaunch(launch, opts, what, said2) {
+async function clickLaunch(launch, opts, what, said3) {
   const result = await launch(opts);
-  if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
+  if (result.ok) return { outcome: { kind: "ok" }, said: said3 };
   if (result.reason === "aborted") {
     const reason2 = new DaemonClosing(what).message;
     return { outcome: { kind: "closing", reason: reason2 }, said: reason2 };
@@ -89849,7 +89859,7 @@ function nameOf(act) {
       return `run ${act.action}`;
   }
 }
-var did = (said2) => ({ outcome: { kind: "ok" }, said: said2 });
+var did = (said3) => ({ outcome: { kind: "ok" }, said: said3 });
 var not = (outcome) => ({
   outcome,
   said: outcome.reason
@@ -89922,10 +89932,10 @@ var Acts = class {
   // throw is classified once, here: a refusal the user can act on, the
   // daemon's close, or a failure.
   async perform(act) {
-    const { outcome, said: said2 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
+    const { outcome, said: said3 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf(act)}: ${said2}`
+      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} \u2014 ${nameOf(act)}: ${said3}`
     );
     return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }
@@ -90030,9 +90040,9 @@ var DeclaredBarPanes = class {
     this.clock.detach(
       `bar pane ${pane.pane} apply`,
       () => this.setPane(pane, on2).then(
-        (said2) => {
+        (said3) => {
           held.application = { kind: "applied", on: on2 };
-          this.log("info", `${event} \u2014 ${said2}`);
+          this.log("info", `${event} \u2014 ${said3}`);
           this.reconcile(key, held);
         },
         (error) => {
@@ -90381,12 +90391,12 @@ function answering(book, dir, answer2) {
   };
 }
 function answeredBook(stateDir2, answers, readText) {
-  const said2 = [];
+  const said3 = [];
   const planned = repoConfigs(stateDir2, readText).plan(
     (current) => answers.reduce((book, { session, dir, answer: answer2 }) => {
       const answered = answering(book, dir, answer2);
       const { superseded, absent, unchecked } = answered.recorded;
-      said2.push(
+      said3.push(
         `repo-config: ${dir} ${answer2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`
       );
       return answered.book;
@@ -90394,10 +90404,10 @@ function answeredBook(stateDir2, answers, readText) {
   );
   if (planned.kind === "failed") return planned;
   if (planned.value.retire !== null)
-    said2.push(
+    said3.push(
       `repo-config: retired ${planned.value.retire.from} to ${planned.value.retire.to} after updating ${repoConfigsPath(stateDir2)}`
     );
-  return ok({ ...planned.value, said: said2 });
+  return ok({ ...planned.value, said: said3 });
 }
 
 // src/daemon/effect-interpreter.ts
@@ -90432,7 +90442,7 @@ function directoryEntries(realpath2 = canonicalDirectory) {
 }
 
 // src/daemon/effect-interpreter.ts
-var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
+var said2 = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
 function configEffectOutcome(landed) {
   if (landed.kind === "ok") return { kind: "ok" };
   if (landed.kind === "incomplete")
@@ -90491,7 +90501,7 @@ function performChanges(changes, book, files, write) {
       );
       if (applied3.kind === "moved")
         return refused(
-          `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)})`
+          `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said2(applied3.read)}, it is ${said2(applied3.found)})`
         );
       rewrites.set(entry, {
         file: prior?.file ?? file,
