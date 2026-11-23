@@ -4,15 +4,22 @@
     {
       "version": "pr-935",
       "ref": "refs/pull/935/merge",
-      "sha": "c6be2e715e263185bbc01de17e169858a5ae282a",
-      "timestamp": "2026-11-23T13:03:43.010Z",
+      "sha": "59fd95ee99111269fc9f742a2fc774a30642d357",
+      "timestamp": "2026-11-23T13:13:16.863Z",
       "commits": [
         {
-          "sha": "c6be2e715e263185bbc01de17e169858a5ae282a",
+          "sha": "59fd95ee99111269fc9f742a2fc774a30642d357",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:02:32Z",
-          "message": "Merge d02f466c014189fab99b014e3b396a64a5316124 into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
+          "timestamp": "2026-11-23T13:12:14Z",
+          "message": "Merge 78f7887a9d0dcd617180b5e063a4df5f7c070944 into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
+        },
+        {
+          "sha": "78f7887a9d0dcd617180b5e063a4df5f7c070944",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:11:53-07:00",
+          "message": "fix(config): take a persisted name's membership from the field's own row and judge a segment palette by the loader's segment schema\n"
         },
         {
           "sha": "d02f466c014189fab99b014e3b396a64a5316124",
