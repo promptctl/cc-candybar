@@ -19,10 +19,26 @@
 
 import type { Globals } from "../dsl-types.js";
 import {
+  liftToFile,
   THEME_DEFAULT_FIELDS,
+  wireKindOf,
+  type FileValue,
   type ThemeDefaultField,
+  type WireKind,
 } from "../globals-fields.js";
-import { isGlobalsField, isPresetGlobalsField } from "./globals.js";
+import {
+  GLOBALS_SCHEMA,
+  isGlobalsField,
+  isPresetGlobalsField,
+  PRESET_GLOBALS_SCHEMA,
+  THEME_DEFAULT_SCHEMA,
+} from "./globals.js";
+import { SEGMENT_DELTA_SCHEMA } from "./segments.js";
+import {
+  record,
+  type RecordSchema,
+  type ValidateCtx,
+} from "./validate-core.js";
 
 export type PersistTarget =
   | { readonly scope: "globals"; readonly field: keyof Globals }
@@ -128,9 +144,10 @@ export function parsePersistTarget(key: string): PersistTarget | null {
 // name is one step, never re-split on "." downstream.
 export type ConfigPath = readonly string[];
 
-export function persistPath(
-  target: Exclude<PersistTarget, { scope: "preset-root" }>,
-): ConfigPath {
+// A target that writes a value into the config file, as against a tree op.
+export type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
+
+export function persistPath(target: ValueTarget): ConfigPath {
   switch (target.scope) {
     case "globals":
       return ["globals", target.field];
@@ -141,4 +158,62 @@ export function persistPath(
     case "theme-default":
       return ["themeDefaults", target.theme, target.field];
   }
+}
+
+// [LAW:one-source-of-truth] The schema that reads the record a target's value
+// lands in — the one the loader judges that place by, so a rule is a member
+// only where that schema takes one.
+const PLACE_SCHEMAS: Readonly<
+  Record<ValueTarget["scope"], RecordSchema<object>>
+> = {
+  globals: GLOBALS_SCHEMA,
+  "preset-globals": PRESET_GLOBALS_SCHEMA,
+  "theme-default": THEME_DEFAULT_SCHEMA,
+  "segment-palette": SEGMENT_DELTA_SCHEMA,
+};
+
+// The primitive the file holds at a target. A segment's palette is a name; it
+// is the one value target that is no globals field, so it has no row to ask.
+function wireKindOfTarget(target: ValueTarget): WireKind {
+  return target.scope === "segment-palette"
+    ? "string"
+    : wireKindOf(target.field);
+}
+
+// [LAW:parse-dont-validate] The typed value the file holds at a target, from the
+// string a write carries — or the reason there is none, which a click throws
+// and the loader reports.
+export function persistedValueOf(target: ValueTarget, raw: string): FileValue {
+  return liftToFile(wireKindOfTarget(target), raw);
+}
+
+// Whether the file holds an integer at a target, which is all a stepper writes.
+export function holdsInteger(target: ValueTarget): boolean {
+  return wireKindOfTarget(target) === "number";
+}
+
+// [LAW:single-enforcer] The loader's own verdict on the value a click would
+// write at a target: `null` when the file would hold it, else the message the
+// loader would refuse the file with. What the merged config alone decides (a
+// declared style or preset) is cross-ref's.
+export function persistedValueIssue(
+  ctx: ValidateCtx,
+  target: ValueTarget,
+  raw: string,
+): string | null {
+  const lifted = persistedValueOf(target, raw);
+  if ("reason" in lifted) return lifted.reason;
+  const steps = persistPath(target);
+  const scratch: ValidateCtx = {
+    ...ctx,
+    source: "",
+    issues: [],
+    groups: [],
+    unplaced: [],
+    inherited: [],
+  };
+  record(scratch, PLACE_SCHEMAS[target.scope], steps.slice(0, -1).join("."), {
+    [steps[steps.length - 1]!]: lifted.value,
+  });
+  return scratch.issues[0]?.message ?? null;
 }

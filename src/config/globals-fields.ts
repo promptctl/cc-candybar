@@ -654,6 +654,55 @@ export function wireKindOf(field: GlobalField): WireKind {
       : "string";
 }
 
+// The named option domain a field's row draws its values from (`styles`,
+// `presets`), for a key that is a field at all; null when its row names none.
+export function optionDomainOf(key: string): string | null {
+  if (!Object.hasOwn(GLOBAL_FIELDS, key)) return null;
+  const row: FieldRow = GLOBAL_FIELDS[key as GlobalField];
+  if (row.kind === "text") return null;
+  const { domain } = row;
+  return typeof domain === "object" &&
+    "from" in domain &&
+    typeof domain.from === "string"
+    ? domain.from
+    : null;
+}
+
+// [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
+// value is written from — a `persist` action's gate is an ALLOW-LIST whose
+// members pass through verbatim, so a config author writing
+// `cycle: ["true", "false"]` or `to: "0"` reaches the file with the raw member
+// string, not a pre-canonicalized "1"/"".
+const BOOLEAN_TRUTHY = new Set(["1", "true"]);
+const BOOLEAN_FALSY = new Set(["0", "false", ""]);
+
+// [LAW:parse-dont-validate] The typed value a field's file holds, from the
+// string a write carries — or the reason there is none, which a click throws
+// and the loader reports. The one lift from the wire's string into the file's
+// primitive, read by what writes the file and by what judges what it would
+// write.
+export type FileValue =
+  | { readonly value: string | number | boolean }
+  | { readonly reason: string };
+
+export function liftToFile(kind: WireKind, raw: string): FileValue {
+  if (kind === "string") return { value: raw };
+  if (kind === "number") {
+    // Every number field is an integer range, and the file holds the integer
+    // as written: a spelling that parses to another (`0x10`, `1e1`, `3.0`)
+    // would write a number its author never wrote.
+    const n = Number(raw);
+    return Number.isInteger(n) && String(n) === raw
+      ? { value: n }
+      : { reason: `expects an integer written plainly, got "${raw}"` };
+  }
+  if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
+  if (BOOLEAN_FALSY.has(raw)) return { value: false };
+  return {
+    reason: `expects boolean-ish (1, 0, true, false), got "${raw}"`,
+  };
+}
+
 // The domain a control changing `field` from the bar ranges, as its row
 // declares it beside the field's spec — `text` for a field no control shape
 // fits.

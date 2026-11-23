@@ -35,12 +35,14 @@ import {
 import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
+  perConfigDomainsFor,
   unknownOptionDomain,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
 import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
+import { optionDomainOf } from "../globals-fields.js";
 import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import { describeControlDomain } from "../setting-control.js";
 import { settingTable, type SettingRow } from "../setting-table.js";
@@ -53,7 +55,12 @@ import {
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
-import { parsePersistTarget } from "./persist-target.js";
+import {
+  holdsInteger,
+  parsePersistTarget,
+  persistedValueIssue,
+  persistPath,
+} from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import {
   fragmentNode,
@@ -180,80 +187,55 @@ export function validateCrossReferences(
   // renders for (unplaced.ts presenceOf).
   presence: (name: string) => SegmentPresence,
 ): void {
-  // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
-  // block (a user's default may be a bundled style — same reason every cross-ref
-  // runs post-merge). Same existence-check shape as layout→segments; an unknown
-  // name is a load error, never a silent identity fallback.
+  // [LAW:locality-or-seam] A globals field whose row draws its values from a
+  // per-config block (style from `styles:`, preset from `presets:`) names a
+  // member of the MERGED block (a user's default may be a bundled style — same
+  // reason every cross-ref runs post-merge). Same existence-check shape as
+  // layout→segments; an unknown name is a load error, never a silent identity
+  // fallback. A typo'd DEFAULT is a load error even though a stale SESSION pick
+  // collapses silently to the floor: the config file is authored and
+  // re-readable, so naming a style or preset that does not exist is a mistake
+  // we can point at; a session pick is a click made against a config that has
+  // since changed, which is not [LAW:no-silent-failure].
   //
-  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no style,
-  // it names the RULE for choosing one per render, so there is nothing here to
-  // check membership of. Its result gets the same forgiveness a stale session
-  // pick does (`decideStyleName` collapses a non-member to the floor), and its
-  // own well-formedness is checked where every other template's is — parsed
-  // eagerly by registerDslConfig, so a malformed one is still a load error.
-  // `isExpression` is the ONE predicate every reader uses, so this exemption
-  // cannot be wider or narrower than what the render will actually evaluate.
+  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no
+  // member, it names the RULE for choosing one per render, so there is nothing
+  // here to check membership of. Its result gets the same forgiveness a stale
+  // session pick does (`decideStyleName` collapses a non-member to the floor),
+  // and its own well-formedness is checked where every other template's is —
+  // parsed eagerly by registerDslConfig, so a malformed one is still a load
+  // error. `isExpression` is the ONE predicate every reader uses, so this
+  // exemption cannot be wider or narrower than what the render will actually
+  // evaluate.
   //
-  // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
-  // is checked the same way — the config's own, each preset's, editGlobals, and
+  // [LAW:one-type-per-behavior] Every globals fragment a name can come from is
+  // checked the same way — the config's own, each preset's, editGlobals, and
   // each theme's default — because each is a rung the resolution reads, and a
   // name no rung can decide falls through to the next in silence
   // (brandon-themes-owl).
-  //
-  // Each fragment carries where an endcaps name written in its `style` belongs:
-  // beside it in a globals fragment, and in `globals` for a theme's default,
-  // which holds no endcaps.
-  const styleFragments: ReadonlyArray<
-    readonly [readonly string[], string | undefined, string]
-  > = [
-    [["globals"], cfg.globals.style, "globals.endcaps"],
-    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
+  const memberDomains = perConfigDomainsFor(cfg);
+  const fragments: ReadonlyArray<readonly [readonly string[], object]> = [
+    [["globals"], cfg.globals],
+    [["editGlobals"], cfg.editGlobals],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [
-          ["presets", name, "globals"],
-          preset.globals?.style,
-          `presets.${name}.globals.endcaps`,
-        ] as const,
+        [["presets", name, "globals"], preset.globals ?? {}] as const,
     ),
     ...Object.entries(cfg.themeDefaults).map(
-      ([theme, fragment]) =>
-        [["themeDefaults", theme], fragment.style, "globals.endcaps"] as const,
+      ([theme, fragment]) => [["themeDefaults", theme], fragment] as const,
     ),
   ];
-  for (const [at, name, endcapsAt] of styleFragments) {
-    if (
-      name === undefined ||
-      isExpression(name) ||
-      Object.prototype.hasOwnProperty.call(cfg.styles, name)
-    )
-      continue;
-    const where = `${at.join(".")}.style`;
-    ctx.issues.push({
-      path: where,
-      message: isStyleEraEndcaps(name)
-        ? endcapsNameMessage(where, name, endcapsAt)
-        : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
-      line: findKeyLine(ctx.source, [...at, "style"]),
-    });
-  }
-  // [LAW:one-type-per-behavior] globals.preset is globals.style one dimension
-  // over — the same post-merge membership check against the same kind of
-  // per-config block, for the same reason (a user's default may name a
-  // bundled preset). A typo'd DEFAULT is a load error even though a stale
-  // SESSION pick collapses silently to the floor: the config file is authored
-  // and re-readable, so naming a preset that does not exist is a mistake we can
-  // point at; a session pick is a click made against a config that has since
-  // changed, which is not [LAW:no-silent-failure].
-  if (
-    cfg.globals.preset !== undefined &&
-    !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)
-  ) {
-    ctx.issues.push({
-      path: "globals.preset",
-      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
-      line: findKeyLine(ctx.source, ["globals", "preset"]),
-    });
+  for (const [at, fragment] of fragments) {
+    for (const [field, value] of Object.entries(fragment)) {
+      if (typeof value !== "string") continue;
+      const message = undeclaredMemberMessage(memberDomains, at, field, value);
+      if (message === null) continue;
+      ctx.issues.push({
+        path: `${at.join(".")}.${field}`,
+        message,
+        line: findKeyLine(ctx.source, [...at, field]),
+      });
+    }
   }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
@@ -1137,6 +1119,88 @@ function checkHelperIssue(
   });
 }
 
+// Where an endcaps name written beside a fragment's `style` belongs: in the
+// fragment, and in `globals` for a theme's default, which holds no endcaps.
+function endcapsHome(at: readonly string[]): string {
+  return at[0] === "themeDefaults"
+    ? "globals.endcaps"
+    : [...at, "endcaps"].join(".");
+}
+
+// [LAW:single-enforcer] The one refusal of a name the merged config does not
+// declare, for the file's own fields and for the value a persist would write
+// there, `at` being the record that holds `field`. What counts is the field's
+// row: one that draws its values from a per-config domain holds a member of
+// it, and any other field holds none to check. A rule is exempt: only a render
+// can settle what it names.
+function undeclaredMemberMessage(
+  domains: ReadonlyMap<string, ResolvedDomain>,
+  at: readonly string[],
+  field: string,
+  name: string,
+): string | null {
+  const domain = optionDomainOf(field);
+  const members = domain === null ? undefined : domains.get(domain)?.members;
+  if (members === undefined || isExpression(name) || members.includes(name)) {
+    return null;
+  }
+  const where = `${at.join(".")}.${field}`;
+  return field === "style" && isStyleEraEndcaps(name)
+    ? endcapsNameMessage(where, name, endcapsHome(at))
+    : `${where} "${name}" does not match any declared ${field} (have: ${members.join(", ")})`;
+}
+
+type PersistAction = Extract<ActionDecl, { readonly persist: string }>;
+
+// [LAW:no-silent-failure] A `persist` writes the file the loader reads, so each
+// value it can write gets the verdict the loader gives that value in that
+// file: the schema of the place it lands (persistedValueIssue), then the
+// membership only the merged config decides. One that the file would refuse
+// fails here, at the field of the action that states it, rather than at the
+// click that writes it. A tree op writes a layout, and a target no globals
+// field holds writes no value: neither is judged.
+function checkPersistedValues(
+  ctx: ValidateCtx,
+  name: string,
+  a: PersistAction,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): void {
+  const target = parsePersistTarget(a.persist);
+  const writes = valuesWritten(a, optionDomains);
+  if (target === null || target.scope === "preset-root" || writes === null) {
+    return;
+  }
+  // A stepper writes integers, which only an integer field holds.
+  if ("min" in a && !holdsInteger(target)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer — use "to", "from", or "cycle" instead`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"]),
+    });
+    return;
+  }
+  const steps = persistPath(target);
+  const at = steps.slice(0, -1);
+  const reasonOf = (raw: string): string | null =>
+    persistedValueIssue(ctx, target, raw) ??
+    undeclaredMemberMessage(optionDomains, at, steps[steps.length - 1]!, raw);
+  for (const field of new Set(writes.map((w) => w.field))) {
+    const refused = writes
+      .filter((w) => w.field === field)
+      .flatMap((w) => {
+        const reason = reasonOf(w.value);
+        return reason === null ? [] : [{ value: w.value, reason }];
+      });
+    if (refused.length === 0) continue;
+    const where = `actions.${name}.${field}`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: persisting ${shownValues(refused.map((r) => r.value))} would write a file the loader refuses — ${refused[0]!.reason}`,
+      line: findKeyLine(ctx.source, ["actions", name, field]),
+    });
+  }
+}
+
 // [LAW:no-silent-failure] A `set` on a setting's session key writes a pick the
 // render resolves only when it is a member of that setting's domain — any
 // other value derives a gate that admits it and a click that changes nothing
@@ -1165,7 +1229,7 @@ function checkSettingWrites(
     });
     return;
   }
-  const writes = setWrites(a, optionDomains);
+  const writes = valuesWritten(a, optionDomains);
   if (writes === ANY_INTEGER) {
     ctx.issues.push({
       path: `actions.${name}.int`,
@@ -1205,17 +1269,11 @@ function checkSettingWrites(
     return;
   }
   for (const field of new Set(outside.map((w) => w.field))) {
-    const values = outside
-      .filter((w) => w.field === field)
-      .map((w) => JSON.stringify(w.value));
-    const shown =
-      values.length <= REPORTED_VALUES
-        ? values.join(", ")
-        : `${values.slice(0, REPORTED_VALUES).join(", ")} and ${values.length - REPORTED_VALUES} more`;
+    const values = outside.filter((w) => w.field === field).map((w) => w.value);
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
+      message: `${where}: ${shownValues(values)} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field]),
     });
   }
@@ -1223,22 +1281,41 @@ function checkSettingWrites(
 
 const REPORTED_VALUES = 3;
 
+// The values a refusal names: the first few, then how many more.
+function shownValues(values: readonly string[]): string {
+  const quoted = values.map((v) => JSON.stringify(v));
+  return quoted.length <= REPORTED_VALUES
+    ? quoted.join(", ")
+    : `${quoted.slice(0, REPORTED_VALUES).join(", ")} and ${quoted.length - REPORTED_VALUES} more`;
+}
+
 type SetAction = Extract<ActionDecl, { readonly set: string }>;
 
 // An `int` cursor writes whatever integer the template binds, so nothing
 // about its values is known at load.
 const ANY_INTEGER = Symbol("any integer");
 
-// [LAW:types-are-the-program] Every value a `set` can write, as known at load,
-// each with the field that states it: a literal its one value, a cycle its
-// members, an option domain its members, a stepper its two ends (checked only
-// against a range domain, which holds every integer between them).
-function setWrites(
+// [LAW:types-are-the-program] Every value a `set` or a `persist` can write, as
+// known at load, each with the field that states it: a literal its one value,
+// a cycle its members, an option domain its members, a stepper its two ends
+// (checked only against a range domain, which holds every integer between
+// them). `null` is an action that writes no value (a tree op, a reset).
+type WrittenValues = ReadonlyArray<{
+  readonly field: string;
+  readonly value: string;
+}>;
+function valuesWritten(
   a: SetAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
-):
-  | ReadonlyArray<{ readonly field: string; readonly value: string }>
-  | typeof ANY_INTEGER {
+): WrittenValues | typeof ANY_INTEGER;
+function valuesWritten(
+  a: PersistAction,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): WrittenValues | null;
+function valuesWritten(
+  a: ActionDecl,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): WrittenValues | typeof ANY_INTEGER | null {
   if ("to" in a) return [{ field: "to", value: a.to }];
   if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
   if ("from" in a) {
@@ -1253,7 +1330,7 @@ function setWrites(
       { field: "max", value: String(a.max) },
     ];
   }
-  return ANY_INTEGER;
+  return "int" in a ? ANY_INTEGER : null;
 }
 
 // A predicate naming the declarations a check is about: every one for a whole
@@ -1311,6 +1388,9 @@ export function validateDeclarations(
       });
       continue;
     }
+    // An unknown `from` was refused above, so every domain a persist draws
+    // from here resolves.
+    if ("persist" in a) checkPersistedValues(ctx, name, a, optionDomains);
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -1453,20 +1533,6 @@ export function validateDeclarations(
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
         message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
-    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
-    // Globals field where nothing today enforces value/field-kind agreement
-    // either way. Rejecting it here (rather than tolerating a numeric-string
-    // palette name that only fails later at `paletteForThemeName`) keeps
-    // the failure at load time, next to the typo it actually is.
-    if ("min" in a) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
     }

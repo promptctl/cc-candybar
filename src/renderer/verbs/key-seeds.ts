@@ -10,6 +10,7 @@ import {
 } from "../../config/dsl-types";
 import { placementFold, settingTable } from "../../config/setting-table";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
+import { parsePersistTarget } from "../../config/loader/persist-target";
 import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
 import { sessionSettingValue } from "../setting-drafts";
 
@@ -42,6 +43,11 @@ export function stateKeyShown(
 // declares it: the field in the globals the bar renders under its preset, or
 // the field's floor (numericGlobalsSeeds). null for a key that is no numeric globals field.
 export function configKeySeed(globals: Globals, key: string): string | null {
-  const seed = numericGlobalsSeeds(globals).get(key);
+  // The seeds are named by field, and the key spells where in the file the
+  // field lives (`presets.compact.globals.padding`).
+  const target = parsePersistTarget(key);
+  const seed = numericGlobalsSeeds(globals).get(
+    target !== null && "field" in target ? target.field : key,
+  );
   return seed === undefined ? null : String(seed);
 }

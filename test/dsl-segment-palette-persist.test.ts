@@ -190,7 +190,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
         ALLOWED,
       ),
     ).toThrow(
-      /"segments\.sidebar\.palette" is a segment palette target and cannot use a bounded stepper/,
+      /a stepper writes the integers from 0 to 5, and segments\.sidebar\.palette does not hold an integer/,
     );
   });
 

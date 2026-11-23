@@ -290,7 +290,7 @@ const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {
 // [LAW:one-source-of-truth] The delta is the declaration with ONE field's
 // required-ness relaxed — the same table, so a field added to SegmentDecl is
 // delta-settable the same day with no edit here.
-const SEGMENT_DELTA_SCHEMA: RecordSchema<RawSegmentDecl> = {
+export const SEGMENT_DELTA_SCHEMA: RecordSchema<RawSegmentDecl> = {
   noun: "segment key",
   fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() },
 };

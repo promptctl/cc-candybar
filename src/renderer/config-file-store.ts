@@ -50,10 +50,7 @@ import type {
   RootFragment,
   SettingValue,
 } from "../config/dsl-types.js";
-import {
-  wireKindOf,
-  type ThemeDefaultField,
-} from "../config/globals-fields.js";
+import type { ThemeDefaultField } from "../config/globals-fields.js";
 import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
@@ -70,6 +67,7 @@ import {
   rowEntriesOf,
   setPlacementSetting,
   setValue,
+  textOf,
   type Node,
 } from "../config/json5-edit.js";
 import {
@@ -80,43 +78,25 @@ import {
 import {
   parsePersistTarget,
   persistPath,
+  persistedValueOf,
   presetGlobalsKey,
   type ConfigPath,
   type PersistTarget,
+  type ValueTarget,
 } from "../config/loader/persist-target.js";
-
-// [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
-// value is written from — a `persist` action's gate is an ALLOW-LIST
-// whose members pass through verbatim, so a config author writing
-// `cycle: ["true", "false"]` or `to: "0"` reaches this boundary with the raw
-// member string, not a pre-canonicalized "1"/"".
-const BOOLEAN_TRUTHY = new Set(["1", "true"]);
-const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 
 // [LAW:parse-dont-validate] The write gate canonicalizes to a STRING (the
 // wire currency); this is the boundary that lifts it into the JSON5 text of
-// the typed value the file declares. An out-of-range/non-numeric string for a
-// "number" field is a caller bug (the range validator already canonicalized
-// it), so it throws loudly rather than writing a wrongly-typed value.
+// the typed value the file declares (`persistedValueOf`). An out-of-range/non-numeric
+// string for a "number" field is a caller bug (the range validator already
+// canonicalized it), so it throws loudly rather than writing a wrongly-typed
+// value.
 export function persistValueText(key: string, raw: string): string {
-  const target = requireValueTarget(key);
-  const kind =
-    target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
-  if (kind === "string") return JSON.stringify(raw);
-  if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      throw new Error(
-        `persistValueText: "${key}" expects a number, got "${raw}"`,
-      );
-    }
-    return String(n);
+  const lifted = persistedValueOf(requireValueTarget(key), raw);
+  if ("reason" in lifted) {
+    throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
-  if (BOOLEAN_TRUTHY.has(raw)) return "true";
-  if (BOOLEAN_FALSY.has(raw)) return "false";
-  throw new Error(
-    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`,
-  );
+  return JSON.stringify(lifted.value);
 }
 
 // ─── The file ────────────────────────────────────────────────────────────────
@@ -193,10 +173,6 @@ function requireDeclared(
     );
   }
 }
-
-// [LAW:types-are-the-program] A target that names a VALUE — every scope but
-// the preset root, whose edits are structural (a row, not a scalar).
-type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 
 // The path a value write splices at. A globals field is always declared; a
 // segment field needs its segment declared somewhere, since the one field
@@ -730,15 +706,24 @@ function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
   }
 }
 
-/** The scalar the file declares at a value target, or undefined. */
-export function readValue(
-  text: string | null,
-  key: string,
-): string | number | boolean | undefined {
+/**
+ * What the file declares at a value target. A string, a null, a list, an
+ * object and a fraction are each declared (`other`, with the text as written),
+ * so a reader that steps an integer can tell them from nothing.
+ */
+export type Declared =
+  | { readonly kind: "none" }
+  | { readonly kind: "integer"; readonly value: number }
+  | { readonly kind: "other"; readonly source: string };
+
+export function readDeclared(text: string | null, key: string): Declared {
   const target = requireValueTarget(key);
   const doc = docOf(text ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
-  return node !== undefined && "value" in node ? node.value : undefined;
+  if (node === undefined) return { kind: "none" };
+  return node.kind === "number" && Number.isInteger(node.value)
+    ? { kind: "integer", value: node.value }
+    : { kind: "other", source: textOf(text ?? "", node) };
 }
 
 /**

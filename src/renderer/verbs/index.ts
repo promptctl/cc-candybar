@@ -60,7 +60,7 @@ import {
   deletePreset as deletePresetFromFile,
   deleteValues,
   proveLoads,
-  readValue,
+  readDeclared,
   writePreset,
   writeDrafts,
   writeThemeDefault,
@@ -727,13 +727,22 @@ const stepConfig: VerbHandler = (args, ctx) => {
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(
+  const declared = readDeclared(
     requireLayerText(into.path, store.read(into.path)),
     landing.key,
   );
+  // [LAW:no-silent-failure] A layer that declares the key holds an integer, to
+  // step from (clamped into the stepper's own range), or something else, which
+  // is refused naming what the layer holds: a step from the value the bar draws
+  // would overwrite what its author wrote.
+  if (declared.kind === "other") {
+    throw new BadVerbArgs(
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`,
+    );
+  }
   const current =
-    typeof stored === "number"
-      ? clampTo(params, stored)
+    declared.kind === "integer"
+      ? clampTo(params, declared.value)
       : stepFrom(
           "step-config",
           key,

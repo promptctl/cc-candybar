@@ -168,3 +168,115 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     ).not.toThrow();
   });
 });
+
+// [LAW:verifiable-goals] A `persist` writes the file the loader reads, so each
+// value it can write is judged as the loader judges that value in the file it
+// lands in (the schema of that place, then the merged config's membership) and
+// refused at load, at the action's own field, rather than at the click.
+describe("a persist is judged by the loader's verdict on the file it writes", () => {
+  const refused = (value: string, why: string): RegExp =>
+    new RegExp(
+      `actions\\.pick\\.(to|cycle|from|min|max): persisting ${value} would write a file the loader refuses.* — .*${why}`,
+    );
+  it.each([
+    [
+      "{ persist: 'padding', to: '99' }",
+      refused('"99"', "padding must be an integer between 0 and 16"),
+    ],
+    [
+      "{ persist: 'padding', min: 0, max: 20, by: 1 }",
+      /actions\.pick\.max: persisting "20"/,
+    ],
+    [
+      "{ persist: 'autoWrap', cycle: ['true', 'maybe'] }",
+      /actions\.pick\.cycle: persisting "maybe" .* expects boolean-ish/,
+    ],
+    [
+      "{ persist: 'palette', to: 'no-such-theme' }",
+      refused('"no-such-theme"', 'Unknown palette "no-such-theme"'),
+    ],
+    [
+      "{ persist: 'style', to: 'no-such-style' }",
+      refused('"no-such-style"', "does not match any declared style"),
+    ],
+    [
+      "{ persist: 'preset', to: 'no-such-preset' }",
+      refused('"no-such-preset"', "does not match any declared preset"),
+    ],
+    [
+      "{ persist: 'presets.compact.globals.padding', to: '99' }",
+      refused('"99"', "padding must be an integer between 0 and 16"),
+    ],
+    [
+      "{ persist: 'themeDefaults.nord.shade', to: 'no-such-shade' }",
+      refused('"no-such-shade"', "themeDefaults\\.nord"),
+    ],
+    // The old spelling of endcaps names where the file wants it.
+    [
+      "{ persist: 'style', to: 'capsule' }",
+      refused('"capsule"', 'write globals\\.endcaps: "capsule"'),
+    ],
+    // A rule is a member only where the file's schema takes one: a number, an
+    // enum and a theme's default style refuse it, a theme or style rule loads.
+    [
+      "{ persist: 'padding', to: '{{ .session.model }}' }",
+      refused('"\\{\\{ \\.session\\.model \\}\\}"', "expects an integer"),
+    ],
+    [
+      "{ persist: 'shade', to: '{{ .session.model }}' }",
+      refused('"\\{\\{ \\.session\\.model \\}\\}"', "shade"),
+    ],
+    [
+      "{ persist: 'themeDefaults.nord.style', to: '{{ .session.model }}' }",
+      refused(
+        '"\\{\\{ \\.session\\.model \\}\\}"',
+        "a rule is not allowed here",
+      ),
+    ],
+    // A segment's palette is judged by the loader's palette check, as the
+    // theme default and the top-level field are.
+    [
+      "{ persist: 'segments.s.palette', to: 'no-such-theme' }",
+      refused('"no-such-theme"', 'Unknown palette "no-such-theme"'),
+    ],
+    [
+      "{ persist: 'segments.s.palette', cycle: ['no-such-theme', 'also-not'] }",
+      refused('"no-such-theme", "also-not"', 'Unknown palette "no-such-theme"'),
+    ],
+    // The file holds the integer as the session does: as written, plainly.
+    [
+      "{ persist: 'padding', to: '0x10' }",
+      refused('"0x10"', "expects an integer written plainly"),
+    ],
+    // A stepper writes integers, which a boolean field does not hold.
+    [
+      "{ persist: 'autoWrap', min: 0, max: 1, by: 1 }",
+      /actions\.pick: a stepper writes the integers from 0 to 1, and autoWrap does not hold an integer/,
+    ],
+    // A field no session pick sets is judged by its own schema all the same.
+    [
+      "{ persist: 'colorCompatibility', to: 'bogus' }",
+      refused('"bogus"', "colorCompatibility"),
+    ],
+  ])("%s is a load error", (action, message) => {
+    expect(() => load(action)).toThrow(message);
+  });
+
+  it.each([
+    "{ persist: 'padding', to: '16' }",
+    "{ persist: 'padding', min: 0, max: 16, by: 1 }",
+    "{ persist: 'autoWrap', cycle: ['true', 'false'] }",
+    `{ persist: 'palette', to: '${THEME}' }`,
+    "{ persist: 'palette', from: 'themes' }",
+    "{ persist: 'style', from: 'styles' }",
+    "{ persist: 'palette', to: '{{ if .session.model }}nord{{ end }}' }",
+    "{ persist: 'style', to: '{{ if .session.model }}vivid{{ end }}' }",
+    "{ persist: 'colorCompatibility', cycle: ['truecolor', '256'] }",
+    // A style the bundled default declares is a member through the merge.
+    "{ persist: 'style', to: 'vivid' }",
+    // A tree op writes a layout, which no setting holds.
+    "{ persist: 'presets.default.root', removeSegment: 'gitaculous' }",
+  ])("%s loads", (action) => {
+    expect(() => load(action)).not.toThrow();
+  });
+});

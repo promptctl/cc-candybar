@@ -2428,6 +2428,23 @@ writes whatever integer the template binds:
 actions.round.to: "banana" is outside the endcaps domain — a click would write it and nothing would change; endcaps takes one of
 ```
 
+A `persist` of any globals field (under `globals`, a preset's globals or a
+theme's default) is judged the way the loader judges the file the click would
+write: each value it can write must be one that place accepts, so a rule is
+accepted only where the file takes one (a theme or style rule in `globals`, not
+a number or a theme's default). It is refused at the field that states the
+value, with the loader's own reason:
+
+```json5 check:fail
+{
+  actions: { wider: { persist: "padding", to: "99" } },
+}
+```
+
+```error
+actions.wider.to: persisting "99" would write a file the loader refuses — padding must be an integer between 0 and 16, got 99
+```
+
 A `style` action that writes only endcaps shapes is using the old name for
 `endcaps`:
 
@@ -2601,10 +2618,11 @@ click-time surprise:
 names segment "ghost" which is not declared
 ```
 
-### A bounded stepper over a segment palette
+### A bounded stepper over a field that holds no integer
 
-A palette is a NAME, not a number — `min`/`max`/`by` has no meaning here;
-use `to`, `from`, or `cycle` like every other palette-shaped target:
+A palette is a NAME, not a number — `min`/`max`/`by` has no meaning here, nor
+over any other field that holds no integer; use `to`, `from`, or `cycle` like
+every other name-shaped target:
 
 ```json5 check:fail
 {
@@ -2614,7 +2632,7 @@ use `to`, `from`, or `cycle` like every other palette-shaped target:
 ```
 
 ```error
-is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead
+a stepper writes the integers from 0 to 5, and segments.sidebar.palette does not hold an integer — use "to", "from", or "cycle" instead
 ```
 
 ### `insertSegment` naming an undeclared segment

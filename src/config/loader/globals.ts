@@ -177,7 +177,7 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
     "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal.",
 };
 
-const GLOBALS_SCHEMA: RecordSchema<Globals> = {
+export const GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "globals key",
   fields: GLOBALS_FIELDS,
   removed: REMOVED_GLOBALS,
@@ -191,7 +191,7 @@ const PRESET_FRAGMENT_REJECTIONS = {
   menuGlyph: nestedMenuGlyphSpec("a preset"),
 };
 
-const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
+export const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
   fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
   removed: REMOVED_GLOBALS,
@@ -240,7 +240,7 @@ const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
 // the config's globals, and a rule is something only a render can settle — a
 // theme's default is a choice made once, by name. Whether that name is a
 // declared style is cross-ref's (it needs the merged `styles` block).
-const THEME_DEFAULT_SCHEMA: RecordSchema<ThemeDefault> = {
+export const THEME_DEFAULT_SCHEMA: RecordSchema<ThemeDefault> = {
   noun: "theme default key",
   fields: {
     ...(Object.fromEntries(
