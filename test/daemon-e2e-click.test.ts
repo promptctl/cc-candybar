@@ -1,14 +1,11 @@
-// The e2e click helper on a click the daemon answered TIMEOUT. The daemon's
-// guard abandons the reply, not the click, so the helper sends the click once
-// and takes its outcome from the click event the daemon logs once it has run.
+// The e2e click helper on a click the daemon answered TIMEOUT. A TIMEOUT to a
+// click means the daemon refused it unread and ran nothing, so the helper
+// sends it again within its budget, and reads what became of it from the
+// answer it got, never from the daemon's log.
 
-import fs from "node:fs";
-import { hostOf } from "./helpers/host";
 import net from "node:net";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { logLine } from "../src/daemon/log";
-import { logPath } from "../src/daemon/paths";
 import {
   encodeFrame,
   makeFrameReader,
@@ -16,14 +13,24 @@ import {
   type Response,
 } from "../src/daemon/foundations/protocol";
 import type { RequestId } from "../src/renderer-interface/interface";
-import { badRequest } from "../src/daemon/foundations/verb-error";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
-import {
-  requestEvent,
-  type RequestOutcome,
-} from "../src/daemon/foundations/request-event";
 import { click } from "./helpers/daemon-e2e";
 import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
+
+const TIMEOUT = (request: number): Response => ({
+  ok: false,
+  error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
+  code: "TIMEOUT",
+  daemonV: PROTOCOL_VERSION,
+  request: request as RequestId,
+});
+const OK: Response = { ok: true, output: "" };
+const BAD_REQUEST: Response = {
+  ok: false,
+  error: "copy: clipboard unavailable",
+  code: "BAD_REQUEST",
+  daemonV: PROTOCOL_VERSION,
+};
 
 interface StandIn {
   readonly sockPath: string;
@@ -31,46 +38,19 @@ interface StandIn {
   close(): Promise<void>;
 }
 
-// A daemon stand-in on an isolated daemon's socket: it answers every click
-// TIMEOUT, as the request guard does, and logs the click's event a beat later,
-// as the daemon does once a click queued behind its loop has run.
-async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-clk");
-  // A write still pending when the stand-in closes is dropped with it, so no
-  // timer of this file outlives its test.
-  const pending = new Set<NodeJS.Timeout>();
+// A daemon stand-in on an isolated daemon's socket that answers the nth click
+// as `answer` says, so a case chooses what the helper is told.
+async function answering(
+  answer: (nth: number) => Response,
+): Promise<StandIn> {
+  const { sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-clk");
   let clicks = 0;
   const server = net.createServer((sock) => {
     sock.on(
       "data",
       makeFrameReader(
         () => {
-          clicks++;
-          sock.end(
-            encodeFrame({
-              ok: false,
-              error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
-              code: "TIMEOUT",
-              daemonV: PROTOCOL_VERSION,
-              request: clicks as RequestId,
-            } satisfies Response),
-          );
-          const { level, line } = requestEvent(
-            "click",
-            [
-              ["req", String(clicks)],
-              ["queued", "240ms"],
-              ["verb", "dispatch"],
-              ["timedOut", "Y"],
-            ],
-            outcome,
-            1,
-          );
-          const write = setTimeout(() => {
-            pending.delete(write);
-            fs.appendFileSync(logPath(hostOf(env)), logLine(level, line, Date.now()));
-          }, 100);
-          pending.add(write);
+          sock.end(encodeFrame(answer(++clicks)));
           return "done";
         },
         () => {},
@@ -81,15 +61,13 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
   return {
     sockPath,
     clicks: () => clicks,
-    close: () => {
-      for (const write of pending) clearTimeout(write);
-      return new Promise<void>((resolve) =>
+    close: () =>
+      new Promise<void>((resolve) =>
         server.close(() => {
           removeTmpDirs();
           resolve();
         }),
-      );
-    },
+      ),
   };
 }
 
@@ -97,20 +75,30 @@ const URL = effectsUrl([
   { verb: VERB_SET_STATE, args: ["bc-click", "candybar.diagnostics", "0"] },
 ]);
 
-test("a click answered TIMEOUT lands by the daemon's own event, sent once", async () => {
-  const daemon = await timingOut({ kind: "ok" });
+test("a click answered TIMEOUT is sent again, and lands once the daemon reads it", async () => {
+  const daemon = await answering((nth) => (nth === 1 ? TIMEOUT(nth) : OK));
   try {
     await click(daemon.sockPath, URL);
-    expect(daemon.clicks()).toBe(1);
+    expect(daemon.clicks()).toBe(2);
   } finally {
     await daemon.close();
   }
 });
 
-test("a click answered TIMEOUT that the daemon then refused fails with the refusal", async () => {
-  const daemon = await timingOut(
-    badRequest("copy: clipboard unavailable"),
-  );
+test("a click answered TIMEOUT until the budget is spent fails naming TIMEOUT", async () => {
+  const daemon = await answering(TIMEOUT);
+  try {
+    await expect(click(daemon.sockPath, URL, 150)).rejects.toThrow(
+      /click failed: .*\(TIMEOUT\)/,
+    );
+    expect(daemon.clicks()).toBeGreaterThan(1);
+  } finally {
+    await daemon.close();
+  }
+});
+
+test("a click the daemon refused is sent once, and fails with the refusal", async () => {
+  const daemon = await answering(() => BAD_REQUEST);
   try {
     await expect(click(daemon.sockPath, URL)).rejects.toThrow(
       /clipboard unavailable/,

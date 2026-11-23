@@ -18,11 +18,11 @@ import type { TmuxHint } from "../../../src/tmux-hint";
 import {
   answeredEvents,
   click,
-  clickAnswer,
   frameRequest,
   hookData,
   render,
   saidOf,
+  sendClick,
 } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { environmentKey } from "../../../src/daemon/foundations/session-env";
@@ -101,7 +101,7 @@ test("a click after a restart writes the session's own config, and types into no
     ).globals?.palette;
     expect(palette).toBe(PALETTE);
 
-    const refused = await clickAnswer(second, linkTo(bar, "COMPACT"));
+    const refused = await sendClick(second,linkTo(bar, "COMPACT"));
     expect(saidOf(refused)).toMatch(
       /the daemon holds no request of session .*\(BAD_REQUEST\)$/,
     );

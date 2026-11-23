@@ -413,22 +413,27 @@ export interface UrlFrame {
 }
 
 // [LAW:parse-dont-validate] What came in over the wire, classified once, by
-// the connection that read it: the URL handler's frame, or a request the `v`
-// gate judges. The connection needs the kind too, since a url frame's writer
-// hangs up at once by design, so its socket's close says nothing about its
-// click. A url frame's fields stay untrusted JSON here (not a Partial that
-// claims their types): the click path reads them, and refuses what it cannot
-// read with the click event that says so.
+// the connection that read it: the URL handler's frame, a click request, or
+// another request the `v` gate judges. The connection needs the kind too: a
+// url frame's writer hangs up at once by design, so its socket's close says
+// nothing about its click, and a click request, once read, is answered with
+// its own outcome where any other request is bounded by the backstop. A url
+// frame's fields stay untrusted JSON here (not a Partial that claims their
+// types): the click path reads them, and refuses what it cannot read with the
+// click event that says so.
 export type Inbound =
   | { readonly kind: "url"; readonly frame: Record<string, unknown> }
+  | { readonly kind: "click"; readonly req: Request }
   | { readonly kind: "request"; readonly req: Request };
 
 export function classifyInbound(raw: unknown): Inbound {
-  return typeof raw === "object" &&
-    raw !== null &&
-    (raw as { kind?: unknown }).kind === URL_FRAME_KIND
-    ? { kind: "url", frame: raw as Record<string, unknown> }
-    : { kind: "request", req: raw as Request };
+  const kind =
+    typeof raw === "object" && raw !== null
+      ? (raw as { kind?: unknown }).kind
+      : undefined;
+  if (kind === URL_FRAME_KIND)
+    return { kind: "url", frame: raw as Record<string, unknown> };
+  return { kind: kind === "click" ? "click" : "request", req: raw as Request };
 }
 
 export interface StatsRequest {

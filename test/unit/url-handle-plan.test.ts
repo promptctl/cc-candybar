@@ -1,26 +1,46 @@
-// [LAW:behavior-not-structure] What a click does when the daemon did not
-// answer it: the exit code is the handler app's error dialog, so it must say
-// whether the click is lost. A click the daemon never accepted is lost (exit 1,
-// a listener holds the socket); one it accepted and then ran out of
-// time on may still land or be refused as stale, and its log says which (exit 0).
+// [LAW:behavior-not-structure] What url-handle tells its reader when the daemon
+// did not answer a click with its outcome. The exit code is the handler app's
+// error dialog and the text is what a person reads, so together they must say
+// what became of the click: refused unread (ran nothing, click again), never
+// sent (the same), or cut off by the client's own clock (unknown, claiming
+// neither result, since a second click on one that ran can revert it).
 
 import { urlHandlePlan } from "../../src/install/index";
 
 describe("urlHandlePlan on a busy daemon", () => {
-  test("a connect timeout never delivered the click: exit 1", () => {
+  test("a connect timeout never delivered the click: it ran nothing, so click again", () => {
     expect(
       urlHandlePlan({
         kind: "busy",
         phase: "connect",
         message: "CONNECT_TIMEOUT",
       }),
-    ).toMatchObject({ code: 1 });
+    ).toMatchObject({
+      code: 1,
+      stderr: expect.stringMatching(/ran nothing; click again/),
+    });
   });
 
-  test("a deadline, ours or the daemon's own TIMEOUT, delivered it: exit 0", () => {
-    expect(
-      urlHandlePlan({ kind: "busy", phase: "deadline", message: "TIMEOUT" }),
-    ).toMatchObject({ code: 0 });
+  test("the daemon's own TIMEOUT refused the click unread: it ran nothing, so click again", () => {
+    const plan = urlHandlePlan({
+      kind: "busy",
+      phase: "backstop",
+      message: "request exceeded 200ms",
+    });
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toMatch(/refused it, so it ran nothing; click again/);
+    expect(plan.stderr).not.toMatch(/unavailable|landed|running/);
+  });
+
+  test("the client's own clock cut the wait off: the outcome is unknown, and neither result is claimed", () => {
+    const plan = urlHandlePlan({
+      kind: "busy",
+      phase: "deadline",
+      message: "TIMEOUT",
+    });
+    expect(plan.code).toBe(0);
+    expect(plan.stderr).toMatch(/may or may not have run/);
+    expect(plan.stderr).not.toMatch(/ran nothing|click again|landed/);
   });
 });
 

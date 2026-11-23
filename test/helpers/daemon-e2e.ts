@@ -49,7 +49,6 @@ import {
   retriedRender,
 } from "./daemon-log";
 import { until } from "./until";
-import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
 import { TEST_ENV } from "./session-environment";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
@@ -90,20 +89,6 @@ const PENDING_RETRY_BUDGET = 20;
 // A session's render events whose reply its client read, in log order.
 export function answeredEvents(log: string, sessionId: string): string[] {
   return renderEventsOf(logLines(log), sessionId).filter(answeredRender);
-}
-
-// The click event of the request the daemon accepted as `id`, or "" while
-// none is written. Ids count from one in each daemon's life and the log
-// outlives a daemon, so only lines past `from` (the log's line count when the
-// click was sent) can be this click's.
-export function clickEventOf(log: string, id: number, from: number): string {
-  return (
-    logLines(log)
-      .slice(from)
-      .find(
-        (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(id),
-      ) ?? ""
-  );
 }
 
 // The Status hook payload Claude Code sends, as `render` below relays it and
@@ -326,80 +311,45 @@ export function drawnLink(
   ).signLink(unprovenLink(link), source);
 }
 
-// A click sent as the URL handler app sends it. The daemon's answer is
-// returned as it came, refusal included.
-export function sendClick(
+// A click sent as the URL handler app sends it, and sent again while the
+// daemon answers TIMEOUT, within the reply budget counted from the first ask.
+// The daemon's answer is returned as it came, refusal included; a TIMEOUT only
+// once the budget is spent.
+//
+// [LAW:no-ambient-temporal-coupling] A TIMEOUT to a click means the daemon read
+// its frame after its guard fired, so it refused the click at its turn and ran
+// nothing: sending it again applies it once, which is why a click may be asked
+// again as a render is. A click the daemon did read is answered with its own
+// outcome, so no answer is ever read off the daemon's log.
+export async function sendClick(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<Response> {
-  return sendDaemonRequest(target, clickBody(url), replyBudgetMs);
+  const firstAskMs = Date.now();
+  for (;;) {
+    const resp = await sendDaemonRequest(target, clickBody(url), replyBudgetMs);
+    if (
+      resp.ok ||
+      resp.code !== "TIMEOUT" ||
+      Date.now() - firstAskMs >= replyBudgetMs
+    )
+      return resp;
+  }
 }
 
-// What a click became, as the daemon tells it: its reply, or, for a click
-// answered TIMEOUT, its own click event.
-//
-// [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
-// daemon's 200 ms guard abandons a request's reply: a click already running
-// still lands, and one still waiting for its turn is dropped unrun
-// (`abandoned`). A render may be asked again on TIMEOUT because it is a read;
-// a click is a write, so sending it again can apply it twice. The TIMEOUT
-// names its request and the click's event records it, so the event read here
-// is this click's whatever else is in flight.
-export type ClickAnswer =
-  | { readonly kind: "replied"; readonly resp: Response }
-  | {
-      readonly kind: "timed-out";
-      readonly outcome: string;
-      readonly event: string;
-    };
+// What the daemon said of the click, in full.
+export const saidOf = (resp: Response): string =>
+  resp.ok ? "ok" : `${resp.error} (${resp.code})`;
 
-export async function clickAnswer(
-  target: DaemonTarget,
-  url: string,
-  replyBudgetMs = REPLY_BUDGET_MS,
-): Promise<ClickAnswer> {
-  const { log } = endpointOf(target);
-  const from = logLines(log).length;
-  const resp = await sendClick(target, url, replyBudgetMs);
-  if (resp.ok || resp.code !== "TIMEOUT") return { kind: "replied", resp };
-  let event = "";
-  // The event is the click's answer by another road, so its wait gets the
-  // reply's budget again, counted from the TIMEOUT.
-  await until(
-    () => (event = clickEventOf(log, resp.request, from)) !== "",
-    `the click event of request ${resp.request} (${url})`,
-    replyBudgetMs,
-  );
-  return { kind: "timed-out", outcome: fieldOf(event, "outcome"), event };
-}
-
-// What the daemon told of the click: the reply's code (`ok` for an ok reply),
-// or the outcome its event records.
-export const toldOf = (answer: ClickAnswer): string =>
-  answer.kind === "timed-out"
-    ? answer.outcome
-    : answer.resp.ok
-      ? "ok"
-      : answer.resp.code;
-
-// What the daemon said of the click, in full: its reply, or its event.
-export const saidOf = (answer: ClickAnswer): string =>
-  answer.kind === "timed-out"
-    ? answer.event
-    : answer.resp.ok
-      ? "ok"
-      : `${answer.resp.error} (${answer.resp.code})`;
-
-// `clickAnswer`, for a test whose click must land.
+// `sendClick`, for a test whose click must land.
 export async function click(
   target: DaemonTarget,
   url: string,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<void> {
-  const answer = await clickAnswer(target, url, replyBudgetMs);
-  if (toldOf(answer) !== "ok")
-    throw new Error(`click failed: ${saidOf(answer)}`);
+  const resp = await sendClick(target, url, replyBudgetMs);
+  if (!resp.ok) throw new Error(`click failed: ${saidOf(resp)}`);
 }
 
 // The reply code a refused click's outcome reaches its client as: the test's
@@ -410,17 +360,15 @@ const REPLY_CODE = {
   threw: "RENDER_FAILED",
 } as const;
 
-// `clickAnswer`, for a test whose click the daemon must refuse: a forged link
+// `sendClick`, for a test whose click the daemon must refuse: a forged link
 // is a bad request, and a click whose verb fails threw.
 export async function refusedClick(
   target: DaemonTarget,
   url: string,
   outcome: keyof typeof REPLY_CODE,
 ): Promise<void> {
-  const answer = await clickAnswer(target, url);
-  expect(toldOf(answer)).toBe(
-    answer.kind === "timed-out" ? outcome : REPLY_CODE[outcome],
-  );
+  const resp = await sendClick(target, url);
+  expect(resp.ok ? "ok" : resp.code).toBe(REPLY_CODE[outcome]);
 }
 
 // [LAW:no-ambient-temporal-coupling] Render until the daemon's own state

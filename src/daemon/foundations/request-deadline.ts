@@ -15,7 +15,9 @@ import {
 } from "./protocol";
 
 // [LAW:single-enforcer] Every handler's backstop: the connection's own timer
-// answers TIMEOUT at this, whatever its request is still doing.
+// answers TIMEOUT at this, whatever its request is still doing. A click
+// request that has been read is the exception, because a TIMEOUT to a click
+// must mean it ran nothing (connection.ts `held`).
 export const REQUEST_TIMEOUT_MS = 200;
 
 // [LAW:single-enforcer] The timeout sent by the connection backstop or by

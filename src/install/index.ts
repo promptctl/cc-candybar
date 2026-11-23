@@ -12,7 +12,7 @@ import { locations } from "../daemon/paths";
 import type { Host, World } from "../host";
 import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
-import type { FailureOutcome } from "../daemon/client-transport";
+import type { BusyPhase, FailureOutcome } from "../daemon/client-transport";
 import type { PermanentOutcome } from "../daemon/foundations/protocol";
 import { APP_NAME, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
@@ -484,19 +484,35 @@ export interface UrlHandlePlan {
   readonly code: 0 | 1;
 }
 
+// [LAW:dataflow-not-control-flow] What a busy daemon's answer says of the click,
+// by how far the click got (`BusyPhase`). A non-zero exit is an error dialog
+// from the handler app, and a second click on a click that ran can revert it.
+// So a click known not to have run exits 1 and says to click again, and one
+// whose outcome the client's own clock cut off exits 0 and claims neither: it
+// may be queued behind the loop, running, done, or refused at its read.
+const BUSY_PLAN: {
+  readonly [P in BusyPhase]: (message: string) => UrlHandlePlan;
+} = {
+  connect: (message) => ({
+    stderr: `url-handle: daemon busy (${message}): the click was never sent, so it ran nothing; click again\n`,
+    code: 1,
+  }),
+  backstop: (message) => ({
+    stderr: `url-handle: daemon busy (${message}): it read the click after its deadline and refused it, so it ran nothing; click again\n`,
+    code: 1,
+  }),
+  deadline: (message) => ({
+    stderr: `url-handle: daemon busy (${message}): the click may or may not have run; check the bar before clicking again\n`,
+    code: 0,
+  }),
+};
+
 export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
   switch (outcome.kind) {
-    // A daemon holds the socket. Kicking would respawn a live daemon
-    // mid-click. A non-zero exit is an error dialog from the handler app, so
-    // it follows whether the click got to the listener (`phase`): sent
-    // ("deadline"), it runs or is refused as stale and the daemon's log says
-    // which — exit 0, as the click may well have landed; never written
-    // ("connect"), nothing will run it — exit 1, so the user is told.
+    // A daemon holds the socket, so kicking would respawn a live daemon
+    // mid-click.
     case "busy":
-      return {
-        stderr: `url-handle: daemon busy (${outcome.message})\n`,
-        code: outcome.phase === "connect" ? 1 : 0,
-      };
+      return BUSY_PLAN[outcome.phase](outcome.message);
     case "transient":
       return {
         stderr: `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,

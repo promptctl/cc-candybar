@@ -43,8 +43,8 @@ export interface RoundTripBudgets {
 // because the next daemon will refuse the same request the same way. `busy`
 // means a daemon is listening and out of time: its own TIMEOUT reply, or our
 // clock running out on the connect or the deadline. A kick cannot cure it —
-// the candidate loses the bind to the live owner (socket-lease.ts) — and the
-// request may or may not have reached it. The caller's branch is no longer
+// the candidate loses the bind to the live owner (socket-lease.ts) — and
+// whether the request reached it is the `phase`. The caller's branch is no longer
 // uniform: it matches on `kind` and routes kick vs. show-error off the type,
 // not off a stringified `reason`.
 // This asymmetry was missing in the previous shape and is the root of the
@@ -59,12 +59,18 @@ export interface TransientOutcome {
   message: string;
 }
 
-// `phase` is whether the request got to the listener: "connect" — it never
-// did, so a click is undelivered; "deadline" — it was sent and no answer came
-// in time, whether our clock or the daemon's own TIMEOUT reply ended the wait.
+// `phase` is how far the request got, and so what a click became:
+// - "connect": it never reached the listener, so a click is undelivered.
+// - "deadline": our own clock ended the wait after it was sent, so a click may
+//   be queued, running, done or refused.
+// - "backstop": the daemon answered TIMEOUT, so its frame was unread when the
+//   daemon's guard fired and a click was refused at its turn, ran nothing, and
+//   can be sent again.
+export type BusyPhase = TimeoutPhase | "backstop";
+
 export interface BusyOutcome {
   kind: "busy";
-  phase: TimeoutPhase;
+  phase: BusyPhase;
   message: string;
 }
 
@@ -223,8 +229,8 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive but didn't answer in time: the request reached it.
-      return { kind: "busy", phase: "deadline", message: errorMessage };
+      // Daemon is alive but its guard fired before it read the frame.
+      return { kind: "busy", phase: "backstop", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":

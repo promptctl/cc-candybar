@@ -22,8 +22,9 @@ import type { RequestId } from "../../src/renderer-interface/interface";
 const HINT = "daemon may not be running";
 
 // A daemon's own TIMEOUT proves it is up: a click's client must tell it from
-// a wait it gave up itself, or it kicks a live daemon mid-click.
-test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
+// a wait it gave up itself, or it kicks a live daemon mid-click. It also says
+// what the click became, which the client's own clock cannot: refused unread.
+test("the daemon's TIMEOUT reads as busy in its own phase, apart from a client timeout", () => {
   const resp: Response = {
     ok: false,
     error: "request exceeded 200ms",
@@ -33,7 +34,7 @@ test("the daemon's TIMEOUT reads as busy, not as a client timeout", () => {
   };
   expect(interpretResponse("click", resp, () => undefined)).toEqual({
     kind: "busy",
-    phase: "deadline",
+    phase: "backstop",
     message: "request exceeded 200ms",
   });
 });
