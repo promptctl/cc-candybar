@@ -1,6 +1,5 @@
-// [LAW:one-way-deps] A leaf with no imports, so the click codec
-// (src/click/wire.ts) reads these names without loading the config loader. The
-// collision checks over them are the loader's,
+// [LAW:one-way-deps] A leaf with no imports: every layer reads these names and
+// nothing here reaches up. The collision checks over them are the loader's,
 // src/config/loader/reserved-namespace.ts.
 
 // [LAW:one-source-of-truth] The reserved namespaces, spelled once. Each is the
@@ -21,6 +20,11 @@ export const EDIT_NS = "edit.";
 // placement's own settings (brandon-segment-settings-i4n), so no variable may
 // live under that name.
 export const SETTINGS_NS = "candybar.";
+
+// [LAW:one-source-of-truth] The bar's record of a click that failed
+// (src/daemon/foundations/click-error.ts): about the click, not state any edit
+// shapes, so no edit holds it.
+export const CLICK_ERROR_KEY = `${SETTINGS_NS}clickError`;
 
 // Whether edit mode is open, and the namespace every placement's unsaved
 // setting value lives under (edit-mode.ts). No scalar is declared at

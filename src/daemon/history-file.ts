@@ -14,15 +14,16 @@ import {
   holdsNothing,
   parseSessionHistory,
 } from "../renderer-interface/history-storage";
-import { isUndoStepKey } from "../config/session-key";
+import { isSettingKey } from "../config/session-key";
 
 // ─── The file ───────────────────────────────────────────────────────────────
 
 // [LAW:types-are-the-program] A session change is a change to a SETTING key —
-// the only kind the journal records. A key that has left that set since the
-// file was written (brandon-menu-ia-q30.xuz renamed `look` and `progression`)
-// names nothing a render reads, so undoing it would spend a click restoring
-// nothing. Those changes alone leave, and the keys they named come back with
+// the only kind this history records, since a placement's draft lives and dies
+// with its edit. A key that has left that set since the file was written
+// (brandon-menu-ia-q30.xuz renamed `look` and `progression`, and an older
+// build recorded drafts here) names nothing a render reads, so undoing it
+// would spend a click restoring nothing. Those changes alone leave, and the keys they named come back with
 // what stays; every other change, and every other session, stays undoable. A
 // step left empty leaves too.
 interface Stripped {
@@ -32,7 +33,7 @@ interface Stripped {
 function withoutRetiredKeys(history: SessionHistory): Stripped {
   const retired = new Set<string>();
   const keep = (change: Change): boolean => {
-    if (change.kind === "layer" || isUndoStepKey(change.key)) return true;
+    if (change.kind === "layer" || isSettingKey(change.key)) return true;
     retired.add(change.key);
     return false;
   };

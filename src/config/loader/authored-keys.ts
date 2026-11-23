@@ -9,6 +9,16 @@
 // of its own, which meets one the code mints only when it is edit mode's (its
 // writes would end with an edit) or the settings menu's own accordion, so
 // only those are refused.
+//
+// [LAW:no-silent-failure] The check runs at load, over the authored sections
+// before any synthesis writes a minted key into them, and sees only authored
+// menus: the settings menu synthesizes its own accordions after it.
+// [LAW:parse-dont-validate] Raw spellings are compared as written, which is
+// sound because every menu key is spelled injectively (menu-keys.ts), so a
+// namespace prefix on an authored key can only be the code's own.
+// [LAW:no-ambient-temporal-coupling] exception: the caller must run it before
+// `synthesizeGroupDecls`, or it refuses the loader's own `groups.` keys as
+// authored; the order is the call site's statement order (dsl-loader.ts).
 
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";

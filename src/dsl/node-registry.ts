@@ -39,7 +39,9 @@ import {
   bodyPath,
   childPath,
   placementId,
+  placementIdentityOf,
 } from "../config/dsl-types.js";
+import type { PlacementIdentity } from "../config/placement-identity.js";
 import { placementPalette } from "../themes/palette-resolvers.js";
 import { groundOf } from "../template-engine/colors.js";
 import { FOLLOW_BAR, type PlacementEffect } from "../themes/policy.js";
@@ -82,9 +84,9 @@ export interface CompiledSegmentNode {
   // declaration — every declared setting present, the placement's value else
   // the default — so the render reads a finished object, never a fallback.
   readonly id: string;
-  // The preset whose tree holds it: with `id` and `name`, the placement's
-  // identity (config/placement-identity.ts).
-  readonly preset: string;
+  // The placement's identity (config/placement-identity.ts): what session
+  // state it owns is filed under.
+  readonly placement: PlacementIdentity;
   readonly settings: PlacementSettings;
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
@@ -713,7 +715,7 @@ const segmentType: NodeType<"segment"> = {
       when: cctx.when,
       name: node.name,
       id: placementId(node),
-      preset: cctx.preset,
+      placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.

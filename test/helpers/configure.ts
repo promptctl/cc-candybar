@@ -28,11 +28,12 @@ export function configurePlacement(
   sessionId: SessionId,
   preset: string,
   id: string,
+  segment: string = id,
 ): void {
   arrange(ctx, sessionId);
   ctx.sessionState.set(
     sessionId,
     EDIT_CONFIGURE_KEY,
-    configureMember(preset, id),
+    configureMember({ preset, id, segment }),
   );
 }

@@ -41,6 +41,7 @@ import {
   menuStateKey,
   sharedMenuStateKey,
 } from "../src/config/menu-keys";
+import { EDIT_CONFIGURE_KEY } from "../src/config/loader/edit-mode";
 import { linkClick } from "./helpers/click";
 import { BadVerbArgs } from "../src/renderer/verbs";
 import { SessionState } from "../src/renderer/session-state";
@@ -67,9 +68,9 @@ describe("click wire — encode/decode round-trip", () => {
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
     ]);
-    expect(url.startsWith("cc-candybar://dispatch/does=set+theme+to+nord&e=")).toBe(
-      true,
-    );
+    expect(
+      url.startsWith("cc-candybar://dispatch/does=set+theme+to+nord&e="),
+    ).toBe(true);
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: [SID, "theme", "nord"] },
     ]);
@@ -162,12 +163,16 @@ describe("a link says in words what its click does", () => {
     [
       {
         verb: VERB_SET_STATE,
-        args: [SID, sharedMenuStateKey("edit.d.configure.clock"), "closed"],
+        args: [
+          SID,
+          sharedMenuStateKey("edit.default.configure.clock"),
+          "closed",
+        ],
       },
-      "close edit.d.configure.clock",
+      "close edit.default.configure.clock",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "edit.configure", "closed"] },
+      { verb: VERB_SET_STATE, args: [SID, EDIT_CONFIGURE_KEY, "closed"] },
       "close edit.configure",
     ],
     [
@@ -185,11 +190,7 @@ describe("a link says in words what its click does", () => {
     [
       {
         verb: VERB_SET_STATE,
-        args: [
-          SID,
-          menuPageKey(sharedMenuStateKey("candybar.pickers")),
-          "2",
-        ],
+        args: [SID, menuPageKey(sharedMenuStateKey("candybar.pickers")), "2"],
       },
       "turn candybar.pickers to page 3",
     ],
@@ -233,7 +234,10 @@ describe("a link says in words what its click does", () => {
       { verb: VERB_OPEN_VSCODE, args: ["/tmp/a.ts"] },
       "open /tmp/a.ts in vs code",
     ],
-    [{ verb: VERB_SAVE, args: [SID, "local"] }, "save settings to local config"],
+    [
+      { verb: VERB_SAVE, args: [SID, "local"] },
+      "save settings to local config",
+    ],
     [
       { verb: VERB_SAVE_PRESET, args: [SID, "user"] },
       "save as a new preset in user config",
@@ -453,7 +457,9 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       { verb: VERB_STEP_STATE, args: [SID, "no-such-key", "1"] },
     ]);
     // The aggregated failure surfaces, naming the bad effect...
-    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(/no-such-key/);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
+      /no-such-key/,
+    );
     // ...but the valid write before it still landed (no rollback).
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
   });
@@ -469,7 +475,9 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const url = effectsUrl(effects);
     expect(effectsOf(url)).toEqual(effects);
     // Dispatch validates the run whole, so the valid write does not land alone.
-    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(/no-such-key/);
+    await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
+      /no-such-key/,
+    );
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
@@ -481,17 +489,21 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const copy = { verb: VERB_COPY, value: "x" };
     // Order is the click's: the copy between two writes keeps its place.
     expect(
-      batchAdjacentWrites([set("a", "k1", "v1"), set("a", "k2", "v2"), copy, set("a", "k3", "v3")]),
+      batchAdjacentWrites([
+        set("a", "k1", "v1"),
+        set("a", "k2", "v2"),
+        copy,
+        set("a", "k3", "v3"),
+      ]),
     ).toEqual([
       { verb: VERB_SET_STATE, value: "a/k1/v1/k2/v2" },
       copy,
       set("a", "k3", "v3"),
     ]);
     // A different session id starts a new batch rather than joining one.
-    expect(batchAdjacentWrites([set("a", "k", "v"), set("b", "k", "v")])).toEqual([
-      set("a", "k", "v"),
-      set("b", "k", "v"),
-    ]);
+    expect(
+      batchAdjacentWrites([set("a", "k", "v"), set("b", "k", "v")]),
+    ).toEqual([set("a", "k", "v"), set("b", "k", "v")]);
   });
 
   test("adjacent resets for one session and layer join into one reset of every key, never with a set-state", () => {
@@ -522,7 +534,9 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     // aggregate must stay BadVerbArgs so the dispatcher maps it to BAD_REQUEST,
     // not RENDER_FAILED. (An operational leaf failure flips it to a plain Error.)
     const sessionState = new SessionState();
-    const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
+    ]);
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
   });
 

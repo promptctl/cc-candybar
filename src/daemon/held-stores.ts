@@ -11,7 +11,7 @@ import type {
 } from "../renderer-interface/history-storage.js";
 import { runEach } from "../utils/run-each.js";
 import {
-  withoutEditModeKeys,
+  withoutRetiredKeys,
   type StoredState,
   type StoreWrite,
 } from "../renderer-interface/stored-state.js";
@@ -46,7 +46,7 @@ export class HeldStores {
   // daemon that won the socket reads what the one before it flushed in its
   // close.
   load(): void {
-    this.sessions = withoutEditModeKeys(this.storage.session.load(), this.log);
+    this.sessions = withoutRetiredKeys(this.storage.session.load(), this.log);
     this.history = new Map(this.storage.history.load());
   }
 

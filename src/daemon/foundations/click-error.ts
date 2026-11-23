@@ -20,7 +20,7 @@ import type {
 } from "../../renderer-interface/session-state.js";
 import type { Instant } from "../../utils/instant.js";
 import type { Drawing } from "../../config/lanes.js";
-import { SETTINGS_NS } from "../../config/reserved-names.js";
+import { CLICK_ERROR_KEY } from "../../config/reserved-names.js";
 import {
   answeredBy,
   eventHoldAt,
@@ -30,7 +30,7 @@ import {
 
 // [LAW:one-source-of-truth] In the bar's own namespace, as every key it
 // mints is, so no authored key reaches it.
-const KEY = `${SETTINGS_NS}clickError`;
+const KEY = CLICK_ERROR_KEY;
 
 // Seconds every render shows a click's errors: several of Claude Code's
 // fastest reruns (`statusLine.refreshInterval: 1`), and long enough to read.
@@ -101,10 +101,22 @@ export function clickErrorAt(
   return kind === "over" ? { kind } : { kind, error: last };
 }
 
+// [LAW:parse-dont-validate] Whether a stored value is a record this build
+// writes. The profile load asks it, so a record a render reads has parsed.
+export function isClickErrorRecord(raw: string): boolean {
+  try {
+    recordOf(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // [LAW:no-silent-failure] Only this module writes the key, and no authored
-// key reaches the namespace it sits in, so a record that does not parse is
-// this module's bug, said. Text is as the writer bounded it and revision is
-// always there, since the answer's identity is the revision.
+// key reaches the namespace it sits in, and the profile load drops a value
+// that does not parse, so one that reaches here is this module's bug, said.
+// Text is as the writer bounded it and revision is always there, since the
+// answer's identity is the revision.
 function recordOf(raw: string): ClickErrorRecord {
   const value: unknown = JSON.parse(raw);
   const { text, at, answered, revision } = (value ?? {}) as Record<

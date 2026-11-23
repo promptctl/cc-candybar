@@ -8,6 +8,15 @@ import {
 } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import {
+  CLICK_ERROR_KEY,
+  EDIT_MODE_KEY,
+} from "../../src/config/reserved-names";
+import {
+  EDIT_CONFIGURE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../../src/config/loader/edit-mode";
+import { menuKeyOf } from "../helpers/menu-key";
+import {
   sessionIdOf,
   type SessionId,
 } from "../../src/daemon/foundations/session-id";
@@ -72,17 +81,34 @@ test("writes taken after the close are held, and none is written", async () => {
   expect(stores.current().history[S1]).toEqual(STEP);
 });
 
-test("a profile loads without edit mode's keys, and a session left holding nothing takes no slot", () => {
+test("a profile loads without the keys nothing reads, and a session left holding nothing takes no slot", () => {
   const S2 = sessionIdOf("s2");
   const logged: string[] = [];
+  const live = menuKeyOf("picker", "applyTheme");
   const stores = new HeldStores(
     {
       session: {
         ...ephemeralSessionFile(),
         load: () =>
           new Map<SessionId, Record<string, string>>([
-            [S1, { "edit.mode": "arrange", theme: "nord" }],
-            [S2, { "edit.configure": "default:clock" }],
+            [
+              S1,
+              {
+                [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
+                // Spellings an older build minted: a menu keyed by its segment
+                // alone, its page cursor, edit chrome's collapsed menu, and the
+                // click error before it moved.
+                "menus.picker.applyTheme": "applyTheme",
+                "menupages.menus.picker.applyTheme": "2",
+                "menus.edit_default_insertSeg": "x",
+                "click.error": "{}",
+                // And a record of a failed click no build wrote.
+                [CLICK_ERROR_KEY]: "x",
+                [live]: "applyTheme",
+                theme: "nord",
+              },
+            ],
+            [S2, { [EDIT_CONFIGURE_KEY]: "default:clock" }],
           ]),
       },
       history: EPHEMERAL_HISTORY_STORAGE,
@@ -90,6 +116,11 @@ test("a profile loads without edit mode's keys, and a session left holding nothi
     (_level, line) => logged.push(line),
   );
   stores.load();
-  expect(stores.current().sessions).toEqual({ [S1]: { theme: "nord" } });
+  expect(stores.current().sessions).toEqual({
+    [S1]: { [live]: "applyTheme", theme: "nord" },
+  });
   expect(logged).toHaveLength(2);
+  expect(logged[0]).toContain("click.error");
+  expect(logged[0]).toContain(CLICK_ERROR_KEY);
+  expect(logged[0]).toContain("menus.picker.applyTheme");
 });

@@ -28,7 +28,7 @@ import {
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
-import { isEditModeKey } from "../config/session-key.js";
+import { isEditModeKey, isHeldByEdit } from "../config/session-key.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import { NavigationHistory } from "./navigation-history.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -78,8 +78,9 @@ type Pairs = ReadonlyArray<{
 }>;
 
 // [LAW:single-enforcer] THE decision of where a session write goes: to the
-// session's open edit, whole; with none open, edit mode's keys to `unheld`
-// and the rest to `store`. Reads come back from where the writes went.
+// session's open edit, whole, but for the bar's own record of a failed click
+// (isHeldByEdit); with none open, edit mode's keys to `unheld` and the rest to
+// `store`. Reads come back from where the writes went.
 export function routedWrites(
   store: SessionStateRW,
   draftOf: (sid: SessionId) => DraftWrites | null,
@@ -90,7 +91,7 @@ export function routedWrites(
     const stored: Array<{ key: string; value: string }> = [];
     runInAction(() => {
       for (const { key, value } of pairs)
-        if (draft !== null) draft.put(key, value);
+        if (draft !== null && isHeldByEdit(key)) draft.put(key, value);
         else if (isEditModeKey(key)) unheld.put(sid, key, value);
         else if (value === null) store.clear(sid, key);
         else stored.push({ key, value });
@@ -100,7 +101,7 @@ export function routedWrites(
   return {
     get: (sid, key) => {
       const draft = draftOf(sid);
-      return draft !== null
+      return draft !== null && isHeldByEdit(key)
         ? draft.read(key)
         : isEditModeKey(key)
           ? unheld.get(sid, key)
@@ -126,6 +127,20 @@ export function heldAside(): Unheld & {
       aside.set(sid, (aside.get(sid) ?? new Map()).set(key, value)),
     held: (sid) => aside.get(sid) ?? new Map(),
   };
+}
+
+// [LAW:no-silent-failure] THE line for a write, or a save or cancel, meant for
+// an edit that is not open: one drawn before the edit closed. It says what was
+// dropped, in one wording wherever it happens.
+export function staleEditWrite(
+  log: DaemonLogger,
+  sid: SessionId,
+  what: Iterable<string>,
+): void {
+  log(
+    "warn",
+    `edit: dropped ${[...what].join(",")} — no edit is open (session=${sid})`,
+  );
 }
 
 // Where an edit's own keys go once it ends: nowhere.
@@ -340,8 +355,7 @@ export class EditTransactions {
   ) {
     const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
       get: () => null,
-      put: (sid, key) =>
-        log("warn", `edit: dropped ${key} — no edit is open (session=${sid})`),
+      put: (sid, key) => staleEditWrite(log, sid, [key]),
     });
     this.view = {
       get: routed.get,

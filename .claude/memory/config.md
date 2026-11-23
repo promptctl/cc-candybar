@@ -68,7 +68,9 @@ An open edit holds every session write made inside it, as it holds its file chan
 
 Edit mode's own keys sit in a namespace of their own and never persist, because no edit outlives the renderer: one stored would reopen a panel or a library on a bar that has no edit, and one in the undo history would bring an edit's draft back with an undone save. So where a click's writes go is decided once, as its journal is chosen: a click outside an edit holds edit mode's keys aside, as the first writes of the edit it opens, or drops and logs them when it opens none (a stale click). The Back steps taken inside an edit are the edit's too and end with it, because a step replayed after the edit closed would write into a panel no edit shows, and spend the click.
 
-Whether an edit has work to keep is one count, the files it changed and the drafts a save would write, derived over the config as the save derives them, so the save cell, the idle close and the save itself agree: a draft on a placement since removed is no work.
+What an edit has to keep is one count, the files it changed and the drafts a save would write, derived over the config as the save derives them, so the save cell and the save itself agree: a draft on a placement since removed is no work. The idle close also counts redo, which the cell does not show, because a timer must not discard it.
+
+The bar's own record of a failed click belongs to no edit: an open edit does not hold it, so cancelling cannot erase an error before it is read. A profile load drops what nothing reads: edit mode's keys, menu keys no current spelling mints (an older build's), and a failed-click record that does not parse, so a bad value never reaches a render.
 
 ## Placements
 

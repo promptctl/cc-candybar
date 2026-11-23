@@ -14,7 +14,6 @@
 // root. This module owns only the op's shape, its wire codec, and the id an
 // insertion mints.
 
-import { randomBytes } from "node:crypto";
 import { placementIds, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
@@ -80,9 +79,11 @@ export interface NewPlacement {
 // fresh suffix, free in every tree the insertion reaches. Session state (an
 // open menu, a configure panel, a draft, a `✚` beside it) is keyed by
 // placement id in every session sharing the config, so a placement added
-// after another went away, by a click, an undo or a hand edit, must not take
+// after another went away, by a click, an undo or a hand edit, should not take
 // that one's id and wear what it left; nothing releases state on removal, so
-// identity is what keeps them apart. The layer it writes (`root.rows.<row>`, a
+// identity is what keeps them apart. Only live ids are checked: a removed
+// one is avoided because the suffix is random, which makes meeting one rare,
+// not impossible. The layer it writes (`root.rows.<row>`, a
 // shared fragment) can reach presets other than the one clicked, and the new
 // placement lands beside `anchor`, so the trees it reaches are exactly the
 // trees that hold `anchor`.
@@ -102,9 +103,6 @@ export function mintPlacement(
   );
   return { seg: segment, id: mintPlacementId(segment, taken, suffix) };
 }
-
-// What a click draws a suffix from.
-export const randomSuffix = (): string => randomBytes(3).toString("hex");
 
 // Suffixes drawn before a mint gives up: three random bytes give 16,777,216
 // suffixes, so a draw meets a taken one this often only from a source that

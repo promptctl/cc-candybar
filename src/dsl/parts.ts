@@ -851,9 +851,7 @@ function placeOf(
   colours: Omit<Colours, "bg" | "style">,
 ) {
   return {
-    segName: node.name,
-    placementId: node.id,
-    preset: node.preset,
+    placement: node.placement,
     palette: colours.palette,
     disclosure: colours.disclosure,
     tint: colours.tint,

@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import {
   heldAside,
   routedWrites,
+  staleEditWrite,
   type EditFinish,
   type EditTransactions,
 } from "../edit-transaction.js";
@@ -85,7 +87,7 @@ import {
   type Globals,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import { isEditModeKey, sessionKeyKind } from "../../config/session-key";
+import { isEditModeKey, isPlacementDraftKey } from "../../config/session-key";
 import {
   durableLanding,
   placementDrafts,
@@ -101,7 +103,7 @@ import {
   SETTING_PROJECTIONS,
   SETTINGS,
 } from "../../config/setting-projections";
-import { decodeLayoutOp, randomSuffix } from "../../config/layout-ops";
+import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
@@ -470,10 +472,7 @@ function refuseDisorderedPicks(
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
-  const picks = writes.filter((w) => {
-    const kind = sessionKeyKind(w.key);
-    return kind.kind === "edit" && kind.part === "draft";
-  });
+  const picks = writes.filter((w) => isPlacementDraftKey(w.key));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -1008,12 +1007,8 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
   }
   const into = heldLayer(ctx, origin, role);
   // [LAW:effects-at-boundaries] The click draws the new placement's suffix.
-  const placed = applyLayoutOpToFile(
-    editStore(ctx, sid),
-    into,
-    key,
-    op,
-    randomSuffix,
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), into, key, op, () =>
+    randomBytes(3).toString("hex"),
   );
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
@@ -1267,19 +1262,14 @@ function journaled<C extends DaemonContext>(
   const journal = edit?.journal ?? ctx.history.begin(files);
   // [LAW:single-enforcer] The click's session writes pass the one router,
   // over its journal: a click in an open edit writes the edit's journal, and
-  // any other holds edit mode's keys aside, for the edit it may open.
-  const click =
-    edit === undefined
-      ? { kind: "outside" as const, aside: heldAside() }
-      : { kind: "edit" as const, edit };
+  // any other holds edit mode's keys aside, for the edit it may open. Whether
+  // the click is in an edit was decided once, above, by its origin; the router
+  // is not asked again.
+  const aside = heldAside();
   const writes =
-    click.kind === "edit"
+    edit !== undefined
       ? journal.sessionState
-      : routedWrites(
-          journal.sessionState,
-          (s) => ctx.edits.draftWrites(s),
-          click.aside,
-        );
+      : routedWrites(journal.sessionState, () => null, aside);
   const requested: { finish?: EditFinish } = {};
   const failures: unknown[] = [];
   const sessionState = closingView(
@@ -1292,9 +1282,10 @@ function journaled<C extends DaemonContext>(
   // already computed view without applying new closure rules to it. An open
   // edit holds its own Back steps, which end with it; outside one, Back sees
   // the journal, which no edit-mode key reaches.
-  const navigation = (
-    click.kind === "edit" ? click.edit.navigation : ctx.navigation
-  ).begin(journal.sessionState, sessionState.setBatch);
+  const navigation = (edit?.navigation ?? ctx.navigation).begin(
+    journal.sessionState,
+    sessionState.setBatch,
+  );
   try {
     handler({
       ...scoped,
@@ -1304,7 +1295,12 @@ function journaled<C extends DaemonContext>(
       journal,
       readConfigFile: (edit?.files ?? files).read,
       finishEdit: (finish) => {
-        if (edit === undefined) return;
+        // [LAW:no-silent-failure] A save or cancel drawn before its edit
+        // closed has no edit to finish, and says so as a stale write does.
+        if (edit === undefined) {
+          staleEditWrite(ctx.log, sid, [finish]);
+          return;
+        }
         requested.finish = finish;
         sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
       },
@@ -1337,11 +1333,18 @@ function journaled<C extends DaemonContext>(
     } catch (e) {
       failed.push(e);
     }
+    // The one way an edit ends: its Back steps land outside it, and its view
+    // is redrawn without it.
+    const end = (): void => {
+      ctx.navigation.landOutsideEdit(visits);
+      ctx.edits.close(sid);
+      ctx.editViewChanged(sid);
+    };
     try {
-      if (click.kind === "outside") {
+      if (edit === undefined) {
         const clicked = new Map([
           ...(journal.commit().get(sid) ?? []),
-          ...click.aside.held(sid),
+          ...aside.held(sid),
         ]);
         const entering =
           clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
@@ -1354,24 +1357,16 @@ function journaled<C extends DaemonContext>(
         if (entering) {
           ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edited.size > 0)
-          ctx.log(
-            "warn",
-            `edit: dropped ${[...edited.keys()].join(",")} — no edit is open (session=${sid})`,
-          );
+        } else if (edited.size > 0) staleEditWrite(ctx.log, sid, edited.keys());
       } else if (saved !== null) {
         saved.commit();
-        ctx.navigation.landOutsideEdit(visits);
-        ctx.edits.close(sid);
-        ctx.editViewChanged(sid);
+        end();
       } else {
-        const { moved, clicked } = click.edit.commit();
+        const { moved, clicked } = edit.commit();
         const mode = clicked.get(EDIT_MODE_KEY);
         if (mode !== undefined && mode !== EDIT_MODE_ARRANGE) {
-          click.edit.leave(clicked);
-          ctx.navigation.landOutsideEdit(visits);
-          ctx.edits.close(sid);
-          ctx.editViewChanged(sid);
+          edit.leave(clicked);
+          end();
         } else if (moved) {
           ctx.edits.changed(sid);
           ctx.editViewChanged(sid);
@@ -1444,8 +1439,9 @@ export function closeIdleMenus(
 ): void {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const nest = nestOf(c, c.context?.durable.origin ?? null);
-    // [LAW:one-source-of-truth] An edit's work is what the save cell counts:
-    // the files it changed and the drafts a save would write.
+    // An edit's work is what the save cell counts (the files it changed and
+    // the drafts a save would write) and redo besides, which the cell does not
+    // show but a timer must not discard.
     const depth = c.edits.draft(sid)?.depth();
     const hasWork =
       depth !== undefined &&

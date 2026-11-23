@@ -33,7 +33,8 @@ describe("escapedIdent", () => {
   });
 
   test("a spelling no name escapes to reads back as nothing", () => {
-    for (const spelled of ["Z", "gitZ2d", "a.b", "Z00005A"])
+    // `Zffffff` is past the last code point: read, not thrown on.
+    for (const spelled of ["Z", "gitZ2d", "a.b", "Z00005A", "Zffffff"])
       expect(unescapedIdent(spelled)).toBeUndefined();
   });
 

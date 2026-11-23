@@ -1210,7 +1210,10 @@ function validateTopLevel(
   // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
   // call's shape, checked where the author wrote them; the keys each placement
   // derives are minted after merge (validateRenderable). Then the authored
-  // keys, before any synthesis writes a minted key into these sections.
+  // keys.
+  // [LAW:no-ambient-temporal-coupling] This order is load-bearing: the check
+  // reads the sections before `synthesizeGroupDecls` writes its minted
+  // `groups.` keys into them, or it refuses the loader's own keys as authored.
   refuseMintedKeys(ctx, out, checkMenuDecls(ctx, out));
   synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-

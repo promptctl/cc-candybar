@@ -73,7 +73,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
       const active = requireActiveSegment(ref, "{{ bgOf }}");
       if (active.bg === undefined) {
         throw new Error(
-          `{{ bgOf }} is not available while segments.${active.segName}'s own ` +
+          `{{ bgOf }} is not available while segments.${active.placement.segment}'s own ` +
             `"bg:" is being evaluated — the background is what that template ` +
             `computes. Reach for a palette color there instead, e.g. ` +
             `bg: '{{ darken (color "surface") 1 }}'.`,

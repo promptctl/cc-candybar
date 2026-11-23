@@ -16,13 +16,16 @@ import {
   type Disclosure,
 } from "./disclosure.js";
 import {
-  placementId,
+  placementIdentityOf,
   type DslConfig,
   type LayoutNode,
   type SegmentNode,
 } from "./dsl-types.js";
-import { hostedMenus } from "./loader/menu-synth.js";
-import { placementScope } from "./placement-identity.js";
+import {
+  hostedMenus,
+  parseCalls,
+  type MenuCalls,
+} from "./loader/menu-synth.js";
 import { presetNames, presetRoot } from "./presets.js";
 
 // One key a disclosure inside a parent holds, and the values it holds for a
@@ -55,24 +58,23 @@ export const NO_NEST: DisclosureNest = {
 const idOf = (d: Disclosure): string => `${d.key}\0${d.member}`;
 
 export function buildDisclosureNest(config: DslConfig): DisclosureNest {
-  // Every preset places most segments again, so each placement's template is
-  // parsed once, not once per preset (the bundled presets: half the build).
-  const menus = new Map<string, readonly Disclosure[]>();
+  // Every preset places most segments again, so each segment's template is
+  // parsed once, not once per placement or preset (the bundled presets: half
+  // the build). Only the keys a placement derives from its calls differ.
+  const calls = new Map<string, MenuCalls>();
   const hostedBy = (
     preset: string,
     node: SegmentNode,
   ): readonly Disclosure[] => {
+    const template = config.segments[node.name]?.template;
+    if (template === undefined) return [];
+    if (!calls.has(node.name)) calls.set(node.name, parseCalls(template));
     // A placement is its preset, id and segment: an id is unique per preset
     // tree, so two presets may give one to different segments.
-    const placement = { preset, id: placementId(node), segment: node.name };
-    const id = placementScope(placement);
-    const memo = menus.get(id);
-    if (memo !== undefined) return memo;
-    const template = config.segments[node.name]?.template;
-    const found =
-      template === undefined ? [] : hostedMenus(template, placement);
-    menus.set(id, found);
-    return found;
+    return hostedMenus(
+      calls.get(node.name)!,
+      placementIdentityOf(preset, node),
+    );
   };
   // The disclosures a placement is the trigger of: the body it opens, and
   // every `{{ menu }}` it hosts.

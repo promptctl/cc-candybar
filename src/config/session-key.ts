@@ -3,12 +3,15 @@
 // goes, what an undo step holds, what Back restores, what a load keeps.
 
 import {
+  CLICK_ERROR_KEY,
   EDIT_MODE_KEY,
   EDIT_NS,
+  MENU_NS,
+  MENU_PAGE_NS,
   PLACEMENT_DRAFT_NS,
   reservedNamespaceOf,
 } from "./reserved-names.js";
-import { SETTING_PROJECTIONS } from "./setting-projections.js";
+import { SESSION_KEY_TO_SETTING } from "./setting-projections.js";
 import { CONFIRM_KEY_SUFFIX } from "./confirm-step.js";
 import { DIAGNOSTICS_VIEWING } from "./door.js";
 
@@ -21,6 +24,8 @@ import { DIAGNOSTICS_VIEWING } from "./door.js";
 //   but its own click arms it;
 // - viewer: which message the diagnostics viewer shows, which is the viewer's
 //   own and no menu's;
+// - record: the bar's own account of a click that failed, which no edit
+//   shapes, so none holds it and Back never restores it;
 // - menu: a menu, disclosure or page cursor the bar mints;
 // - plain: a key a config authors.
 export type SessionKeyKind =
@@ -28,12 +33,9 @@ export type SessionKeyKind =
   | { readonly kind: "setting" }
   | { readonly kind: "confirm" }
   | { readonly kind: "viewer" }
+  | { readonly kind: "record" }
   | { readonly kind: "menu" }
   | { readonly kind: "plain" };
-
-const SETTING_KEYS: ReadonlySet<string> = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey),
-);
 
 export function sessionKeyKind(key: string): SessionKeyKind {
   if (key.startsWith(EDIT_NS))
@@ -46,9 +48,14 @@ export function sessionKeyKind(key: string): SessionKeyKind {
             ? "draft"
             : "view",
     };
-  if (SETTING_KEYS.has(key)) return { kind: "setting" };
+  if (SESSION_KEY_TO_SETTING.has(key)) return { kind: "setting" };
+  // A menu's key ends in its apply action's name, which may be `armed`, so the
+  // menu namespaces are told before the confirm suffix is.
+  if (key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS))
+    return { kind: "menu" };
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
+  if (key === CLICK_ERROR_KEY) return { kind: "record" };
   return reservedNamespaceOf(key) === undefined
     ? { kind: "plain" }
     : { kind: "menu" };
@@ -57,12 +64,27 @@ export function sessionKeyKind(key: string): SessionKeyKind {
 export const isEditModeKey = (key: string): boolean =>
   sessionKeyKind(key).kind === "edit";
 
+export const isSettingKey = (key: string): boolean =>
+  sessionKeyKind(key).kind === "setting";
+
+// A placement's unsaved value of one of its settings.
+export const isPlacementDraftKey = (key: string): boolean => {
+  const k = sessionKeyKind(key);
+  return k.kind === "edit" && k.part === "draft";
+};
+
+// Whether an open edit holds a write to the key: every key but the bar's own
+// record of a failed click, which says what happened to a click and belongs to
+// no edit. Cancel would erase it before it was read, and no answer could mark
+// it, since an answer marks the stored record.
+export const isHeldByEdit = (key: string): boolean =>
+  sessionKeyKind(key).kind !== "record";
+
 // What an undo step holds: the settings, and a placement's unsaved values,
 // which are the edit's own settings. Every other key is navigation or the
 // bar's own.
 export function isUndoStepKey(key: string): boolean {
-  const k = sessionKeyKind(key);
-  return k.kind === "setting" || (k.kind === "edit" && k.part === "draft");
+  return isSettingKey(key) || isPlacementDraftKey(key);
 }
 
 // What Back restores: the menus and an author's own state, and inside an edit

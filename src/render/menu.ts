@@ -72,7 +72,7 @@ import {
 // `MenuPlacement` type; it is now a field on the ONE active-segment record the
 // walk publishes (see render/active-segment.ts), because "which placement is
 // rendering" is a single fact and a per-feature copy of it is a second clock.
-// The menu reads `placementId` and ignores the rest.
+// The menu reads `placement` and ignores the rest.
 
 // [LAW:locality-or-seam] The runtime the `menu` func closes over. It shares the
 // ACTION runtime (the menu's glyph and body resolve their actions/state from the
@@ -105,15 +105,7 @@ function renderMenu(
   // — comes from the SAME menu-keys derivation the loader synthesis used, so the
   // key this render reads/writes is the key whose state var + int gate the
   // loader emitted. No page-action argument to mis-wire.
-  const stateKey = menuStateKey(
-    {
-      preset: placement.preset,
-      id: placement.placementId,
-      segment: placement.segName,
-    },
-    applyName,
-    options.key,
-  );
+  const stateKey = menuStateKey(placement.placement, applyName, options.key);
   const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
 

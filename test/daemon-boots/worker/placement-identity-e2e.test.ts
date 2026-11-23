@@ -10,7 +10,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf, type Frame } from "../../../src/render/frame";
-import { DOOR_GLYPH } from "../../../src/config/disclosure";
+import { DISCLOSURE_OPEN, DOOR_GLYPH } from "../../../src/config/disclosure";
+import { EDIT_LIVE_KEY } from "../../../src/config/edit-chrome";
+import { EDIT_MODE_KEY } from "../../../src/config/reserved-names";
+import { EDIT_MODE_ARRANGE } from "../../../src/config/loader/edit-mode";
 import { isEditModeKey } from "../../../src/config/session-key";
 import { menuStateKey } from "../../../src/config/menu-keys";
 import { decodeLayoutOp } from "../../../src/config/layout-ops";
@@ -189,18 +192,25 @@ describe("edit mode leaves nothing behind", () => {
 
   test("a restart over a store an older build left edit-mode keys in loads none", async () => {
     const b = await barOf(CONFIG);
+    const older = {
+      [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
+      [EDIT_LIVE_KEY]: DISCLOSURE_OPEN,
+      // The spellings that build minted for edit chrome's menus and for a
+      // failed click.
+      "menus.edit_default_insertSeg_clock": "x",
+      "menupages.menus.edit_default_insertSeg_clock": "1",
+      "click.error": "{}",
+    };
     await b.restart((stored) => ({
       ...stored,
-      [SESSION]: {
-        ...stored[SESSION],
-        "edit.mode": "arrange",
-        "edit.live": "open",
-      },
+      [SESSION]: { ...stored[SESSION], ...older },
     }));
     expect(textOf(await b.render())).not.toContain("✓");
     // The session's next write stores it as the daemon now holds it.
     await b.click(DOOR_GLYPH);
     expect(await storedEditKeys(b)).toEqual([]);
+    const stored = Object.keys(b.stored()[SESSION] ?? {});
+    for (const key of Object.keys(older)) expect(stored).not.toContain(key);
   });
 });
 

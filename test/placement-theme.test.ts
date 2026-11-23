@@ -33,7 +33,6 @@ import { VERB_SAVE } from "../src/click/wire";
 import { type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
-  configureMember,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
@@ -353,11 +352,7 @@ describe("the layout preview while arranging", () => {
     const drawn = previewPalette(rt, "tag");
     expect(drawn).toHaveLength(2);
     expect(drawn).toContain(paletteForThemeName(PIN));
-    rt.ctx.sessionState.set(
-      SID,
-      placementDraftKey(TAG, "theme"),
-      BAR_B,
-    );
+    rt.ctx.sessionState.set(SID, placementDraftKey(TAG, "theme"), BAR_B);
     expect(previewPalette(rt, "tag")).toEqual([
       paletteForThemeName(BAR_B),
       paletteForThemeName(PIN),

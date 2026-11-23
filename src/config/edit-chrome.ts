@@ -25,6 +25,7 @@ import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
   placementId,
+  placementIdentityOf,
   settingSpelling,
   settingsOf,
   IMPLIED_SETTINGS,
@@ -356,9 +357,10 @@ function configureParts(
   decls: Readonly<Record<string, SettingDecl>>,
 ): ConfigureParts {
   const id = placementId(node);
+  const identity = placementIdentityOf(ctx.preset, node);
   const placement = escapedIdent(id);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id);
+  const member = configureMember(identity);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
   // A shared `{{ menu }}` key's spelling, in edit mode's own namespace since
@@ -379,15 +381,11 @@ function configureParts(
   };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(
-      { preset: ctx.preset, id, segment: node.name },
-      name,
-    );
-    // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
-    // preset or placement may lead with a digit, which a field name may not —
-    // hence `p` and `d`. The key, not the name, is what a session
-    // holds across reloads.
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    const key = placementDraftKey(identity, name);
+    // [LAW:one-source-of-truth] The variable is named by its key, as every
+    // state variable is: a template field path, which the identity's lettered
+    // parts keep legal (placement-identity.ts).
+    const variable = key;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,

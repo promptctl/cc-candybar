@@ -95,14 +95,14 @@ function previous(
   let depth = 0;
   for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
     const visit = timeline.visits[cursor]!;
-    const keys = movedKeys(visit.from, visit.to);
-    const step = keys.flatMap((key) => {
-      const from = visit.from.values.get(key);
-      const to = visit.to.values.get(key);
-      return from === to ? [] : [{ key, from, to }];
-    });
+    // A visit is kept only if it moved a key (commit, landOutsideEdit), so its
+    // step is never empty.
+    const step = movedKeys(visit.from, visit.to).map((key) => ({
+      key,
+      from: visit.from.values.get(key),
+      to: visit.to.values.get(key),
+    }));
     if (
-      step.length === 0 ||
       !step.every(
         ({ key, from, to }) =>
           values.get(key) === to &&

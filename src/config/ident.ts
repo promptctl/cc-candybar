@@ -1,5 +1,6 @@
 // The marker that opens an escape, and so the one letter never kept as itself.
 const ESCAPE = "Z";
+const MAX_CODE_POINT = 0x10ffff;
 
 // [LAW:one-source-of-truth] A name spelled injectively as an identifier, by
 // escape encoding: an ASCII letter or digit is kept as itself, except
@@ -19,9 +20,14 @@ export function escapedIdent(name: string): string {
 // The name `escapedIdent` spelled, or undefined for a spelling it never
 // makes.
 export function unescapedIdent(spelled: string): string | undefined {
+  // [LAW:parse-dont-validate] An escape past the last code point is left as
+  // written, and its `ESCAPE` then fails the round trip below.
   const name = spelled.replace(
     new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
-    (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)),
+    (escape, hex: string) =>
+      parseInt(hex, 16) > MAX_CODE_POINT
+        ? escape
+        : String.fromCodePoint(parseInt(hex, 16)),
   );
   return escapedIdent(name) === spelled ? name : undefined;
 }

@@ -22,7 +22,10 @@
 // config (settings-menu.ts), ensures this same toggle, and puts `✎ arrange` in its
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
-import { escapedIdent } from "../ident.js";
+import {
+  placementScope,
+  type PlacementIdentity,
+} from "../placement-identity.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type {
@@ -63,13 +66,12 @@ export const EDIT_TOGGLE_ACTION = "edit.toggle";
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 export const EDIT_MODE_ARRANGE = "arrange";
 
-// The member that configures the placement `id` in the layout of `preset` —
-// an id is unique only within one preset's tree, so switching presets never
-// carries configure mode onto a different placement that shares the id. The
-// preset is escaped (letters and digits alone) and the loader refuses a `:`
-// in an id, so the member names exactly one placement.
-export function configureMember(preset: string, id: string): string {
-  return `${escapedIdent(preset)}:${id}`;
+// [LAW:one-source-of-truth] The member that configures one placement: its
+// scope, as every other key it owns is filed (placement-identity.ts), so
+// switching presets, or a hand edit that gives a kept id another segment,
+// never carries configure mode onto a different placement.
+export function configureMember(placement: PlacementIdentity): string {
+  return placementScope(placement);
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has

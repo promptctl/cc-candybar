@@ -94,6 +94,7 @@ function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
 // the palette arrives per call — which is the whole point of the seam.
 
 const SEG = "demo";
+const PLACE = { preset: "default", id: SEG, segment: SEG };
 
 interface Harness {
   readonly ref: ActiveSegmentRef;
@@ -117,7 +118,7 @@ function resolve(
   scope: object = {},
 ): Style {
   return resolveSegmentColors(
-    openSegment(h.ref, SEG, SEG, "default", palette, DISCLOSURE, TINT, PAIRED_TEXT),
+    openSegment(h.ref, PLACE, palette, DISCLOSURE, TINT, PAIRED_TEXT),
     ColorDepth.TRUECOLOR,
     bg,
     fg,
@@ -229,17 +230,34 @@ describe("readsRed: a colour reads as red by its hue and its chroma", () => {
   // Inside, at each edge: a theme's pinkest error rung (-18°), a crimson
   // 256 colours draws (-14°), the terminal's reds (29°), a theme's most
   // orange red (36°), and a dusty red just over the chroma floor.
-  test.each(["ffcdeb", "87005f", "ff0000", "800000", "ff5f5f", "ff8b6b", "b88080"])(
-    "#%s reads as red",
-    (hex) => expect(readsRed(parseRgbHex(hex))).toBe(true),
+  test.each([
+    "ffcdeb",
+    "87005f",
+    "ff0000",
+    "800000",
+    "ff5f5f",
+    "ff8b6b",
+    "b88080",
+  ])("#%s reads as red", (hex) =>
+    expect(readsRed(parseRgbHex(hex))).toBe(true),
   );
   // Outside: the salmon 256 colours rounds a theme's palest red to (39°),
   // the oranges past it, a magenta past -20°, a red-tinged grey under the
   // chroma floor, and greys of every lightness.
-  test.each(["ff875f", "ff5f00", "ff6600", "d75f00", "af5f00", "ffaf87", "ff00d7", "a88080", "c0c0c0", "808080", "ffffff", "fffffe"])(
-    "#%s does not",
-    (hex) => expect(readsRed(parseRgbHex(hex))).toBe(false),
-  );
+  test.each([
+    "ff875f",
+    "ff5f00",
+    "ff6600",
+    "d75f00",
+    "af5f00",
+    "ffaf87",
+    "ff00d7",
+    "a88080",
+    "c0c0c0",
+    "808080",
+    "ffffff",
+    "fffffe",
+  ])("#%s does not", (hex) => expect(readsRed(parseRgbHex(hex))).toBe(false));
   test("every bundled theme's error role reads as red at truecolor, where the band was set from", () => {
     const off = listThemePalettes()
       .map((name) => [name, getThemePalette(name)!.get("error")!] as const)
@@ -248,7 +266,12 @@ describe("readsRed: a colour reads as red by its hue and its chroma", () => {
     expect(off).toEqual([]);
   });
   test("the terminal's reds read as red at every depth", () => {
-    for (const depth of [ColorDepth.DEFAULT, ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
+    for (const depth of [
+      ColorDepth.DEFAULT,
+      ColorDepth.TRUECOLOR,
+      ColorDepth.EIGHT_BIT,
+      ColorDepth.STANDARD,
+    ]) {
       for (const red of TERMINAL_REDS) {
         expect(readsRed(drawnColour(red, depth))).toBe(true);
       }
@@ -279,7 +302,7 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
       ...TEST_ENGINE,
       extraFuncs: segmentColorFuncs(ref),
     });
-    openSegment(ref, SEG, SEG, "default", palette, DISCLOSURE, TINT, PAIRED_TEXT);
+    openSegment(ref, PLACE, palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
       .parse(`{{ errorRedOn "${ground}" }}`)
       .evaluate({})
@@ -311,7 +334,9 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
 
   test("a terminal red that clears the text floor is taken where no theme red does", () => {
     // Pale reds on white all stand under 2:1; ANSI's red #800000 stands 10:1.
-    const PALE = new Map([...RED].map(([role]) => [role, parseRgbHex("f0a8a8")]));
+    const PALE = new Map(
+      [...RED].map(([role]) => [role, parseRgbHex("f0a8a8")]),
+    );
     expect(on("#ffffff", withRoles("pale", PALE))).toBe("#800000");
   });
 
@@ -342,8 +367,14 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
   test("a near-white error text colour is never taken for red, at any depth", () => {
     // textual-ansi's text-error is #fffffe.
     const palette = theme("textual-ansi");
-    for (const depth of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
-      expect(on("#000000", palette, depth)).not.toBe(palette.get("text-error")!.hex);
+    for (const depth of [
+      ColorDepth.TRUECOLOR,
+      ColorDepth.EIGHT_BIT,
+      ColorDepth.STANDARD,
+    ]) {
+      expect(on("#000000", palette, depth)).not.toBe(
+        palette.get("text-error")!.hex,
+      );
     }
   });
 });
@@ -587,16 +618,7 @@ describe("segment color functions in the engine", () => {
       extraFuncs: segmentColorFuncs(ref),
     });
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    openSegment(
-      ref,
-      SEG,
-      SEG,
-      "default",
-      makeTestPalette(),
-      DISCLOSURE,
-      TINT,
-      PAIRED_TEXT,
-    );
+    openSegment(ref, PLACE, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
     const fragments = tpl.evaluate({});
     expect(resolvedStyle(fragments[0]!.style).color?.value?.hex).toBe(
       "#4488ff",

@@ -52,7 +52,7 @@ import {
   type Disclosure,
 } from "../disclosure.js";
 import {
-  placementId,
+  placementIdentityOf,
   walkNodes,
   type DslConfig,
   type RawDslConfig,
@@ -186,9 +186,9 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
 // [LAW:no-defensive-null-guards] A bare engine purely for AST introspection: it
 // never evaluates, so `fromString` is identity and no funcs are registered (parse
 // does not resolve function existence — that is an eval-time concern).
-function parseCalls(
-  template: string,
-): readonly MenuAnalysis[] | "parse-failed" {
+export type MenuCalls = readonly MenuAnalysis[] | "parse-failed";
+
+export function parseCalls(template: string): MenuCalls {
   const engine = createEngine<string>({ fromString: (s) => s });
   try {
     return engine
@@ -206,12 +206,13 @@ function parseCalls(
 
 // [LAW:one-source-of-truth] The disclosures the `{{ menu }}`s of one placement
 // open, keyed exactly as `synthesizePlacementMenus` mints their state — so a
-// reader asking which menus sit in a body finds the keys a click writes.
+// reader asking which menus sit in a body finds the keys a click writes. The
+// calls are the segment's, parsed once by the caller: placements of one
+// segment differ only in the keys they derive from them.
 export function hostedMenus(
-  template: string,
+  calls: MenuCalls,
   placement: PlacementIdentity,
 ): readonly Disclosure[] {
-  const calls = parseCalls(template);
   return calls === "parse-failed"
     ? []
     : calls.flatMap((call) =>
@@ -401,7 +402,7 @@ export function synthesizePlacementMenus(
   const variables: Record<string, VariableDecl> = {};
   const actions: Record<string, ActionDecl> = {};
   // Each segment's template parsed once, however many placements it has.
-  const callsOf = new Map<string, readonly MenuAnalysis[] | "parse-failed">();
+  const callsOf = new Map<string, MenuCalls>();
   // One collision, found in every tree that holds it, is reported once.
   const reported = new Set<string>();
   const issue = (segName: string, message: string): void => {
@@ -432,18 +433,14 @@ export function synthesizePlacementMenus(
       }
       const calls = callsOf.get(node.name)!;
       if (calls === "parse-failed") continue;
-      const id = placementId(node);
+      const placement = placementIdentityOf(preset, node);
       for (const [index, call] of calls.entries()) {
         if (call.kind === "issue" || identityIssue(call.apply) !== undefined) {
           continue;
         }
         const { apply, options } = call;
         const member = menuMember(apply);
-        const stateKey = menuStateKey(
-          { preset, id, segment: node.name },
-          apply,
-          options.key,
-        );
+        const stateKey = menuStateKey(placement, apply, options.key);
         const pageKey = menuPageKey(stateKey);
         const identity = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
