@@ -41517,20 +41517,25 @@ var RETIRED_THEMES = /* @__PURE__ */ new Map([
 function successorOf(name) {
   return RETIRED_THEMES.get(name);
 }
-function retiredThemeNote(name) {
+function retiredThemeSentence(name) {
   const to = typeof name === "string" ? successorOf(name) : void 0;
-  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
+  return to === void 0 ? "" : `"${name}" was retired; write "${to}", the same palette`;
+}
+function retiredThemeNote(name) {
+  const sentence = retiredThemeSentence(name);
+  return sentence === "" ? "" : ` \u2014 ${sentence}`;
+}
+function oneOf(members) {
+  return `one of ${members.map((m) => JSON.stringify(m)).join(", ")}`;
 }
 var LISTED_MEMBERS = 8;
 var SAMPLED_MEMBERS = 3;
-function oneOf(members, named2) {
-  const quoted2 = members.map((m) => JSON.stringify(m));
-  if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
-  const name = named2 === void 0 ? "" : ` "${named2}"`;
-  return `one of the ${members.length}${name} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+function sampledOneOf(members) {
+  if (members.length <= LISTED_MEMBERS) return oneOf(members);
+  return `one of ${members.length} values, such as ${members.slice(0, SAMPLED_MEMBERS).map((m) => JSON.stringify(m)).join(", ")}`;
 }
 function installedThemesNote() {
-  return oneOf([...listResolvablePaletteNames()].sort(), "themes");
+  return oneOf([...listResolvablePaletteNames()].sort());
 }
 var THEME_FLOOR = "textual-dark";
 var UNSET = { kind: "unset" };
@@ -41847,8 +41852,8 @@ function parseSettingSpelling(decl, raw) {
   if (typeof domain === "object" && "min" in domain) {
     return parseSessionInt(raw, domain) ?? void 0;
   }
-  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
-  return inSettingDomain(decl, value) ? value : void 0;
+  if (domain === "bool") return parseSessionBoolean(raw) ?? void 0;
+  return inSettingDomain(decl, raw) ? raw : void 0;
 }
 function describeSettingDomain(decl) {
   const { domain } = decl;
@@ -42586,7 +42591,7 @@ function validatePaletteName(ctx, path31, raw) {
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
       path: `${path31}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected ${oneOf([...ctx.allowedPalettes].sort(), "themes")}`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
       line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
     });
     return void 0;
@@ -43306,6 +43311,12 @@ function wireKindOf(field) {
   if (row.kind === "text") return "string";
   const { domain } = row;
   return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+}
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row) {
+  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
 }
 
 // src/config/setting-projections.ts
@@ -49094,224 +49105,6 @@ init_globals();
 // src/config/setting-table.ts
 init_globals();
 
-// src/config/loader/globals.ts
-init_globals();
-var LIVE_GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
-);
-function retired(spec, description) {
-  return {
-    ...spec,
-    json: { ...spec.json, deprecated: true, description },
-    parse(ctx, path31, field, raw) {
-      spec.parse(ctx, path31, field, raw);
-      return void 0;
-    }
-  };
-}
-var GLOBALS_FIELDS = {
-  ...LIVE_GLOBALS_FIELDS,
-  updateNotice: retired(
-    optionalBooleanSpec(),
-    "Obsolete in-bar update notice."
-  ),
-  experimentalBand: retired(
-    optionalBooleanSpec(),
-    "Obsolete Claude Code band mod."
-  ),
-  experimentalTmuxStatus: retired(
-    optionalBooleanSpec(),
-    "Obsolete tmux status renderer."
-  ),
-  renderer: retired(
-    optionalEnumSpec(["claude", "tmux"]),
-    "Obsolete tmux status renderer."
-  )
-};
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row) {
-  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
-}
-function fragmentRejection(description, message) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path31, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: message(`${path31}.${field}`),
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
-  );
-}
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
-  );
-}
-function nameOnlySpec(spec, subject, why) {
-  return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path31, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
-    )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path31 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path31,
-        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected ${oneOf([...ctx.allowedPalettes].sort(), "themes")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path31, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path31, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path31, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(LIVE_GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor3);
-  }
-  return seeds;
-}
-
 // src/config/setting-control.ts
 init_globals();
 
@@ -49682,12 +49475,14 @@ function unknownOptionDomain(from, perConfigDomains) {
 
 // src/config/setting-control.ts
 var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function describeControlDomain(domain, perConfigDomains) {
+function describeControlDomain(domain, perConfigDomains, listing = oneOf) {
   if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
   if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    return oneOf(members, typeof from === "string" ? from : void 0);
+    const { members } = resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    );
+    return listing(members);
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }
@@ -49829,6 +49624,218 @@ function settingTable(config) {
   };
   TABLES.set(config, table);
   return table;
+}
+
+// src/config/loader/globals.ts
+init_globals();
+var LIVE_GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
+);
+function retired(spec, description) {
+  return {
+    ...spec,
+    json: { ...spec.json, deprecated: true, description },
+    parse(ctx, path31, field, raw) {
+      spec.parse(ctx, path31, field, raw);
+      return void 0;
+    }
+  };
+}
+var GLOBALS_FIELDS = {
+  ...LIVE_GLOBALS_FIELDS,
+  updateNotice: retired(
+    optionalBooleanSpec(),
+    "Obsolete in-bar update notice."
+  ),
+  experimentalBand: retired(
+    optionalBooleanSpec(),
+    "Obsolete Claude Code band mod."
+  ),
+  experimentalTmuxStatus: retired(
+    optionalBooleanSpec(),
+    "Obsolete tmux status renderer."
+  ),
+  renderer: retired(
+    optionalEnumSpec(["claude", "tmux"]),
+    "Obsolete tmux status renderer."
+  )
+};
+function fragmentRejection(description, message) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path31, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: message(`${path31}.${field}`),
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path31, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path31 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path31,
+        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path31, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path31, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path31, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(LIVE_GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor3);
+  }
+  return seeds;
 }
 
 // src/config/loader/persist-target.ts
@@ -62127,7 +62134,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
     if (target.scope === "theme-default" && !ctx.allowedPalettes.has(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort(), "themes")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort())})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
       continue;
@@ -62329,23 +62336,13 @@ function validateNoNesting(ctx, cfg, names) {
 init_globals();
 function refuseSettingKeyOwners(ctx, config) {
   const { rows } = settingTable(config);
-  const declared = [
-    ...Object.entries(config.variables).map(
-      ([name, decl]) => [["variables", name], decl]
-    ),
-    ...Object.entries(config.segments).flatMap(
-      ([seg2, decl]) => Object.entries(decl.vars ?? {}).map(
-        ([name, v]) => [["segments", seg2, "vars", name], v]
-      )
-    )
-  ];
-  for (const [at, decl] of declared) {
+  for (const [, decl, at] of declarationsAt(config)) {
     if (decl.kind !== "state") continue;
     const row = rows.get(decl.key);
     if (row === void 0) continue;
     ctx.issues.push({
       path: [...at, "key"].join("."),
-      message: `${at.join(".")}: a state variable reads "${decl.key}", which is the session key of setting ${row.name} \u2014 the setting owns it; read the setting's value instead`,
+      message: `${at.join(".")}: a state variable reads "${decl.key}", which is the session key of setting ${row.name} \u2014 the setting owns it; read its value from the "${row.name}.effective" variable`,
       line: findKeyLine(ctx.source, [...at, "key"])
     });
   }
@@ -66207,8 +66204,8 @@ var SourceRegistry = class _SourceRegistry {
       return opts.read(sessionState.get(this.session(), opts.key)) ?? empty2;
     });
   }
-  // What the bound view's session holds at `key`, as its `state` variables
-  // read it. [LAW:no-silent-failure] A registry with no session state cannot
+  // The raw spelling the bound view's session holds at `key`, before any
+  // variable's default or fold reads it. [LAW:no-silent-failure] A registry with no session state cannot
   // be asked, as `declareState` cannot be.
   held(key) {
     if (!this.sessionState) {
@@ -67308,8 +67305,8 @@ function actionFuncs(runtime) {
 // src/dsl/stale-warnings.ts
 init_globals();
 function holds2(pick2, domains) {
-  const successor = typeof pick2.row.domain === "object" && "themes" in pick2.row.domain ? successorOf(pick2.raw) : void 0;
-  return successor === void 0 ? `It can hold ${describeControlDomain(pick2.row.domain, domains)}` : `"${pick2.raw}" was retired; its successor is "${successor}"`;
+  const retired2 = typeof pick2.row.domain === "object" && "themes" in pick2.row.domain ? retiredThemeSentence(pick2.raw) : "";
+  return retired2 === "" ? `It can hold ${describeControlDomain(pick2.row.domain, domains, sampledOneOf)}` : retired2;
 }
 function staleWarnings(picks, domains) {
   let built;

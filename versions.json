@@ -4,15 +4,22 @@
     {
       "version": "pr-901",
       "ref": "refs/pull/901/merge",
-      "sha": "261c34ad3c921c6669a60882f705182e2b25632f",
-      "timestamp": "2026-11-23T11:17:56.230Z",
+      "sha": "61b8f755ed6cd4f21504c43b10d4424785e9179a",
+      "timestamp": "2026-11-23T11:38:11.608Z",
       "commits": [
         {
-          "sha": "261c34ad3c921c6669a60882f705182e2b25632f",
+          "sha": "61b8f755ed6cd4f21504c43b10d4424785e9179a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:16:58Z",
-          "message": "Merge 6c678248edc73e4418dfa68445e467acffa1812f into 9981658049e4a64f1743182196945f5de277f53e\n"
+          "timestamp": "2026-11-23T11:37:05Z",
+          "message": "Merge 688ce7a54281f1172aab1a8994a5bf18d312c44d into 9981658049e4a64f1743182196945f5de277f53e\n"
+        },
+        {
+          "sha": "688ce7a54281f1172aab1a8994a5bf18d312c44d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T04:36:51-07:00",
+          "message": "fix(settings): list every member in a load refusal, share one retired-theme sentence, and pin the release paths\n"
         },
         {
           "sha": "6c678248edc73e4418dfa68445e467acffa1812f",
