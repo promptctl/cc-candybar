@@ -70,7 +70,7 @@ The `env` source reads the session's environment, which the client sends with th
 
 ### Diagnostics
 
-Gather's share crosses in `SessionFacts`. A renderer merges it through the pure `collectDiagnostics`, so its `⚠` shows Gather's faults. Load errors, questions, update notices and render warnings are the renderer's own. A failed scalar source doesn't reach the indicator today, and `SourceReading` would allow that.
+Gather's share crosses in `SessionFacts`. A renderer merges it through the pure `collectDiagnostics`, so its `⚠` shows Gather's faults. Load errors, questions and render warnings are the renderer's own. A failed scalar source doesn't reach the indicator today, and `SourceReading` would allow that.
 
 The full survey is in [../inventory/sources.md](../inventory/sources.md).
 

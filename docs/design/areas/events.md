@@ -16,19 +16,13 @@ The queue's implementation isn't the point. What matters is that an event source
 
 **`set-state` and `set-config` are pure.** Each produces an event. They don't flip switches, and nothing runs because of when they ran.
 
-**`journaled` goes.** It measures surface switches before a handler and after its commit, then infers that a surface moved. That is hidden ordering, the `[LAW:no-ambient-temporal-coupling]` violation. A surface change becomes an explicit `surface-requested` event carrying its intent. The memory doc's reason for the measurement still holds: a hand edit or another session's save mustn't restart every idle Claude Code. An explicit event satisfies that, because only a request produces one.
+**A surface change is a declaration.** The renderer's output declares each session's lane switches, and the host reconciles the surface from the declaration (`src/daemon/declared-bar-panes.ts`), so nothing infers that a surface moved from a measurement taken before a handler and after its commit. A hand edit or another session's save moves no surface, because only a declaration does.
 
 **Timers are event sources.** The idle close produces `idle-close`. It's one more source, not a special path.
 
-**Effects stay what they are.** A surface click that restarts Claude Code does what its button says. `dispatch` keeps running every effect and collecting errors, on purpose.
+**Effects stay what they are.** A click does what its button says. `dispatch` keeps running every effect and collecting errors, on purpose.
 
-**Cut what doesn't convert.** A feature too tangled to make pure gets removed and rebuilt later in a law-aligned way. Apparent first candidates:
-
-| Candidate | Why it's tangled |
-|---|---|
-| Surface setup after a click | Inferred from a before-and-after measurement, with owed setups running on a later request or click |
-| `doctor-run` reloading inside the measured window | An unseen hand edit gets attributed to the click |
-| `undo`, `redo` and `rewind` writing through `writeConfigText` | They skip the loader gate and closing view, though isolation doesn't depend on fixing this |
+**Cut what doesn't convert.** A feature too tangled to make pure gets removed and rebuilt later in a law-aligned way.
 
 **Every event emits one wide event**, extending today's click event, so a queue that did nothing is distinguishable from one that never ran.
 
@@ -50,4 +44,4 @@ Not done. A future session should have a subagent produce:
 
 ## Done when
 
-A test shows that handlers for `set-state` and `set-config` touch only the queue, no source of change reaches a writer except through Apply, and `journaled`'s surface measurement is gone.
+A test shows that handlers for `set-state` and `set-config` touch only the queue, no source of change reaches a writer except through Apply, and no handler infers a surface change from a measurement.

@@ -30,9 +30,9 @@ export interface TranscriptSaid {
 
 // [LAW:types-are-the-program] What the session's bar drew, read off the frame
 // itself (`Frame`, src/render/frame.ts): whether anything on it changes
-// without new data — an effect, a transition, a template's `frames` — so a
-// reader can tell when the bar needs Claude Code to redraw it a second at a
-// time (brandon-doctor-v62x.tgp). A render that threw drew nothing.
+// without new data — an effect, a transition, a template's `frames` — so the
+// stats reply says whether the bar needs Claude Code to redraw it a second at
+// a time (brandon-doctor-v62x.tgp). A render that threw drew nothing.
 // `can-move`: still now, but the config can start motion at any render
 // without a click — a `globals.effect` rule, placements fading as they come
 // and go, a placement wearing its own effect — so it needs the redraw a moving
@@ -72,7 +72,7 @@ export interface RoledSaid extends RenderSaid {
 }
 
 export interface RenderSighting extends RoledSaid {
-  // Whose render it was, so a reader keeps one session's sightings apart.
+  // Whose render it was, so the stats reply tells sessions apart.
   readonly sessionId: SessionId;
   // Seconds since the session's last render.
   readonly ago: number;

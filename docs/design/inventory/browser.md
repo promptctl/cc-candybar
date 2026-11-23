@@ -5,6 +5,7 @@ An inventory read from the code, plus the requirements any browser listener has 
 ## What exists
 
 - **One feed per session.** `FrameFeeds` in `src/daemon/frame-feed.ts` keeps one feed for each session, and a feed draws one frame at one width.
+- **One record of the last frame per surface and width.** A surface keeps one record of what its last drawn frame showed (`src/render/frame-memory.ts`), and a frame drawn at another width finds no comparable last frame, so its placements stop fading and a held loading cell is lost. A session keeps one effect memory, with one anchor, one effect in force and one set of placement clocks (`SessionEffects`, `src/render/effect.ts`). A second width under one feed key needs both keyed by width.
 - **Session discovery.** `src/bar-pane/index.ts` receives a pane id and asks the daemon for the session in that pane on a tick (`trySessionInPane`), because a `/clear` changes the session id in the pane. `src/daemon/pane-visibility.ts` is how the daemon knows a pane is on screen.
 - **Backpressure.** `src/utils/newest-wins.ts` takes any `Writable`, holds one pending chunk, and writes it on `drain`.
 - **No listener in `src/`.** The only listener is the unix socket, whose parent directory is owned, mode 0700, and not a symlink.

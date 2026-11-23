@@ -10,7 +10,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 **Code today.** The payload is composed in `src/renderer/render-payload.ts` (`composePayload`) from the world state the host hands the renderer, and read per view through `src/renderer/session-source.ts`. Every provider runs for every session whatever the config's layout reads, so no wants closure decides what is read. A not-yet-known fact is a value, `Pending` in `src/utils/outcome.ts`, that crosses a process as JSON; a source holds it beside the landing of its read (`src/utils/reading.ts`). There is no document type that holds a session's facts: the payload is derived in each view's store, read lazily during the draw.
 
-**Backlog today.** `candybar-testing-ihvy.cbz` (Sources piece: payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery`) and `.uf1` (Watchdogs: `updateWatch`, `binaryWatch`, `limits`) move exactly the state Proposal 1 sends to Gather into pieces with fake ports. Their blockers are the port tickets `.5t2` (launcher), `.y10` (watched store), `.31f` (git), `.xp7` (forge), `.dcv` (tmux), `.89p` (pricing, release, usage). Of the plan's ports only the clock (`Timekeeper`, `src/time.ts`, with a fake and a contract) and the launcher seam (`src/proc/launch.ts`, injected but without fake or contract) exist; `fs` is imported directly in about 23 daemon files and `fs.watch` in `WatcherRegistry`; git is a concrete class built inside `payload-providers.ts`; tmux is `runTmuxAsync` direct. None of the piece tickets defines the output shape the Sources piece hands to Drawing; Drawing (`.ncz`) still "reads the payload providers" directly.
+**Backlog today.** `candybar-testing-ihvy.cbz` (Sources piece: payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery`) and `.uf1` (Watchdogs: `binaryWatch`, `limits`) move exactly the state Proposal 1 sends to Gather into pieces with fake ports. Their blockers are the port tickets `.5t2` (launcher), `.y10` (watched store), `.31f` (git), `.xp7` (forge), `.dcv` (tmux), `.89p` (pricing, release, usage). Of the plan's ports only the clock (`Timekeeper`, `src/time.ts`, with a fake and a contract) and the launcher seam (`src/proc/launch.ts`, injected but without fake or contract) exist; `fs` is imported directly in about 23 daemon files and `fs.watch` in `WatcherRegistry`; git is a concrete class built inside `payload-providers.ts`; tmux is `runTmuxAsync` direct. None of the piece tickets defines the output shape the Sources piece hands to Drawing; Drawing (`.ncz`) still "reads the payload providers" directly.
 
 **Change.**
 - New ticket, under `candybar-isolated-daemon-bfab`: *A session's facts are one total document.* Define `SessionFacts` with `pending` as a value; the payload composes from it. Done when every built-in is in every payload and the bar is byte-identical for a config that read everything before. Depends on the two unblocking tickets below.
@@ -46,19 +46,19 @@ The gap is listed per proposal section: what the code does today, what the backl
 
 **Change.**
 - Fold into the §1 ticket: `follow { session, locator }` and `declare { session, sources }` as the two renderer-to-Gather messages, with the locator typed as the hint subset Gather reads. No separate ticket; it is the input side of the same seam.
-- The shell/file source identity digest (kind, command or path, cwd, parse, normalised policy, key value) is a small ticket of its own against `src/var-system/sources.ts`. Today dedupe is by scope: a source lives in the directory registry for its `(projectDir, cwd)` render-cache entry unless its key reads a view value, in which case each session runs its own. That rule is the renderer's and cannot be shared across processes; the digest replaces it. The same ticket gives `shellReader` the timeout it lacks, since one slow command would otherwise hold its identity for every renderer sharing it. The `declareEnv` read of the daemon's own `host.env` is the `env` source the proposal removes.
+- The shell/file source identity digest (kind, command or path, cwd, parse, normalised policy, key value) is a small ticket of its own against `src/var-system/sources.ts`. Today dedupe is by scope: a source lives in the directory registry for its `(projectDir, cwd)` render-cache entry unless its key reads a view value, in which case each session runs its own. That rule is the renderer's and cannot be shared across processes; the digest replaces it. The same ticket gives `shellReader` the timeout it lacks, since one slow command would otherwise hold its identity for every renderer sharing it. The `env` source reads the session's environment, which the host holds, and stays as a subscription kind.
 
 ## §5 Events → Apply → Draw
 
-**Code today.** Every verb handler is in `src/renderer/verbs/index.ts` (there are no per-verb files) and acts directly on state and disk. `journaled` opens a history journal and a navigation journal, measures the session's lane switches before the handler and after the commit, and hands the difference to `LaneSetups.clicked`; that measurement is the surface inference the proposal replaces with an event. `set-config` writes through `writeValues` and reloads; undo, redo and rewind write config text through `writeConfigText`; `doctor-run` writes a doctor store to disk outside the journal. Writers outside any handler: the render path itself writes `client-hints` and `render-origin` into session state; `MenuIdle`'s timer; `Runs.ended` and `LaneSetups.sync` holding click errors asynchronously; `updateWatch.act` launching builds; `limits` writing heap snapshots; `tmuxStatusLines` writing tmux options and bindings; `managedStorage`. The only queues are `JournalTurns` (per-session arrival, one daemon-wide turn, one gather lane) and `LaneSetups`' per-session serial queue; everything else lands as its own callback on the event loop, and a click's reply and the feed's next frame go out on different connections with nothing ordering them, as the comment in `daemon.ts` says outright. One more impurity the proposal's "Draw writes nothing" has to take: `FrameMemory` (`src/render/frame-memory.ts`) is written by the draw and is the basis of fades.
+**Code today.** Every verb handler is in `src/renderer/verbs/index.ts` (there are no per-verb files) and returns effects. `journaled` opens a history journal and a navigation journal around the handler, whole within one turn. Config writes leave as `change` effects the host applies. A lane switch is declared in the renderer's output, and the host reconciles tmux bar panes from the declaration (`src/daemon/declared-bar-panes.ts`). Writers outside any handler: `MenuIdle`'s timer (`src/renderer/menu-idle.ts`); `limits` writing heap snapshots; the managed storage owner (`src/daemon/cache/managed-storage.ts`). One more impurity the proposal's "Draw writes nothing" has to take: the record of a surface's last drawn frame (`src/render/frame-memory.ts`) is written by the draw and is the basis of fades.
 
 **Backlog today.** `candybar-testing-ihvy.2rl` (Actions: verbs, `Runs`, `closeIdleMenus`, `lanesAt`, `laneClicked`; "`verbCtx` splits by verb, each taking only what it uses"), `.th2` (Sessions: `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle`), `.cd0` (Requests: `handleRequest`, `replyTo`, the order of a render). These cut the same code into pieces but keep verbs as direct writers.
 
 **Change.**
-- Edit `.2rl`: the Actions piece is the reducer. Its constructor takes an `Event` and returns state plus effect descriptions; the effect performer is the piece's one adapter. The ticket's "each verb taking only what it uses" becomes "each verb a reducer arm". `journaled` is deleted and `surface-requested` is the event that replaces its inference. This is the largest single edit to an existing ticket and should be made before anyone pulls it.
+- Edit `.2rl`: the Actions piece is the reducer. Its constructor takes an `Event` and returns state plus effect descriptions; the effect performer is the piece's one adapter. The ticket's "each verb taking only what it uses" becomes "each verb a reducer arm". `journaled` is deleted, its history and navigation journals becoming reducer arms. This is the largest single edit to an existing ticket and should be made before anyone pulls it.
 - Edit `.cd0`: Requests puts a `request` event on the queue rather than calling into Drawing directly; "the order of a render" becomes the queue's order.
-- New ticket: *Every source of change is an event.* Timers and watchers (idle close, menu idle, update act, config watcher) produce events; the `Event` union is closed. Depends on `.2rl`. Its done-when is the events draft's: no writer exists outside Apply.
-- The deletions (the `env` source, direct verb URLs, the install test URL) each remove a verb or source and belong on the ticket whose piece owns the code, named explicitly so they are not lost: the install URL on the §2 ticket, `env` on the §1 ticket.
+- New ticket: *Every source of change is an event.* Timers and watchers (idle close, menu idle, config watcher) produce events; the `Event` union is closed. Depends on `.2rl`. Its done-when is the events draft's: no writer exists outside Apply.
+- The deletions (direct verb URLs, the install test URL) each remove a link form and belong on the ticket whose piece owns the code, named explicitly so they are not lost: the install URL on the §2 ticket.
 
 ## §6 Isolation is one value: the home
 
@@ -105,7 +105,7 @@ The gap is listed per proposal section: what the code does today, what the backl
 Eight new tickets, in dependency order, all under `candybar-isolated-daemon-bfab` unless named otherwise:
 
 1. `today` and PR stop blocking the first bar.
-2. A session's facts are one total document (`SessionFacts`; wants closure deleted; `env` removed; `follow` and `declare` as the input side).
+2. A session's facts are one total document (`SessionFacts`; wants closure deleted; `follow` and `declare` as the input side).
 3. A facts recording replays into a renderer with zero I/O (acceptance for 2; or fold into `.go6`).
 4. Shell and file sources have one identity digest.
 5. A renderer has one home.
@@ -121,7 +121,7 @@ No ticket closes. The tmux, URL-handler and daemon-health epics are unaffected i
 
 Three honest warnings for whoever pulls this.
 
-- `src/renderer/verbs/index.ts` is one file of over two thousand lines in which `journaled`, the effect dispatch and every verb's writes are interleaved. Turning it into a reducer is the bulk of the Events work and is not a mechanical move; `.2rl`'s "split `verbCtx` by verb" undersells it.
+- `src/renderer/verbs/index.ts` is one file of about fifteen hundred lines in which `journaled`, the effect dispatch and every verb's writes are interleaved. Turning it into a reducer is the bulk of the Events work and is not a mechanical move; `.2rl`'s "split `verbCtx` by verb" undersells it.
 - The wants closure is threaded through the render cache's view declaration (`declareLanes`, `settledLanes` in `render-payload.ts`), so deleting it touches how a view is held and when it refreshes, not only what the payload contains. The §1 ticket should expect to touch `src/renderer/render-cache.ts` and `src/dsl/` and should be planned with that file's memory (`.claude/memory/daemon-memory.md`) read first.
 - The Rust client and the Swift forwarder both carry the socket layout as literals checked by `scripts/check-protocol.mjs`. Homes (§6) and names (§2) change that layout in three languages at once; the check is the thing that makes it safe, and it must grow in the same commit.
 
@@ -134,14 +134,13 @@ Ruling: `candybar-isolated-daemon-bfab` owns the cut. The testing epic arrived a
 | Testing ticket | Piece | Is, in Proposal 1 | Becomes |
 |---|---|---|---|
 | `.cbz` | Sources | Gather's built-in sources and declared sources, publishing `SessionFacts` | *Gather publishes a session's facts* |
-| `.uf1` | Watchdogs | Splits: `updateWatch` reads the network, so it is a Gather fact; `binaryWatch` and `limits` are one-per-process | *Gather carries the update fact; every process watches its bundle and its memory* |
+| `.uf1` | Watchdogs | `binaryWatch` and `limits` are one-per-process | *Every process watches its bundle and its memory* |
 | `.cnn` | Feeds | Renderer surfaces and their feeds; `PaneVisibility` is a Gather fact | *A renderer's surfaces*, and visibility moves to `.cbz` |
 | `.th2` | Sessions | Apply's state | *A renderer's state* |
 | `.5zt` | Config | A renderer's config load as a value | *A renderer loads config as a value* |
 | `.ncz` | Drawing | Draw, plus the compile and views that stay per renderer | *Draw is pure over facts, state and config* |
 | `.2rl` | Actions | Apply | *Apply is the one writer* |
 | `.cd0` | Requests | The request event and the client edge | *A request is an event* |
-| `.ct7` | Doctor | A renderer's doctor | unchanged in substance, renamed |
 | `.97v` | Lifetime | Shared by both process kinds | *A process starts, leases and ends*, used by Gather and renderers alike |
 | `.go6` | Recorded case set | The recording primitive, widened from the client wire to facts | *A recording replays into a renderer* |
 | `.0zw` | Tests stop waiting | What the recording and the held clock give for free | folds into `.go6` |

@@ -3,11 +3,14 @@
 // the host to perform, what it needs read, and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
-// implements it; what it imports is the vocabulary both sides speak (the
-// session context, the world state, the frame, the instant), plus the failure
-// shape and its one converter, so a thrown value crosses as the same data
-// whichever side threw it. The stats snapshot imports its renderer portion from
-// here.
+// implements it. It sits in the shared zone (scripts/import-zones.mjs), so what
+// it imports is the vocabulary both sides speak (the session context, the
+// world state, the frame, the instant) and the failure shape with its one
+// converter, so a thrown value crosses as the same data whichever side threw it.
+// [LAW:one-way-deps] exception: it imports the stats snapshot's types, and the
+// snapshot imports `RendererStats` back from here. The stats reply carries one
+// renderer portion that both files must spell the same way, and each import is
+// type-only, so neither loads the other at runtime.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
@@ -343,9 +346,10 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
-// [LAW:one-type-per-behavior] A statusline frame returns as the present of the
-// request it answers. A frame a feed draws for a subscriber is no present: it
-// leaves as `RendererOutput.frames`, and the host publishes it.
+// A request's answer and a publication to a subscriber are two behaviors, so
+// they have two types: a statusline frame returns as the present of the
+// request it answers, and a frame a feed draws for a subscriber leaves as
+// `RendererOutput.frames`, which the host publishes.
 export interface Present {
   readonly kind: "present";
   readonly id: EffectId;
@@ -491,8 +495,8 @@ export interface Subscriptions {
   // Its address came from the host's plugin discovery.
   readonly managedFolders: readonly string[];
   // The lanes each session with an open view switches on, as it draws them:
-  // the host gates every subscriber by its lane, and holds the tmux status
-  // line row of each session whose switch is on, in the pane its newest
+  // the host gates every subscriber by its lane, and reconciles the tmux bar
+  // pane of each session from its `pane` switch, in the pane its newest
   // request reports. A session with no view has no switch to read.
   readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
   // The origins whose config the renderer holds: each live session's, and

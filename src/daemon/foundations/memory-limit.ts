@@ -1,7 +1,6 @@
 // The vocabulary of the daemon's memory limit: the units it is said in, a
 // breach's post-mortem, what a reading charges and how near the limit it is.
-// Shared, so what the daemon reports and what reads its post-mortems say it in the
-// daemon's words.
+// Shared, so everything the daemon says of its memory says it in one set of words.
 
 export const BYTES_PER_MB = 1024 * 1024;
 
@@ -15,8 +14,7 @@ export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
 // so a reader asks for the memory report by name instead of searching paths.
 // [LAW:one-source-of-truth] THE order of post-mortem identities, by code
 // unit as the ISO stamp is written (a collation may weigh its `-` and `:`
-// otherwise): the listing sorts by it, so the newest identity a reader has read
-// answers for every one it listed.
+// otherwise): the listing sorts by it.
 export function laterIdentity(a: string, b: string): boolean {
   return a > b;
 }
@@ -27,9 +25,9 @@ export interface PostMortem {
 }
 
 // The daemon as its stats reply reports it: which process it is and how much
-// of its budget it holds. Its post-mortems are files any
-// process reads (src/daemon/limits.ts `listPostMortems`), so they are no part
-// of what only the running daemon can say of itself.
+// of its budget it holds. Its post-mortems are files, which
+// `listPostMortems` (src/daemon/limits.ts) lists and only tests call today, so
+// they are no part of what only the running daemon can say of itself.
 export interface ServingDaemon {
   readonly pid: number;
   readonly memory: MemoryReading;

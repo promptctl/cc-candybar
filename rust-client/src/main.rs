@@ -691,7 +691,7 @@ fn resolve_against(cwd: &std::path::Path, value: &str) -> String {
 // The variables a terminal emulator sets to name itself — mirrors
 // TERMINAL_ENV_VARS in src/terminal-hint.ts, diffed by
 // scripts/check-protocol.mjs. They cross raw, by name: which terminal a value
-// means is a reader's judgment, made in one place.
+// means is left to whatever reads them.
 const TERMINAL_ENV_VARS: [&str; 5] = [
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",

@@ -465,8 +465,7 @@ function breachArtifacts(dir: string): string[] {
 }
 
 // [LAW:one-source-of-truth] The post-mortems the daemons' breaches left in
-// the state directory, read as rotation reads them, whichever process reads
-// it.
+// the state directory, read as rotation reads them. Only tests call it today.
 export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
   try {
     return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };

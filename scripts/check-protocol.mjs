@@ -345,7 +345,7 @@ const CHECKS = [
   },
   // What the native client says it is: the field names of the `client` hint.
   // A renamed field would make every native render read as "unreported" to
-  // whatever reads the hint, on the one client path that ships.
+  // the stats reply that reports it, on the one client path that ships.
   {
     label: "client hint fields",
     ts: memberSet(

@@ -31,7 +31,7 @@ Gather writes the click down that renderer's connection. A link routes by name. 
 
 Clients keep the default socket, which is the main renderer's, so the Rust hot path doesn't change. The handler app knows only the socket path and one frame, so moving it to Gather's path is a change to that one path, and it ships through reinstall.
 
-The URL needs no handler change to pass through: `open` on a `to/…` link reached the live daemon as verb `to`, unchanged. Parsing it is the change. `parseHandlerUrl` returns a typed address, and `statusLineClick`, `isBarLink` and `follow()` in `scripts/bar-web/index.html` update to match.
+The URL needs no handler change to pass through: `open` on a `to/…` link reached the live daemon as verb `to`, unchanged. Parsing it is the change. `parseHandlerUrl` returns a typed address, and `isBarLink` and `follow()` in `scripts/bar-web/index.html` update to match.
 
 **Failure.** A refused click is invisible today: the daemon logged `unknown click verb: to`, and no window appeared. That's a `[LAW:no-silent-failure]` gap regardless of this work.
 
@@ -47,7 +47,6 @@ The URL needs no handler change to pass through: `open` on a `to/…` link reach
 | Actions, menus, pickers, carousels, close fragments | Already through it |
 | Diagnostics, repo questions, handoff | Built with only a session id today, so each gets the minter. They live in the renderer |
 | Config-authored | A template function mints in the renderer. `{{ link }}` with a literal `cc-candybar://` is refused at load |
-| Doctor probes | Use the minter, so they also test the route through Gather |
 | Install test URL | Removed |
 
 The `{{ link }}` refusal makes `examples/demo-actions.json5` migrate, along with anything else writing literal links.
@@ -59,6 +58,8 @@ Removal candidates, since each leaves one URL form: direct verb URLs and bare `c
 ### tmux
 
 The tmux status row carries no ranges, and nothing writes a click binding for it; the daemon removes the binding an older version wrote (`src/daemon/retired-tmux-status.ts`). A drawn link reaches the daemon through the handler app, or by hand through `url-handle`.
+
+A tmux status row cannot draw a link with `#[link=…]`: tmux 3.8 drops a link of 256 bytes or more silently while its text still draws, `,` and `]` break the style, and `%` must be doubled. Raw OSC 8 in a status format does not work either: tmux 3.7b dropped the ESC bytes. Whether a plain click opens such a link with tmux `mouse on` was never tested.
 
 ### Signing
 
