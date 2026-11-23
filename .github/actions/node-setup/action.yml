@@ -1,0 +1,20 @@
+name: Node setup
+description: pnpm, Node 22 with the pnpm store cached, and the locked install. Runs after checkout.
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    # The npm registry is named for every job, so the publishing jobs and the
+    # test jobs set up one way.
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: 'pnpm'
+        registry-url: 'https://registry.npmjs.org'
+
+    - shell: bash
+      run: pnpm install --frozen-lockfile

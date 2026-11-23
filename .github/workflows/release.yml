@@ -8,26 +8,21 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Test
+  # [LAW:single-enforcer] The checks a commit must pass run as parallel jobs,
+  # and `Test` below is the one gate over all of them: the ruleset requires it,
+  # and the release jobs wait on it. The run is held to 5 minutes, so each job
+  # before the gate times out at 4 and the gate at 1.
+
+  checks:
+    name: Static checks
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Node setup
+        uses: ./.github/actions/node-setup
 
       - name: Lint
         run: pnpm run lint
@@ -41,29 +36,6 @@ jobs:
       - name: Schema drift guard
         run: pnpm run check:schema
 
-      # [LAW:verifiable-goals] Before the build, so a test outside the process
-      # tier that comes to need one fails here. The three test steps are the whole
-      # suite: each run selects a directory and the others ignore it.
-      - name: Test the unit tier
-        id: unit
-        run: pnpm test:unit
-
-      - name: Test outside the process tier
-        id: worker
-        run: pnpm test:worker
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Test the process tier
-        id: process
-        run: pnpm test:process
-
-      # [LAW:single-enforcer] The only run of test/e2e/: the sign-off's cap and
-      # assertion limit are checked here, and every other config ignores the directory.
-      - name: Test end-to-end
-        run: pnpm test:e2e
-
       # Covers the Rust client, the vendored statusline push and the Swift
       # URL handler, by reading their sources: no toolchain needed here.
       - name: Protocol-version guard
@@ -75,24 +47,154 @@ jobs:
       - name: Rust tests (spawn-boundary guard)
         run: cargo test --manifest-path rust-client/Cargo.toml
 
+  # Each test job keeps its run's records (test-records/<run>.jsonl) as an
+  # artifact, red or green, and `Test` reports over all of them. The three runs
+  # are the whole suite: each selects a directory and the others ignore it.
+  test-unit:
+    name: Test the unit tier
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+
+      - name: Test the unit tier
+        run: pnpm test:unit
+
+      - name: Keep the test records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-records-unit
+          path: test-records/
+          if-no-files-found: error
+          retention-days: 1
+
+  # [LAW:verifiable-goals] No build in this job, so a test outside the process
+  # tier that comes to need one fails here.
+  test-worker:
+    name: Test outside the process tier (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      matrix:
+        # [LAW:one-source-of-truth] The shard count is this list's length.
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+
+      - name: Test outside the process tier
+        run: pnpm test:worker --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Keep the test records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-records-worker-${{ matrix.shard }}
+          path: test-records/
+          if-no-files-found: error
+          retention-days: 1
+
+  test-process:
+    name: Test the process tier
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test the process tier
+        run: pnpm test:process
+
+      # [LAW:single-enforcer] The only run of test/e2e/: the sign-off's cap and
+      # assertion limit are checked here, and every other config ignores the directory.
+      - name: Test end-to-end
+        run: pnpm test:e2e
+
+      - name: Keep the test records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-records-process
+          path: test-records/
+          if-no-files-found: error
+          retention-days: 1
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    needs: [checks, test-unit, test-worker, test-process]
+    # Runs after a red job too: a red run is the one whose records matter most.
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node setup
+        uses: ./.github/actions/node-setup
+
+      - name: Download the test records
+        uses: actions/download-artifact@v4
+        with:
+          path: shards
+          pattern: test-records-*
+
+      # Each job wrote <run>.jsonl for the files it ran; a run's shards are
+      # disjoint, so their records joined are the run's records.
+      - name: Join the test records
+        run: |
+          set -euo pipefail
+          mkdir -p test-records
+          for file in shards/*/*.jsonl; do
+            cat "$file" >> "test-records/$(basename "$file")"
+          done
+
       # One record per test file, kept so a number about the suite is read from
-      # a run and not remembered. `always()` because a red run is the one whose
-      # records matter most, and last so a failed report cannot skip a gate.
+      # a run and not remembered. The report fails on a run that left none.
       - name: Report tests by layer
-        if: always() && !contains(fromJSON('["skipped","cancelled"]'), steps.unit.outcome) && !contains(fromJSON('["skipped","cancelled"]'), steps.worker.outcome) && !contains(fromJSON('["skipped","cancelled"]'), steps.process.outcome)
         run: pnpm test:report --runs unit,worker,process
 
       - name: Keep the test records
-        if: always() && !contains(fromJSON('["skipped","cancelled"]'), steps.unit.outcome)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-records
           path: test-records/
           if-no-files-found: error
 
+      # [LAW:no-silent-failure] The gate: every job above passed, or this
+      # names the ones that did not.
+      - name: Every check passed
+        if: always()
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          failed=$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "::error::checks that did not pass:"$'\n'"$failed"
+            exit 1
+          fi
+
   build-rust:
     name: Build native binary (${{ matrix.platform }})
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     # All targets cross-compiled from Linux via cargo-zigbuild. Zig acts as
     # the linker and ships a stub macOS SDK sufficient for binaries that
     # only use libc + libSystem (this one does — see rust-client/Cargo.toml).
@@ -153,6 +255,7 @@ jobs:
   build-url-handler:
     name: Build URL handler app (darwin universal)
     runs-on: macos-latest
+    timeout-minutes: 4
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -171,6 +274,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [test, build-rust, build-url-handler]
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -182,20 +286,8 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Node setup
+        uses: ./.github/actions/node-setup
 
       - name: Release
         env:
@@ -208,6 +300,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [test, build-rust, build-url-handler]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -217,20 +310,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Node setup
+        uses: ./.github/actions/node-setup
 
       - name: Download all binary artifacts
         uses: actions/download-artifact@v4
