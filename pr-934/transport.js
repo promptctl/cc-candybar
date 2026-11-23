@@ -28407,6 +28407,7 @@ init_globals();
 // src/utils/event-hold.ts
 init_globals();
 var DAEMON_EVENT_HOLD_S = 60;
+var recurrence = (more) => more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
 function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
@@ -72763,6 +72764,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const { daemon: daemon2 } = document;
   const daemonEvents = daemonEventsAt(daemon2.held, at, drawing2.by);
+  const threw2 = daemonEvents.filter(isThrew);
   const errors2 = [
     said2("refused-args", refusedArgsError(req.refusedArgs)),
     said2("hints", hintsError),
@@ -72775,7 +72777,7 @@ function drawRender(parts, setup, drawing2, feeds) {
       (e) => ({
         kind: "dropped",
         subject: e.file,
-        about: `dropped\0${e.file}`,
+        about: aboutOf("dropped", e.file),
         text: e.message,
         copy: e.prompt
       })
@@ -72784,51 +72786,39 @@ function drawRender(parts, setup, drawing2, feeds) {
     // [LAW:no-silent-failure] A daemon task that threw is a fault in the
     // daemon, an error on every bar. Each task is one message about itself,
     // however often it threw.
-    ...daemonEvents.flatMap(
-      ({ shown }) => shown.kind === "task-threw" ? [
-        {
-          kind: "task-threw",
-          subject: shown.about,
-          about: `task-threw\0${shown.about}`,
-          text: shown.event.text,
-          copy: shown.event.text
-        }
-      ] : []
+    ...threw2.map(
+      ({ shown }) => ({
+        kind: "task-threw",
+        subject: shown.about,
+        about: aboutOf("task-threw", shown.about),
+        text: shown.event.text,
+        copy: shown.event.text
+      })
     )
   ].flatMap(
     ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
   const configWatch = entry.revision.snapshot.watch;
   const eventsShown = daemonEvents.map(({ shown }) => shown).filter(({ event }) => !event.answered);
-  const daemonWarnings = daemonEvents.flatMap(
-    ({ shown, hold: hold2 }) => {
-      const message = shown.event.text;
-      switch (shown.kind) {
-        case "task-threw":
-          return [];
-        case "launch-pipes":
-          return [{ kind: shown.kind, message, hold: hold2, subject: shown.about }];
-        default:
-          return [{ kind: shown.kind, message, hold: hold2 }];
-      }
-    }
+  const daemonWarnings = daemonEvents.filter(isWarned).map(
+    ({ shown, hold: hold2 }) => ({
+      warning: { kind: shown.kind, message: shown.event.text, hold: hold2 },
+      subject: shown.kind === "launch-pipes" ? shown.about : void 0
+    })
   );
   const standing2 = [
-    ...daemon2.fileEvents,
-    ...daemon2.launcher === null ? [] : [daemon2.launcher],
+    ...daemon2.fileEvents.map(alone),
+    ...daemon2.launcher === null ? [] : [alone(daemon2.launcher)],
     ...daemonWarnings,
-    ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
-    ...entry.lastWarnings.map((message) => ({
-      kind: "load",
-      message
-    })),
+    ...configWatch === null ? [] : [alone({ kind: "config-watch", message: configWatch })],
+    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...failure2 === null ? [] : [
-      {
+      alone({
         kind: "facts",
         message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure2}`
-      }
+      })
     ]
   ];
   const config = presentations.configOf(state.config);
@@ -72843,10 +72833,10 @@ function drawRender(parts, setup, drawing2, feeds) {
       // recurs, whose words change as it does (a pipe event's count), so
       // that is what it is about: a viewer open on it stays open. A render
       // warning is about its words.
-      ...standing2.map((w) => ({
-        about: "subject" in w ? `${w.kind}\0${w.subject}` : w.kind,
-        text: w.message,
-        copy: w.message
+      ...standing2.map(({ warning, subject }) => ({
+        about: aboutOf(warning.kind, subject),
+        text: warning.message,
+        copy: warning.message
       })),
       ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
         about: key,
@@ -72930,19 +72920,14 @@ function drawRender(parts, setup, drawing2, feeds) {
   const warnings = drawnWarnings.map(describeWarning);
   const warned = [
     ...standing2.map(
-      (w) => w.kind === "file-events" ? `${w.kind}:${w.state}` : w.kind
+      ({ warning }) => warning.kind === "file-events" ? `${warning.kind}:${warning.state}` : warning.kind
     ),
     ...warnings.map(({ tag }) => tag)
   ].join(",") || "-";
   const faults = [
     ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
     ...standing2.map(
-      (w) => faultOf(
-        "warning",
-        w.kind,
-        w.message,
-        "subject" in w ? w.subject : void 0
-      )
+      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
     ),
     ...warnings.map(
       ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
@@ -72979,8 +72964,9 @@ function drawRender(parts, setup, drawing2, feeds) {
     rules: [...rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
-    // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: daemonWarnings.find(({ kind }) => kind === "launch-pipes")?.hold ?? "-",
+    // Each pipe event as this frame showed it, in the order held: `-` for
+    // none at all.
+    pipeEvent: daemonWarnings.filter(({ warning }) => warning.kind === "launch-pipes").map(({ warning }) => warning.hold).join(",") || "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -73023,12 +73009,19 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 var faultOf = (level, kind, message, subject) => ({ level, kind, subject, message });
+var aboutOf = (kind, subject) => subject === void 0 ? kind : `${kind}\0${subject}`;
+var isThrew = (event) => event.shown.kind === "task-threw";
+var isWarned = (event) => !isThrew(event);
 function daemonEventsAt(held, at, render3) {
   return held.flatMap((shown) => {
     const hold2 = eventHoldAt(shown.event, DAEMON_EVENT_HOLD_S, at, render3);
     return hold2 === "over" ? [] : [{ shown, hold: hold2 }];
   });
 }
+var alone = (warning) => ({
+  warning,
+  subject: void 0
+});
 function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
@@ -78766,153 +78759,6 @@ var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock
 
 // src/daemon/task-throws.ts
 init_globals();
-
-// src/daemon/held-slot.ts
-init_globals();
-var HeldSlot = class {
-  constructor(clock, task, left) {
-    this.clock = clock;
-    this.task = task;
-    this.left = left;
-  }
-  clock;
-  task;
-  left;
-  state = "empty";
-  event() {
-    return typeof this.state === "string" ? null : this.state.event;
-  }
-  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
-  // an event, so a disposed slot takes none and arms no end on a closed daemon.
-  hold(event) {
-    if (this.state === "disposed") return;
-    if (this.state !== "empty") this.state.cancelEnd();
-    const held = { event, cancelEnd: () => {
-    } };
-    this.state = held;
-    this.armEnd(held);
-  }
-  // Whether `shown` marked the held event, which leaves too if it is past
-  // its hold.
-  answer(shown) {
-    const held = this.state;
-    if (typeof held === "string" || !answeredBy(held.event, shown))
-      return false;
-    held.event = { ...held.event, answered: true };
-    if (this.holdNow(held.event) === "over") this.leave(held);
-    return true;
-  }
-  // A disposed slot lets go of what it holds as any slot does, and it holds
-  // nothing after.
-  dispose() {
-    const held = this.state;
-    this.state = "disposed";
-    if (typeof held === "string") return;
-    held.cancelEnd();
-    this.left();
-  }
-  // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
-  // and timed on the timers, which need not agree: an end that finds the
-  // event still inside its hold arms again for what is left of it. Leaving
-  // and a new occurrence cancel the end, so one that fires judges the event
-  // the slot still holds.
-  armEnd(held) {
-    const ms = (held.event.at + DAEMON_EVENT_HOLD_S - instantAt(this.clock)) * 1e3;
-    held.cancelEnd = this.clock.after(this.task, Math.max(0, ms), () => {
-      switch (this.holdNow(held.event)) {
-        case "held":
-          this.armEnd(held);
-          break;
-        // An answer past the hold lets it go.
-        case "owed":
-          break;
-        case "over":
-          this.leave(held);
-          break;
-      }
-    });
-  }
-  holdNow(event) {
-    return eventHoldAt(
-      event,
-      DAEMON_EVENT_HOLD_S,
-      instantAt(this.clock),
-      "request"
-    );
-  }
-  leave(held) {
-    held.cancelEnd();
-    this.state = "empty";
-    this.left();
-  }
-};
-var recurrence = (more) => more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
-var RecurringEvents = class {
-  constructor(clock, kind, task, about, shown, changed) {
-    this.clock = clock;
-    this.kind = kind;
-    this.task = task;
-    this.about = about;
-    this.shown = shown;
-    this.changed = changed;
-  }
-  clock;
-  kind;
-  task;
-  about;
-  shown;
-  changed;
-  subjects = /* @__PURE__ */ new Map();
-  // [LAW:dataflow-not-control-flow] One operation for every occurrence: held
-  // while its subject holds nothing, counted while it does.
-  occur(occurrence) {
-    const about = this.about(occurrence);
-    const subject = this.subjects.get(about);
-    if (subject === void 0) this.show(this.subjectOf(about), occurrence, 0);
-    else
-      subject.recurred = {
-        count: (subject.recurred?.count ?? 0) + 1,
-        latest: occurrence
-      };
-  }
-  held() {
-    return [...this.subjects].flatMap(([about, { slot }]) => {
-      const event = slot.event();
-      return event === null ? [] : [{ kind: this.kind, about, event }];
-    });
-  }
-  // Whether `shown` marked its subject's held event. A frame can carry an
-  // event whose subject has since left: nothing holds it to mark.
-  answer(about, shown) {
-    return this.subjects.get(about)?.slot.answer(shown) ?? false;
-  }
-  // Each subject lets go as at any slot's disposal, so what recurred is still
-  // shown to whatever hears it, and nothing is held after.
-  dispose() {
-    for (const { slot } of this.subjects.values()) slot.dispose();
-  }
-  show(subject, occurrence, more) {
-    subject.recurred = null;
-    subject.slot.hold(this.shown(occurrence, more));
-    this.changed();
-  }
-  subjectOf(about) {
-    const subject = {
-      slot: new HeldSlot(this.clock, `${this.task} ${about}`, () => {
-        const { recurred } = subject;
-        if (recurred !== null)
-          return this.show(subject, recurred.latest, recurred.count);
-        this.subjects.delete(about);
-        this.changed();
-      }),
-      recurred: null
-    };
-    this.subjects.set(about, subject);
-    return subject;
-  }
-};
-
-// src/daemon/task-throws.ts
 function thrownText(reported, more = 0) {
   const failure2 = failureOf(reported.thrown);
   const threw2 = `${reported.task} threw${recurrence(more)}`;
@@ -91527,6 +91373,152 @@ var RendererRecordings = class {
   }
 };
 
+// src/daemon/held-slot.ts
+init_globals();
+var HeldSlot = class {
+  constructor(clock, task, left) {
+    this.clock = clock;
+    this.task = task;
+    this.left = left;
+  }
+  clock;
+  task;
+  left;
+  state = "empty";
+  event() {
+    return typeof this.state === "string" ? null : this.state.event;
+  }
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a disposed slot takes none and arms no end on a closed daemon.
+  hold(event) {
+    if (this.state === "disposed") return;
+    if (this.state !== "empty") this.state.cancelEnd();
+    const held = { event, cancelEnd: () => {
+    } };
+    this.state = held;
+    this.armEnd(held);
+  }
+  // Whether `shown` marked the held event, which leaves too if it is past
+  // its hold.
+  answer(shown) {
+    const held = this.state;
+    if (typeof held === "string" || !answeredBy(held.event, shown))
+      return false;
+    held.event = { ...held.event, answered: true };
+    if (this.holdNow(held.event) === "over") this.leave(held);
+    return true;
+  }
+  // A disposed slot lets go of what it holds as any slot does, and it holds
+  // nothing after.
+  dispose() {
+    const held = this.state;
+    this.state = "disposed";
+    if (typeof held === "string") return;
+    held.cancelEnd();
+    this.left();
+  }
+  // [LAW:no-ambient-temporal-coupling] The hold is judged on the wall reading
+  // and timed on the timers, which need not agree: an end that finds the
+  // event still inside its hold arms again for what is left of it. Leaving
+  // and a new occurrence cancel the end, so one that fires judges the event
+  // the slot still holds.
+  armEnd(held) {
+    const ms = (held.event.at + DAEMON_EVENT_HOLD_S - instantAt(this.clock)) * 1e3;
+    held.cancelEnd = this.clock.after(this.task, Math.max(0, ms), () => {
+      switch (this.holdNow(held.event)) {
+        case "held":
+          this.armEnd(held);
+          break;
+        // An answer past the hold lets it go.
+        case "owed":
+          break;
+        case "over":
+          this.leave(held);
+          break;
+      }
+    });
+  }
+  holdNow(event) {
+    return eventHoldAt(
+      event,
+      DAEMON_EVENT_HOLD_S,
+      instantAt(this.clock),
+      "request"
+    );
+  }
+  leave(held) {
+    held.cancelEnd();
+    this.state = "empty";
+    this.left();
+  }
+};
+var RecurringEvents = class {
+  constructor(clock, kind, about, shown, changed) {
+    this.clock = clock;
+    this.kind = kind;
+    this.about = about;
+    this.shown = shown;
+    this.changed = changed;
+  }
+  clock;
+  kind;
+  about;
+  shown;
+  changed;
+  subjects = /* @__PURE__ */ new Map();
+  closed = false;
+  // [LAW:no-ambient-temporal-coupling] Past the owner's close no bar can show
+  // an event, so a closed family takes none and arms no end on a closed
+  // daemon, as a disposed slot takes none.
+  occur(occurrence) {
+    if (this.closed) return;
+    const about = this.about(occurrence);
+    const subject = this.subjects.get(about);
+    if (subject === void 0) this.show(this.subjectOf(about), occurrence, 0);
+    else
+      subject.recurred = {
+        count: (subject.recurred?.count ?? 0) + 1,
+        latest: occurrence
+      };
+  }
+  held() {
+    return [...this.subjects].flatMap(([about, { slot }]) => {
+      const event = slot.event();
+      return event === null ? [] : [{ kind: this.kind, about, event }];
+    });
+  }
+  // Whether `shown` marked its subject's held event. A frame can carry an
+  // event whose subject has since left: nothing holds it to mark.
+  answer(about, shown) {
+    return this.subjects.get(about)?.slot.answer(shown) ?? false;
+  }
+  // Each subject lets go as at any slot's disposal, so what recurred is still
+  // shown to whatever hears it, and nothing is held after.
+  dispose() {
+    this.closed = true;
+    for (const { slot } of this.subjects.values()) slot.dispose();
+  }
+  show(subject, occurrence, more) {
+    subject.recurred = null;
+    subject.slot.hold(this.shown(occurrence, more, instantAt(this.clock)));
+    this.changed();
+  }
+  subjectOf(about) {
+    const subject = {
+      slot: new HeldSlot(this.clock, `${this.kind} hold ${about}`, () => {
+        const { recurred } = subject;
+        if (recurred !== null)
+          return this.show(subject, recurred.latest, recurred.count);
+        this.subjects.delete(about);
+        this.changed();
+      }),
+      recurred: null
+    };
+    this.subjects.set(about, subject);
+    return subject;
+  }
+};
+
 // src/daemon/config-discovery/config-discovery.ts
 init_globals();
 
@@ -92429,9 +92421,8 @@ function createDaemon(inputs) {
   const launchPipes = new RecurringEvents(
     clock,
     "launch-pipes",
-    "launch pipe hold",
     (text4) => text4,
-    (text4, more) => joinedEvent(null, `${text4}${recurrence(more)}`, instant()),
+    (text4, more, at) => joinedEvent(null, `${text4}${recurrence(more)}`, at),
     restateOnceBuilt
   );
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
@@ -92439,15 +92430,11 @@ function createDaemon(inputs) {
   const taskThrows = new RecurringEvents(
     clock,
     "task-threw",
-    "task throw hold",
     (reported) => reported.task,
-    (reported, more) => {
+    (reported, more, at) => {
       const { shown, logged } = thrownText(reported, more);
       log("error", logged);
-      return environmentOutput(
-        joinedEvent(null, shown, instantOf(new Date(reported.at))),
-        true
-      );
+      return environmentOutput(joinedEvent(null, shown, at), true);
     },
     restateFaults
   );

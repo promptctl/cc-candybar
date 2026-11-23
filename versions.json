@@ -4,15 +4,22 @@
     {
       "version": "pr-934",
       "ref": "refs/pull/934/merge",
-      "sha": "ed9c64d3bb1ab84cdae7fcabf6171e4bcbc4a8ae",
-      "timestamp": "2026-11-23T08:14:52.927Z",
+      "sha": "2b87d42839720398b484fd349a8b72538d8c1aac",
+      "timestamp": "2026-11-23T08:28:56.672Z",
       "commits": [
         {
-          "sha": "ed9c64d3bb1ab84cdae7fcabf6171e4bcbc4a8ae",
+          "sha": "2b87d42839720398b484fd349a8b72538d8c1aac",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T08:13:47Z",
-          "message": "Merge ee54d71ad7a693cae0e1cd771038b1c2a1b9ed81 into 7e6b5e5c82b2b65761435a047c890ba77ff34587\n"
+          "timestamp": "2026-11-23T08:27:49Z",
+          "message": "Merge f120afebc85bdba5b69ebc637ff173a7a066b221 into 7e6b5e5c82b2b65761435a047c890ba77ff34587\n"
+        },
+        {
+          "sha": "f120afebc85bdba5b69ebc637ff173a7a066b221",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T01:27:24-07:00",
+          "message": "fix(daemon): recurring events close with their owner and stamp one way\n\nA closed family of recurring events takes no occurrence, so a pipe event\nthat lands after close arms no end on a closed daemon. The family stamps\nevery event it shows at the instant it is shown, a first occurrence and a\nrecurrence alike, where a task throw used to carry the instant it was\ncaught. The wording of a recurrence moves to the event hold with the rest of\nthe events' vocabulary, and the hold-end task is named from the kind.\n\nThe draw tells an error from a warning once, and names what a standing\nwarning is about beside the warning, not by whether it has a subject. The\nframe record names each pipe event's hold.\n"
         },
         {
           "sha": "ee54d71ad7a693cae0e1cd771038b1c2a1b9ed81",
