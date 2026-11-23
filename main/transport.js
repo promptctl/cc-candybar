@@ -84900,6 +84900,62 @@ async function foldAppended(filePath2, prior, empty2, step4) {
   }
 }
 
+// src/daemon/foundations/day-ledger.ts
+init_globals();
+var DayLedgersDraft = class _DayLedgersDraft {
+  days = /* @__PURE__ */ new Map();
+  // The ledgers of `from` on days at or after `keep` (day keys sort as dates).
+  static keeping(from, keep) {
+    const draft = new _DayLedgersDraft();
+    for (const [day, ledger] of from) {
+      if (day < keep) continue;
+      draft.days.set(day, {
+        responses: new Map(ledger.responses),
+        unnamed: { ...ledger.unnamed }
+      });
+    }
+    return draft;
+  }
+  // One response's usage on `day`; `undefined` is a response no id names.
+  record(day, response, usage) {
+    const ledger = this.ledger(day);
+    if (response === void 0) addDay(ledger.unnamed, usage);
+    else ledger.responses.set(response, usage);
+  }
+  // Every ledger of `from`, a response already held kept as it is: a copy
+  // carries the usage of the response it copies.
+  union(from) {
+    for (const [day, ledger] of from) {
+      const into = this.ledger(day);
+      addDay(into.unnamed, ledger.unnamed);
+      for (const [response, usage] of ledger.responses) {
+        if (!into.responses.has(response)) into.responses.set(response, usage);
+      }
+    }
+  }
+  done() {
+    return this.days;
+  }
+  ledger(day) {
+    const found2 = this.days.get(day);
+    if (found2 !== void 0) return found2;
+    const fresh = { responses: /* @__PURE__ */ new Map(), unnamed: { ...EMPTY_DAY } };
+    this.days.set(day, fresh);
+    return fresh;
+  }
+};
+function dayTotals(sets) {
+  const all2 = new DayLedgersDraft();
+  for (const set2 of sets) all2.union(set2);
+  const totals2 = {};
+  for (const [day, ledger] of all2.done()) {
+    const total = { ...ledger.unnamed };
+    for (const usage of ledger.responses.values()) addDay(total, usage);
+    totals2[day] = total;
+  }
+  return totals2;
+}
+
 // src/daemon/cache/session-usage-store.ts
 var SPEED_RING_CAPACITY = 64;
 function speedSampleOf(breakdown, turnOpen, atMs) {
@@ -84945,8 +85001,7 @@ async function foldFile(state, entries, cacheRoot, clock) {
   let turnOpen = state.turnOpen;
   let last2 = state.response;
   const breakdown = { ...state.breakdown };
-  const days = /* @__PURE__ */ new Map();
-  for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
+  const days = DayLedgersDraft.keeping(state.days, keep);
   for (const entry of entries) {
     turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
@@ -84963,21 +85018,28 @@ async function foldFile(state, entries, cacheRoot, clock) {
     breakdown.cacheRead += u.cache_read_input_tokens || 0;
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
+    days.record(key, response, {
+      cost: priced,
+      input: u.input_tokens || 0,
+      output: u.output_tokens || 0,
+      cacheCreation: u.cache_creation_input_tokens || 0,
+      cacheRead: u.cache_read_input_tokens || 0
+    });
   }
-  return { entries: count, cost, breakdown, days, turnOpen, response: last2 };
+  return {
+    entries: count,
+    cost,
+    breakdown,
+    days: days.done(),
+    turnOpen,
+    response: last2
+  };
 }
 function mergeFolds(files) {
   let count = 0;
   let cost = 0;
   const bd = emptyBreakdown();
-  const days = /* @__PURE__ */ new Map();
+  const draft = new DayLedgersDraft();
   for (const { value: f } of files.values()) {
     count += f.entries;
     cost += f.cost;
@@ -84985,12 +85047,9 @@ function mergeFolds(files) {
     bd.output += f.breakdown.output;
     bd.cacheCreation += f.breakdown.cacheCreation;
     bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
+    draft.union(f.days);
   }
+  const days = draft.done();
   if (count === 0) return { usage: EMPTY_USAGE, days };
   const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
@@ -85006,16 +85065,13 @@ function under(path31, roots) {
   return path31 !== void 0 && roots.some((root) => path31.startsWith(root));
 }
 function daySumsOver(slots, roots) {
-  const sums = /* @__PURE__ */ new Map();
+  const sets = [];
   for (const { record: record2 } of slots) {
-    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
-    for (const [day, d] of record2.days) {
-      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum2, d);
-      sums.set(day, sum2);
+    if (record2 !== void 0 && under(record2.transcriptPath, roots)) {
+      sets.push(record2.days);
     }
   }
-  return Object.fromEntries(sums);
+  return dayTotals(sets);
 }
 async function mapPool(items, limit, fn) {
   let cursor = 0;
@@ -85239,7 +85295,7 @@ var SessionUsageStore = class {
     if (record2 === void 0 || under(record2.transcriptPath, roots)) {
       return ABSENT2;
     }
-    return ok(Object.fromEntries(record2.days));
+    return ok(dayTotals([record2.days]));
   }
   // A refresh's speed sample, over its one ingest of the session: its current
   // cumulative counts and whether its turn is open, added to the session's

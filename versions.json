@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-939",
-      "ref": "refs/pull/939/merge",
-      "sha": "0a7735f4c5f997d62e3d3d3f60736ae73e532d1a",
-      "timestamp": "2026-11-23T18:14:49.409Z",
-      "commits": [
-        {
-          "sha": "0a7735f4c5f997d62e3d3d3f60736ae73e532d1a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:13:42-07:00",
-          "message": "Merge 4974dcd1ce39d8283618c817cca434ec0a3dc9d7 into a4fa5033219305be8ae9d3b24c8700c208a1ac50\n"
-        },
-        {
-          "sha": "4974dcd1ce39d8283618c817cca434ec0a3dc9d7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:13:19-07:00",
-          "message": "fix(usage): today counts each API response once, however many session files hold a copy of it (candybar-host-renderer-x96a.au0)\n\nA forked or resumed session's transcript copies the earlier session's\nresponses under their original ids, with a forkedFrom mark or without\none. Day buckets are now keyed by response, so a directory's day sums\nand a session's own days count each copy once, including when the file\nit was copied from is gone or unread. Buckets are kept only for the\ndays today reads, so the ids held grow with a day's work.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "a4fa5033219305be8ae9d3b24c8700c208a1ac50",
-      "timestamp": "2026-11-23T18:01:45.308Z",
+      "sha": "65b812767561b997ca5949478dde770145835dd0",
+      "timestamp": "2026-11-23T18:17:48.964Z",
       "commits": [
         {
-          "sha": "a4fa5033219305be8ae9d3b24c8700c208a1ac50",
+          "sha": "65b812767561b997ca5949478dde770145835dd0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:00:42-07:00",
-          "message": "ci: the Release workflow's checks run as parallel jobs under one Test gate, inside 5 minutes (#938)\n\nThe Test job ran lint, typecheck, the three test tiers and the Rust tests one\nafter another on one runner: ~7.5 min on main, and the worker tier alone held\n~300 s of wall time. They now run as parallel jobs (static checks, unit, four\nworker shards, process + e2e), each capped at 4 minutes, and Test is the one\ngate over them: it joins every job's test records, reports by layer, and names\nany job that did not pass.\n\nRefs brandon-unfiled-3248.o44h"
+          "timestamp": "2026-11-23T11:16:46-07:00",
+          "message": "fix(usage): today counts each API response once, however many session files hold a copy of it (#939)\n\nfix(usage): today counts each API response once, however many session files hold a copy of it (candybar-host-renderer-x96a.au0)\n\nA forked or resumed session's transcript copies the earlier session's\nresponses under their original ids, with a forkedFrom mark or without\none. Day buckets are now keyed by response, so a directory's day sums\nand a session's own days count each copy once, including when the file\nit was copied from is gone or unread. Buckets are kept only for the\ndays today reads, so the ids held grow with a day's work."
         }
       ]
     }
