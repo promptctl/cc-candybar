@@ -810,18 +810,29 @@ const save: VerbHandler = (args, ctx) => {
 // against the file they came from and are released all the same. Only a pick
 // the session holds is released: letting go of nothing writes nothing, which
 // matters for an edit mode key with no edit open.
+//
+// [LAW:no-ambient-temporal-coupling] The drafts are judged against the preset
+// the save settles on, which is an input (`preset`): the session's own pick
+// of it is what a save that switches presets is about to write, so the release
+// never depends on whether that write has landed.
 function releaseSaved(
   ctx: ClickContext,
   written: DslConfig,
-  movedOn: readonly string[] = [],
+  settled: {
+    readonly preset?: string;
+    readonly movedOn?: readonly string[];
+  } = {},
 ): void {
   const sid = ctx.session;
-  const pick = (key: string) => ctx.sessionState.get(sid, key);
+  const pick = (key: string) =>
+    key === SETTINGS.preset.sessionKey && settled.preset !== undefined
+      ? settled.preset
+      : ctx.sessionState.get(sid, key);
   const drafted = new Set([
     ...settingDrafts(written, pick).map((d) => d.sessionKey),
     ...placementDrafts(written, pick).map((p) => p.key),
   ]);
-  for (const key of movedOn) drafted.delete(key);
+  for (const key of settled.movedOn ?? []) drafted.delete(key);
   // [LAW:nothing-unseen] A release that lets go of a stale pick is a decision
   // the save made for the user: the log names it.
   const released = [...settingTable(written).rows].flatMap(([key, row]) => {
@@ -888,15 +899,11 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
-  // [LAW:no-ambient-temporal-coupling] The new preset is picked BEFORE the
-  // release: its drafts are judged against the session's preset, which this
-  // line sets, so a pick the new preset's globals now hold is no draft.
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  releaseSaved(
-    ctx,
-    written,
-    snapshot.placements.map((p) => p.key),
-  );
+  releaseSaved(ctx, written, {
+    preset: name,
+    movedOn: snapshot.placements.map((p) => p.key),
+  });
   ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${into.path} (session=${sid})`,
