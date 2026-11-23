@@ -43709,12 +43709,17 @@ var SAYS = {
 };
 var spell = (text4) => encodeURIComponent(text4).replaceAll("%20", "+").replaceAll("%2F", "/").replaceAll("%3A", ":");
 function clickDoes(effects) {
+  const [face = "nothing", ...rest2] = inFaceOrder(effects).flatMap(
+    (e) => SAYS[e.verb](e.args)
+  );
+  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
+}
+function inFaceOrder(effects) {
   const writesSession = (e) => e.verb === VERB_SET_STATE || e.verb === VERB_STEP_STATE;
-  const [face = "nothing", ...rest2] = [
+  return [
     ...effects.filter((e) => !writesSession(e)),
     ...effects.filter(writesSession)
-  ].flatMap((e) => SAYS[e.verb](e.args));
-  return rest2.length > 0 ? `${face} and ${rest2.length} more` : face;
+  ];
 }
 function encodeSegments(parts) {
   return parts.map(encodeURIComponent).join("/");

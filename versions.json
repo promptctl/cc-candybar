@@ -4,15 +4,22 @@
     {
       "version": "pr-936",
       "ref": "refs/pull/936/merge",
-      "sha": "00007e25357cda474b295c3a62df7a28051f13a6",
-      "timestamp": "2026-11-23T13:33:07.800Z",
+      "sha": "a4d784088fdb8d067842b4c13a6dbb3cc8d9cf9a",
+      "timestamp": "2026-11-23T13:37:22.213Z",
       "commits": [
         {
-          "sha": "00007e25357cda474b295c3a62df7a28051f13a6",
+          "sha": "a4d784088fdb8d067842b4c13a6dbb3cc8d9cf9a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:32:05Z",
-          "message": "Merge 1bef5801d6745060232a2234daf678cc050fceba into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
+          "timestamp": "2026-11-23T13:36:14Z",
+          "message": "Merge da3d7d478ba21dcb68d25e47889643ca2f94142b into 1bc8a492d7f2458aaa33e154361a22475fd112b3\n"
+        },
+        {
+          "sha": "da3d7d478ba21dcb68d25e47889643ca2f94142b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:36:01-07:00",
+          "message": "test(click): the click-words case reads the phrase a link says, from the product's own table\n"
         },
         {
           "sha": "1bef5801d6745060232a2234daf678cc050fceba",
