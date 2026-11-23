@@ -312,6 +312,8 @@ describe("a request's wait", () => {
       .then(() => (ended = true));
     await drained();
     expect(ended).toBe(false);
+    // The record of a wait that ended here would name the fact it held on.
+    expect(collector.holds(SID)).toContain("hostName");
     land("host.name", ok("box"));
     await until(() => {
       takeTurns(collector, handedIn);
@@ -347,6 +349,7 @@ describe("a request's wait", () => {
       .then(() => (ended = true));
     await drained();
     expect(ended).toBe(false);
+    expect(collector.holds(SID)).toEqual(["turn"]);
     await until(() => {
       takeTurns(collector, handedIn);
       return ended;

@@ -233,9 +233,9 @@ export function rendererHost(
     // [LAW:single-enforcer] Where changed subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
-    // [LAW:single-enforcer] Told after a turn that took a world state has had
-    // its output taken, so a request's wait covers what that world state
-    // taught the renderer to subscribe to.
+    // [LAW:single-enforcer] Told when a turn that took a world state is over,
+    // its output taken if it could be, so a request's wait covers what that
+    // world state taught the renderer to subscribe to.
     readonly heard: (worldState: WorldState) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
     // send each subscriber what changed for it.
@@ -423,6 +423,7 @@ export function rendererHost(
       output = await renderer.answer(input);
     } catch (thrown) {
       recordTaken("session release", release);
+      turnEnded(input.event);
       const failure = failureOf(thrown);
       if (input.event.kind === "start") endedStart({ kind: "threw", failure });
       return unanswered(failure, queuedMs);
@@ -498,6 +499,17 @@ export function rendererHost(
     };
   };
 
+  // [LAW:single-enforcer] The one word to the collector that the renderer's
+  // turn on a world state is over, whatever it did: a request's wait ends on
+  // a turn that took its subscriptions, and on one that could not (the
+  // renderer threw, or the host could not take them: `notTaken`, which is
+  // loud). Holding the wait to its client's deadline for an answer that
+  // cannot come would only turn the cause into a TIMEOUT.
+  const turnEnded = (event: Event): void => {
+    if (event.kind === "context" || event.kind === "world-state")
+      recordTaken("world state heard", () => collector.heard(event.worldState));
+  };
+
   // [LAW:single-enforcer] After an answer, the host lands the configuration
   // batch, publishes the output, and settles every effect. Only acts that
   // depend on a refused configuration landing are skipped.
@@ -528,8 +540,7 @@ export function rendererHost(
       requested,
       receipt,
     );
-    if (event.kind === "context" || event.kind === "world-state")
-      recordTaken("world state heard", () => collector.heard(event.worldState));
+    turnEnded(event);
     let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];

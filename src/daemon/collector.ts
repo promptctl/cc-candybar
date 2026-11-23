@@ -62,7 +62,7 @@ import { judgeRun } from "./foundations/judge-run.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
-import { awaitsReading } from "../facts/awaited.js";
+import { unreadOf } from "../facts/awaited.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -144,9 +144,9 @@ interface SessionRecord<Context extends ViewFacts> {
   readonly session: SessionId;
   readonly stamped: Stamped;
   subscriptions: Subscribed;
-  // The newest world state's seq whose turn the host has taken the renderer's
-  // output of: `subscriptions` accounts for the landings up to it, and for
-  // none after.
+  // The newest world state's seq whose renderer turn is over: `subscriptions`
+  // holds what the turns up to it subscribed, except where a turn's output
+  // could not be taken, which the host has told loudly, and none after.
   heard: number;
   // Whether a request named the session since the last sweep.
   active: boolean;
@@ -276,7 +276,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
   // model): until the renderer has answered the session's latest stamp, and
   // that stamp has no fact its draw waits on that has never answered, over
   // the plugin sources, runs and `env` variables its renderer subscribes to
-  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
+  // (`holds`), or the session is no longer read, or `signal` ends it.
   // The renderer's answer is part of the wait because a source whose key is
   // another's value names its run only once the renderer has read that
   // value's landing: until its turn is taken, the subscriptions know nothing
@@ -288,27 +288,34 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
   // longer names it) ends the wait on that run.
   async settled(session: SessionId, signal: AbortSignal): Promise<void> {
     try {
-      await when(
-        () => {
-          const record = this.records.get(session);
-          return (
-            record?.phase.kind !== "live" ||
-            (record.heard >= record.stamped.document.seq &&
-              !awaitsReading(record.stamped.document, record.subscriptions))
-          );
-        },
-        { signal },
-      );
+      await when(() => this.holds(session).length === 0, { signal });
     } catch (e) {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
   }
 
+  // [LAW:single-enforcer] What a request's wait on the session is held by
+  // now, none when it may go on: the renderer's turn on the latest stamp
+  // (`turn`), then each fact its draw waits on that has never answered. A
+  // session no longer read holds nothing. The wait and the request's record
+  // (`held=`) both read it, so the record names what the wait waited on.
+  holds(session: SessionId): readonly string[] {
+    const record = this.records.get(session);
+    if (record?.phase.kind !== "live") return [];
+    return [
+      ...(record.heard < record.stamped.document.seq ? ["turn"] : []),
+      ...unreadOf(record.stamped.document, record.subscriptions),
+    ];
+  }
+
   // [LAW:single-enforcer] The host's word that the renderer's turn on this
-  // world state is taken, its subscriptions with it (`subscribed`), so a wait
-  // reads the run the state's landings named. A turn on a session whose
-  // record is gone (retired while the turn ran) has nothing to tell.
+  // world state is over, its subscriptions taken first (`subscribed`) when it
+  // answered, so a wait reads the run the state's landings named. It is told
+  // of a turn that threw or whose output could not be taken as well, so a
+  // wait whose turn cannot be answered ends instead of holding to its
+  // deadline. A turn on a session whose record is gone (retired while the
+  // turn ran) has nothing to tell.
   heard(worldState: WorldState): void {
     const record = this.records.get(worldState.session);
     if (record === undefined) return;

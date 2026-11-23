@@ -1,11 +1,14 @@
 // [LAW:single-enforcer] The one rule for which facts a request's draw waits
 // on before it draws: the host's wait asks it over a session's world state.
 
+import type { Subscribed } from "../renderer-interface/request-context.js";
 import type { Reading } from "../utils/outcome.js";
 import {
   envFactOf,
   runFactOf,
+  shortDigest,
   sourceFactOf,
+  stampFailureOf,
   type BuiltinFacts,
   type WorldState,
 } from "./world-state.js";
@@ -27,26 +30,44 @@ import {
 // answered: the draw reads it the same way (`runFactOf`). A doctor run is not
 // waited on: its read probes the terminal, fonts and the forge, so its report
 // lands in a later world state, as the PR does.
-//
-// The keys of a session's `Subscribed` (src/renderer-interface/request-context.ts),
-// which it is passed whole: the rule needs the names, never what each maps to.
-export interface SubscribedKeys {
-  readonly plugins: ReadonlyMap<string, unknown>;
-  readonly runs: ReadonlyMap<string, unknown>;
-  readonly env: readonly string[];
+// [LAW:one-source-of-truth] It takes the session's `Subscribed` itself, not a
+// copy of its shape, so the collector hands it exactly what the renderer
+// subscribed.
+// [LAW:nothing-unseen] Each fact it waits on is named for the request's
+// record, so a wait that ends on its deadline says which fact held it.
+export function unreadOf(
+  facts: WorldState,
+  { plugins, runs, env }: Subscribed,
+): readonly string[] {
+  const waited: ReadonlyArray<readonly [string, Reading<unknown>]> = [
+    ...AWAITED_BUILTINS.map((name) => [name, facts.builtins[name]] as const),
+    ...[...plugins.keys()].map(
+      (name) => [`source:${name}`, sourceFactOf(facts, name)] as const,
+    ),
+    ...[...runs.keys()].map(
+      (digest) =>
+        [
+          `run:${shortDigest(digest)}`,
+          runFactOf(facts, digest).reading,
+        ] as const,
+    ),
+    ...env.map((name) => [`env:${name}`, envFactOf(facts, name)] as const),
+  ];
+  // [LAW:no-silent-failure] A world state whose last stamp failed carries the
+  // readings it held, and its owners cannot read a key it lacks: nothing
+  // arrives for that fact while the failure stands, and the bar says so (⚠
+  // from the stamp's own diagnostic). Waiting on it would hold every request
+  // to its deadline and turn the cause into a TIMEOUT.
+  if (stampFailureOf(facts) !== null) return [];
+  return waited
+    .filter(([, fact]) => awaitedReading(fact))
+    .map(([label]) => label);
 }
 
-export function awaitsReading(
+export const awaitsReading = (
   facts: WorldState,
-  { plugins, runs, env }: SubscribedKeys,
-): boolean {
-  return [
-    ...AWAITED_BUILTINS.map((name) => facts.builtins[name]),
-    ...[...plugins.keys()].map((name) => sourceFactOf(facts, name)),
-    ...[...runs.keys()].map((digest) => runFactOf(facts, digest).reading),
-    ...env.map((name) => envFactOf(facts, name)),
-  ].some(awaitedReading);
-}
+  subscribed: Subscribed,
+): boolean => unreadOf(facts, subscribed).length > 0;
 
 // [LAW:types-are-the-program] Whether a request waits on each built-in, every
 // one named, so a new built-in fails the build here until it says.

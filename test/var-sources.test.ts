@@ -1755,6 +1755,33 @@ describe("SourceRegistry — shell: key: cache policy", () => {
     }
   });
 
+  it("a document with no default, whose key throws before any run answered, shows the failure the key has now", () => {
+    const store = new VariableStore(systemTimekeeper);
+    const registry = registryOver(store);
+    store.defineBox("trigger", "string", "boom 1");
+    registry.declareShell("doc", "echo '{}'", {
+      cwd: process.cwd(),
+      env: SHELL_ENV,
+      parse: { kind: "json", default: undefined },
+      cache: {
+        kind: "key",
+        template: '{{ fail .trigger }}',
+      },
+    });
+    const shows = (message: string) =>
+      expect(store.stored("doc")).toEqual({
+        kind: "failed",
+        reason: expect.stringContaining(message),
+        failedAt: "read",
+      });
+    shows("boom 1");
+    // The standing fault updates with the key's message; the document the bar
+    // draws from says the same.
+    store.setBox("trigger", "boom 2");
+    expect(registry.getLastError("doc")?.message).toContain("boom 2");
+    shows("boom 2");
+  });
+
   // A key over a document that has not completed its first scan is waiting,
   // not stuck: the reaction tracks the document and fires when it arrives.
   // Read directly, inside a function call (where the engine re-raises with a

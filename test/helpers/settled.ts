@@ -21,8 +21,11 @@ export const subscribedBy = (
   view: Pick<SessionView, "state" | "registry">,
 ): Subscribed => sourcesOf(subscriptionsOf(view), NOTHING_SUBSCRIBED);
 
-// A request's wait over a world state, as the host's collector settles one:
-// until nothing the draw waits on is unread, by the one rule (`awaitsReading`).
+// The unread half of a request's wait (`awaitsReading`, the rule the
+// collector's `holds` reads), for the rigs that draw straight from the owners'
+// world state and take no renderer turn: the collector's other half, the
+// renderer's turn on the latest stamp, has nothing to wait on there, and its
+// tests are the collector's own.
 export async function settledWorld(
   worldState: () => WorldState,
   subscribed: () => Subscribed,

@@ -171,17 +171,24 @@ export interface StateOptions {
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
 // What a source's node is told each time the run it names moves: that run's
-// reading, or that it names none. A source's key that failed before it ever
-// answered names no run (answeredUnder), and so nothing has ever been read
-// for it either.
+// answer, that it has not answered, or that it names no run. A source's key
+// that failed before it ever answered names no run (answeredUnder), and so
+// nothing has ever been read for it either.
 type Told =
-  | { readonly kind: "run"; readonly reading: Reading<unknown> }
+  | { readonly kind: "answer"; readonly reading: Outcome<unknown> }
+  | { readonly kind: "pending"; readonly reading: Pending }
   | { readonly kind: "none"; readonly why: Failed };
 
-// The publish half of a source, closed over its store node: takes what it is
-// told and writes the node — pending until the first run answers, then the
-// value or fallback.
-type Publish = (told: Told) => void;
+// [LAW:types-are-the-program] The write half of a source, closed over its
+// store node. A node is only ever written `unanswered` before its first
+// answer: the one effect that tells it holds the answer showing while a key's
+// move waits for the next run's (`declareSource`), so no publisher sees a
+// pending or a failed key after an answer.
+interface Publisher {
+  // Pending, or the failure of a key that never answered.
+  readonly unanswered: (reading: Pending | Failed) => void;
+  readonly answered: (outcome: Outcome<unknown>) => void;
+}
 
 // [LAW:one-source-of-truth] The parser's identity, without its default: what
 // the run digests.
@@ -647,8 +654,8 @@ export class SourceRegistry {
   // (registerCachePolicy), never whether the node exists
   // [LAW:dataflow-not-control-flow].
   //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node is pending until the first run answers, and on a key's move
+  // [LAW:types-are-the-program] The node is pending until the first run
+  // answers (or stands in, for a key that never answered), and on a key's move
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
@@ -658,7 +665,25 @@ export class SourceRegistry {
     cache: CachePolicy,
     parse: SourceParse,
   ): void {
-    const publish = this.publisherFor(name, parse);
+    const node = this.publisherFor(name, parse);
+    // [LAW:single-enforcer] The one owner of whether this source has answered,
+    // for every parser arm: what it is told after an answer that is not one
+    // is the held answer's to outlast.
+    let answered = false;
+    const publish = (told: Told): void => {
+      switch (told.kind) {
+        case "answer":
+          answered = true;
+          node.answered(told.reading);
+          return;
+        case "pending":
+          if (!answered) node.unanswered(told.reading);
+          return;
+        case "none":
+          if (!answered) node.unanswered(told.why);
+          return;
+      }
+    };
     const refreshOf = this.registerCachePolicy(name, cache);
     // [LAW:single-enforcer] The one place a source's run is named: its digest
     // is taken here, as its identity moves. Equal by digest, so a source whose
@@ -672,13 +697,17 @@ export class SourceRegistry {
             )
           : refresh;
       },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
+      // A failure is what it says: it is the variable's standing fault and
+      // what a document with no default shows for a key that never answered,
+      // so a key throwing a moving message moves the failure, and no run.
       {
-        equals: (a, b) =>
-          a.kind === "ok" && b.kind === "ok"
-            ? a.value.digest === b.value.digest
-            : a.kind === b.kind,
+        equals: (a, b) => {
+          if (a.kind === "ok" && b.kind === "ok")
+            return a.value.digest === b.value.digest;
+          if (a.kind === "failed" && b.kind === "failed")
+            return a.reason === b.reason;
+          return a.kind === b.kind;
+        },
       },
     );
     runInAction(() => {
@@ -714,15 +743,15 @@ export class SourceRegistry {
             case "failed":
               return { kind: "none", why: named };
             case "pending":
-              return { kind: "run", reading: named };
+              return { kind: "pending", reading: named };
             case "ok": {
               // The instant the reading first differed is the world state's;
               // the store holds what the run answered.
               const fact = this.inputs.get().run(named.value.digest).reading;
               if (fact.kind === "pending")
-                return { kind: "run", reading: fact };
+                return { kind: "pending", reading: fact };
               const { at: _at, ...reading } = fact;
-              return { kind: "run", reading };
+              return { kind: "answer", reading };
             }
           }
         },
@@ -740,7 +769,7 @@ export class SourceRegistry {
   // document. Selected once, at declaration — the pipeline never asks again.
   // The run parsed by the arm's own parser (source-runs.ts), so its value is
   // the arm's type.
-  private publisherFor(name: string, parse: SourceParse): Publish {
+  private publisherFor(name: string, parse: SourceParse): Publisher {
     switch (parse.kind) {
       case "text":
       case "regex":
@@ -753,37 +782,29 @@ export class SourceRegistry {
   private scalarPublisher(
     name: string,
     varDefault: string | undefined,
-  ): Publish {
+  ): Publisher {
     const fallback = varDefault ?? this.defaultEmptyValue;
     // [LAW:types-are-the-program] Not answered yet is its own state, so the node
     // is pending until its first run answers, as a document and an `env`
     // variable are. The fallback stands in for a run that read nothing (a
     // missing file, a failed command, blank output), which a run that has not
-    // run is not.
+    // run is not, and for a key that failed before any run named one: that
+    // failure is the variable's standing fault already (`cachePolicyFaults`).
     this.store.defineBox(name, "string", pendingOf("unread"));
-    // Whether a run has answered: after one, a run still unread (a key's move)
-    // leaves that answer showing until its own lands.
-    let answered = false;
-    return (told) => {
-      // A run that is named nowhere has read nothing, and its failure is the
-      // variable's standing fault already (`cachePolicyFaults`).
-      if (told.kind === "none") {
-        this.store.setBox(name, fallback);
-        return;
-      }
-      const { reading } = told;
-      if (reading.kind === "pending") {
-        if (!answered) this.store.setBox(name, reading);
-        return;
-      }
-      answered = true;
-      this.noteOutcome(name, reading);
-      this.store.setBox(name, orElse(reading as Outcome<string>, fallback));
+    return {
+      unanswered: (reading) =>
+        this.store.setBox(name, reading.kind === "failed" ? fallback : reading),
+      answered: (outcome) => {
+        this.noteOutcome(name, outcome);
+        this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+      },
     };
   }
 
-  // A document is pending until its first scan, then holds what the scan
-  // found — or, with a default, the default for a run that had nothing to read.
+  // A document is pending until its first scan — or until its key fails
+  // before any run is named, when it shows the stand-in below at once — then
+  // holds what the scan found — or, with a default, the default for a run
+  // that had nothing to read.
   // Without one it holds absent for that run, or failed with its reason after
   // a bad one — which the scope proxy surfaces naming the variable
   // [LAW:no-silent-failure]: a document has no honest empty value to show for
@@ -806,52 +827,48 @@ export class SourceRegistry {
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
-  ): Publish {
+  ): Publisher {
     // What stands in for a run that had nothing to read: the default, or with
     // none the failure itself.
     const standIn = <F extends Reading<JsonValue>>(failure: F) =>
       varDefault === undefined ? failure : ok(varDefault);
     this.store.defineDocument(name, pendingOf("unread"));
     let clearSettling: (() => void) | undefined;
-    // Whether a run has answered, and whether the document showing was READ
-    // (not the default standing in).
-    let answered = false;
+    // Whether the document showing was READ (not the default standing in).
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    return (told) => {
-      // A run that is named nowhere has read nothing, and its failure is the
-      // variable's standing fault already (`cachePolicyFaults`).
-      if (told.kind === "none") {
-        this.store.setDocument(name, standIn(told.why));
-        return;
-      }
-      const { reading } = told;
-      if (reading.kind === "pending") {
-        if (!answered) this.store.setDocument(name, reading);
-        return;
-      }
-      answered = true;
-      clearSettling?.();
-      const outcome = reading as Outcome<JsonValue>;
-      this.noteOutcome(name, outcome);
-      const readText =
-        outcome.kind === "ok" ||
-        (outcome.kind === "failed" && outcome.failedAt === "parse");
-      const next = readText ? outcome : standIn(outcome);
-      const torn = showingRead && readText && outcome.kind !== "ok";
-      const show = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next);
-      };
-      if (torn) {
-        clearSettling = this.store.clock.after(
-          `torn write settle ${name}`,
-          TORN_WRITE_SETTLE_MS,
-          show,
-        );
-      } else {
-        show();
-      }
+    return {
+      // A key that failed before any run named one has read nothing, and its
+      // failure is the variable's standing fault already
+      // (`cachePolicyFaults`): the stand-in is what the document shows.
+      unanswered: (reading) =>
+        this.store.setDocument(
+          name,
+          reading.kind === "failed" ? standIn(reading) : reading,
+        ),
+      answered: (read) => {
+        clearSettling?.();
+        const outcome = read as Outcome<JsonValue>;
+        this.noteOutcome(name, outcome);
+        const readText =
+          outcome.kind === "ok" ||
+          (outcome.kind === "failed" && outcome.failedAt === "parse");
+        const next = readText ? outcome : standIn(outcome);
+        const torn = showingRead && readText && outcome.kind !== "ok";
+        const show = () => {
+          showingRead = outcome.kind === "ok";
+          this.store.setDocument(name, next);
+        };
+        if (torn) {
+          clearSettling = this.store.clock.after(
+            `torn write settle ${name}`,
+            TORN_WRITE_SETTLE_MS,
+            show,
+          );
+        } else {
+          show();
+        }
+      },
     };
   }
 

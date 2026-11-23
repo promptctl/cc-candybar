@@ -32,6 +32,7 @@ import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
 import { heardRequest } from "../helpers/click";
 import { daemonFactsOf } from "../helpers/daemon-facts";
+import { worldStateOf } from "../helpers/world-state";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
@@ -451,6 +452,61 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       /^renderer main's subscriptions could not be taken: .*the collector broke/,
     ),
   ]);
+});
+
+// [LAW:no-ambient-temporal-coupling] A request's wait ends on the renderer's
+// turn on its world state, whatever the turn did: a turn that cannot be
+// answered or taken is said loudly elsewhere, and the wait does not hold to
+// its client's deadline for it.
+describe("a turn on a world state tells the collector it is over", () => {
+  const ENDS: ReadonlyArray<
+    readonly [
+      string,
+      Renderer["answer"],
+      (() => void) | undefined,
+    ]
+  > = [
+    ["answered", async () => answered(), undefined],
+    [
+      "answered, its subscriptions not taken",
+      async () => answered(),
+      () => {
+        throw new Error("the collector broke");
+      },
+    ],
+    [
+      "threw",
+      async () => {
+        throw new Error("the renderer broke");
+      },
+      undefined,
+    ],
+  ];
+
+  test.each(ENDS)("%s", async (_, answer, subscribed) => {
+    const told: number[] = [];
+    const host = rendererHost(
+      MAIN_RENDERER,
+      clockAt({ wall: 0, mono: 0 }),
+      held({ answer }),
+      () => {},
+      {
+        subscribed: subscribed ?? (() => {}),
+        frames: () => {},
+        stored: () => {},
+        recorded: () => {},
+        holding: () => () => {},
+        heard: ({ seq }) => void told.push(seq),
+      },
+      // A take the host could not make is said on every bar.
+      { ...NO_ACTS, unheard: () => {} },
+    );
+    await host.answer(() => ({
+      kind: "event",
+      event: { kind: "world-state", worldState: worldStateOf({ seq: 7 }) },
+    }));
+    expect(told).toEqual([7]);
+  });
 });
 
 test("a delayed presentation receipt belongs to the worker that drew the frame", async () => {

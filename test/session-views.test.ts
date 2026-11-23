@@ -155,9 +155,7 @@ function configure(cwd: string, edition = 0): void {
       },
     },
     segments: {
-      // Reads the session value alone: this rig hands a view no run's
-      // reading, so a segment over a run's variable would draw pending.
-      who: { template: "who={{ .sid }}" },
+      who: { template: "who={{ .sid }} {{ .perSession }} {{ .perDirectory }}" },
     },
     root: { h: ["who"] },
   };
@@ -194,23 +192,32 @@ const drawViewFrame = (
 const drawn = (view: SessionView, sid?: string, at?: Date) =>
   textOf(drawViewFrame(view, sid, at).frame);
 
+// A draw of the readings the view's runs have landed, as a request's is: the
+// first draw binds the view's inputs, which names the runs keyed on them, and
+// a frame drawn before they land would show them pending.
+async function drawnSettled(
+  view: SessionView,
+  sid?: string,
+  at?: Date,
+): Promise<string> {
+  drawn(view, sid, at);
+  expect(await runsOf(view).settled(AbortSignal.timeout(5000))).toEqual([]);
+  return drawn(view, sid, at);
+}
+
 // One render of session `sid` from `cwd`, as the daemon draws one: through the
-// session's view, held for the render, then every run its view names settled.
+// session's view, held for the render, every run its view names settled.
 async function render(
   cache: RenderCache,
   sid: string,
   cwd = dir,
   at = new Date(),
 ): Promise<{ text: string; view: SessionView }> {
-  const { text, view } = (() => {
-    using held = cache.holdSession(
-      originOf(cwd, cwd, undefined),
-      viewFacts(cwd, sid),
-    );
-    return { text: drawn(held.view, sid, at), view: held.view };
-  })();
-  expect(await runsOf(view).settled(AbortSignal.timeout(5000))).toEqual([]);
-  return { text, view };
+  using held = cache.holdSession(
+    originOf(cwd, cwd, undefined),
+    viewFacts(cwd, sid),
+  );
+  return { text: await drawnSettled(held.view, sid, at), view: held.view };
 }
 
 test("two sessions alternating on one directory each keep their own values", async () => {
@@ -218,8 +225,9 @@ test("two sessions alternating on one directory each keep their own values", asy
   const { cache } = makeCache();
   const a = await render(cache, "s-a");
   const b = await render(cache, "s-b");
-  expect(a.text).toContain("who=s-a");
-  expect(b.text).toContain("who=s-b");
+  // Each draws its own run's value, the per-session one included.
+  expect(a.text).toContain("who=s-a ps pd");
+  expect(b.text).toContain("who=s-b ps pd");
   // One view per session, over the one entry.
   expect(a.view).not.toBe(b.view);
   expect(a.view.state).toBe(b.view.state);
@@ -304,7 +312,7 @@ test("a kept view draws by each request holdSession is given, inside a batch too
   });
 });
 
-test("a view held by a render in flight is disposed only when the render returns", () => {
+test("a view held by a render in flight is disposed only when the render returns", async () => {
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(
@@ -316,7 +324,7 @@ test("a view held by a render in flight is disposed only when the render returns
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
-  expect(drawn(held.view)).toContain("who=s-a");
+  expect(await drawnSettled(held.view)).toContain("who=s-a");
   held[Symbol.dispose]();
   expect(cache.stats.retiredViews).toBe(0);
   expect(lines).toContainEqual(

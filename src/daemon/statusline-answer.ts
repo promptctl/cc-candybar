@@ -126,7 +126,7 @@ export async function answerStatusline(
   publish: PublishFrame,
   collector: Pick<
     Collector<CheckedRenderRequest>,
-    "requested" | "holding" | "settled"
+    "requested" | "holding" | "settled" | "holds"
   >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
@@ -202,7 +202,14 @@ export async function answerStatusline(
         clock,
         closing,
       );
-      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+      // [LAW:nothing-unseen] What the wait still held on when it ended: `-`
+      // when it had let go, else the renderer's turn and the unread facts.
+      const held = collector.holds(session);
+      noteFacts(facts, {
+        waited: `${elapsedMs(clock, waitFrom)}ms`,
+        ended,
+        held: held.length === 0 ? "-" : held.join(","),
+      });
 
       // [LAW:no-ambient-temporal-coupling] Admit the draw only while the
       // reply has a recipient. A closure or deadline can land while the

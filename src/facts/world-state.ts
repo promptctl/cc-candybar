@@ -64,6 +64,11 @@ export const envFactOf = (
   name: string,
 ): Fact<string> => ownValue(facts.env, name) ?? UNREAD_ENV;
 
+// [LAW:dataflow-not-control-flow] A source the view's config declares, as its
+// world state carries it. The host learns a view's sources from the output of
+// the turn that opened it, so the world state that turn drew from carries none
+// of them yet, and each is not read yet: pending, never missing, so a segment
+// over it waits rather than drawing its default.
 export const sourceFactOf = (
   facts: Pick<WorldState, "sources">,
   name: string,

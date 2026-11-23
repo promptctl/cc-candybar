@@ -172,6 +172,8 @@ function scripted(
 // may take, and the daemon's close.
 interface Meets {
   readonly settled?: (session: unknown, signal: AbortSignal) => Promise<void>;
+  // What the wait is still held by when it ends.
+  readonly holds?: () => readonly string[];
   readonly waitEndsAt?: number;
   readonly closing?: AbortSignal;
 }
@@ -217,6 +219,7 @@ async function answer(
       holding,
       // A warm session: nothing it reads is still unread.
       settled: meets.settled ?? (async () => {}),
+      holds: meets.holds ?? (() => []),
     },
     CLOCK,
     meets.closing ?? NOT_CLOSING,
@@ -587,12 +590,14 @@ describe("the request's wait, between its context and its request", () => {
     expect(answered.resp).toEqual({ ok: true, frame: FRAME });
     expect(requests).toHaveLength(1);
     expect(facts.get("ended")).toBe("answered");
+    expect(facts.get("held")).toBe("-");
   });
 
-  test("a wait that outlasts the client's deadline ends there, and the request draws what is landed", async () => {
+  test("a wait that outlasts the client's deadline ends there, says what held it, and the request draws what is landed", async () => {
     const { renderer, requests } = scripted(output([present(1)]));
     const answering = answer(renderer, [], [], undefined, {
       settled: () => new Promise(() => {}),
+      holds: () => ["turn", "git"],
       waitEndsAt: 5000,
     });
     await drained();
@@ -601,6 +606,7 @@ describe("the request's wait, between its context and its request", () => {
     expect(answered.resp).toEqual({ ok: true, frame: FRAME });
     expect(requests).toHaveLength(1);
     expect(facts.get("ended")).toBe("deadline");
+    expect(facts.get("held")).toBe("turn,git");
   });
 
   test("the daemon's close ends the wait, and the request draws nothing into the closing views", async () => {
@@ -671,6 +677,7 @@ describe("the request's wait, between its context and its request", () => {
         requested: () => WORLD,
         holding: () => () => {},
         settled: wait.settled,
+        holds: () => [],
       },
       CLOCK,
       NOT_CLOSING,
