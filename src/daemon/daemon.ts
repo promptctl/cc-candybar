@@ -78,11 +78,12 @@ import {
   type RendererName,
 } from "./foundations/renderer-name.js";
 import type { SessionId } from "./foundations/session-id.js";
-import type {
-  RendererBoot,
-  RequestId,
-  Subscriptions,
-  Viewers,
+import {
+  untakenBy,
+  type RendererBoot,
+  type RequestId,
+  type Subscriptions,
+  type Viewers,
 } from "../renderer-interface/interface.js";
 import type { RendererLink, RendererPort } from "./renderer-process.js";
 import {
@@ -656,6 +657,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const renderer = (renderers.get(nameOf(session)) ?? primary).renderer;
       return renderer
         .deliver(() => ({ kind: "event", event }), [])
+        .then(untakenBy)
         .finally(() => {
           if (event.kind === "retire" && routes.get(session) === route)
             routes.delete(session);

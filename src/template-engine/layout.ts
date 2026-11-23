@@ -21,7 +21,7 @@ import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { CellPlacement } from "../render/effect.js";
 import { resolvedStyle } from "../render/rich-theme.js";
-import { readPending } from "../var-system/types.js";
+import { readPending, type PendingRead } from "../var-system/types.js";
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";
@@ -92,7 +92,7 @@ export function evaluateWhen(
 export type Gate =
   | { readonly kind: "shown" }
   | { readonly kind: "hidden" }
-  | { readonly kind: "pending"; readonly variable: string }
+  | ({ readonly kind: "pending" } & PendingRead)
   | { readonly kind: "failed"; readonly message: string };
 
 export const HIDDEN = { kind: "hidden" } as const satisfies Gate;
@@ -111,7 +111,7 @@ export function gateOf(
   } catch (e) {
     const pending = readPending(e);
     return pending !== undefined
-      ? { kind: "pending", variable: pending.variable }
+      ? { kind: "pending", variable: pending.variable, why: pending.why }
       : {
           kind: "failed",
           message: e instanceof Error ? e.message : String(e),

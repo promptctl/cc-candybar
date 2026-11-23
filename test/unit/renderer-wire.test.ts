@@ -138,6 +138,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
         surface: "statusline",
         frame,
         displayedEvents,
+        awaiting: { kind: "settled", seq: 1 },
       },
     ],
     frames: [

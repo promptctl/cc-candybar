@@ -131,7 +131,7 @@ The complete shape of a `shell` variable:
 | `env` | optional — the names of variables the command reads beyond the base set above, such as `["AWS_PROFILE", "KUBECONFIG"]`. Each is read from the session's environment; one the session has not set stays unset. |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why), `{ watch_file: "/abs/path" }` (re-run when that file changes, checked about once a second, or a symlink on the way to it is re-pointed; a folder is watched for every child, by the OS, which on macOS streams every write in its whole tree, so name a small folder, never a home or repository root; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning on a folder), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`), `{ never: true }` (run once) |
-| `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
+| `default` | what the variable reads whenever a run has nothing to read (the command failed, the file is missing, the output is blank). Until the first run completes the variable is pending and draws `…`, never the default. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A run's identity is what it needs: the command (or the path and read mode),
 the directory it runs in, the values of the variables it runs with, the
@@ -189,17 +189,18 @@ the parser sees. A file that does not exist yet reads as its `default`:
 }
 ```
 
-The `default` is not optional in practice. A `json` source with no `default`
-draws `…` in every segment reading it until its first run lands — not answered
-yet, which is no fault — and one whose run fails or prints nothing — the script
-is missing, exits non-zero — has no document to read, and every segment
-reading it renders a `⚠` cell.
+The `default` is not optional in practice. Every source draws `…` in each
+segment reading it until its first run lands — not answered yet, which is no
+fault, and the default is not shown in its place. A `json` source with no
+`default` whose run fails or prints nothing — the script is missing, exits
+non-zero — has no document to read, and every segment reading it renders a
+`⚠` cell.
 Output that is not JSON is that `⚠` even with a `default`: a broken writer
 is not an empty one. A `text`/`regex` source with no `default`
 reads as the empty string instead, silently. Give every source a `default`,
 and give a document default **every field a template reads**: a field that
-exists in the script's output but not in the default is a `⚠` from daemon
-start until the first run lands.
+exists in the script's output but not in the default is a `⚠` whenever the
+default stands in for a run that read nothing.
 
 ## Step 3 — shaped variables: what a dotted path reaches
 
@@ -315,8 +316,8 @@ pending.
 The template is Go template text over the document's fields. Format numbers
 with `printf`, compare fields with `gt`/`ge`/`lt`, and gate the whole segment
 with `when` on a fact the document carries — here the segment hides while the
-script has reported no limit, which is exactly the `default` before the first
-run:
+script has reported no limit, which is exactly the `default` when a run read
+nothing:
 
 ```json5 check:pass
 {

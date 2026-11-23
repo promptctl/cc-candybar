@@ -18,6 +18,7 @@ import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
+import type { Awaiting } from "../facts/awaited";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
@@ -350,6 +351,10 @@ export interface Present {
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
   readonly displayedEvents?: readonly DaemonEvent[];
+  // [LAW:single-enforcer] What the draw says the frame still owes, about the
+  // world state it drew from: the host waits for the stamp to move past
+  // `awaiting.seq` while it is owed, and for nothing else.
+  readonly awaiting: Awaiting;
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
@@ -555,6 +560,21 @@ export type TurnOutcome = {
   | { readonly kind: "answered"; readonly reply?: CommandReply }
   | TurnFailure
 );
+
+// [LAW:single-enforcer] What the renderer records when a world state names a
+// session it holds no view of, and the one reading of whether a turn took the
+// world state it was handed: why it did not, or null.
+export const WORLD_STATE_UNTAKEN: Field = ["world-state", "no-live-session"];
+
+export function untakenBy(turn: TurnOutcome): string | null {
+  if (turn.kind === "threw") return turn.failure.message;
+  return turn.record.some(
+    ([key, value]) =>
+      key === WORLD_STATE_UNTAKEN[0] && value === WORLD_STATE_UNTAKEN[1],
+  )
+    ? "the renderer holds no view of the session"
+    : null;
+}
 
 // [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
 // output names the open views' subscriptions as they stand after it, however

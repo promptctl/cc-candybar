@@ -21,6 +21,7 @@ import {
   Collector,
   SESSION_SWEEP_MS,
   type HandedIn,
+  type Untaken,
 } from "../src/daemon/collector";
 import { stampFailureOf } from "../src/facts/world-state";
 import { judgeRun, type Judged } from "../src/daemon/foundations/judge-run";
@@ -54,7 +55,6 @@ import {
   withTranscriptLanes,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -116,7 +116,8 @@ function handLanded() {
   return { owners, held, land };
 }
 
-const ANSWERED = { kind: "answered" } as const;
+// A renderer that took what it was handed.
+const ANSWERED: Untaken = null;
 
 // A collector over `owners`, on a clock the case moves, with a renderer that
 // records each hand-in and answers it at once. `watched` is which sessions an
@@ -127,10 +128,13 @@ function collectorOver(
     fileEvents = () => [],
     watched = new Set<SessionId>(),
     retired = async () => ANSWERED,
+    taken = () => ANSWERED,
   }: {
     readonly fileEvents?: () => DaemonFacts["fileEvents"];
     readonly watched?: ReadonlySet<SessionId>;
-    readonly retired?: () => Promise<unknown>;
+    readonly retired?: () => Promise<Untaken>;
+    // Why the renderer did not take a world state, or null: it did.
+    readonly taken?: () => Untaken;
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -144,7 +148,7 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
-      return event.kind === "retire" ? retired() : ANSWERED;
+      return event.kind === "retire" ? retired() : taken();
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -173,7 +177,7 @@ function heldRetires() {
   const answers: Array<() => void> = [];
   return {
     retired: () =>
-      new Promise<unknown>((resolve) => answers.push(() => resolve(ANSWERED))),
+      new Promise<Untaken>((resolve) => answers.push(() => resolve(ANSWERED))),
     answer: (i: number) => answers[i]!(),
   };
 }
@@ -254,11 +258,9 @@ describe("a session's transcript", () => {
     const { collector, clock, handedIn } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
-    expect(awaitsReading(first, [])).toBe(true);
     await clock.settle(0);
     const landed = lastHandedIn(handedIn)!;
     expect(messagesOf(landed)).toBe(1);
-    expect(awaitsReading(landed, [])).toBe(false);
   });
 
   test("an append lands in the world state on the collector's trigger, with no request", async () => {
@@ -278,7 +280,7 @@ describe("a session's transcript", () => {
     await clock.settle(0);
     append();
     const warm = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    expect(awaitsReading(warm, [])).toBe(false);
+    expect(warm.builtins.metrics.kind).toBe("ok");
     // What the transcript said when the trigger last read it, not the append
     // this request arrived after: the trigger reads it, not the request.
     expect(messagesOf(warm)).toBe(1);
@@ -292,32 +294,65 @@ const UNREAD: Current<unknown> = {
   landed: new Promise<void>(() => {}),
 };
 
-describe("a request's wait", () => {
-  test("ends once the read it waits on lands, and a warm session's at once", async () => {
+// A session opened and quiet: the lanes' first reads have landed, so the
+// world state a draw reads moves only as the case moves it.
+async function opened(
+  collector: Collector,
+  clock: HeldClock,
+): Promise<WorldState> {
+  collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+  await clock.settle(0);
+  return collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+}
+
+describe("a request's wait for a later world state", () => {
+  test("ends once a world state after the draw's reaches the renderer, and one already past it at once", async () => {
     const { owners, land } = handLanded();
-    const { collector } = collectorOver(owners);
+    const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    let ended = false;
+    const drawn = await opened(collector, clock);
+    let ended: unknown = null;
     const waiting = collector
-      .settled(SID, new AbortController().signal)
-      .then(() => (ended = true));
+      .moved(SID, drawn.seq, new AbortController().signal)
+      .then((moved) => (ended = moved));
     await drained();
-    expect(ended).toBe(false);
+    expect(ended).toBeNull();
     land("host.name", ok("box"));
     await waiting;
-    await collector.settled(SID, new AbortController().signal);
+    expect(ended).toEqual({ kind: "landed" });
+    expect(
+      await collector.moved(SID, drawn.seq, new AbortController().signal),
+    ).toEqual({ kind: "landed" });
   });
 
-  test("ends when its signal does", async () => {
+  test("ends when its signal does, with no world state", async () => {
     const { owners, land } = handLanded();
-    const { collector } = collectorOver(owners);
+    const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+    const drawn = await opened(collector, clock);
     const signal = new AbortController();
-    const waiting = collector.settled(SID, signal.signal);
+    const waiting = collector.moved(SID, drawn.seq, signal.signal);
     signal.abort();
-    await waiting;
+    expect(await waiting).toBeNull();
+  });
+
+  test("ends saying why when the renderer did not take the world state, so no later draw reads it", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock } = collectorOver(owners, {
+      taken: () => "the renderer holds no view of the session",
+    });
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const waiting = collector.moved(
+      SID,
+      drawn.seq,
+      new AbortController().signal,
+    );
+    land("host.name", ok("box"));
+    expect(await waiting).toEqual({
+      kind: "untaken",
+      reason: "the renderer holds no view of the session",
+    });
   });
 });
 
@@ -502,7 +537,7 @@ describe("the sweep", () => {
   test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire settles, even as threw, so the next request starts a new record", async () => {
     const { owners, held } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners, {
-      retired: async () => ({ kind: "threw" }),
+      retired: async () => "the renderer threw",
     });
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(SESSION_SWEEP_MS);
@@ -525,15 +560,16 @@ describe("the sweep", () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    let ended = false;
+    const drawn = await opened(collector, clock);
+    let ended: unknown = null;
     const waiting = collector
-      .settled(SID, new AbortController().signal)
-      .then(() => (ended = true));
+      .moved(SID, drawn.seq, new AbortController().signal)
+      .then((moved) => (ended = moved));
     await drained();
-    expect(ended).toBe(false);
+    expect(ended).toBeNull();
     clock.advance(2 * SESSION_SWEEP_MS);
     await waiting;
+    expect(ended).toEqual({ kind: "gone" });
   });
 
   test("keeps a session an open feed draws", () => {

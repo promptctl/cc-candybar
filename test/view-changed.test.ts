@@ -121,7 +121,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   const { status, changed, open } = setUp();
   using held = open("s");
   await until(
-    () => held.view.store.read("status") === "green",
+    () => held.view.store.stored("status") === "green",
     "the source's first read",
   );
   // Its first read is a change from the default the view opened with.
@@ -131,7 +131,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   await sleep(1000);
   expect(changed).toHaveLength(settled);
   writeAtomic(status, "red");
-  await until(() => held.view.store.read("status") === "red", "the new value");
+  await until(() => held.view.store.stored("status") === "red", "the new value");
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
   expect(changed).toHaveLength(settled + 1);
@@ -157,7 +157,7 @@ test("a view a reload retired says nothing more while a render still holds it", 
   const { status, changed, writeConfig, reload, open } = setUp();
   using old = open("s");
   await until(
-    () => old.view.store.read("status") === "green",
+    () => old.view.store.stored("status") === "green",
     "the first read",
   );
   // An edit, and the save's reload of it. The config's watch hears the write
@@ -168,7 +168,7 @@ test("a view a reload retired says nothing more while a render still holds it", 
   using now = open("s");
   expect(now.view).not.toBe(old.view);
   await until(
-    () => now.view.store.read("status") === "green",
+    () => now.view.store.stored("status") === "green",
     "the successor's first read",
   );
   await sleep(200);
@@ -176,8 +176,8 @@ test("a view a reload retired says nothing more while a render still holds it", 
   writeAtomic(status, "red");
   await until(
     () =>
-      old.view.store.read("status") === "red" &&
-      now.view.store.read("status") === "red",
+      old.view.store.stored("status") === "red" &&
+      now.view.store.stored("status") === "red",
     "both views' new value",
   );
   await sleep(200);

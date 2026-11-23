@@ -280,11 +280,11 @@ describe("a frame's payload", () => {
     const { git } = payloadOf(inputs(), DRAW);
     expect(git).toMatchObject({ branch: "main", sha: "abc1234" });
     expect(git).toMatchObject({
-      prNumber: pendingOf("unread"),
-      prState: pendingOf("unread"),
-      prUrl: pendingOf("unread"),
-      prError: pendingOf("unread"),
-      prEarlier: pendingOf("unread"),
+      prNumber: pendingOf("deferred"),
+      prState: pendingOf("deferred"),
+      prUrl: pendingOf("deferred"),
+      prError: pendingOf("deferred"),
+      prEarlier: pendingOf("deferred"),
     });
   });
 

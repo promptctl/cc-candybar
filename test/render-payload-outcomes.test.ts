@@ -835,7 +835,7 @@ describe("payloadOf — config file and resume command", () => {
 // stale (a click's move) may take as long as the program the click ran, so a
 // request after it draws the loading cell at once rather than waiting out its
 // deadline.
-describe("awaitsReading — what a request waits on", () => {
+describe("what a request waits on", () => {
   test("a superseded lane is not waited on: the request after a click draws it pending at once", async () => {
     let current: Current<string> = {
       kind: "pending",
@@ -912,11 +912,13 @@ describe("awaitsReading — what a request waits on", () => {
       );
 
     const first = await draw();
+    // Deferred, not unread: the frame draws them pending, and no request
+    // owes the wait for them.
     expect(first.git).toMatchObject({
       branch: "feature",
-      prNumber: pendingOf("unread"),
+      prNumber: pendingOf("deferred"),
     });
-    expect(first.today).toEqual(pendingOf("unread"));
+    expect(first.today).toEqual(pendingOf("deferred"));
 
     sums = ok(sumsOf(at, 1.5, 10));
     pullRequest = ok({

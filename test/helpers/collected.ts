@@ -8,6 +8,7 @@
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
 import type { RendererHost } from "../../src/daemon/renderer-host";
 import { instantAt } from "../../src/utils/instant";
+import { untakenBy } from "../../src/renderer-interface/interface";
 import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
@@ -64,15 +65,17 @@ export function collected(
     // subscribed yet.
     deliver: async (event) => {
       if (routed !== null)
-        return routed.deliver(
-          () => ({ kind: "event", event, at: instantAt(systemTimekeeper) }),
-          [],
+        return untakenBy(
+          await routed.deliver(
+            () => ({ kind: "event", event, at: instantAt(systemTimekeeper) }),
+            [],
+          ),
         );
       if (event.kind === "world-state") worldStates.take(event.worldState);
       else retireSession({ renderCache: cache(), worldStates }, event.session);
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
-      return { kind: "answered" };
+      return null;
     },
   });
   cleanups.push(() => collector.close());

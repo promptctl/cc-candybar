@@ -5,7 +5,7 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Timekeeper } from "../time";
-import type { Outcome, Pending, PendingWhy } from "./outcome";
+import type { FactPendingWhy, Outcome, Pending } from "./outcome";
 
 // What a waiter awaits: the read that will answer a pending value.
 export interface Landing {
@@ -20,7 +20,7 @@ export interface Landing {
 // never on a poll. Every owner of a shared source (the repos, panes and
 // session files) holds its values in this one shape; dropping the landing
 // leaves the plain `Pending` a facts document carries.
-export type Held<T> = (Pending & Landing) | Outcome<T>;
+export type Held<T> = (Pending<FactPendingWhy> & Landing) | Outcome<T>;
 
 // [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
 // derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
@@ -35,7 +35,9 @@ export function unread<T>(): IObservableValue<Held<T>> {
   return observable.box<Held<T>>(pending("unread"), { deep: false });
 }
 
-export function pending(why: PendingWhy): Pending & Landing {
+export function pending(
+  why: FactPendingWhy,
+): Pending<FactPendingWhy> & Landing {
   let land!: () => void;
   const landed = new Promise<void>((resolve) => {
     land = resolve;
@@ -57,7 +59,7 @@ export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
 // superseding move): it is pending until a fresh read lands, for `why`. A
 // value already pending keeps the landing its readers wait on, and a key never
 // answered stays `unread` whatever made it pending again.
-export function renew<T>(source: Readable<T>, why: PendingWhy): void {
+export function renew<T>(source: Readable<T>, why: FactPendingWhy): void {
   const prior = source.reading.get();
   if (prior.kind !== "pending") {
     runInAction(() => source.reading.set(pending(why)));
@@ -82,7 +84,7 @@ export function answerPending<T>(
 export type Current<T> = Outcome<T> | Waiting;
 
 // Not answered yet, why, and the landing to wait for.
-export interface Waiting extends Pending {
+export interface Waiting extends Pending<FactPendingWhy> {
   readonly landed: Promise<void>;
 }
 

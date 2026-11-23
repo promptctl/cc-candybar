@@ -44,7 +44,7 @@ export const ABSENT: Outcome<never> = { kind: "absent" };
 // taken. A holder of a sample that can neither find nothing nor fail (the
 // update watch's build and release, whose failures are values of the sample
 // itself) has no `absent` or `failed` to guard.
-export type Sampled<T> = Pending | Ok<T>;
+export type Sampled<T> = Pending<FactPendingWhy> | Ok<T>;
 
 export type Failed = Extract<Outcome<never>, { kind: "failed" }>;
 
@@ -60,36 +60,54 @@ export function orElse<T>(outcome: Outcome<T> | undefined, fallback: T): T {
   return outcome?.kind === "ok" ? outcome.value : fallback;
 }
 
-// [LAW:types-are-the-program] Why a value is not answered yet: `unread`, a key
+// [LAW:types-are-the-program] Why a fact is not answered yet: `unread`, a key
 // never answered (a first read, a new key); `superseded`, a key whose value the
 // daemon itself made stale (a click that moved it). A request waits only for
 // first answers: a superseded value may take as long as the program the click
 // ran, so it draws its loading cell, and its landing reaches the next frame.
-export type PendingWhy = "unread" | "superseded";
+export type FactPendingWhy = "unread" | "superseded";
+
+// Why a draw reads something as not answered yet: what a fact can be pending
+// for, and `deferred`, a first answer no request waits for (the day's sums and
+// the branch's PR, which land after the bar is up). Only a draw reads
+// `deferred`: a fact never carries it, so the owners and the document cannot
+// spell it, and a request waits only for `unread`.
+export type PendingWhy = FactPendingWhy | "deferred";
 
 // A source's value as it stands: not answered yet, or what its read answered.
 // `pending` is not `absent`: absent says the domain genuinely has nothing,
 // pending says nobody has asked it yet — a document before its first scan —
 // and is never drawn as an answer. It is a plain value, so it crosses a
 // process as JSON and is recognised by its discriminator, never by identity.
-export interface Pending {
+// The type is what a draw reads; a fact, a reading and a sample are the
+// `FactPendingWhy` kind of it.
+export interface Pending<W extends PendingWhy = PendingWhy> {
   readonly kind: "pending";
-  readonly why: PendingWhy;
+  readonly why: W;
 }
-export type Reading<T> = Pending | Outcome<T>;
+//
+// A reading is a fact's by default; the wider `W` is a reading as a draw takes
+// it, where a pending may be `deferred` too.
+export type Reading<T, W extends PendingWhy = FactPendingWhy> =
+  | Pending<W>
+  | Outcome<T>;
 // A reading of something that is never absent: what it is, why not yet, or
 // what failed.
-export type Present<T> = Exclude<Reading<T>, { kind: "absent" }>;
+export type Present<T, W extends PendingWhy = FactPendingWhy> = Exclude<
+  Reading<T, W>,
+  { kind: "absent" }
+>;
 
 const PENDINGS: Readonly<Record<PendingWhy, Pending>> = {
   unread: Object.freeze({ kind: "pending", why: "unread" }),
   superseded: Object.freeze({ kind: "pending", why: "superseded" }),
+  deferred: Object.freeze({ kind: "pending", why: "deferred" }),
 };
 
 // Shared per `why` only so a payload recomputed from the same pending is the
 // same value to a MobX identity comparer; every test of pending is `isPending`.
-export function pendingOf(why: PendingWhy): Pending {
-  return PENDINGS[why];
+export function pendingOf<W extends PendingWhy>(why: W): Pending<W> {
+  return PENDINGS[why] as Pending<W>;
 }
 
 // What a payload node the daemon built can be. `unknown` is not among them: a

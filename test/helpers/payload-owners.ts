@@ -54,6 +54,7 @@ import { HostService } from "../../src/daemon/cache/host-identity";
 import { assembleFacts } from "../../src/daemon/facts-assembly";
 import { instantOf } from "../../src/utils/instant";
 import { settledWorld } from "./settled";
+import { spelled } from "../../src/facts/awaited";
 import {
   composePayload,
   todayOf,
@@ -358,7 +359,12 @@ export function withTranscriptLanes<O extends FixtureOwners>(
     transcriptLanes: new TranscriptLanes({
       owners: laned,
       watchers: {
-        acquire: () => ({ release: () => {}, observed: () => {}, deaf: [], ridesStream: false }),
+        acquire: () => ({
+          release: () => {},
+          observed: () => {},
+          deaf: [],
+          ridesStream: false,
+        }),
       },
       clock,
       logger: owners.log,
@@ -441,7 +447,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(todayReadingOf(inputs), at),
+    today: todayOf(spelled("today", todayReadingOf(inputs)), at),
   };
 }
 

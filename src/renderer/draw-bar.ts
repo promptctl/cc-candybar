@@ -41,6 +41,9 @@ import {
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
+import { awaitingOf, type Awaiting } from "../facts/awaited.js";
+import type { WorldState } from "../facts/world-state.js";
+import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
   editGlobalsOf,
@@ -642,6 +645,7 @@ export function drawRender(
   // the same width, including a client whose request waited through a resize.
   const {
     frame,
+    waited,
     memory,
     warnings: drawnWarnings,
     segments,
@@ -781,6 +785,10 @@ export function drawRender(
   return {
     drawn: {
       body,
+      // What the body drew as not answered yet, and the document it drew
+      // from; a viewer standing in for the body drew none.
+      waited: viewing === null ? waited : [],
+      document,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -932,6 +940,8 @@ const alone = (warning: StandingWarning): Standing => ({
 // viewer, the draw's one diagnostic list, and the geometry.
 interface DrawnBar {
   readonly body: Frame;
+  readonly waited: readonly PendingRead[];
+  readonly document: WorldState;
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
@@ -943,6 +953,9 @@ export interface RequestAnswer {
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
   readonly displayedEvents?: readonly DaemonEvent[];
+  // [LAW:single-enforcer] What the frame still owes, said by the draw that
+  // made it: the one thing the host's wait reads (src/facts/awaited.ts).
+  readonly awaiting: Awaiting;
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -980,9 +993,19 @@ export function answerRequest(
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
   });
+  // A frame the handoff stands in for drew nothing of the bar's.
+  const awaiting = awaitingOf(
+    frame === drawn.body ? drawn.waited : [],
+    drawn.document,
+  );
+  // [LAW:nothing-unseen] What the frame owes, by name; `-` for nothing.
+  noteFacts(facts, {
+    owed: awaiting.kind === "settled" ? "-" : awaiting.names.join(","),
+  });
   return {
     frame,
     displayedEvents: eventsShown,
+    awaiting,
     delivery: {
       candidate,
       clickShown,

@@ -3,6 +3,8 @@
 // be a code change that ripples through the cast helpers and the filter
 // pipeline — there is no "extra" variant available at the type layer.
 
+import type { PendingWhy } from "../utils/outcome.js";
+
 export type VarType = "string" | "number" | "boolean";
 export type VarValue = string | number | boolean;
 
@@ -129,15 +131,22 @@ export function toBool(v: VarValue): boolean {
 // source has not answered yet (`Reading`'s `pending` — a document before its
 // first scan), thrown as its own type so every place a template is evaluated
 // can tell "not yet" from a failure, which a message string cannot carry.
-// `variable` names the source, so a draw can say which ones it waited on.
+// `variable` names the source, so a draw can say which ones it waited on, and
+// `why` says what the pending is (`PendingWhy`): the one answer a request
+// waits for is the `unread` one.
 export class PendingValueError extends Error {
   constructor(
     readonly variable: string,
+    readonly why: PendingWhy,
     message: string,
   ) {
     super(message);
   }
 }
+
+// What a read found pending: the variable and what it is pending for. A draw
+// keeps these, and the renderer says from them what the frame still owes.
+export type PendingRead = Pick<PendingValueError, "variable" | "why">;
 
 // [LAW:single-enforcer] The one classifier of a throw as pending: the read
 // that raised it, or none. The template engine re-raises a throw from inside a

@@ -1,12 +1,34 @@
 import { when } from "mobx";
-import { awaitsReading } from "../../src/facts/awaited";
-import type { WorldState } from "../../src/facts/world-state";
+import { awaits, spelled } from "../../src/facts/awaited";
+import {
+  UNREAD_RUN,
+  type BuiltinFacts,
+  type WorldState,
+} from "../../src/facts/world-state";
 
-// A request's wait over a world state, as the host's collector settles one:
-// until nothing the draw waits on is unread, by the one rule (`awaitsReading`).
+// Whether a world state still holds a fact a draw waits for: some built-in a
+// request waits for, some source, or some run the view subscribes to, never
+// answered. The one table of what a request waits for (`spelled`) says which
+// built-ins count.
+function unanswered(
+  { builtins, sources, runs }: WorldState,
+  subscribed: Iterable<string>,
+): boolean {
+  const builtin = (name: keyof BuiltinFacts) => {
+    const fact = builtins[name];
+    return fact.kind === "pending" ? spelled(name, fact) : fact;
+  };
+  return [
+    ...(Object.keys(builtins) as Array<keyof BuiltinFacts>).map(builtin),
+    ...Object.values(sources),
+    ...[...subscribed].map((digest) => (runs[digest] ?? UNREAD_RUN).reading),
+  ].some((reading) => reading.kind === "pending" && awaits(reading.why));
+}
+
+// A test's wait over a world state: until what a draw waits for has answered.
 export async function settledWorld(
   worldState: () => WorldState,
   subscribed: () => Iterable<string>,
 ): Promise<void> {
-  await when(() => !awaitsReading(worldState(), subscribed()));
+  await when(() => !unanswered(worldState(), subscribed()));
 }

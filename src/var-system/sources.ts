@@ -35,6 +35,7 @@ import {
 import {
   VariableStore,
   type Derivation,
+  type DocumentReading,
   type StoredValue,
   type VariableKey,
 } from "./store.js";
@@ -46,10 +47,12 @@ import {
   orElse,
   isPending,
   pendingOf,
+  type Failed,
   type Outcome,
   type Present,
   type PayloadNode,
   type Pending,
+  type PendingWhy,
   type Reading,
 } from "../utils/outcome.js";
 import type { SourceParse } from "./parse.js";
@@ -70,9 +73,10 @@ import type { Fact } from "../facts/fact.js";
 export type { ReadMode } from "../facts/source-identity.js";
 
 // The run a `shell` or `file` source names, or why it names none: pending
-// while what its policy reads has not answered, failed while a key failed
-// before answering.
-export type SourceRun = Present<Run>;
+// while what its policy reads has not answered (for what that value is
+// pending for, so a source behind a value no request waits for is pending for
+// that too), failed while a key failed before answering.
+export type SourceRun = Present<Run, PendingWhy>;
 
 type SourceKey = string | readonly VariableKey[];
 
@@ -169,9 +173,24 @@ export interface StateOptions {
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
-// The publish half of a source, closed over its store node: takes what the
-// run yielded, parsed, and writes the node — value or fallback.
-type Publish = (outcome: Outcome<unknown>) => void;
+// What the run a source names says to the source's node: the host's reading of
+// it, an answer; or why it has none yet, the run's naming (`SourceRun`) or the
+// host's pending reading of a run it names.
+type Told =
+  | {
+      readonly kind: "answer";
+      readonly reading: Exclude<RunFact["reading"], Pending>;
+    }
+  | { readonly kind: "unanswered"; readonly reading: Pending | Failed };
+
+// The write half of a source, closed over its store node. `unanswered` is told
+// only before the first answer (`declareSource`): pending for what the run
+// waits on, or the failure of a key that never named a run. `answered` takes
+// what the run yielded, parsed, and writes the node — value or fallback.
+interface Publisher {
+  unanswered(reading: Pending | Failed): void;
+  answered(outcome: Outcome<unknown>): void;
+}
 
 // [LAW:one-source-of-truth] The parser's identity, without its default: what
 // the run digests.
@@ -223,6 +242,7 @@ const UNBOUND: InputSource = {
   session: () => {
     throw new PendingValueError(
       "session_id",
+      "unread",
       "the view's session has no value yet: no view source is bound",
     );
   },
@@ -232,6 +252,7 @@ const UNBOUND: InputSource = {
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
+      "unread",
       "the drawn depth has no value yet: no view source is bound",
     );
   },
@@ -273,7 +294,7 @@ export function resolvePath(obj: unknown, path: string): Resolved {
 // [LAW:parse-dont-validate] What a view's payload holds at a source's name,
 // as the document's reading: the source's own outcome, pending while it has
 // not answered, and a failure for anything else.
-function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
+function sourceReading(name: string, resolved: Resolved): DocumentReading {
   if (resolved.kind === "pending") return resolved;
   const raw = resolved.value;
   if (raw === undefined) {
@@ -290,7 +311,7 @@ function sourceReading(name: string, resolved: Resolved): Reading<JsonValue> {
     case "ok":
     case "absent":
     case "failed":
-      return raw as Reading<JsonValue>;
+      return raw as DocumentReading;
     default:
       return failed(
         `variable "${name}": the view's payload holds no source reading at "${name}"`,
@@ -565,6 +586,7 @@ export class SourceRegistry {
       this.lastErrors.delete(name);
       throw new PendingValueError(
         name,
+        resolved.why,
         `variable "${name}" has no value yet: its source has not answered`,
       );
     }
@@ -637,18 +659,21 @@ export class SourceRegistry {
   // (registerCachePolicy), never whether the node exists
   // [LAW:dataflow-not-control-flow].
   //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first run answers, and on a key's move
-  // it holds the old run's answer until the new run's lands — the old `ok` is
-  // simply not overwritten yet, so a key change draws no pending flash (spec
-  // section 19).
+  // [LAW:types-are-the-program] The node is pending until the first run
+  // answers (for what the run waits on, so a source behind a value no request
+  // waits for is pending for that), and its fallback stands in only for a run
+  // that read nothing, or a key that failed before it ever answered. After the
+  // first answer only answers are published: on a key's move the node holds
+  // the old run's answer until the new run's lands, so a key change draws no
+  // pending flash (spec section 19).
   private declareSource(
     name: string,
     read: SourceRead,
     cache: CachePolicy,
     parse: SourceParse,
   ): void {
-    const publish = this.publisherFor(name, parse);
+    const publisher = this.publisherFor(name, parse);
+    let answered = false;
     const refreshOf = this.registerCachePolicy(name, cache);
     // [LAW:single-enforcer] The one place a source's run is named: its digest
     // is taken here, as its identity moves. Equal by digest, so a source whose
@@ -668,7 +693,9 @@ export class SourceRegistry {
         equals: (a, b) =>
           a.kind === "ok" && b.kind === "ok"
             ? a.value.digest === b.value.digest
-            : a.kind === b.kind,
+            : a.kind === "pending" && b.kind === "pending"
+              ? a.why === b.why
+              : a.kind === b.kind,
       },
     );
     runInAction(() => {
@@ -689,17 +716,41 @@ export class SourceRegistry {
         { fireImmediately: true },
       ),
       reaction(
-        () => this.runFact(name)?.reading,
-        (reading) => {
-          if (reading === undefined || reading.kind === "pending") return;
-          // The instant the reading first differed is the world state's; the
-          // store holds what the run answered.
-          const { at: _at, ...outcome } = reading;
-          publish(outcome);
+        () => this.toldOf(name),
+        (told) => {
+          // [LAW:single-enforcer] exception: whether this source has answered
+          // is the effect's own memory, as a run's last key is
+          // (`answeredUnder`). The store cannot say it, because what stands
+          // in for a key that failed before it ever answered is a value like
+          // any answer.
+          if (told.kind === "answer") {
+            answered = true;
+            // The instant the reading first differed is the world state's;
+            // the store holds what the run answered.
+            const { at: _at, ...outcome } = told.reading;
+            publisher.answered(outcome);
+          } else if (!answered) publisher.unanswered(told.reading);
         },
-        { fireImmediately: true },
+        {
+          fireImmediately: true,
+          // The tellings are stable values (a run, a fact), told apart by what
+          // they are, never walked: a source's value can be large JSON.
+          equals: (a, b) => a.kind === b.kind && a.reading === b.reading,
+        },
       ),
     );
+  }
+
+  // What the run `name` names says to its node: the host's reading of the run
+  // when it names one, else why it names none (a key over a value not answered
+  // yet, a key that failed before it ever answered).
+  private toldOf(name: string): Told {
+    const run = this.runs.get(name)!.get();
+    if (run.kind !== "ok") return { kind: "unanswered", reading: run };
+    const reading = this.inputs.get().run(run.value.digest).reading;
+    return reading.kind === "pending"
+      ? { kind: "unanswered", reading }
+      : { kind: "answer", reading };
   }
 
   // The reading of the run `name` names, or nothing while its policy names
@@ -716,7 +767,7 @@ export class SourceRegistry {
   // document. Selected once, at declaration — the pipeline never asks again.
   // The run parsed by the arm's own parser (source-runs.ts), so its value is
   // the arm's type.
-  private publisherFor(name: string, parse: SourceParse): Publish {
+  private publisherFor(name: string, parse: SourceParse): Publisher {
     switch (parse.kind) {
       case "text":
       case "regex":
@@ -726,24 +777,38 @@ export class SourceRegistry {
     }
   }
 
+  // The node is pending until the first run answers; the fallback stands in
+  // for a run that read nothing (a missing file, a command that failed, blank
+  // output) and for a key that failed before it ever answered.
   private scalarPublisher(
     name: string,
     varDefault: string | undefined,
-  ): Publish {
+  ): Publisher {
     const fallback = varDefault ?? this.defaultEmptyValue;
-    this.store.defineBox(name, "string", fallback);
-    return (outcome) => {
-      this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    return {
+      unanswered: (reading) => {
+        // Not answered yet is no failure, and a key's own failure is the
+        // variable's standing fault (`answeredUnder`): neither is a read's
+        // error.
+        this.store.setBox(
+          name,
+          reading.kind === "pending" ? reading : fallback,
+        );
+      },
+      answered: (outcome) => {
+        this.noteOutcome(name, outcome);
+        this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+      },
     };
   }
 
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node is pending until its first scan, then holds what the scan
-  // found — absent when it had nothing to read, failed with its reason after a
-  // bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value the way a
-  // string has "".
+  // A document's fallback is the declared default, or NO document: the node is
+  // pending until its first scan, then holds what the scan found — absent when
+  // it had nothing to read, failed with its reason after a bad one — which the
+  // scope proxy surfaces naming the variable [LAW:no-silent-failure]: a
+  // document has no honest empty value the way a string has "". Without a
+  // default, a key that failed before it ever answered is that failure.
   //
   // The default stands in for a run that had nothing to READ — a missing
   // file, a command that failed, blank output — never for text that was read
@@ -762,38 +827,45 @@ export class SourceRegistry {
   private documentPublisher(
     name: string,
     varDefault: JsonValue | undefined,
-  ): Publish {
-    // What the node holds before its first scan, and — with a default — what
-    // stands in for a run that had nothing to read.
-    const fallback: Reading<JsonValue> =
-      varDefault === undefined ? pendingOf("unread") : ok(varDefault);
-    this.store.defineDocument(name, fallback);
+  ): Publisher {
+    // What stands in for a run that had nothing to read, and for a key that
+    // failed before it ever answered.
+    const standIn = (outcome: Outcome<JsonValue>): Outcome<JsonValue> =>
+      varDefault === undefined ? outcome : ok(varDefault);
+    this.store.defineDocument(name, pendingOf("unread"));
     let clearSettling: (() => void) | undefined;
     // Whether the document showing was READ (not the default standing in).
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    return (raw) => {
-      clearSettling?.();
-      const outcome = raw as Outcome<JsonValue>;
-      this.noteOutcome(name, outcome);
-      const readText =
-        outcome.kind === "ok" ||
-        (outcome.kind === "failed" && outcome.failedAt === "parse");
-      const next = readText || varDefault === undefined ? outcome : fallback;
-      const torn = showingRead && readText && outcome.kind !== "ok";
-      const show = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next);
-      };
-      if (torn) {
-        clearSettling = this.store.clock.after(
-          `torn write settle ${name}`,
-          TORN_WRITE_SETTLE_MS,
-          show,
-        );
-      } else {
-        show();
-      }
+    return {
+      unanswered: (reading) =>
+        this.store.setDocument(
+          name,
+          reading.kind === "pending" ? reading : standIn(reading),
+        ),
+      answered: (raw) => {
+        clearSettling?.();
+        const outcome = raw as Outcome<JsonValue>;
+        this.noteOutcome(name, outcome);
+        const readText =
+          outcome.kind === "ok" ||
+          (outcome.kind === "failed" && outcome.failedAt === "parse");
+        const next = readText ? outcome : standIn(outcome);
+        const torn = showingRead && readText && outcome.kind !== "ok";
+        const show = () => {
+          showingRead = outcome.kind === "ok";
+          this.store.setDocument(name, next);
+        };
+        if (torn) {
+          clearSettling = this.store.clock.after(
+            `torn write settle ${name}`,
+            TORN_WRITE_SETTLE_MS,
+            show,
+          );
+        } else {
+          show();
+        }
+      },
     };
   }
 
@@ -1024,7 +1096,7 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-  ): () => Present<RunRefresh> {
+  ): () => Present<RunRefresh, PendingWhy> {
     switch (policy.kind) {
       case "never":
         return () => ok({ kind: "never" });
@@ -1055,8 +1127,9 @@ export class SourceRegistry {
                 .join(""),
             );
           } catch (e) {
-            return readPending(e) !== undefined
-              ? pendingOf("unread")
+            const pending = readPending(e);
+            return pending !== undefined
+              ? pendingOf(pending.why)
               : failed(
                   `cache key: ${e instanceof Error ? e.message : String(e)}`,
                   "read",
@@ -1071,9 +1144,17 @@ export class SourceRegistry {
         // whether the update executes.
         return this.answeredUnder(name, () => {
           const keys = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys.every((key) => key.kind === "ok")
-            ? ok(keys.map((key) => key.value))
-            : pendingOf("unread");
+          const values = keys.flatMap((key) =>
+            key.kind === "ok" ? [key.value] : [],
+          );
+          if (values.length === keys.length) return ok(values);
+          // [LAW:types-are-the-program] The source waits for what any of its
+          // dependencies waits for: a request waits for a first answer, so one
+          // dependency unread makes the source's own first answer owed.
+          const waiting = keys.flatMap((key) =>
+            key.kind === "pending" ? [key] : [],
+          );
+          return waiting.find((key) => key.why === "unread") ?? waiting[0]!;
         });
       }
     }
@@ -1091,8 +1172,8 @@ export class SourceRegistry {
   // failure, so the render event says failed rather than unread.
   private answeredUnder(
     name: string,
-    reads: () => Reading<SourceKey>,
-  ): () => Present<RunRefresh> {
+    reads: () => Present<SourceKey, PendingWhy>,
+  ): () => Present<RunRefresh, PendingWhy> {
     // Equal by value, so an input that moved without moving what the policy
     // read hashes nothing and names the run it named.
     const answer = computed(reads, { equals: compareStructural });
@@ -1108,16 +1189,17 @@ export class SourceRegistry {
     // move inside the host's batch. The registry observes its runs for its
     // life (the constructor), so this derivation runs at every answer.
     let last: SourceKey | undefined;
+    // [LAW:single-enforcer] Encode the complete key once. A template can
+    // spell a dependency tuple, and its encoded value is still a string.
+    const named = (key: SourceKey) =>
+      ok({ kind: "key", hash: keyHashOf(JSON.stringify(key)) } as const);
     return () => {
       const now = answer.get();
-      if (now.kind === "ok") last = now.value;
-      // [LAW:single-enforcer] Encode the complete key once. A template can
-      // spell a dependency tuple, and its encoded value is still a string.
-      return last !== undefined
-        ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last)) })
-        : now.kind === "failed"
-          ? now
-          : pendingOf("unread");
+      if (now.kind === "ok") {
+        last = now.value;
+        return named(last);
+      }
+      return last !== undefined ? named(last) : now;
     };
   }
 
@@ -1158,7 +1240,7 @@ export class SourceRegistry {
   private noteFault(
     faults: ObservableMap<string, LastError>,
     name: string,
-    outcome: Reading<unknown>,
+    outcome: Reading<unknown, PendingWhy>,
   ): void {
     runInAction(() => {
       if (outcome.kind !== "failed") faults.delete(name);

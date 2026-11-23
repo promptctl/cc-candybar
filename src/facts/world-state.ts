@@ -195,6 +195,8 @@ export const shortDigest = (digest: string): string =>
   digest.slice(0, SHORT_DIGEST_LENGTH);
 
 // Why the document is drawn from older facts, or null when its stamp held.
-export function stampFailureOf(document: WorldState): string | null {
+export function stampFailureOf(
+  document: Pick<WorldState, "diagnostics">,
+): string | null {
   return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }

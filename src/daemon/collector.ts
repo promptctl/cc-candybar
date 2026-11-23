@@ -62,7 +62,6 @@ import { judgeRun } from "./foundations/judge-run.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
-import { awaitsReading } from "../facts/awaited.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -86,9 +85,9 @@ export interface CollectorDeps {
   // frame feeds are the one record of who is watching.
   readonly watched: (session: SessionId) => boolean;
   // The host's one path to its renderer, for what the collector hands in
-  // alone; it settles once the renderer's turn did, and the collector reads
-  // nothing of how it ended.
-  readonly deliver: (event: HandedIn) => Promise<unknown>;
+  // alone; it settles once the renderer's turn did, with why the renderer did
+  // not take it, or null when it did.
+  readonly deliver: (event: HandedIn) => Promise<Untaken>;
   readonly log: DaemonLogger;
 }
 
@@ -113,11 +112,31 @@ interface DeclaredFor<Context extends ViewFacts> {
   readonly subscriptions: Subscribed;
 }
 
+// Why a renderer did not take what the collector handed it, or null: taken.
+export type Untaken = string | null;
+
+// What reached the renderer last: the world state it took, or the one it did
+// not, and why. A request's wait reads this, never the stamp: a stamp is only
+// what the collector holds until the renderer has it.
+interface Landed {
+  readonly seq: number;
+  readonly untaken: Untaken;
+}
+
 // The session's latest document and the read it was stamped from.
 interface Stamped {
   document: WorldState;
   from: StampInputs;
+  landed: Landed;
 }
+
+// [LAW:types-are-the-program] How a request's wait for the renderer's next
+// world state ended: one landed after the draw's, the renderer did not take it
+// (so no later draw can read it), or the session is no longer read.
+export type Moved =
+  | { readonly kind: "landed" }
+  | { readonly kind: "untaken"; readonly reason: string }
+  | { readonly kind: "gone" };
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.
@@ -268,34 +287,36 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     return document;
   }
 
-  // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
-  // model): until the session's latest stamp has no fact its draw waits on
-  // that has never answered, over the runs its renderer subscribes to now
-  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
-  // The wait triggers no read: the owners' reads follow the world, and each
-  // stamp they move goes to the renderer ahead of the request, so the request
-  // draws the world state the wait ended on. It reads the subscriptions as
-  // they move, so a turn that drops a run (a view retired, a config that no
-  // longer names it) ends the wait on that run.
-  async settled(session: SessionId, signal: AbortSignal): Promise<void> {
+  // [LAW:single-enforcer] A request's wait for its draw's owed answers: until
+  // a world state later than `after` (the one the draw read) reaches the
+  // renderer, or the renderer fails to take it, or the session is no longer
+  // read; null when `signal` ended it first. The wait triggers no read: the
+  // owners' reads follow the world, and each stamp they move goes to the
+  // renderer ahead of the request, so the request's next draw reads the world
+  // state the wait ended on. It judges the renderer's side, never the stamp
+  // alone, so a wait cannot end on a world state its next draw cannot read.
+  async moved(
+    session: SessionId,
+    after: number,
+    signal: AbortSignal,
+  ): Promise<Moved | null> {
+    const read = (): Moved | null => {
+      const record = this.records.get(session);
+      if (record?.phase.kind !== "live") return { kind: "gone" };
+      const { landed } = record.stamped;
+      if (landed.seq <= after) return null;
+      return landed.untaken === null
+        ? { kind: "landed" }
+        : { kind: "untaken", reason: landed.untaken };
+    };
     try {
-      await when(
-        () => {
-          const record = this.records.get(session);
-          return (
-            record?.phase.kind !== "live" ||
-            !awaitsReading(
-              record.stamped.document,
-              record.subscriptions.runs.keys(),
-            )
-          );
-        },
-        { signal },
-      );
+      await when(() => read() !== null, { signal });
     } catch (e) {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
+      return null;
     }
+    return read();
   }
 
   // A click is a person's input naming the session, as a request is, so the
@@ -445,8 +466,8 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
       throw e;
     }
     const stamped: Stamped = observable(
-      { document, from: first },
-      { document: observableRef, from: false },
+      { document, from: first, landed: { seq: document.seq, untaken: null } },
+      { document: observableRef, from: false, landed: observableRef },
     );
     return observable(
       {
@@ -515,13 +536,21 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           // [LAW:no-ambient-temporal-coupling] A stamp and its delivery are
           // one action, so a request's wait (`settled`) sees only a stamp
           // whose world state is already in the mailbox, ahead of its turn.
-          if (this.stamp({ session, stamped }, moved))
-            this.deps.clock.detach(`world state delivery ${session}`, () =>
-              this.deps.deliver({
-                kind: "world-state",
-                worldState: stamped.document,
-              }),
+          if (this.stamp({ session, stamped }, moved)) {
+            const { document } = stamped;
+            this.deps.clock.detach(
+              `world state delivery ${session}`,
+              async () => {
+                const untaken = await this.deps.deliver({
+                  kind: "world-state",
+                  worldState: document,
+                });
+                runInAction(() => {
+                  stamped.landed = { seq: document.seq, untaken };
+                });
+              },
             );
+          }
         }),
       {
         // The expression cannot throw; the effect's catch is `stamp`.

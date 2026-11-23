@@ -67,7 +67,7 @@ import {
   type LaidCell,
 } from "../template-engine/layout.js";
 import type { PlacementRecord, Returned } from "../render/frame-memory.js";
-import { readPending } from "../var-system/types.js";
+import { readPending, type PendingRead } from "../var-system/types.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -326,8 +326,9 @@ export interface NodeRenderCtx {
   // What the view's last drawn frame showed of the placement `id`: none in a
   // view that has drawn none, or where the walk never reached it.
   lastDrawn(id: string): PlacementRecord<RenderedLine> | undefined;
-  // A source whose value this frame drew as not answered yet.
-  waited(variable: string): void;
+  // A source whose value this frame drew as not answered yet, and what it is
+  // pending for.
+  waited(read: PendingRead): void;
   // The styles the placement's region deals it in `palette`, its authored
   // colours unread.
   decorations(node: CompiledSegmentNode, palette: Palette): SegmentStyles;
@@ -851,20 +852,12 @@ function drawSegment(
     const waits = gate.kind === "pending" ? gate : bodyGate;
     const own =
       waits.kind === "pending"
-        ? waitingOn(waits.variable)
+        ? waitingOn(waits)
         : ownAnswer(() => parts.evaluate(palette, ctx.region));
     const drawn =
       own.kind === "drawn"
         ? drawnRows(own.segment, layoutOf)
-        : waitingRows(
-            node,
-            scope,
-            ctx,
-            own.variable,
-            palette,
-            bodyOpen,
-            layoutOf,
-          );
+        : waitingRows(node, scope, ctx, own, palette, bodyOpen, layoutOf);
     if (drawn === null) return [];
     const { styles, inline: inlineLines, drops: dropLines } = drawn;
 
@@ -958,11 +951,12 @@ function drawSegment(
 // to, or not answered yet — they read `variable`, whose source has not.
 type OwnAnswer =
   | { readonly kind: "drawn"; readonly segment: EvaluatedSegment }
-  | { readonly kind: "waiting"; readonly variable: string };
+  | ({ readonly kind: "waiting" } & PendingRead);
 
-const waitingOn = (variable: string): OwnAnswer => ({
+const waitingOn = ({ variable, why }: PendingRead): OwnAnswer => ({
   kind: "waiting",
   variable,
+  why,
 });
 
 // [LAW:single-enforcer] `readPending` is the one thing that tells not answered
@@ -973,7 +967,7 @@ function ownAnswer(evaluate: () => EvaluatedSegment): OwnAnswer {
   } catch (err) {
     const pending = readPending(err);
     if (pending === undefined) throw err;
-    return waitingOn(pending.variable);
+    return waitingOn(pending);
   }
 }
 
@@ -1062,12 +1056,12 @@ function waitingRows(
   node: CompiledSegmentNode,
   scope: object,
   ctx: NodeRenderCtx,
-  variable: string,
+  read: PendingRead,
   palette: Palette,
   bodyOpen: boolean,
   layoutOf: (baseStyle: Style) => Layout,
 ): OwnRows | null {
-  ctx.waited(variable);
+  ctx.waited(read);
   const last = ctx.lastDrawn(node.placement.id);
   if (last?.kind === "hidden") return null;
   const styles = ctx.decorations(node, palette);
@@ -1176,7 +1170,7 @@ function errorAffix(
   } catch (err) {
     // [LAW:single-enforcer] `readPending` is the one thing that tells them apart.
     const pending = readPending(err);
-    if (pending !== undefined) ctx.waited(pending.variable);
+    if (pending !== undefined) ctx.waited(pending);
     else
       ctx.brokenPlacement(
         node.placement.id,

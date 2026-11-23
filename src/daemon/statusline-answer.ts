@@ -29,7 +29,7 @@ import type { Response } from "./foundations/protocol";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import { timeoutResponse } from "./foundations/request-deadline.js";
 import type { FrameSeen } from "./foundations/sightings";
-import type { Collector } from "./collector.js";
+import type { Collector, Moved } from "./collector.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { HostTurn, Made, RendererHost } from "./renderer-host.js";
 import {
@@ -126,7 +126,7 @@ export async function answerStatusline(
   publish: PublishFrame,
   collector: Pick<
     Collector<CheckedRenderRequest>,
-    "requested" | "holding" | "settled"
+    "requested" | "holding" | "moved"
   >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
@@ -158,6 +158,45 @@ export async function answerStatusline(
   const release = collector.holding(session);
   let configured: HostTurn;
   let delivered: HostTurn | null = null;
+  let answer: Present | null = null;
+  let draws = 0;
+  let waited = 0;
+  // What ended the request's draws: nothing owed (`settled`), or the cause,
+  // which `cause` says when it has more to say than its name.
+  let ended = "settled";
+  let cause = "-";
+  let closedDuring: Failure | null = null;
+  // [LAW:types-are-the-program] Every present a turn returned, in its order,
+  // is performed or refused: the first statusline frame for this request
+  // answers it, and nothing else may; a turn that threw answers nothing. A
+  // change was the host's to perform as the turn answered.
+  const presentedBy = (turn: HostTurn): Present | null => {
+    const done = turn.settlePresentation;
+    let presented: Present | null = null;
+    for (const effect of turn.effects) {
+      switch (effect.kind) {
+        case "present":
+          if (turn.kind === "threw") done(effect, "its turn threw");
+          else if (effect.request !== id)
+            done(
+              effect,
+              `presents request ${effect.request}, not this turn's ${id}`,
+            );
+          else if (effect.session !== session)
+            done(
+              effect,
+              `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
+            );
+          else if (presented !== null)
+            done(effect, `a second statusline frame for request ${id}`);
+          else presented = effect;
+          break;
+        case "change":
+          break;
+      }
+    }
+    return presented;
+  };
   try {
     // [LAW:no-ambient-temporal-coupling] The host owns the order: the
     // session's context goes first, with the world state read at the
@@ -187,32 +226,103 @@ export async function answerStatusline(
       return failed(host, configured.configFailure, "its config turn: ");
     }
     // [LAW:effects-at-boundaries] The context still serves the shared
-    // session, including panes. Only the source wait and one-off draw
-    // belong to the connection that asked for the reply.
+    // session, including panes. Only the draws and their wait belong to the
+    // connection that asked for the reply.
     if (!abandoned()) {
-      const waitFrom = clock.monotonic();
-      const budget = recipient.waitEndsAt - waitFrom;
       noteFacts(facts, {
-        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
+        deadline: `${req.deadline.kind}:${Math.round(recipient.waitEndsAt - clock.monotonic())}ms`,
       });
-      const ended = await waitWithin(
-        `render wait ${session}`,
-        (signal) => collector.settled(session, signal),
-        budget,
-        clock,
-        closing,
-      );
-      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-
-      // [LAW:no-ambient-temporal-coupling] Admit the draw only while the
-      // reply has a recipient. A closure or deadline can land while the
-      // source wait or the mailbox is serving something else.
-      if (!abandoned()) {
-        const draw = unlessClosing({ kind: "request", id, context: req });
-        delivered = await host.answer(() =>
+      const draw = unlessClosing({ kind: "request", id, context: req });
+      // [LAW:single-enforcer] The draw is the definition of what a request
+      // waits for: each draw says what it still owes (`Present.awaiting`),
+      // and the request waits only for that, within its deadline, then draws
+      // again. A draw that owes nothing, or whose owing cannot be paid, ends
+      // it, with the cause said.
+      for (;;) {
+        // [LAW:no-ambient-temporal-coupling] Admit a draw only while the
+        // reply has a recipient. A closure or deadline can land while the
+        // mailbox is serving something else.
+        const turn = await host.answer(() =>
           abandoned() ? DRAW_ABANDONED : draw(),
         );
+        delivered = turn;
+        draws++;
+        answer = presentedBy(turn);
+        if (turn.kind === "threw") {
+          // A draw refused for the close is the close's ending.
+          ended = closing.aborted ? "closed" : "threw";
+          break;
+        }
+        if (answer === null) {
+          ended = "unpresented";
+          break;
+        }
+        const { awaiting } = answer;
+        if (awaiting.kind === "settled") break;
+        if (awaiting.kind === "stalled") {
+          ended = "stalled";
+          cause = awaiting.reason;
+          break;
+        }
+        const left = recipient.waitEndsAt - clock.monotonic();
+        if (left <= 0) {
+          ended = "deadline";
+          break;
+        }
+        const waitFrom = clock.monotonic();
+        const found: { moved: Moved | null } = { moved: null };
+        const end = await waitWithin(
+          `render wait ${session}`,
+          async (signal) => {
+            found.moved = await collector.moved(session, awaiting.seq, signal);
+          },
+          left,
+          clock,
+          closing,
+        );
+        waited += elapsedMs(clock, waitFrom);
+        if (end !== "answered") {
+          ended = end;
+          // [LAW:no-ambient-temporal-coupling] The close has begun, so no
+          // draw may follow into the views its teardown is closing: the
+          // frame drawn is refused, and the request answers closing.
+          if (end === "closed") {
+            turn.settlePresentation(answer, "the daemon closed");
+            closedDuring = failureOf(new DaemonClosing("render"));
+          }
+          break;
+        }
+        const { moved } = found;
+        if (moved === null || moved.kind === "gone") {
+          ended = "gone";
+          break;
+        }
+        if (moved.kind === "untaken") {
+          ended = "untaken";
+          cause = moved.reason;
+          break;
+        }
+        // A frame replaced is never shown: refused, so the renderer commits
+        // nothing of it.
+        turn.settlePresentation(
+          answer,
+          abandoned()
+            ? DRAW_ABANDONED.message
+            : "a later draw of this request replaces it",
+        );
+        if (abandoned()) {
+          ended = "abandoned";
+          delivered = null;
+          answer = null;
+          break;
+        }
       }
+      noteFacts(facts, {
+        draws: String(draws),
+        waited: `${waited}ms`,
+        ended,
+        cause,
+      });
     }
   } finally {
     release();
@@ -251,33 +361,7 @@ export async function answerStatusline(
         .map((e) => (e.kind === "present" ? `present:${e.surface}` : e.kind))
         .join(",") || "-",
   });
-  // [LAW:types-are-the-program] Every present the turn returned, in its
-  // order, is performed or refused: the first statusline frame for this
-  // request answers it, and nothing else may; a turn that threw answers
-  // nothing. A change was the host's to perform as the turn answered.
-  let answer: Present | null = null;
-  for (const effect of effects) {
-    switch (effect.kind) {
-      case "present":
-        if (delivered.kind === "threw") done(effect, "its turn threw");
-        else if (effect.request !== id)
-          done(
-            effect,
-            `presents request ${effect.request}, not this turn's ${id}`,
-          );
-        else if (effect.session !== session)
-          done(
-            effect,
-            `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
-          );
-        else if (answer !== null)
-          done(effect, `a second statusline frame for request ${id}`);
-        else answer = effect;
-        break;
-      case "change":
-        break;
-    }
-  }
+  if (closedDuring !== null) return failed(host, closedDuring);
   if (delivered.kind === "threw") return failed(host, delivered.failure);
   if (answer === null)
     return failed(

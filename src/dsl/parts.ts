@@ -86,7 +86,7 @@ import {
   type PlacementParts,
   type SegmentStyles,
 } from "./node-registry.js";
-import { readPending } from "../var-system/types.js";
+import { readPending, type PendingRead } from "../var-system/types.js";
 
 // A globals rule as the compile parsed it: the paths it was written at, and
 // its template.
@@ -123,7 +123,7 @@ export type SlotState =
       readonly kind: "settled";
       readonly name: string;
       readonly warning: string | null;
-      readonly waited: string | null;
+      readonly waited: PendingRead | null;
     }
   | { readonly kind: "per-draw"; readonly rule: CompiledRule };
 
@@ -162,7 +162,7 @@ export interface DrawFacts {
 // `variable`, whose source has not answered — or why it threw.
 export type RuleOutcome =
   | { readonly kind: "named"; readonly name: string }
-  | { readonly kind: "pending"; readonly variable: string }
+  | ({ readonly kind: "pending" } & PendingRead)
   | { readonly kind: "failed"; readonly error: string };
 
 // A derivation's answer, its throw included: a part that throws throws again
@@ -406,7 +406,7 @@ export class ViewParts {
             return settled(last, warning, null);
           }
           case "pending":
-            return settled(last ?? SLOT_FLOORS[slot], null, outcome.variable);
+            return settled(last ?? SLOT_FLOORS[slot], null, outcome);
           case "failed":
             // A failure settles on the floor, so a pending answer after it
             // keeps the floor, as a per-draw rule's frame does.
@@ -511,7 +511,11 @@ export class ViewParts {
           } catch (e) {
             const pending = readPending(e);
             return pending !== undefined
-              ? { kind: "pending", variable: pending.variable }
+              ? {
+                  kind: "pending",
+                  variable: pending.variable,
+                  why: pending.why,
+                }
               : {
                   kind: "failed",
                   error: e instanceof Error ? e.message : String(e),
@@ -621,15 +625,23 @@ export function partsOf(source: ViewsOf, store: VariableStore): ViewParts {
 const settled = (
   name: string,
   warning: string | null,
-  waited: string | null,
-): SlotState => ({ kind: "settled", name, warning, waited });
+  waited: PendingRead | null,
+): SlotState => ({
+  kind: "settled",
+  name,
+  warning,
+  // Only what the read found: the variable and what it is pending for.
+  waited:
+    waited === null ? null : { variable: waited.variable, why: waited.why },
+});
 
 const sameSlot = (a: SlotState, b: SlotState): boolean =>
   a.kind === "settled"
     ? b.kind === "settled" &&
       a.name === b.name &&
       a.warning === b.warning &&
-      a.waited === b.waited
+      a.waited?.variable === b.waited?.variable &&
+      a.waited?.why === b.waited?.why
     : b.kind === "per-draw" && a.rule === b.rule;
 
 // [LAW:no-defensive-null-guards] The compile parses every rule the resolution

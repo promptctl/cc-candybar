@@ -10,7 +10,7 @@
 
 import type { VariableStore } from "../var-system/store.js";
 import { PendingValueError, type JsonValue } from "../var-system/types.js";
-import type { Present } from "../utils/outcome.js";
+import type { PendingWhy, Present } from "../utils/outcome.js";
 
 // Build the scope object the engine receives as `.` (dot).
 // Call once per render; the returned object is a read-only view of the store
@@ -101,13 +101,17 @@ function absentDocument(store: VariableStore, name: string): boolean {
 // whose scan failed throws its reason, which the segment reading it renders as
 // its ⚠ cell. A document never reads as an
 // empty value.
-function unwrapDocument(name: string, doc: Present<JsonValue>): JsonValue {
+function unwrapDocument(
+  name: string,
+  doc: Present<JsonValue, PendingWhy>,
+): JsonValue {
   switch (doc.kind) {
     case "ok":
       return doc.value;
     case "pending":
       throw new PendingValueError(
         name,
+        doc.why,
         `variable "${name}" has no value yet: its source has not completed a scan`,
       );
     case "failed":
