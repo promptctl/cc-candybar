@@ -116,7 +116,7 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
 // The render cache's share of the daemon's memory limit: what is left under
-// the line the doctor calls near the limit once the rest of the daemon is
+// the line the restart forecast calls near the limit once the rest of the daemon is
 // reserved — so a share full at its charges, which a test holds real heap
 // under and so are the most the cache can cost, never puts the daemon past
 // that line, whatever the limit. The limit is over the host and its renderer
@@ -288,8 +288,8 @@ export interface DslRenderState {
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
   readonly remainingLanes: ReadonlyMap<string, LaneSwitches>;
-  // What the file declares that nothing uses (the doctor's config check) —
-  // from the same raw parse, for the same reason.
+  // What the file declares that nothing uses — from the same raw parse, for
+  // the same reason. No bar reads it; the retired Doctor's config check did.
   readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;

@@ -1,7 +1,7 @@
 // What the statusline client IS — the one fact about a render only the client
 // that sent it can state: which program drew the bar, and which bundle it
-// belongs to. The doctor's "install is current" check reasons over it
-// (src/doctor/checks.ts), because the settings file only says what is
+// belongs to. A reader judging whether the install is current reasons over it,
+// because the settings file only says what is
 // supposed to run — a launcher script, managed settings, or a project file
 // may stand between it and the client that actually rendered.
 //

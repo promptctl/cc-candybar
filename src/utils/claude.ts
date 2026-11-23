@@ -398,8 +398,8 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
 
 // [LAW:one-source-of-truth] The one reading of a transcript line: blank lines
 // are none, and a line that is not a JSON object is `unparsed`. The bar's
-// parse skips those lines; the doctor counts them (brandon-doctor-v62x.p4l),
-// so the two agree on what a bad line is. Per line, so no reader holds more
+// parse skips those lines; a reader that counts them agrees on what a bad
+// line is. Per line, so no reader holds more
 // than one line's full object at once — makeEntry drops it straight away.
 // [LAW:effects-at-boundaries] Pure: a reader that wants the reason logs it.
 export type JsonLine =

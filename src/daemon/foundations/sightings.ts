@@ -1,6 +1,6 @@
 // What one render said of the session that sent it: its rate-limit windows,
-// its transcript, the frame it drew. The host records them and the doctor
-// reads them, so both name them here.
+// its transcript, the frame it drew. The host records them and its stats reply
+// reports them, so both name them here.
 
 import type { SessionId } from "./session-id.js";
 import { DRAWN_MOTIONS } from "../../render/drawn-motion.js";
@@ -30,9 +30,9 @@ export interface TranscriptSaid {
 
 // [LAW:types-are-the-program] What the session's bar drew, read off the frame
 // itself (`Frame`, src/render/frame.ts): whether anything on it changes
-// without new data — an effect, a transition, a template's `frames` — so the
-// doctor asks Claude Code for a redraw a second exactly when the bar needs one
-// (brandon-doctor-v62x.tgp). A render that threw drew nothing.
+// without new data — an effect, a transition, a template's `frames` — so a
+// reader can tell when the bar needs Claude Code to redraw it a second at a
+// time (brandon-doctor-v62x.tgp). A render that threw drew nothing.
 // `can-move`: still now, but the config can start motion at any render
 // without a click — a `globals.effect` rule, placements fading as they come
 // and go, a placement wearing its own effect — so it needs the redraw a moving
@@ -72,7 +72,7 @@ export interface RoledSaid extends RenderSaid {
 }
 
 export interface RenderSighting extends RoledSaid {
-  // Whose render it was: a doctor run reads its own session's sightings.
+  // Whose render it was, so a reader keeps one session's sightings apart.
   readonly sessionId: SessionId;
   // Seconds since the session's last render.
   readonly ago: number;

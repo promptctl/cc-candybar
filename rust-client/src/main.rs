@@ -588,7 +588,7 @@ fn detect_ssh() -> bool {
         .any(|name| env::var(name).is_ok_and(|v| !v.is_empty()))
 }
 
-// The tmux facts the doctor's tmux-truecolor check reasons over — mirrors
+// The tmux facts the client reports — mirrors
 // TMUX_ENV in src/tmux-hint.ts (socket var, pane var, Claude Code's truecolor
 // switch), diffed by scripts/check-protocol.mjs. Both runtimes must agree on
 // what "in tmux" means, or the native fast path and the node fallback would
@@ -691,7 +691,7 @@ fn resolve_against(cwd: &std::path::Path, value: &str) -> String {
 // The variables a terminal emulator sets to name itself — mirrors
 // TERMINAL_ENV_VARS in src/terminal-hint.ts, diffed by
 // scripts/check-protocol.mjs. They cross raw, by name: which terminal a value
-// means is the doctor's reading (src/doctor/terminal.ts).
+// means is a reader's judgment, made in one place.
 const TERMINAL_ENV_VARS: [&str; 5] = [
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",
@@ -733,8 +733,8 @@ fn detect_tmux() -> serde_json::Value {
 // an object is the facts. `socket` is the part of TMUX before its first comma
 // (the value is `socket,server-pid,session-id`); `truecolor` is the switch's
 // value, or `null` for unset-or-empty — both falsy to Claude Code's own
-// truthiness test. Pure over the three raw env values so the table in
-// test/doctor-checks.test.ts can be run against it.
+// truthiness test. Pure over the three raw env values so a table can be run
+// against it.
 fn tmux_hint(
     tmux: Option<String>,
     pane: Option<String>,
@@ -1435,7 +1435,7 @@ mod tests {
         assert_eq!(detect_term_extent(None, 0), None);
     }
 
-    // The same table as test/doctor-checks.test.ts (detectTmuxHint): in tmux
+    // The same table as the TS client's detectTmuxHint (src/tmux-hint.ts): in tmux
     // iff TMUX and TMUX_PANE are both non-empty; socket is TMUX up to its
     // first comma; truecolor is the raw value or null.
     #[test]

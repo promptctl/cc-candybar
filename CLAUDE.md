@@ -71,7 +71,7 @@ Leave out:
 
 Example:
 
-- WRONG: "The render cache (`src/daemon/cache/render.ts`) is bounded by bytes: `renderCacheBudget()` evicts LRU entries while `entries × ENTRY_BYTES` exceeds it (abc.123: each entry used to hold its own 9.3 MB compile)."
+- WRONG: "The render cache (`src/renderer/render-cache.ts`) is bounded by bytes: `renderCacheBudget()` evicts LRU entries while `entries × ENTRY_BYTES` exceeds it (abc.123: each entry used to hold its own 9.3 MB compile)."
 - RIGHT: "Entries share one compile, because a new entry appears for every directory a session renders from, and one compile per entry exhausts the memory limit. So a compile captures nothing that differs per directory."
 
 Keep the index to one line per file. A new area gets a new file and a line here.

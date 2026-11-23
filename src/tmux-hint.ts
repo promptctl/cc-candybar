@@ -4,9 +4,9 @@
 // [LAW:single-enforcer] Only the statusline CLIENT can observe these: Claude
 // Code spawns it with Claude Code's exact environment, while the daemon is
 // detached and one-per-user, its env answering for whichever shell spawned it.
-// So the client reports and the daemon holds its newest request's — the
-// doctor reasons over the facts of the session's request heard since the
-// daemon started, never over the daemon's own env.
+// So the client reports and the daemon holds its newest request's — a reader
+// reasons over the facts of the session's request heard since the daemon
+// started, never over the daemon's own env.
 //
 // [LAW:one-source-of-truth] This vocabulary is mirrored by the Rust client
 // (rust-client/src/main.rs, TMUX_ENV) and diffed by scripts/check-protocol.mjs,

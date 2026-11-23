@@ -18,18 +18,18 @@ This also works after a session moves to another renderer, and for links with no
 
 ```
 OSC 8 link → macOS → handler app (raw link) ───┐
-tmux status range → click binding → url-handle ┴→ Gather's socket
+url-handle, run by hand ───────────────────────┴→ Gather's socket
                      ↓
 Gather finds the renderer among attached connections
                      ↓
 renderer's event queue
 ```
 
-Gather writes the click down that renderer's connection. A link routes by name and a tmux range by attach id. One with no live connection is refused.
+Gather writes the click down that renderer's connection. A link routes by name. One with no live connection is refused.
 
 ### The handler changes
 
-Clients keep the default socket, which is the main renderer's, so the Rust hot path doesn't change. The handler app knows only the socket path and one frame, so moving it to Gather's path is a change to that one path, and it ships through reinstall; `url-handle` follows the daemon that composes its command.
+Clients keep the default socket, which is the main renderer's, so the Rust hot path doesn't change. The handler app knows only the socket path and one frame, so moving it to Gather's path is a change to that one path, and it ships through reinstall.
 
 The URL needs no handler change to pass through: `open` on a `to/…` link reached the live daemon as verb `to`, unchanged. Parsing it is the change. `parseHandlerUrl` returns a typed address, and `statusLineClick`, `isBarLink` and `follow()` in `scripts/bar-web/index.html` update to match.
 
@@ -49,7 +49,6 @@ The URL needs no handler change to pass through: `open` on a `to/…` link reach
 | Config-authored | A template function mints in the renderer. `{{ link }}` with a literal `cc-candybar://` is refused at load |
 | Doctor probes | Use the minter, so they also test the route through Gather |
 | Install test URL | Removed |
-| tmux `CLICK_URL` | Stays one fixed binding per tmux server. It isn't a drawn link: tmux sends a range, and the link it resolves to came from the minter |
 
 The `{{ link }}` refusal makes `examples/demo-actions.json5` migrate, along with anything else writing literal links.
 
@@ -59,19 +58,13 @@ Removal candidates, since each leaves one URL form: direct verb URLs and bare `c
 
 ### tmux
 
-The status row carries ranges, because a click there sends only a range name, and the link stays in the renderer that drew it. The binding is shared by every session on the tmux server, so the range id itself says which renderer drew the frame: see tmux status ranges in [../contracts.md](../contracts.md). That names the frame clicked, where a session option written by the current holder could name a newer renderer than the one on screen. Gather reads the attach id from the range, and the renderer runs `linkAt` on the rest. A status-line click carries a third URL form through the same route, so `parseHandlerUrl`'s address type covers it.
-
-A click on an old frame either finds the same link or finds nothing. It can't reach a different link. After a restart it's refused until the next frame redraws the row.
-
-**Why not `#[link=…]`.** tmux 3.8 draws real OSC 8 from a status format through this style. Raw OSC 8 or DCS passthrough in a format didn't work on 3.7b, where tmux dropped the ESC bytes. Tested on 3.8: a link of 256 bytes or more is dropped silently while its text still draws (250 worked), `,` and `]` break the style, and `%` must be doubled. Drawn links already reach 278 bytes, and human-readable links won't get shorter. Shortening links for this would give up human-readable links. Whether a plain click opens such a link with tmux `mouse on` was never tested.
-
-The status row has no hover. tmux turns mouse moves into a key only over a pane, so nothing can restyle a range under the pointer. Hover belongs to the bar pane, whose program can request motion events.
+The tmux status row carries no ranges, and nothing writes a click binding for it; the daemon removes the binding an older version wrote (`src/daemon/retired-tmux-status.ts`). A drawn link reaches the daemon through the handler app, or by hand through `url-handle`.
 
 ### Signing
 
-Links are signed with the renderer's own key, and verified by the renderer that drew them. The name isn't signed, and doesn't need to be.
+The host signs each bar link over its whole text and opens each click before a renderer sees it (`src/click/link-signer.ts`).
 
-The full survey is in [../inventory/frames.md](../inventory/frames.md), Task C.
+The full survey is in [../inventory/frames.md](../inventory/frames.md).
 
 ## Evidence
 
@@ -89,7 +82,6 @@ Limits: this used a whole daemon behind a bridge script, and the timing excludes
 
 - **Notification from the handler app.** Whether it needs a permission grant, and whether it appears at all.
 - **Handler update path.** How a staged handler is replaced on upgrade, and what a click does between a new Gather and an old handler.
-- **Range id characters.** `range=user|…` has only carried hex here. Base 36 needs a check; hex still works, with counters that run out sooner.
 - **Link session at routing time.** Whether `clickSessionOf` works on an addressed link, for raising a refusal on its bar.
 
 ## Done when

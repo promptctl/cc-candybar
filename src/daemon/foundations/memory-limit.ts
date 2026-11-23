@@ -1,6 +1,7 @@
 // The vocabulary of the daemon's memory limit: the units it is said in, a
 // breach's post-mortem, what a reading charges and how near the limit it is.
-// Shared, so the doctor judges what the daemon reports in the daemon's words.
+// Shared, so what the daemon reports and what reads its post-mortems say it in the
+// daemon's words.
 
 export const BYTES_PER_MB = 1024 * 1024;
 
@@ -14,8 +15,8 @@ export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
 // so a reader asks for the memory report by name instead of searching paths.
 // [LAW:one-source-of-truth] THE order of post-mortem identities, by code
 // unit as the ISO stamp is written (a collation may weigh its `-` and `:`
-// otherwise): the listing sorts by it and the doctor's "unread" filters by it,
-// so the newest it files read answers for every one it listed.
+// otherwise): the listing sorts by it, so the newest identity a reader has read
+// answers for every one it listed.
 export function laterIdentity(a: string, b: string): boolean {
   return a > b;
 }
@@ -25,8 +26,8 @@ export interface PostMortem {
   readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
 }
 
-// The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
-// it is and how much of its budget it holds. Its post-mortems are files any
+// The daemon as its stats reply reports it: which process it is and how much
+// of its budget it holds. Its post-mortems are files any
 // process reads (src/daemon/limits.ts `listPostMortems`), so they are no part
 // of what only the running daemon can say of itself.
 export interface ServingDaemon {
@@ -36,8 +37,8 @@ export interface ServingDaemon {
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
-// forecast in daemon-stats and the doctor's daemon row both ask it, and the
-// render cache's share is sized under it.
+// forecast in daemon-stats asks it, and the render cache's share is sized
+// under it.
 export const NEAR_LIMIT = 0.75;
 
 export function approachingLimit(bytes: number, limit: number): boolean {
@@ -45,7 +46,7 @@ export function approachingLimit(bytes: number, limit: number): boolean {
 }
 
 // [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
-// breach line, the restart forecast and the doctor's row all say it this way.
+// breach line and the restart forecast say it this way.
 export function chargeWords(charge: ReadCharge): string {
   return charge.kind === "charged"
     ? `${charge.measure} ${mb(charge.bytes)} MB`
@@ -53,7 +54,7 @@ export function chargeWords(charge: ReadCharge): string {
 }
 
 // [LAW:one-source-of-truth] The one token naming what a charge measured: the
-// per-check log line and the doctor's event both say it this way.
+// per-check log line says it this way.
 export function measureOf(charge: MemoryCharge): string {
   return charge.kind === "charged" ? charge.measure : "rss-stand-in";
 }

@@ -3,8 +3,11 @@
 // the host to perform, what it needs read, and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
-// implements it; it imports only types, the vocabulary both sides speak: the
-// session context, the world state, the frame, the instant.
+// implements it; what it imports is the vocabulary both sides speak (the
+// session context, the world state, the frame, the instant), plus the failure
+// shape and its one converter, so a thrown value crosses as the same data
+// whichever side threw it. The stats snapshot imports its renderer portion from
+// here.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
@@ -340,8 +343,9 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
-// [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
-// the statusline's arm carries the request it answers.
+// [LAW:one-type-per-behavior] A statusline frame returns as the present of the
+// request it answers. A frame a feed draws for a subscriber is no present: it
+// leaves as `RendererOutput.frames`, and the host publishes it.
 export interface Present {
   readonly kind: "present";
   readonly id: EffectId;

@@ -26,7 +26,7 @@ Each has the same sections: Owns, Why, Design, To probe, Done when, plus Evidenc
 
 ## Reference
 
-- [inventory/](inventory/): four read-only surveys of the code at commit `10f26ceb`. The daemon has been split up since, so check a location before relying on it.
+- [inventory/](inventory/): four read-only surveys of what the code reaches, reads and draws. A row the code stopped supporting is removed, so a missing row proves nothing.
 - [probes/](probes/README.md): the scripts behind the evidence.
 
 ## Working on this

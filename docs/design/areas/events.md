@@ -32,7 +32,7 @@ The queue's implementation isn't the point. What matters is that an event source
 
 **Every event emits one wide event**, extending today's click event, so a queue that did nothing is distinguishable from one that never ran.
 
-[../inventory/verbs.md](../inventory/verbs.md) has every verb's effects and every side effect outside a handler. Its reach classes and dev rows are obsolete; its effect lists aren't.
+[../inventory/verbs.md](../inventory/verbs.md) lists every verb's reach and the effects outside a handler.
 
 ## To survey
 

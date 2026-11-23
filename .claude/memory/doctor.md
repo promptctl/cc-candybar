@@ -1,12 +1,12 @@
 # Doctor
 
-The Doctor is retired and will be rebuilt on the shared host. This file keeps what its probes learned about the machine, because that stays true and a rebuild starts from it.
+The Doctor is retired. This file keeps what its probes learned about the machine, because that stays true.
 
-Most of the facts a doctor needs are visible only to the statusline client, which inherits Claude Code's environment, so they arrive as hints.
+The probes found that most facts a doctor needs are visible only to the statusline client, which inherits Claude Code's environment, so they arrived as hints.
 
 ## Claude Code settings
 
-- The first scope that sets statusLine wins it whole. This was never verified, and the old checks depended on it. env merges key by key.
+- The old checks assumed the first scope that sets statusLine wins it whole; that was never verified. env merges key by key.
 - Never write managed settings or a project's shared .claude/settings.json. The first is an administrator's policy, and the second is somebody's repository.
 - Claude Code parses settings strictly: keys must be quoted and trailing commas aren't allowed. Edit settings files in that dialect.
 - Refresh cadence is judged from the settings chain the session reads, not from request timing. Under load, no arrival pattern tells a timer from the events of a busy turn. And a statusLine from --settings, MDM or server-managed settings outranks every file a fix could write.

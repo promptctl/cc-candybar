@@ -5,11 +5,12 @@
 // [LAW:single-enforcer] Only the statusline CLIENT can observe these: Claude
 // Code spawns it with Claude Code's exact environment, while the daemon is
 // detached and one-per-user, its env answering for whichever shell spawned it.
-// So the client reports them as the `terminalEnv` hint and the doctor reasons
-// over the session's last render (src/doctor/terminal.ts).
+// So the client reports them as the `terminalEnv` hint, which no code reads
+// today; what the retired Doctor learned about terminals is in
+// .claude/memory/doctor.md.
 //
 // [LAW:one-source-of-truth] They cross raw, by name: which terminal a value
-// means is the doctor's reading, made in one place. The names are mirrored by
+// means is a reader's judgment, made in one place. The names are mirrored by
 // the Rust client (rust-client/src/main.rs, TERMINAL_ENV_VARS) and diffed by
 // scripts/check-protocol.mjs, which anchors on the declaration below.
 export const TERMINAL_ENV_VARS = [

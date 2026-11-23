@@ -34,7 +34,7 @@ The Node and native followers share their reconnect decisions through one fixtur
 
 ## Lane switches
 
-A renderer's lane declaration sets the desired pane policy. The host's latest accepted statusline request locates that session. A pane move or a temporary setup failure is reconciled from those requests even when the renderer's policy stays the same.
+A renderer's lane declaration sets the desired pane policy. The host's latest accepted statusline request locates that session. A pane move or a temporary setup failure is reconciled from those requests even when the renderer's policy stays the same. Pane lanes are held by declaration and not by acts, because an act makes the renderer remember what it asked, and that memory drifts from the host's when the host releases a pane on its own.
 
 A lane's switch is read where the config is, in the renderer, and every output declares each viewed session's switches, a turn that threw included, so the host's gate ends a lane switched off while the render throws. The host gates on the switches the last output declared: a subscribe to a lane that's off is refused at once, and a subscriber whose lane goes off is ended, told why. A session with no view yet has no switch to read, since only an event opens a view, so its subscriber is admitted and the switches its view opens with decide.
 
@@ -43,7 +43,3 @@ While a lane that draws the bar somewhere else is on and actually followed, Clau
 ## The attach launcher
 
 A Bun-compiled Claude Code honours BUN_OPTIONS. It doesn't honour BUN_INSPECT_PRELOAD or NODE_OPTIONS. BUN_INSPECT names a single socket, so two sessions can't share it, and BUN_INSPECT_CONNECT_TO dials out without holding the process. This was measured on one Claude Code release, so recheck it if attaching stops working. The preload execs node with the launcher in the same pid and removes itself from BUN_OPTIONS, so no Bun child process runs it again. When it can't attach, it refuses rather than start a stock session.
-
-## Restoring tmux status options
-
-A daemon puts back the status options an older daemon wrote into tmux. tmux stores an array option whole at each level, so a session's status-format array is restored whole: a session-level index blanks the global window list, and unsetting indices leaves an empty array that still shadows the global one. The restore compares against a record kept in tmux itself, so the next daemon puts back what a dead one left. Each record names the socket of the daemon that wrote it and a daemon touches only its own, so a dev or test daemon on the same tmux server leaves the real one's records alone.
