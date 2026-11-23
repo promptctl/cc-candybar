@@ -56,29 +56,18 @@ export const renderEventsOf = (
 // or an abandoned draw can log an attempt that only produced a timeout.
 export const answeredRender = (line: string): boolean => {
   const fields = fieldsOf(line);
-  return fields.get("timedOut") === "N" && fields.get("outcome") !== "abandoned";
+  return (
+    fields.get("timedOut") === "N" && fields.get("outcome") !== "abandoned"
+  );
 };
 
-// Whether every value a render event drew pending is a plugin source a run
-// superseded, as its `sourcesPending=` names them.
-export function drewOnlySuperseded(event: string): boolean {
-  const field = (name: string): string[] =>
-    (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
-      .split(",")
-      .filter((v) => v !== "-");
-  const superseded = new Set(
-    field("sourcesPending")
-      .filter((v) => v.endsWith(":superseded"))
-      .map((v) => v.slice(0, -":superseded".length)),
-  );
-  const pending = field("pending");
-  return pending.length > 0 && pending.every((name) => superseded.has(name));
-}
+// The names a render event lists under `name`, none for `-`.
+const listedBy = (event: string, name: string): string[] =>
+  (fieldsOf(event).get(name) ?? "-").split(",").filter((v) => v !== "-");
 
-// An answered render that drew a source still pending. A source a run
-// superseded is pending by design (no request waits on it), so it is not one.
-export const drewAwaitedPending = (event: string): boolean =>
-  !/ pending=-(?: |$)/.test(event) && !drewOnlySuperseded(event);
+// What the request waited for and its last draw still owed (`owed=`): the
+// draw's own statement, the one thing the host's wait reads.
+export const owedBy = (event: string): string[] => listedBy(event, "owed");
 
 // The values no request waits for: each draws pending on a first bar and lands
 // through its owner's refresh, which that owner logs as `<source> refresh`.
@@ -94,9 +83,7 @@ const UNWAITED: ReadonlyArray<{
 // them is a value no request waits for; none otherwise, since a render that
 // drew any other value pending is the one the deadline or a bug explains.
 export function owedLandings(event: string): readonly string[] {
-  const pending = (/ pending=(\S+)/.exec(event)?.[1] ?? "-")
-    .split(",")
-    .filter((v) => v !== "-");
+  const pending = listedBy(event, "pending");
   const owed = pending.map(
     (name) => UNWAITED.find((u) => u.name.test(name))?.lands,
   );
@@ -105,14 +92,20 @@ export function owedLandings(event: string): readonly string[] {
     : [];
 }
 
+// An answered render whose values are still on their way: its draw owed a
+// source, or drew only values no request waits for, pending. A value a run
+// superseded is pending by design and owed to no one, so it is neither.
+export const drewAwaitedPending = (event: string): boolean =>
+  owedBy(event).length > 0 || owedLandings(event).length > 0;
+
 // [LAW:one-source-of-truth] The answer `renderRequest` asks again after: one
-// that drew a source pending because its wait ended at the deadline, or drew
-// only values no request waits for. The retry loop decides with this and
+// whose wait ended at the deadline with a source still owed, or that drew only
+// values no request waits for. The retry loop decides with this and
 // `renderLines` drops what it decided, so a render is read as the one event
 // its client kept.
 export const retriedRender = (event: string): boolean =>
-  drewAwaitedPending(event) &&
-  (/ ended=deadline(?: |$)/.test(event) || owedLandings(event).length > 0);
+  (owedBy(event).length > 0 && fieldsOf(event).get("ended") === "deadline") ||
+  (owedBy(event).length === 0 && owedLandings(event).length > 0);
 
 // A session's render events, one per render its client kept, in log order.
 // A request the client retried is logged once per attempt: after a timeout

@@ -127,13 +127,18 @@ function hold(
   holders.set(registry, { held, runs });
   registry.bindInputs({
     session: () => {
-      throw new PendingValueError("session_id", "no view source is bound");
+      throw new PendingValueError(
+        "session_id",
+        "unread",
+        "no view source is bound",
+      );
     },
     read: () => pendingOf("unread"),
     ...held.readings,
     drawnAt: () => {
       throw new PendingValueError(
         "colorCompatibility.effective",
+        "unread",
         "no view source is bound",
       );
     },
@@ -3410,6 +3415,48 @@ describe("SourceRegistry — parse seam", () => {
     expect(doc(store, "doc").a).toBe(1);
   });
 
+  // [LAW:dataflow-not-control-flow] A default stands in for a run that read
+  // nothing, never for a run not yet answered: the node is pending first, so
+  // a frame drawn before the answer shows a wait and not a value.
+  it("a text variable with a default is pending until its first run answers, then holds what the run read", async () => {
+    const { store, registry } = make();
+    registry.declareShell("word", `sleep 0.2; echo read`, {
+      cwd: process.cwd(),
+      env: SHELL_ENV,
+      parse: text("fallback"),
+      cache: { kind: "never" },
+    });
+    expect(store.stored("word")).toEqual(pendingOf("unread"));
+    expect(await settledOf(registry, 3000)).toEqual([]);
+    expect(store.read("word")).toBe("read");
+  });
+
+  it("a text variable's default stands in for a run that read nothing", async () => {
+    const { store, registry } = make();
+    registry.declareShell("failing", `exit 3`, {
+      cwd: process.cwd(),
+      env: SHELL_ENV,
+      parse: text("fallback"),
+      cache: { kind: "never" },
+    });
+    expect(store.stored("failing")).toEqual(pendingOf("unread"));
+    expect(await settledOf(registry, 3000)).toEqual([]);
+    expect(store.read("failing")).toBe("fallback");
+  });
+
+  it("a document with a default is pending until its first run answers, and the default stands in for a run that read nothing", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `sleep 0.2; exit 3`, {
+      cwd: process.cwd(),
+      env: SHELL_ENV,
+      parse: { kind: "json", default: { label: "?" } },
+      cache: { kind: "never" },
+    });
+    expect(store.readDocument("doc")).toEqual(pendingOf("unread"));
+    expect(await settledOf(registry, 3000)).toEqual([]);
+    expect(doc(store, "doc").label).toBe("?");
+  });
+
   it("settled() names the sources still in flight at its deadline", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -3428,7 +3475,7 @@ describe("SourceRegistry — parse seam", () => {
         parse: TEXT,
         cache: { kind: "never" },
       });
-      await until(() => store.read("fast") === "y", "fast's run publishing");
+      await until(() => store.stored("fast") === "y", "fast's run publishing");
       expect(await settledOf(registry, 0)).toEqual(["slow"]);
       gate.open();
       expect(await settledOf(registry, 3000)).toEqual([]);
@@ -3545,9 +3592,9 @@ describe("SourceRegistry — in-flight runs", () => {
       const spawns = path.join(dir, "spawns");
       const { store, registry } = make();
       // A is the slow one: its first publish lands while settled() is
-      // waiting, and that publish is what re-runs B. B's own first run is
-      // long done by then, so the re-run is a new in-flight entry that only
-      // a re-snapshot of inFlight after A's publish can await.
+      // waiting, and that publish is what names B's run, since B's key reads
+      // A. B is pending until that run answers, so the wait covers a run that
+      // did not exist when it began, and B runs once, under A's answer.
       registry.declareShell("A", "sleep 0.5; echo a", {
         cwd: process.cwd(),
         env: SHELL_ENV,
@@ -3566,7 +3613,7 @@ describe("SourceRegistry — in-flight runs", () => {
       );
       expect(await settledOf(registry, 3000)).toEqual([]);
       expect(store.read("A")).toBe("a");
-      expect(store.read("B")).toBe("2");
+      expect(store.read("B")).toBe("1");
     } finally {
       cleanup();
     }
@@ -3678,7 +3725,7 @@ describe("SourceRegistry — in-flight runs", () => {
     heldOf(registry).runs.close();
     await until(() => !alive(marker), "the run's child ending", 3000);
     expect(alive(nap)).toBe(false);
-    expect(store.read("s")).toBe("pending");
+    expect(store.stored("s")).toEqual(pendingOf("unread"));
     expect(registry.getLastError("s")).toBeUndefined();
   });
 });

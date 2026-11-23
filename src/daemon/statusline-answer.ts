@@ -59,6 +59,45 @@ const DRAW_ABANDONED: Failure = {
   detail: "the statusline reply has no recipient",
 };
 
+// [LAW:types-are-the-program] How the request's draws ended, with what each
+// ending answers from: the last turn drawn, and the frame it presented where
+// one answers.
+type Ending =
+  // A frame answers: it owes nothing, or what it owes will not come in time
+  // (`deadline`; `gone`, the session no longer read) or at all (`stalled`, a
+  // failed stamp; `stale`, a redraw that read no world state newer than the
+  // draw before it, so what was stamped never reached the renderer), `cause`
+  // saying why for the last two.
+  | {
+      readonly kind: "settled" | "deadline" | "gone";
+      readonly turn: HostTurn;
+      readonly answer: Present;
+    }
+  | {
+      readonly kind: "stalled" | "stale";
+      readonly turn: HostTurn;
+      readonly answer: Present;
+      readonly cause: string;
+    }
+  // No frame answers: the draw threw, presented nothing, or was refused for
+  // the daemon's close or the recipient's leaving.
+  | {
+      readonly kind: "threw";
+      readonly turn: HostTurn;
+      readonly failure: Failure;
+    }
+  | { readonly kind: "unpresented"; readonly turn: HostTurn }
+  | { readonly kind: "closed"; readonly turn: HostTurn }
+  | { readonly kind: "abandoned"; readonly turn: HostTurn };
+
+interface Drawing {
+  readonly ending: Ending;
+  readonly draws: number;
+  readonly waited: number;
+  // What the first draw owed, the names this request waited for.
+  readonly waitedFor: readonly string[];
+}
+
 // [LAW:no-silent-failure] A request whose turn did not answer it is answered
 // with a failure naming the renderer, never with an empty bar. `error` is what
 // the request's event records: the failure's detail, an Error's stack
@@ -126,7 +165,7 @@ export async function answerStatusline(
   publish: PublishFrame,
   collector: Pick<
     Collector<CheckedRenderRequest>,
-    "requested" | "holding" | "settled"
+    "requested" | "holding" | "moved"
   >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after" | "failed">,
   // The daemon's close, which ends the request's wait.
@@ -157,7 +196,150 @@ export async function answerStatusline(
   // context to its answer, wait included, so no sweep retires it between.
   const release = collector.holding(session);
   let configured: HostTurn;
-  let delivered: HostTurn | null = null;
+  let drawing: Drawing | null = null;
+  // [LAW:types-are-the-program] Every present a turn returned, in its order,
+  // is performed or refused: the first statusline frame for this request
+  // answers it, and nothing else may; a turn that threw answers nothing. A
+  // change was the host's to perform as the turn answered.
+  const presentedBy = (turn: HostTurn): Present | null => {
+    const done = turn.settlePresentation;
+    let presented: Present | null = null;
+    for (const effect of turn.effects) {
+      switch (effect.kind) {
+        case "present":
+          if (turn.kind === "threw") done(effect, "its turn threw");
+          else if (effect.request !== id)
+            done(
+              effect,
+              `presents request ${effect.request}, not this turn's ${id}`,
+            );
+          else if (effect.session !== session)
+            done(
+              effect,
+              `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
+            );
+          else if (presented !== null)
+            done(effect, `a second statusline frame for request ${id}`);
+          else presented = effect;
+          break;
+        case "change":
+          break;
+      }
+    }
+    return presented;
+  };
+  // [LAW:single-enforcer] The draw is the definition of what a request waits
+  // for: each draw says what it still owes (`Present.awaiting`), and the
+  // request waits only for that, within its deadline, then draws again. A
+  // draw that owes nothing, or whose owing cannot be paid, ends it, with the
+  // cause said.
+  const drawnUntilEnded = async (): Promise<Drawing> => {
+    const draw = unlessClosing({ kind: "request", id, context: req });
+    let draws = 0;
+    let waited = 0;
+    let waitedFor: readonly string[] = [];
+    // The world state the draw before read: a redraw that reads no later one
+    // after a wait that ended on a stamp was not handed what was stamped.
+    let drewSeq = -1;
+    for (;;) {
+      // [LAW:no-ambient-temporal-coupling] Admit a draw only while the reply
+      // has a recipient. A closure or deadline can land while the mailbox is
+      // serving something else.
+      const turn = await host.answer(() =>
+        abandoned() ? DRAW_ABANDONED : draw(),
+      );
+      draws++;
+      const answer = presentedBy(turn);
+      const ended = (ending: Ending): Drawing => ({
+        ending,
+        draws,
+        waited,
+        waitedFor,
+      });
+      if (turn.kind === "threw") {
+        // A draw refused for the recipient's leaving, or for the close, is
+        // those endings: neither is a throw of the renderer's, and a throw
+        // while the close is under way is still the renderer's.
+        if (turn.failure === DRAW_ABANDONED)
+          return ended({ kind: "abandoned", turn });
+        return ended(
+          turn.failure.kind === "closing"
+            ? { kind: "closed", turn }
+            : { kind: "threw", turn, failure: turn.failure },
+        );
+      }
+      if (answer === null) return ended({ kind: "unpresented", turn });
+      // [LAW:single-enforcer] A draw is admitted only while the reply has a
+      // recipient (above), and a frame it drew stands as its answer. One the
+      // wait ended on is a later moment: a recipient that left during it
+      // refuses the frame, so nothing is published for no one.
+      const answersAfterWait = (
+        ending: Extract<Ending, { readonly answer: Present }>,
+      ): Drawing => {
+        if (!abandoned()) return ended(ending);
+        turn.settlePresentation(answer, DRAW_ABANDONED.message);
+        return ended({ kind: "abandoned", turn });
+      };
+      const { awaiting } = answer;
+      if (awaiting.kind === "settled")
+        return ended({ kind: "settled", turn, answer });
+      if (draws === 1) waitedFor = awaiting.names;
+      if (awaiting.seq <= drewSeq)
+        return ended({
+          kind: "stale",
+          turn,
+          answer,
+          cause: `the renderer drew world state ${awaiting.seq} again after a wait for one later than ${drewSeq}`,
+        });
+      drewSeq = awaiting.seq;
+      if (awaiting.kind === "stalled")
+        return ended({
+          kind: "stalled",
+          turn,
+          answer,
+          cause: awaiting.reason,
+        });
+      const left = recipient.waitEndsAt - clock.monotonic();
+      if (left <= 0) return ended({ kind: "deadline", turn, answer });
+      const waitFrom = clock.monotonic();
+      const wait = await waitWithin(
+        `render wait ${session}`,
+        (signal) => collector.moved(session, awaiting.seq, signal),
+        left,
+        clock,
+        closing,
+      );
+      waited += elapsedMs(clock, waitFrom);
+      // [LAW:no-ambient-temporal-coupling] The close has begun, so no draw
+      // may follow into the views its teardown is closing: the frame drawn
+      // is refused, and the request answers closing. A wait whose own signal
+      // ended it as its answer was taken ended the same way.
+      const closed = (): Drawing => {
+        turn.settlePresentation(answer, "the daemon closed");
+        return ended({ kind: "closed", turn });
+      };
+      if (wait.end === "closed") return closed();
+      if (wait.end === "deadline")
+        return answersAfterWait({ kind: "deadline", turn, answer });
+      switch (wait.value.kind) {
+        case "aborted":
+          if (closing.aborted) return closed();
+          return answersAfterWait({ kind: "deadline", turn, answer });
+        case "gone":
+          return answersAfterWait({ kind: "gone", turn, answer });
+        case "moved":
+          // A frame replaced is never shown: refused, so the renderer commits
+          // nothing of it.
+          turn.settlePresentation(
+            answer,
+            abandoned()
+              ? DRAW_ABANDONED.message
+              : "a later draw of this request replaces it",
+          );
+          if (abandoned()) return ended({ kind: "abandoned", turn });
+      }
+    }
+  };
   try {
     // [LAW:no-ambient-temporal-coupling] The host owns the order: the
     // session's context goes first, with the world state read at the
@@ -187,36 +369,25 @@ export async function answerStatusline(
       return failed(host, configured.configFailure, "its config turn: ");
     }
     // [LAW:effects-at-boundaries] The context still serves the shared
-    // session, including panes. Only the source wait and one-off draw
-    // belong to the connection that asked for the reply.
+    // session, including panes. Only the draws and their wait belong to the
+    // connection that asked for the reply.
     if (!abandoned()) {
-      const waitFrom = clock.monotonic();
-      const budget = recipient.waitEndsAt - waitFrom;
       noteFacts(facts, {
-        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
+        deadline: `${req.deadline.kind}:${Math.round(recipient.waitEndsAt - clock.monotonic())}ms`,
       });
-      const ended = await waitWithin(
-        `render wait ${session}`,
-        (signal) => collector.settled(session, signal),
-        budget,
-        clock,
-        closing,
-      );
-      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-
-      // [LAW:no-ambient-temporal-coupling] Admit the draw only while the
-      // reply has a recipient. A closure or deadline can land while the
-      // source wait or the mailbox is serving something else.
-      if (!abandoned()) {
-        const draw = unlessClosing({ kind: "request", id, context: req });
-        delivered = await host.answer(() =>
-          abandoned() ? DRAW_ABANDONED : draw(),
-        );
-      }
+      drawing = await drawnUntilEnded();
+      noteFacts(facts, {
+        draws: String(drawing.draws),
+        waited: `${drawing.waited}ms`,
+        waitedFor: drawing.waitedFor.join(",") || "-",
+        ended: drawing.ending.kind,
+        cause: "cause" in drawing.ending ? drawing.ending.cause : "-",
+      });
     }
   } finally {
     release();
   }
+  const delivered = drawing === null ? null : drawing.ending.turn;
   if (delivered !== null) recorded(facts, delivered);
   // [LAW:nothing-unseen] Both turns' times in the renderer, their waits in
   // the mailbox and their hops, beside `took`: what the renderer and reaching
@@ -233,58 +404,30 @@ export async function answerStatusline(
         : `${configured.hopMs + drawHop}ms`,
     renderer: host.name,
   });
-  if (
-    delivered === null ||
-    (delivered.kind === "threw" && delivered.failure === DRAW_ABANDONED)
-  )
+  if (drawing === null || drawing.ending.kind === "abandoned")
     return {
       outcome: DRAW_ABANDONED,
       resp: timeoutResponse(id, DRAW_ABANDONED.message),
       seen: "failed",
       settled: NOTHING_TO_SETTLE,
     };
-  const done = delivered.settlePresentation;
-  const { effects } = delivered;
+  const { ending } = drawing;
   noteFacts(facts, {
     effects:
-      effects
+      ending.turn.effects
         .map((e) => (e.kind === "present" ? `present:${e.surface}` : e.kind))
         .join(",") || "-",
   });
-  // [LAW:types-are-the-program] Every present the turn returned, in its
-  // order, is performed or refused: the first statusline frame for this
-  // request answers it, and nothing else may; a turn that threw answers
-  // nothing. A change was the host's to perform as the turn answered.
-  let answer: Present | null = null;
-  for (const effect of effects) {
-    switch (effect.kind) {
-      case "present":
-        if (delivered.kind === "threw") done(effect, "its turn threw");
-        else if (effect.request !== id)
-          done(
-            effect,
-            `presents request ${effect.request}, not this turn's ${id}`,
-          );
-        else if (effect.session !== session)
-          done(
-            effect,
-            `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
-          );
-        else if (answer !== null)
-          done(effect, `a second statusline frame for request ${id}`);
-        else answer = effect;
-        break;
-      case "change":
-        break;
-    }
-  }
-  if (delivered.kind === "threw") return failed(host, delivered.failure);
-  if (answer === null)
+  if (ending.kind === "closed")
+    return failed(host, failureOf(new DaemonClosing("render")));
+  if (ending.kind === "threw") return failed(host, ending.failure);
+  if (ending.kind === "unpresented")
     return failed(
       host,
       failureOf(new Error(`presented no statusline frame for request ${id}`)),
     );
-  const presented = answer;
+  const done = ending.turn.settlePresentation;
+  const presented = ending.answer;
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {

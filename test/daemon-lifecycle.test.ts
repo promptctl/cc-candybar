@@ -58,6 +58,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
                           surface: "statusline",
                           request: event.id,
                           frame: renderFailedFrame("test frame"),
+                          awaiting: { kind: "settled", seq: 1 },
                         },
                       ]
                     : [],

@@ -62,7 +62,6 @@ import { judgeRun } from "./foundations/judge-run.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
-import { awaitsReading } from "../facts/awaited.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -112,6 +111,14 @@ interface DeclaredFor<Context extends ViewFacts> {
   readonly request: CollectedRequest<Context>;
   readonly subscriptions: Subscribed;
 }
+
+// [LAW:types-are-the-program] How a request's wait for the next world state
+// ended: one later than the draw's was stamped, the session is no longer
+// read, or the wait's own signal ended it first.
+export type Moved =
+  | { readonly kind: "moved" }
+  | { readonly kind: "gone" }
+  | { readonly kind: "aborted" };
 
 // The session's latest document and the read it was stamped from.
 interface Stamped {
@@ -224,8 +231,8 @@ function release({
 
 export class Collector<Context extends ViewFacts = ViewFacts> {
   // [LAW:one-source-of-truth] Observable as far as a request's wait reads
-  // them (`settled`): which sessions are read, each one's phase, its latest
-  // stamp and its subscriptions.
+  // them (`moved`): which sessions are read, each one's phase and its latest
+  // stamp.
   private readonly records = observable.map<SessionId, SessionRecord<Context>>(
     undefined,
     { deep: false },
@@ -268,34 +275,30 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     return document;
   }
 
-  // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
-  // model): until the session's latest stamp has no fact its draw waits on
-  // that has never answered, over the runs its renderer subscribes to now
-  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
-  // The wait triggers no read: the owners' reads follow the world, and each
-  // stamp they move goes to the renderer ahead of the request, so the request
-  // draws the world state the wait ended on. It reads the subscriptions as
-  // they move, so a turn that drops a run (a view retired, a config that no
-  // longer names it) ends the wait on that run.
-  async settled(session: SessionId, signal: AbortSignal): Promise<void> {
+  // [LAW:single-enforcer] A request's wait for its draw's owed answers: until
+  // the session is stamped later than `after` (the world state the draw read),
+  // or is no longer read, or `signal` ends it. The wait triggers no read: the
+  // owners' reads follow the world, and each stamp they move goes to the
+  // renderer ahead of the request, so the request's next draw reads the world
+  // state the wait ended on. A renderer that did not take it says so by what
+  // the draw reports: it throws, or reads the world state it already drew.
+  async moved(
+    session: SessionId,
+    after: number,
+    signal: AbortSignal,
+  ): Promise<Moved> {
+    const read = (): Moved | null => {
+      const record = this.records.get(session);
+      if (record?.phase.kind !== "live") return { kind: "gone" };
+      return record.stamped.document.seq > after ? { kind: "moved" } : null;
+    };
     try {
-      await when(
-        () => {
-          const record = this.records.get(session);
-          return (
-            record?.phase.kind !== "live" ||
-            !awaitsReading(
-              record.stamped.document,
-              record.subscriptions.runs.keys(),
-            )
-          );
-        },
-        { signal },
-      );
+      await when(() => read() !== null, { signal });
     } catch (e) {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
+    return read() ?? { kind: "aborted" };
   }
 
   // A click is a person's input naming the session, as a request is, so the
@@ -513,7 +516,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           // The read a request's stamp already took.
           if (moved === stamped.from) return;
           // [LAW:no-ambient-temporal-coupling] A stamp and its delivery are
-          // one action, so a request's wait (`settled`) sees only a stamp
+          // one action, so a request's wait (`moved`) sees only a stamp
           // whose world state is already in the mailbox, ahead of its turn.
           if (this.stamp({ session, stamped }, moved))
             this.deps.clock.detach(`world state delivery ${session}`, () =>

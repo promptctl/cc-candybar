@@ -54,7 +54,6 @@ import {
   withTranscriptLanes,
   type FixtureOwners,
 } from "./helpers/payload-owners";
-import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -254,11 +253,9 @@ describe("a session's transcript", () => {
     const { collector, clock, handedIn } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
-    expect(awaitsReading(first, [])).toBe(true);
     await clock.settle(0);
     const landed = lastHandedIn(handedIn)!;
     expect(messagesOf(landed)).toBe(1);
-    expect(awaitsReading(landed, [])).toBe(false);
   });
 
   test("an append lands in the world state on the collector's trigger, with no request", async () => {
@@ -278,7 +275,7 @@ describe("a session's transcript", () => {
     await clock.settle(0);
     append();
     const warm = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    expect(awaitsReading(warm, [])).toBe(false);
+    expect(warm.builtins.metrics.kind).toBe("ok");
     // What the transcript said when the trigger last read it, not the append
     // this request arrived after: the trigger reads it, not the request.
     expect(messagesOf(warm)).toBe(1);
@@ -292,32 +289,78 @@ const UNREAD: Current<unknown> = {
   landed: new Promise<void>(() => {}),
 };
 
-describe("a request's wait", () => {
-  test("ends once the read it waits on lands, and a warm session's at once", async () => {
+// A session opened and quiet: the lanes' first reads have landed, so the
+// world state a draw reads moves only as the case moves it.
+async function opened(
+  collector: Collector,
+  clock: HeldClock,
+): Promise<WorldState> {
+  collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+  await clock.settle(0);
+  return collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+}
+
+describe("a request's wait for a later world state", () => {
+  test("ends once the session is stamped after the draw's world state, and one already past it at once", async () => {
     const { owners, land } = handLanded();
-    const { collector } = collectorOver(owners);
+    const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    let ended = false;
+    const drawn = await opened(collector, clock);
+    let ended: unknown = null;
     const waiting = collector
-      .settled(SID, new AbortController().signal)
-      .then(() => (ended = true));
+      .moved(SID, drawn.seq, new AbortController().signal)
+      .then((moved) => (ended = moved));
     await drained();
-    expect(ended).toBe(false);
+    expect(ended).toBeNull();
     land("host.name", ok("box"));
     await waiting;
-    await collector.settled(SID, new AbortController().signal);
+    expect(ended).toEqual({ kind: "moved" });
+    expect(
+      await collector.moved(SID, drawn.seq, new AbortController().signal),
+    ).toEqual({ kind: "moved" });
   });
 
-  test("ends when its signal does", async () => {
+  test("ends when its signal does, saying so", async () => {
     const { owners, land } = handLanded();
-    const { collector } = collectorOver(owners);
+    const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+    const drawn = await opened(collector, clock);
     const signal = new AbortController();
-    const waiting = collector.settled(SID, signal.signal);
+    const waiting = collector.moved(SID, drawn.seq, signal.signal);
     signal.abort();
-    await waiting;
+    expect(await waiting).toEqual({ kind: "aborted" });
+  });
+
+  test("a world state a later request's own context carries ends a wait on an older draw", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock } = collectorOver(owners);
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const waiting = collector.moved(
+      SID,
+      drawn.seq,
+      new AbortController().signal,
+    );
+    // A directory the owners already read answers differently, so the request
+    // that names it stamps a world state of its own.
+    land("git:/b", ok({}));
+    const carried = collector.requested(requestAt("/b"), TEST_ENVIRONMENT);
+    expect(carried.seq).toBeGreaterThan(drawn.seq);
+    expect(await waiting).toEqual({ kind: "moved" });
+  });
+
+  test("ends as gone once the session is no longer read", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock } = collectorOver(owners);
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const waiting = collector.moved(
+      SID,
+      drawn.seq,
+      new AbortController().signal,
+    );
+    collector.close();
+    expect(await waiting).toEqual({ kind: "gone" });
   });
 });
 
@@ -502,7 +545,7 @@ describe("the sweep", () => {
   test("retires a session no request named across a whole sweep, releasing what it held, and drops it once the retire settles, even as threw, so the next request starts a new record", async () => {
     const { owners, held } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners, {
-      retired: async () => ({ kind: "threw" }),
+      retired: async () => "the renderer threw",
     });
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(SESSION_SWEEP_MS);
@@ -525,15 +568,16 @@ describe("the sweep", () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
-    let ended = false;
+    const drawn = await opened(collector, clock);
+    let ended: unknown = null;
     const waiting = collector
-      .settled(SID, new AbortController().signal)
-      .then(() => (ended = true));
+      .moved(SID, drawn.seq, new AbortController().signal)
+      .then((moved) => (ended = moved));
     await drained();
-    expect(ended).toBe(false);
+    expect(ended).toBeNull();
     clock.advance(2 * SESSION_SWEEP_MS);
     await waiting;
+    expect(ended).toEqual({ kind: "gone" });
   });
 
   test("keeps a session an open feed draws", () => {

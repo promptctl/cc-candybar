@@ -217,7 +217,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 // A declaration's answer, waited for while it — or the PR inside it — is not
 // answered yet: what a request's wait reads of the lane its session's
-// declaration took (`awaitsReading`, src/facts/awaited.ts).
+// declaration took (`awaits`, src/facts/awaited.ts).
 function gitOf(
   svc: GitDataProvider,
   holds: Holds,

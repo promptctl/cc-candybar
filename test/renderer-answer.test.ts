@@ -246,6 +246,26 @@ function checked(
 
 const REQUEST = 7 as RequestId;
 
+// `request`'s config, a bar that draws its pane's tmux session: what a request
+// of it owes while the pane's read is on its way.
+function drawingTmuxSession(
+  request: CheckedRenderRequest,
+): CheckedRenderRequest {
+  const file = request.requested.target.path;
+  if (file === undefined) throw new Error("test needs a config file");
+  fs.writeFileSync(
+    file,
+    `{
+    variables: {
+      paneSession: { kind: "input", path: "tmux.session", default: "unknown" },
+    },
+    segments: { pane: { template: "pane={{ .tmux.pane }} world={{ .paneSession }}" } },
+    root: { h: ["pane"] },
+  }`,
+  );
+  return request;
+}
+
 // The readings every input here carries: the rig's instant, at the first tick.
 const READ = { at: AT, tick: 0 as Tick };
 
@@ -1596,7 +1616,7 @@ describe("the session's config, ahead of its request", () => {
       broken = false;
       throw new Error("config load broke");
     };
-    const waits = jest.spyOn(t.rig.served.collector, "settled");
+    const waits = jest.spyOn(t.rig.served.collector, "moved");
     const seen: Event[] = [];
     const ask = productionAnswer(t, seen);
     const reply = await ask();
@@ -1853,7 +1873,7 @@ describe("two requests of one session at different keys", () => {
         new AbortController().signal,
         () => {},
         checkoutLocation,
-        checked(pane, `${id}.json5`),
+        drawingTmuxSession(checked(pane, `${id}.json5`)),
         TEST_ENVIRONMENT,
         id as RequestId,
         {
@@ -1887,7 +1907,8 @@ describe("two requests of one session at different keys", () => {
       expect(answer.resp).toMatchObject({ ok: true });
       answer.settled(true);
     }
-    expect([...drawings].sort()).toEqual([1, 2]);
+    // Each drew once with its pane unread, and again as the wait ended.
+    expect([...drawings].sort()).toEqual([1, 1, 2, 2]);
     const view = viewOf(t.rig)!;
     expect(view.facts().hints.tmux?.pane).toBe("%2");
     expect(view.source.facts().builtins.tmux).toMatchObject({
@@ -1954,10 +1975,11 @@ test("overlapping requests draw the latest pane with each client's width, then a
   const earlierCollector = {
     requested: collector.requested.bind(collector),
     holding: collector.holding.bind(collector),
-    settled: async (...args: Parameters<typeof collector.settled>) => {
-      await collector.settled(...args);
+    moved: async (...args: Parameters<typeof collector.moved>) => {
+      const moved = await collector.moved(...args);
       olderSourcesReady = true;
       await olderCanDraw;
+      return moved;
     },
   };
   const ask = (
@@ -1994,7 +2016,9 @@ test("overlapping requests draw the latest pane with each client's width, then a
   const newer = await second;
   resumeOlder();
   const older = await first;
-  expect(drawings).toEqual([2, 1]);
+  // Each drew once with its pane unread; then the newer drew as its pane
+  // landed, and the older once the case let it.
+  expect(drawings).toEqual([1, 2, 2, 1]);
   const expectFrame = (resp: typeof newer.resp) => {
     if (!resp.ok || !("frame" in resp))
       throw new Error(`expected a frame: ${JSON.stringify(resp)}`);

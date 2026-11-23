@@ -111,8 +111,10 @@ describe("a daemon render's event counts the session's prompts", () => {
   const counts = async (sessionId: string) =>
     (await renderLines(env, sessionId)).map((l) => {
       // A count drawn before its fold landed would read `-` for the wrong
-      // reason: the wait says so by name.
-      expect(l).toContain(" ended=answered ");
+      // reason: the draw says so by name (`owed=`), and the request settled
+      // only on a draw that owed nothing.
+      expect(l).toContain(" ended=settled ");
+      expect(l).toContain(" owed=- ");
       return {
         prompts: l.match(/ prompts=(\S+) /)?.[1],
         nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],

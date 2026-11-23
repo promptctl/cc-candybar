@@ -5,7 +5,7 @@ import {
   type IObservableValue,
 } from "mobx";
 import type { Timekeeper } from "../time";
-import type { Outcome, Pending, PendingWhy } from "./outcome";
+import type { FactPendingWhy, Outcome, Pending } from "./outcome";
 
 // What a waiter awaits: the read that will answer a pending value.
 export interface Landing {
@@ -20,7 +20,7 @@ export interface Landing {
 // never on a poll. Every owner of a shared source (the repos, panes and
 // session files) holds its values in this one shape; dropping the landing
 // leaves the plain `Pending` a facts document carries.
-export type Held<T> = (Pending & Landing) | Outcome<T>;
+export type Held<T> = (Pending<FactPendingWhy> & Landing) | Outcome<T>;
 
 // [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
 // derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
@@ -35,7 +35,9 @@ export function unread<T>(): IObservableValue<Held<T>> {
   return observable.box<Held<T>>(pending("unread"), { deep: false });
 }
 
-export function pending(why: PendingWhy): Pending & Landing {
+export function pending(
+  why: FactPendingWhy,
+): Pending<FactPendingWhy> & Landing {
   let land!: () => void;
   const landed = new Promise<void>((resolve) => {
     land = resolve;
@@ -57,7 +59,7 @@ export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
 // superseding move): it is pending until a fresh read lands, for `why`. A
 // value already pending keeps the landing its readers wait on, and a key never
 // answered stays `unread` whatever made it pending again.
-export function renew<T>(source: Readable<T>, why: PendingWhy): void {
+export function renew<T>(source: Readable<T>, why: FactPendingWhy): void {
   const prior = source.reading.get();
   if (prior.kind !== "pending") {
     runInAction(() => source.reading.set(pending(why)));
@@ -82,7 +84,7 @@ export function answerPending<T>(
 export type Current<T> = Outcome<T> | Waiting;
 
 // Not answered yet, why, and the landing to wait for.
-export interface Waiting extends Pending {
+export interface Waiting extends Pending<FactPendingWhy> {
   readonly landed: Promise<void>;
 }
 
@@ -109,9 +111,12 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
-// How a bounded wait ended: what it waited on answered, its time ran out, or
-// its owner closed.
-export type WaitEnd = "answered" | "deadline" | "closed";
+// [LAW:types-are-the-program] How a bounded wait ended: what it waited on
+// answered (with its answer), its time ran out, or its owner closed.
+export type Waited<T> =
+  | { readonly end: "answered"; readonly value: T }
+  | { readonly end: "deadline" }
+  | { readonly end: "closed" };
 
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
 // wait over work that does not end at a signal of its own (a wait that does,
@@ -123,20 +128,20 @@ export type WaitEnd = "answered" | "deadline" | "closed";
 // nothing behind. What it does not, a run it started, goes on, and a failure
 // of it after the wait ended is no one's answer: it is the clock's, as the
 // wait's task after its wait, saying what the work threw.
-export function waitWithin(
+export function waitWithin<T>(
   // The wait's task name: its deadline's, and its work's past the wait.
   task: string,
-  work: (signal: AbortSignal) => Promise<unknown>,
+  work: (signal: AbortSignal) => Promise<T>,
   ms: number,
   clock: Pick<Timekeeper, "after" | "failed">,
   closing: AbortSignal,
-): Promise<WaitEnd> {
+): Promise<Waited<T>> {
   const wait = new AbortController();
   const end = (why: "deadline" | "closed") => () => wait.abort(why);
   const clear = clock.after(task, Math.max(0, ms), end("deadline"));
-  const ended = new Promise<WaitEnd>((resolve, reject) => {
+  const ended = new Promise<Waited<T>>((resolve, reject) => {
     wait.signal.addEventListener("abort", () =>
-      resolve(wait.signal.reason as WaitEnd),
+      resolve({ end: wait.signal.reason as "deadline" | "closed" }),
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
@@ -145,14 +150,14 @@ export function waitWithin(
     // clock's after, as a task of its own, a wait begun closed included. Work
     // that answered never rejects, so a wait aborted before it ended at its
     // deadline or close.
-    let working: Promise<unknown>;
+    let working: Promise<T>;
     try {
       working = work(wait.signal);
     } catch (thrown) {
       working = Promise.reject(thrown);
     }
     working.then(
-      () => resolve("answered"),
+      (value) => resolve({ end: "answered", value }),
       (e: unknown) => {
         if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
         else reject(e);

@@ -78,6 +78,7 @@ import {
 } from "../config/globals-fields.js";
 import { type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
+import { spelled } from "../facts/awaited.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
 import type { ViewFacts } from "../renderer-interface/request-context";
@@ -138,9 +139,10 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
 // their slots null/missing — and the DSL templates handle absence via
 // `when`/inline guards, never by branching in this code.
 // [LAW:types-are-the-program] `P` is how a field a source answers says "not
-// answered yet": a frame draws every value as it stands, so its payload may
-// carry `Pending` (`DrawnPayload`); a request waits for every answer, so its
-// payload carries none (`RenderPayload`, `P = never`).
+// answered yet": a draw takes every value as it stands, so a payload drawn
+// from may carry `Pending` (`DrawnPayload`). A request waits only for what it
+// draws pending for a first answer; `RenderPayload` (`P = never`) is the
+// shape that carries none.
 export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // env-style values surfaced as paths so the DSL can read them via `input`
   // alongside the rest of the payload. (`kind: "env"` is also available for
@@ -753,7 +755,7 @@ export function composePayload(
     speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
-    pr: unstamped(built.pr),
+    pr: spelled(unstamped(built.pr)),
     tmux: unstamped(built.tmux),
     hostName: unstamped(built.hostName),
     hostUser: unstamped(built.hostUser),
@@ -967,18 +969,19 @@ export function sourceSummaryOf(
   }>;
   readonly failed: readonly string[];
 } {
-  const named: ReadonlyArray<readonly [string, Reading<unknown>]> = [
-    ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
-    ...[...runs].map(
-      ([name, run]) =>
-        [
-          name,
-          run.kind === "ok"
-            ? (facts.runs[run.value.digest] ?? UNREAD_RUN).reading
-            : run,
-        ] as const,
-    ),
-  ];
+  const named: ReadonlyArray<readonly [string, Reading<unknown, PendingWhy>]> =
+    [
+      ...names.map((name) => [name, sourceFactOf(facts, name)] as const),
+      ...[...runs].map(
+        ([name, run]) =>
+          [
+            name,
+            run.kind === "ok"
+              ? (facts.runs[run.value.digest] ?? UNREAD_RUN).reading
+              : run,
+          ] as const,
+      ),
+    ];
   return {
     count: named.length,
     pending: named.flatMap(([name, fact]) =>
@@ -1069,7 +1072,7 @@ export function instantFacts(
   builtins: { readonly today: Reading<TodayFacts> },
   at: Instant,
 ): { readonly today: TodayPayload | Pending | undefined } {
-  return { today: todayOf(builtins.today, at) };
+  return { today: todayOf(spelled(builtins.today), at) };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
@@ -1078,7 +1081,7 @@ export function instantFacts(
 // moving (DRAW_PROJECTIONS, src/config/payload-inputs.ts). A failed scan or
 // ingest is logged by its owner, the usage store.
 export function todayOf(
-  fact: Reading<TodayFacts>,
+  fact: Reading<TodayFacts, PendingWhy>,
   at: Instant,
 ): TodayPayload | Pending | undefined {
   if (fact.kind === "pending") return pendingOf(fact.why);
@@ -1195,7 +1198,7 @@ function posixify(s: string | undefined): string | undefined {
 // failure is what logged it.
 function projectGitInfo<P>(
   info: GitRead,
-  pullRequest: Reading<PullRequest>,
+  pullRequest: Reading<PullRequest, PendingWhy>,
   pending: (why: PendingWhy) => P,
 ): GitPayloadOf<P> {
   const field = <T>(oc: Outcome<T>): T | undefined =>

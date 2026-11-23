@@ -14,7 +14,10 @@ import { linkUrls } from "./frame";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
-import { openFrameStream, type StreamEnd } from "../../src/daemon/client-frames";
+import {
+  openFrameStream,
+  type StreamEnd,
+} from "../../src/daemon/client-frames";
 
 import {
   PROTOCOL_VERSION,
@@ -25,7 +28,11 @@ import {
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { linkKeyFile, linkKeyFromFile } from "../../src/daemon/link-key";
-import { linkSignerOver, unprovenLink, type FrameSource } from "../../src/click/link-signer";
+import {
+  linkSignerOver,
+  unprovenLink,
+  type FrameSource,
+} from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -160,14 +167,16 @@ async function renderAnswer(
       `the render event of ${sessionId}'s answer`,
     );
     if (!drewAwaitedPending(event)) return resp;
-    // [LAW:no-silent-failure] Only a wait its deadline ended may draw
-    // pending: one that answered yet drew a value not answered means the wait
-    // left out something the request started (rule 1), and asking again would
-    // hide it. A value still pending after every ask is the failure too.
-    // Both are named by the event that drew them, never a bar a later
-    // assertion trips over.
+    // [LAW:no-silent-failure] Only a wait its deadline ended may leave a
+    // source owed: a request that ended any other way with one owed (a stamp
+    // that failed, a world state the renderer did not take) is a failure
+    // asking again would hide. A value still pending after every ask is the
+    // failure too. Both are named by the event that drew them, never a bar a
+    // later assertion trips over.
     if (!retriedRender(event))
-      throw new Error(`render drew pending though its wait answered: ${event}`);
+      throw new Error(
+        `render ended owing a source before its deadline: ${event}`,
+      );
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
         `render still drew pending after ${attempt} asks: ${event}`,
@@ -307,7 +316,11 @@ export function clickBody(url: string) {
 // that daemon's key, which lives in the state directory beside its log. For a
 // test that builds the link a draw makes, or edits one a draw made, rather
 // than clicking one read off a frame as it was drawn.
-export function drawnLink(target: DaemonTarget, link: string, source?: FrameSource): string {
+export function drawnLink(
+  target: DaemonTarget,
+  link: string,
+  source?: FrameSource,
+): string {
   return linkSignerOver(
     linkKeyFromFile(linkKeyFile(path.dirname(endpointOf(target).log))),
   ).signLink(unprovenLink(link), source);

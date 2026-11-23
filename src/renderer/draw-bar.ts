@@ -41,6 +41,9 @@ import {
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
+import { awaitingOf, type Awaiting } from "../facts/awaited.js";
+import type { WorldState } from "../facts/world-state.js";
+import type { PendingRead } from "../var-system/types.js";
 import { isPending } from "../utils/outcome.js";
 import {
   editGlobalsOf,
@@ -143,7 +146,7 @@ export function renderFrame(
     const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
       drawRender(parts, setup, { by: "feed", fps }, feeds);
     const bar = drawn.body;
-    const statusline = statuslineOf(
+    const { frame: statusline } = statuslineOf(
       setup,
       parts.sessionState,
       drawn,
@@ -642,6 +645,7 @@ export function drawRender(
   // the same width, including a client whose request waited through a resize.
   const {
     frame,
+    waited,
     memory,
     warnings: drawnWarnings,
     segments,
@@ -781,6 +785,10 @@ export function drawRender(
   return {
     drawn: {
       body,
+      // What the body drew as not answered yet, and the document it drew
+      // from; a viewer standing in for the body drew none.
+      waited: viewing === null ? waited : [],
+      document,
       viewerOpen: viewing !== null,
       diagnostics,
       geometry,
@@ -932,6 +940,8 @@ const alone = (warning: StandingWarning): Standing => ({
 // viewer, the draw's one diagnostic list, and the geometry.
 interface DrawnBar {
   readonly body: Frame;
+  readonly waited: readonly PendingRead[];
+  readonly document: WorldState;
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
@@ -943,6 +953,9 @@ export interface RequestAnswer {
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
   readonly displayedEvents?: readonly DaemonEvent[];
+  // [LAW:single-enforcer] What the frame still owes, said by the draw that
+  // made it: the one thing the host's wait reads (src/facts/awaited.ts).
+  readonly awaiting: Awaiting;
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -972,17 +985,23 @@ export function answerRequest(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(presentation.client ?? null) === "statusline";
-  const frame = toStatusline
+  const { frame, waited } = toStatusline
     ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
-    : drawn.body;
+    : { frame: drawn.body, waited: drawn.waited };
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
   // long the turn took is the host's `drew=`, timed around the turn.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
   });
+  const awaiting = awaitingOf(waited, drawn.document);
+  // [LAW:nothing-unseen] What the frame owes, by name; `-` for nothing.
+  noteFacts(facts, {
+    owed: awaiting.kind === "settled" ? "-" : awaiting.names.join(","),
+  });
   return {
     frame,
     displayedEvents: eventsShown,
+    awaiting,
     delivery: {
       candidate,
       clickShown,
@@ -1018,15 +1037,19 @@ export function deliver(
 // draw it `elsewhere` — the handoff line, which says where, with the bar's
 // indicator after it. [LAW:one-source-of-truth] The indicator reads the draw's
 // one list, and its click opens the one viewer: while it is open the statusline
-// shows it, the same body the lanes draw.
+// shows it, the same body the lanes draw. [LAW:single-enforcer] It says what
+// the frame it returns drew as not answered yet, so the frame and what it owes
+// are decided together: the handoff line stands in for the bar and draws none
+// of the bar's.
 function statuslineOf(
   { sessionId, state, view }: RenderSetup,
   picks: SessionStateRW,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
-): Frame {
+): { readonly frame: Frame; readonly waited: readonly PendingRead[] } {
   const first = elsewhere[0];
-  if (first === undefined || drawn.viewerOpen) return drawn.body;
+  if (first === undefined || drawn.viewerOpen)
+    return { frame: drawn.body, waited: drawn.waited };
 
   const effective = view.source.effective();
   const defaultsAfterReset = state.remainingLanes.get(effective.preset);
@@ -1041,18 +1064,21 @@ function statuslineOf(
     (lane) =>
       editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane],
   );
-  return standIn(
-    drawn.body,
-    handoffRows(
-      laneHandoff(
+  return {
+    frame: standIn(
+      drawn.body,
+      handoffRows(
+        laneHandoff(
+          sessionId,
+          writableRoles(view.configAccess()),
+          [first, ...elsewhere.slice(1)],
+          remaining,
+        ),
+        drawn.diagnostics,
         sessionId,
-        writableRoles(view.configAccess()),
-        [first, ...elsewhere.slice(1)],
-        remaining,
+        drawn.geometry,
       ),
-      drawn.diagnostics,
-      sessionId,
-      drawn.geometry,
     ),
-  );
+    waited: [],
+  };
 }

@@ -401,7 +401,7 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery, displayedEvents } = answerRequest(
+        const { frame, delivery, displayedEvents, awaiting } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -417,6 +417,7 @@ export function mainRenderer(
           request: event.id,
           frame,
           displayedEvents,
+          awaiting,
         });
         return;
       }

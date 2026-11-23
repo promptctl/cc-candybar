@@ -135,8 +135,13 @@ test("the running host refuses shell stdout and stderr derived from an environme
       source("printf 'exposed no environment'"),
     );
     const saved = await host.open("absent");
-    expect(textOf(await host.draw("absent", safe, {}))).toContain(
-      "exposed no environment",
+    // The source's first run may still be on its way when the bar draws.
+    await until(
+      async () =>
+        textOf(await host.draw("absent", safe, {})).includes(
+          "exposed no environment",
+        ),
+      "the source's first run reaching the bar",
     );
     await host.stop("absent");
     expect((await host.command("replay", saved)).stdout).toContain("Verified");

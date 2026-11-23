@@ -46,7 +46,8 @@ import {
   type CachePolicy,
 } from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
-import type { JsonValue } from "../var-system/types.js";
+import type { JsonValue, PendingRead } from "../var-system/types.js";
+import type { PendingWhy } from "../utils/outcome.js";
 import {
   type BuildLineOptions,
   drawStripCells,
@@ -1111,7 +1112,7 @@ const unreachable = (message: string): never => {
 // the view's last frame, and where this frame's go.
 interface RuleFrame {
   readonly held: (slot: ExpressionSlot) => string | undefined;
-  readonly waited: (variable: string) => void;
+  readonly waited: (read: PendingRead) => void;
   readonly settled: (slot: ExpressionSlot, name: string) => void;
 }
 
@@ -1149,7 +1150,7 @@ function ruleName(
     case "named":
       return outcome.name;
     case "pending":
-      frame.waited(outcome.variable);
+      frame.waited(outcome);
       return frame.held(slot) ?? SLOT_FLOORS[slot];
     case "failed":
       warn({
@@ -1214,6 +1215,10 @@ function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
 // and what the walk that drew it reports of itself.
 export interface DrawnFrame {
   readonly frame: Frame;
+  // What each variable the frame drew as not answered yet is pending for
+  // (`frame.pending` names them): what the renderer says the frame still owes
+  // is judged from it, so the draw is the one definition of a wait.
+  readonly waited: readonly PendingRead[];
   // [LAW:effects-at-boundaries] What the frame leaves, which the draw writes
   // nowhere: the surface's record of it (handed to its next draw as
   // `DrawSelection.record`) and the session's motion (`SessionEffects.keep`).
@@ -1401,10 +1406,10 @@ export function drawDsl(
   };
   const record = beginRecord(source, returnedBy);
   const last = recordFrom(selection.record ?? null, source);
-  const waited = new Set<string>();
+  const waited = new Map<string, PendingWhy>();
   const ruleFrame: RuleFrame = {
     held: (slot) => last?.rules.get(slot),
-    waited: (variable) => waited.add(variable),
+    waited: ({ variable, why }) => waited.set(variable, why),
     settled: record.rule,
   };
   // [LAW:one-source-of-truth] Each slot's name is its view node's: settled
@@ -1418,7 +1423,8 @@ export function drawDsl(
     if (state.kind === "settled") {
       if (state.warning !== null)
         warn({ kind: "rule", slot, message: state.warning });
-      if (state.waited !== null) waited.add(state.waited);
+      if (state.waited !== null)
+        waited.set(state.waited.variable, state.waited.why);
       return state.name;
     }
     const name = decideSlot(
@@ -1577,7 +1583,7 @@ export function drawDsl(
         return record.placed(id, motion.placed(id, lines));
       },
       lastDrawn: (id) => last?.placements.get(id),
-      waited: (variable) => waited.add(variable),
+      waited: ({ variable, why }) => waited.set(variable, why),
       decorations: (node, palette) =>
         decoratedStyles(
           compiled.activeSegment,
@@ -1706,6 +1712,11 @@ export function drawDsl(
       error: fault.message,
       message: `variable "${variable}" cannot refresh: ${fault.message}`,
     });
+  // [LAW:one-source-of-truth] The one list of what the frame drew as not
+  // answered yet: the frame names them, and the wait reads why.
+  const pendingReads = [...waited]
+    .map(([variable, why]) => ({ variable, why }))
+    .sort((a, b) => (a.variable < b.variable ? -1 : 1));
   return {
     frame: {
       depth: drawOpts.colorCompatibility,
@@ -1714,8 +1725,9 @@ export function drawDsl(
       ),
       nextChange,
       motion: frameMotion,
-      pending: [...waited].sort(),
+      pending: pendingReads.map(({ variable }) => variable),
     },
+    waited: pendingReads,
     memory,
     warnings,
     segments,

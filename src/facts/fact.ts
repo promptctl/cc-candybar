@@ -4,8 +4,8 @@ import {
   pendingOf,
   type FailedAt,
   type Outcome,
+  type FactPendingWhy,
   type Pending,
-  type PendingWhy,
   type Reading,
 } from "../utils/outcome";
 import { isJsonValue, type JsonValue } from "../var-system/types";
@@ -18,7 +18,7 @@ import { isJsonValue, type JsonValue } from "../var-system/types";
 // the change, not of the read: a read that found the same thing moves nothing.
 // `failedAt` is the phase that failed; `at` is when.
 export type Answered<T> = Outcome<T> & { readonly at: Instant };
-export type Fact<T> = Pending | Answered<T>;
+export type Fact<T> = Pending<FactPendingWhy> | Answered<T>;
 
 // [LAW:types-are-the-program] What survives `JSON.stringify` and `JSON.parse`
 // as itself. A value type that cannot (a Map becomes `{}`, a Promise `{}`, a
@@ -76,7 +76,7 @@ export class FactParseError extends Error {
   }
 }
 
-const PENDING_WHYS: ReadonlySet<unknown> = new Set<PendingWhy>([
+const PENDING_WHYS: ReadonlySet<unknown> = new Set<FactPendingWhy>([
   "unread",
   "superseded",
 ]);
@@ -98,7 +98,7 @@ export function parseFact(json: unknown, where: string): Fact<JsonValue> {
       if (!PENDING_WHYS.has(o.why)) {
         throw new FactParseError(where, `pending for ${String(o.why)}`);
       }
-      return pendingOf(o.why as PendingWhy);
+      return pendingOf(o.why as FactPendingWhy);
     case "ok":
       if (!isJsonValue(o.value)) {
         throw new FactParseError(where, "ok with a value that is not JSON");

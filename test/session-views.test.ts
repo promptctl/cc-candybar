@@ -193,22 +193,23 @@ const drawn = (view: SessionView, sid?: string, at?: Date) =>
   textOf(drawViewFrame(view, sid, at).frame);
 
 // One render of session `sid` from `cwd`, as the daemon draws one: through the
-// session's view, held for the render, then every run its view names settled.
+// session's view, held for the render. The first draw owes the runs its view
+// names, which settle, and the draw that answers reads them.
 async function render(
   cache: RenderCache,
   sid: string,
   cwd = dir,
   at = new Date(),
 ): Promise<{ text: string; view: SessionView }> {
-  const { text, view } = (() => {
-    using held = cache.holdSession(
-      originOf(cwd, cwd, undefined),
-      viewFacts(cwd, sid),
-    );
-    return { text: drawn(held.view, sid, at), view: held.view };
-  })();
-  expect(await runsOf(view).settled(AbortSignal.timeout(5000))).toEqual([]);
-  return { text, view };
+  using held = cache.holdSession(
+    originOf(cwd, cwd, undefined),
+    viewFacts(cwd, sid),
+  );
+  drawn(held.view, sid, at);
+  expect(await runsOf(held.view).settled(AbortSignal.timeout(5000))).toEqual(
+    [],
+  );
+  return { text: drawn(held.view, sid, at), view: held.view };
 }
 
 test("two sessions alternating on one directory each keep their own values", async () => {
@@ -302,7 +303,7 @@ test("a kept view draws by each request holdSession is given, inside a batch too
   });
 });
 
-test("a view held by a render in flight is disposed only when the render returns", () => {
+test("a view held by a render in flight is disposed only when the render returns", async () => {
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(
@@ -312,8 +313,13 @@ test("a view held by a render in flight is disposed only when the render returns
   configure(dir, 1);
   cache.configs.again();
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
-  // Retired, not disposed: the render still draws through it.
+  // Retired, not disposed: the render still draws through it, and what its
+  // sources answer is its own session's.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
+  drawn(held.view);
+  expect(await runsOf(held.view).settled(AbortSignal.timeout(5000))).toEqual(
+    [],
+  );
   expect(drawn(held.view)).toContain("who=s-a");
   held[Symbol.dispose]();
   expect(cache.stats.retiredViews).toBe(0);

@@ -28,7 +28,12 @@ import {
 } from "./claude";
 import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
-import { pendingOf, type FailedAt, type Pending } from "./outcome";
+import {
+  pendingOf,
+  type FactPendingWhy,
+  type FailedAt,
+  type Pending,
+} from "./outcome";
 import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
 import type { RefreshTrigger, Refreshes } from "./refresh-ledger";
@@ -132,7 +137,7 @@ export class TranscriptFold<S> {
 
   // What the session's last read answered, as it stands: never read is
   // pending, its first read the next request's.
-  answer(sessionId: SessionId): FoldOutcome<S> | Pending {
+  answer(sessionId: SessionId): FoldOutcome<S> | Pending<FactPendingWhy> {
     return this.sessions.get(sessionId)?.answer ?? pendingOf("unread");
   }
 

@@ -52,6 +52,7 @@ const output: RendererOutput = {
       session,
       surface: "statusline",
       frame: present,
+      awaiting: { kind: "settled", seq: 1 },
     },
   ],
   frames: [

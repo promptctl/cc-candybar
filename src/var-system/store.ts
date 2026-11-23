@@ -32,6 +32,7 @@ import {
   pendingOf,
   type Ok,
   type Pending,
+  type PendingWhy,
   type Reading,
 } from "../utils/outcome.js";
 import type { Timekeeper } from "../time";
@@ -65,7 +66,11 @@ const unwritten = (value: VarValue | Pending): value is Pending =>
   isPending(value);
 
 // What a written node holds: a box's value, or a document's reading.
-export type StoredValue = VarValue | Pending | Reading<JsonValue>;
+// A document as a draw reads it: a source's reading, whose pending may be
+// `deferred` when the document is derived from the draw's payload.
+export type DocumentReading = Reading<JsonValue, PendingWhy>;
+
+export type StoredValue = VarValue | Pending | DocumentReading;
 
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
@@ -101,6 +106,7 @@ class BoxNode implements VarNode {
     if (unwritten(value)) {
       throw new PendingValueError(
         this.name,
+        value.why,
         `variable "${this.name}" has no value yet: nothing has written it`,
       );
     }
@@ -304,30 +310,30 @@ class ProjectionNode implements VarNode {
 export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
-  read(): Reading<JsonValue>;
+  read(): DocumentReading;
   // `null` until its first scan, as a box nothing has written.
   lastUpdatedMs(): number | null;
 }
 
 class DocumentCell implements DocumentNode {
   readonly kind = "document" as const;
-  private readonly cell: IObservableValue<Reading<JsonValue>>;
+  private readonly cell: IObservableValue<DocumentReading>;
   private lastChangedAt: number | null;
 
   constructor(
     readonly name: string,
-    initial: Reading<JsonValue>,
+    initial: DocumentReading,
     private readonly clock: Pick<Timekeeper, "now">,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
     this.lastChangedAt = initial.kind === "pending" ? null : clock.now();
   }
 
-  read(): Reading<JsonValue> {
+  read(): DocumentReading {
     return this.cell.get();
   }
 
-  set(value: Reading<JsonValue>): void {
+  set(value: DocumentReading): void {
     const next = shaped(value);
     // [LAW:single-enforcer] As in BoxNode: one comparison, and not writing IS
     // the notification rule. An unchanged rescan reaches no observer because the
@@ -350,11 +356,11 @@ class DocumentCell implements DocumentNode {
 // reading wakes nobody.
 class DerivedDocument implements DocumentNode {
   readonly kind = "document" as const;
-  private readonly cell: Kept<Reading<JsonValue>>;
+  private readonly cell: Kept<DocumentReading>;
 
   constructor(
     readonly name: string,
-    deriver: () => Reading<JsonValue>,
+    deriver: () => DocumentReading,
   ) {
     this.cell = new Kept(
       `Variable "${name}"`,
@@ -363,7 +369,7 @@ class DerivedDocument implements DocumentNode {
     );
   }
 
-  read(): Reading<JsonValue> {
+  read(): DocumentReading {
     return this.cell.read();
   }
 
@@ -383,15 +389,15 @@ class DerivedDocument implements DocumentNode {
 // (toDocument), so a rescan that produced the same content in another key order
 // keys identically; total because the other arms are values too (two failures
 // for the same reason are not a change, a new reason is).
-export function documentKey(outcome: Reading<JsonValue>): string {
+export function documentKey(outcome: DocumentReading): string {
   return JSON.stringify(outcome);
 }
 
-function sameDocument(a: Reading<JsonValue>, b: Reading<JsonValue>): boolean {
+function sameDocument(a: DocumentReading, b: DocumentReading): boolean {
   return documentKey(a) === documentKey(b);
 }
 
-function shaped(outcome: Reading<JsonValue>): Reading<JsonValue> {
+function shaped(outcome: DocumentReading): DocumentReading {
   return outcome.kind === "ok"
     ? { kind: "ok", value: toDocument(outcome.value) }
     : outcome;
@@ -399,7 +405,7 @@ function shaped(outcome: Reading<JsonValue>): Reading<JsonValue> {
 
 // [LAW:one-type-per-behavior] Every node the store holds. `read`'s result type
 // is the discriminator's payload: a VarNode reads a VarValue, a DocumentNode
-// a Reading<JsonValue>; a consumer that must be total over both (the scope
+// a DocumentReading; a consumer that must be total over both (the scope
 // proxy, debug introspection) switches on `kind` once.
 export type StoreNode = VarNode | DocumentNode;
 
@@ -454,12 +460,12 @@ export class VariableStore {
     this.declare(name, new BoxNode(name, type, initial, this.clock));
   }
 
-  defineDocument(name: string, initial: Reading<JsonValue>): void {
+  defineDocument(name: string, initial: DocumentReading): void {
     this.declare(name, new DocumentCell(name, initial, this.clock));
   }
 
   // A document whose reading the deriver computes from what it reads.
-  defineDerivedDocument(name: string, deriver: () => Reading<JsonValue>): void {
+  defineDerivedDocument(name: string, deriver: () => DocumentReading): void {
     this.declare(name, new DerivedDocument(name, deriver));
   }
 
@@ -507,7 +513,7 @@ export class VariableStore {
     return this.requireVar(name).read();
   }
 
-  readDocument(name: string): Reading<JsonValue> {
+  readDocument(name: string): DocumentReading {
     const node = this.requireNode(name);
     if (node.kind !== "document") {
       throw new TypeError(
@@ -531,7 +537,7 @@ export class VariableStore {
     return (node as BoxNode).stored();
   }
 
-  setDocument(name: string, value: Reading<JsonValue>): void {
+  setDocument(name: string, value: DocumentReading): void {
     const node = this.requireOwn(name);
     if (!(node instanceof DocumentCell)) {
       throw new TypeError(
@@ -581,6 +587,9 @@ export class VariableStore {
   // [LAW:one-source-of-truth] A dependant sees the same change a node's own
   // observers see, with pending blocking a first run and failures counting
   // as changes. A document key uses the store's own structural comparison.
+  //
+  // [LAW:types-are-the-program] What it is pending for passes through: a key
+  // over a value no request waits for is no key a request waits for either.
   changeKey(name: string): Pending | Ok<VariableKey> {
     const node = this.requireNode(name);
     if (node.kind === "document") {
@@ -598,8 +607,9 @@ export class VariableStore {
     try {
       return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
-      return readPending(e) !== undefined
-        ? pendingOf("unread")
+      const pending = readPending(e);
+      return pending !== undefined
+        ? pendingOf(pending.why)
         : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }

@@ -18,6 +18,7 @@ import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
+import type { Awaiting } from "../facts/awaited";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
@@ -350,6 +351,10 @@ export interface Present {
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
   readonly displayedEvents?: readonly DaemonEvent[];
+  // [LAW:single-enforcer] What the draw says the frame still owes, about the
+  // world state it drew from: the host waits for a later world state to be
+  // stamped (`Collector.moved`) while it is owed, and for nothing else.
+  readonly awaiting: Awaiting;
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
