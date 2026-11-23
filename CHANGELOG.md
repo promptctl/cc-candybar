@@ -1,3 +1,9 @@
+## [1.236.11](https://github.com/promptctl/cc-candybar/compare/v1.236.10...v1.236.11) (2026-11-23)
+
+### Bug Fixes
+
+* **render:** a request waits for exactly what its frame draws pending ([#940](https://github.com/promptctl/cc-candybar/issues/940)) ([8c0bb1d](https://github.com/promptctl/cc-candybar/commit/8c0bb1d6a482c98263a00d5db9cd63d931555cce))
+
 ## [1.236.10](https://github.com/promptctl/cc-candybar/compare/v1.236.9...v1.236.10) (2026-11-23)
 
 ### Bug Fixes
