@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1bc8a492d7f2458aaa33e154361a22475fd112b3",
+      "timestamp": "2026-11-23T13:29:14.449Z",
+      "commits": [
+        {
+          "sha": "1bc8a492d7f2458aaa33e154361a22475fd112b3",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T13:28:17Z",
+          "message": "chore(release): set `package.json` to 1.236.9\n\n## [1.236.9](https://github.com/promptctl/cc-candybar/compare/v1.236.8...v1.236.9) (2026-11-23)\n\n### Bug Fixes\n\n* **config:** judge a persisted value by its setting's row at load, and refuse a step over a stored non-number ([#935](https://github.com/promptctl/cc-candybar/issues/935)) ([341c494](https://github.com/promptctl/cc-candybar/commit/341c494d0eada140f82fa3ae26638e0ef19e42de))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-936",
       "ref": "refs/pull/936/merge",
       "sha": "802caaae6f74e9522f1331aa35449a45a5aa6778",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T06:22:55-07:00",
           "message": "test(click): the click-words case treats the checkout path's own digits as the path\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "341c494d0eada140f82fa3ae26638e0ef19e42de",
-      "timestamp": "2026-11-23T13:21:09.087Z",
-      "commits": [
-        {
-          "sha": "341c494d0eada140f82fa3ae26638e0ef19e42de",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:20:09-07:00",
-          "message": "fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number (#935)\n\n* fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number\n\n* fix(config): judge a persisted value by the loader's verdict on the file it writes, and refuse a step over any stored value that is no in-range integer\n\n* fix(config): carry a persist target's file place and schema once, judge a segment's palette and a stepper's field by it, and step only over a stored integer\n\n* fix(config): take a persisted name's membership from the field's own row and judge a segment palette by the loader's segment schema"
         }
       ]
     }
