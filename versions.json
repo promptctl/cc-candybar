@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-941",
+      "ref": "refs/pull/941/merge",
+      "sha": "ce87bf8c2ca4f9f8fee851a797d89d40f31c1357",
+      "timestamp": "2026-11-23T18:29:14.262Z",
+      "commits": [
+        {
+          "sha": "ce87bf8c2ca4f9f8fee851a797d89d40f31c1357",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:28:13-07:00",
+          "message": "Merge 63cccdde1ffce5e4e368753b920f03b6315bf491 into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+        },
+        {
+          "sha": "63cccdde1ffce5e4e368753b920f03b6315bf491",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:26:53-07:00",
+          "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7dea1a27bd6e661b5b96a252c21c8b713f1ccad7",
