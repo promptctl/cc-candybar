@@ -66104,13 +66104,28 @@ var SourceRegistry = class _SourceRegistry {
   // (registerCachePolicy), never whether the node exists
   // [LAW:dataflow-not-control-flow].
   //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node is pending until the first run answers, and on a key's move
+  // [LAW:types-are-the-program] The node is pending until the first run
+  // answers (or stands in, for a key that never answered), and on a key's move
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
   declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
+    const node = this.publisherFor(name, parse3);
+    let answered = false;
+    const publish = (told) => {
+      switch (told.kind) {
+        case "answer":
+          answered = true;
+          node.answered(told.reading);
+          return;
+        case "pending":
+          if (!answered) node.unanswered(told.reading);
+          return;
+        case "none":
+          if (!answered) node.unanswered(told.why);
+          return;
+      }
+    };
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run2 = computed(
       () => {
@@ -66119,10 +66134,17 @@ var SourceRegistry = class _SourceRegistry {
           runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
         ) : refresh;
       },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
+      // A failure is what it says: it is the variable's standing fault and
+      // what a document with no default shows for a key that never answered,
+      // so a key throwing a moving message moves the failure, and no run.
       {
-        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
+        equals: (a, b) => {
+          if (a.kind === "ok" && b.kind === "ok")
+            return a.value.digest === b.value.digest;
+          if (a.kind === "failed" && b.kind === "failed")
+            return a.reason === b.reason;
+          return a.kind === b.kind;
+        }
       }
     );
     runInAction(() => {
@@ -66153,13 +66175,13 @@ var SourceRegistry = class _SourceRegistry {
             case "failed":
               return { kind: "none", why: named2 };
             case "pending":
-              return { kind: "run", reading: named2 };
+              return { kind: "pending", reading: named2 };
             case "ok": {
               const fact = this.inputs.get().run(named2.value.digest).reading;
               if (fact.kind === "pending")
-                return { kind: "run", reading: fact };
+                return { kind: "pending", reading: fact };
               const { at: _at, ...reading } = fact;
-              return { kind: "run", reading };
+              return { kind: "answer", reading };
             }
           }
         },
@@ -66188,24 +66210,18 @@ var SourceRegistry = class _SourceRegistry {
   scalarPublisher(name, varDefault) {
     const fallback = varDefault ?? this.defaultEmptyValue;
     this.store.defineBox(name, "string", pendingOf("unread"));
-    let answered = false;
-    return (told) => {
-      if (told.kind === "none") {
-        this.store.setBox(name, fallback);
-        return;
+    return {
+      unanswered: (reading) => this.store.setBox(name, reading.kind === "failed" ? fallback : reading),
+      answered: (outcome) => {
+        this.noteOutcome(name, outcome);
+        this.store.setBox(name, orElse(outcome, fallback));
       }
-      const { reading } = told;
-      if (reading.kind === "pending") {
-        if (!answered) this.store.setBox(name, reading);
-        return;
-      }
-      answered = true;
-      this.noteOutcome(name, reading);
-      this.store.setBox(name, orElse(reading, fallback));
     };
   }
-  // A document is pending until its first scan, then holds what the scan
-  // found — or, with a default, the default for a run that had nothing to read.
+  // A document is pending until its first scan — or until its key fails
+  // before any run is named, when it shows the stand-in below at once — then
+  // holds what the scan found — or, with a default, the default for a run
+  // that had nothing to read.
   // Without one it holds absent for that run, or failed with its reason after
   // a bad one — which the scope proxy surfaces naming the variable
   // [LAW:no-silent-failure]: a document has no honest empty value to show for
@@ -66229,38 +66245,36 @@ var SourceRegistry = class _SourceRegistry {
     const standIn3 = (failure2) => varDefault === void 0 ? failure2 : ok(varDefault);
     this.store.defineDocument(name, pendingOf("unread"));
     let clearSettling;
-    let answered = false;
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    return (told) => {
-      if (told.kind === "none") {
-        this.store.setDocument(name, standIn3(told.why));
-        return;
-      }
-      const { reading } = told;
-      if (reading.kind === "pending") {
-        if (!answered) this.store.setDocument(name, reading);
-        return;
-      }
-      answered = true;
-      clearSettling?.();
-      const outcome = reading;
-      this.noteOutcome(name, outcome);
-      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-      const next2 = readText ? outcome : standIn3(outcome);
-      const torn2 = showingRead && readText && outcome.kind !== "ok";
-      const show2 = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next2);
-      };
-      if (torn2) {
-        clearSettling = this.store.clock.after(
-          `torn write settle ${name}`,
-          TORN_WRITE_SETTLE_MS,
-          show2
-        );
-      } else {
-        show2();
+    return {
+      // A key that failed before any run named one has read nothing, and its
+      // failure is the variable's standing fault already
+      // (`cachePolicyFaults`): the stand-in is what the document shows.
+      unanswered: (reading) => this.store.setDocument(
+        name,
+        reading.kind === "failed" ? standIn3(reading) : reading
+      ),
+      answered: (read2) => {
+        clearSettling?.();
+        const outcome = read2;
+        this.noteOutcome(name, outcome);
+        const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+        const next2 = readText ? outcome : standIn3(outcome);
+        const torn2 = showingRead && readText && outcome.kind !== "ok";
+        const show2 = () => {
+          showingRead = outcome.kind === "ok";
+          this.store.setDocument(name, next2);
+        };
+        if (torn2) {
+          clearSettling = this.store.clock.after(
+            `torn write settle ${name}`,
+            TORN_WRITE_SETTLE_MS,
+            show2
+          );
+        } else {
+          show2();
+        }
       }
     };
   }
@@ -82015,7 +82029,12 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         clock,
         closing
       );
-      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+      const held = collector.holds(session);
+      noteFacts(facts, {
+        waited: `${elapsedMs(clock, waitFrom)}ms`,
+        ended,
+        held: held.length === 0 ? "-" : held.join(",")
+      });
       if (!abandoned()) {
         const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
         delivered = await host.answer(
@@ -88547,13 +88566,22 @@ function capturing(pattern2) {
 
 // src/facts/awaited.ts
 init_globals();
-function awaitsReading(facts, { plugins: plugins2, runs, env: env2 }) {
-  return [
-    ...AWAITED_BUILTINS.map((name) => facts.builtins[name]),
-    ...[...plugins2.keys()].map((name) => sourceFactOf(facts, name)),
-    ...[...runs.keys()].map((digest2) => runFactOf(facts, digest2).reading),
-    ...env2.map((name) => envFactOf(facts, name))
-  ].some(awaitedReading);
+function unreadOf(facts, { plugins: plugins2, runs, env: env2 }) {
+  const waited = [
+    ...AWAITED_BUILTINS.map((name) => [name, facts.builtins[name]]),
+    ...[...plugins2.keys()].map(
+      (name) => [`source:${name}`, sourceFactOf(facts, name)]
+    ),
+    ...[...runs.keys()].map(
+      (digest2) => [
+        `run:${shortDigest(digest2)}`,
+        runFactOf(facts, digest2).reading
+      ]
+    ),
+    ...env2.map((name) => [`env:${name}`, envFactOf(facts, name)])
+  ];
+  if (stampFailureOf(facts) !== null) return [];
+  return waited.filter(([, fact]) => awaitedReading(fact)).map(([label2]) => label2);
 }
 var AWAITED = {
   session: true,
@@ -88663,7 +88691,7 @@ var Collector = class {
   // model): until the renderer has answered the session's latest stamp, and
   // that stamp has no fact its draw waits on that has never answered, over
   // the plugin sources, runs and `env` variables its renderer subscribes to
-  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
+  // (`holds`), or the session is no longer read, or `signal` ends it.
   // The renderer's answer is part of the wait because a source whose key is
   // another's value names its run only once the renderer has read that
   // value's landing: until its turn is taken, the subscriptions know nothing
@@ -88675,21 +88703,31 @@ var Collector = class {
   // longer names it) ends the wait on that run.
   async settled(session, signal) {
     try {
-      await when(
-        () => {
-          const record2 = this.records.get(session);
-          return record2?.phase.kind !== "live" || record2.heard >= record2.stamped.document.seq && !awaitsReading(record2.stamped.document, record2.subscriptions);
-        },
-        { signal }
-      );
+      await when(() => this.holds(session).length === 0, { signal });
     } catch (e) {
       if (!signal.aborted) throw e;
     }
   }
+  // [LAW:single-enforcer] What a request's wait on the session is held by
+  // now, none when it may go on: the renderer's turn on the latest stamp
+  // (`turn`), then each fact its draw waits on that has never answered. A
+  // session no longer read holds nothing. The wait and the request's record
+  // (`held=`) both read it, so the record names what the wait waited on.
+  holds(session) {
+    const record2 = this.records.get(session);
+    if (record2?.phase.kind !== "live") return [];
+    return [
+      ...record2.heard < record2.stamped.document.seq ? ["turn"] : [],
+      ...unreadOf(record2.stamped.document, record2.subscriptions)
+    ];
+  }
   // [LAW:single-enforcer] The host's word that the renderer's turn on this
-  // world state is taken, its subscriptions with it (`subscribed`), so a wait
-  // reads the run the state's landings named. A turn on a session whose
-  // record is gone (retired while the turn ran) has nothing to tell.
+  // world state is over, its subscriptions taken first (`subscribed`) when it
+  // answered, so a wait reads the run the state's landings named. It is told
+  // of a turn that threw or whose output could not be taken as well, so a
+  // wait whose turn cannot be answered ends instead of holding to its
+  // deadline. A turn on a session whose record is gone (retired while the
+  // turn ran) has nothing to tell.
   heard(worldState) {
     const record2 = this.records.get(worldState.session);
     if (record2 === void 0) return;
@@ -90881,6 +90919,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       output = await renderer.answer(input);
     } catch (thrown2) {
       recordTaken("session release", release3);
+      turnEnded(input.event);
       const failure2 = failureOf(thrown2);
       if (input.event.kind === "start") endedStart({ kind: "threw", failure: failure2 });
       return unanswered(failure2, queuedMs);
@@ -90947,6 +90986,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
+  const turnEnded = (event) => {
+    if (event.kind === "context" || event.kind === "world-state")
+      recordTaken("world state heard", () => collector.heard(event.worldState));
+  };
   const landInSlot = async (event, output, captures, receipt) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
@@ -90966,8 +91009,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       requested,
       receipt
     );
-    if (event.kind === "context" || event.kind === "world-state")
-      recordTaken("world state heard", () => collector.heard(event.worldState));
+    turnEnded(event);
     let configFailure = null;
     const waited = [];
     const unreceived = [];

@@ -4,15 +4,22 @@
     {
       "version": "pr-937",
       "ref": "refs/pull/937/merge",
-      "sha": "a7ebadb60381f0582812b0abfd2cb56a3cde99b3",
-      "timestamp": "2026-11-23T15:37:12.443Z",
+      "sha": "f8e77494a94e63ae9cfa268e667d01f39e62e66f",
+      "timestamp": "2026-11-23T16:10:30.732Z",
       "commits": [
         {
-          "sha": "a7ebadb60381f0582812b0abfd2cb56a3cde99b3",
+          "sha": "f8e77494a94e63ae9cfa268e667d01f39e62e66f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T15:35:53Z",
-          "message": "Merge f14e6b0faa7e542f1f1db196960c8b54321cdf46 into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+          "timestamp": "2026-11-23T16:09:16Z",
+          "message": "Merge 7a11377662f82684b009f8e57adb1aea5b846b5c into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+        },
+        {
+          "sha": "7a11377662f82684b009f8e57adb1aea5b846b5c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T09:09:01-07:00",
+          "message": "fix(sources): a request's wait ends on the renderer's turn however it ended, names what held it, and one effect owns whether a source has answered\n"
         },
         {
           "sha": "f14e6b0faa7e542f1f1db196960c8b54321cdf46",
