@@ -286,10 +286,10 @@ function saidCopy(text: string): string {
     : `${chars.slice(0, kept).join("")}${ELISION}${chars.slice(-kept).join("")}`;
 }
 
-// A phrase a click says. A phrase that quotes text from outside the bar's own
-// computation (a copied text, a path, a directory) names that text, so a reader
-// of the words can tell what the bar computed from what it was handed: where a
-// checkout lives holds whatever digits its name does.
+// A phrase a click says. A phrase that quotes text the bar was handed rather
+// than computed (a path, a directory, a copied text whose template the author
+// wrote) names that text, so a reader of the words can tell the two apart:
+// where a checkout lives holds whatever digits its name does.
 export interface Said {
   readonly words: string;
   readonly quoted: string;
