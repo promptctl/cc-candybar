@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-936",
+      "ref": "refs/pull/936/merge",
+      "sha": "802caaae6f74e9522f1331aa35449a45a5aa6778",
+      "timestamp": "2026-11-23T13:24:45.777Z",
+      "commits": [
+        {
+          "sha": "802caaae6f74e9522f1331aa35449a45a5aa6778",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:23:33-07:00",
+          "message": "Merge 260e536436d37854b6f604e0381d965eb0a12cc6 into 341c494d0eada140f82fa3ae26638e0ef19e42de\n"
+        },
+        {
+          "sha": "260e536436d37854b6f604e0381d965eb0a12cc6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:22:55-07:00",
+          "message": "test(click): the click-words case treats the checkout path's own digits as the path\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "341c494d0eada140f82fa3ae26638e0ef19e42de",
