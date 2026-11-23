@@ -2,45 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-937",
-      "ref": "refs/pull/937/merge",
-      "sha": "64fdfd5b87f6678872dfb9e30ca56b625dafeb05",
-      "timestamp": "2026-11-23T16:43:32.768Z",
+      "version": "pr-938",
+      "ref": "refs/pull/938/merge",
+      "sha": "c5cc89cfb11523924aba7734ad115a711524219a",
+      "timestamp": "2026-11-23T17:48:04.868Z",
       "commits": [
         {
-          "sha": "64fdfd5b87f6678872dfb9e30ca56b625dafeb05",
+          "sha": "c5cc89cfb11523924aba7734ad115a711524219a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T16:42:31Z",
-          "message": "Merge 7454183e81dad5c657864592526e0f0248dd787f into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+          "timestamp": "2026-11-23T10:47:02-07:00",
+          "message": "Merge e522e770d303dbe4063ef91f8dc50c4ea4d8f85a into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
         },
         {
-          "sha": "7454183e81dad5c657864592526e0f0248dd787f",
+          "sha": "e522e770d303dbe4063ef91f8dc50c4ea4d8f85a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T09:42:15-07:00",
-          "message": "fix(sources): one place ends a renderer's turn on a world state, and a failed stamp lands its failure on the facts that never answered instead of switching the wait off\n"
-        },
-        {
-          "sha": "7a11377662f82684b009f8e57adb1aea5b846b5c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T09:09:01-07:00",
-          "message": "fix(sources): a request's wait ends on the renderer's turn however it ended, names what held it, and one effect owns whether a source has answered\n"
-        },
-        {
-          "sha": "f14e6b0faa7e542f1f1db196960c8b54321cdf46",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T08:35:39-07:00",
-          "message": "fix(sources): one rule tells a source's node what its run read, and the request's wait holds until the renderer has taken the latest world state\n"
-        },
-        {
-          "sha": "419fe269ad918d024737ce02d5235df251508609",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T07:21:00-07:00",
-          "message": "fix(sources): a request waits for what its frame draws as pending, and a text source is pending until its first run answers\n"
+          "timestamp": "2026-11-23T10:46:33-07:00",
+          "message": "ci: the Release workflow's checks run as parallel jobs under one Test gate, inside 5 minutes\n\nThe Test job ran lint, typecheck, the three test tiers and the Rust tests one\nafter another on one runner: ~7.5 min on main, and the worker tier alone held\n~300 s of wall time. They now run as parallel jobs (static checks, unit, four\nworker shards, process + e2e), each capped at 4 minutes, and Test is the one\ngate over them: it joins every job's test records, reports by layer, and names\nany job that did not pass.\n\nRefs brandon-unfiled-3248.o44h\n"
         }
       ]
     },

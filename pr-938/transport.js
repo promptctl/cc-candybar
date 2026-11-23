@@ -65716,9 +65716,6 @@ var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
 };
-var runFactOf = (facts, digest2) => ownValue(facts.runs, digest2) ?? UNREAD_RUN;
-var envFactOf = (facts, name) => ownValue(facts.env, name) ?? UNREAD_ENV;
-var sourceFactOf = (facts, name) => ownValue(facts.sources, name) ?? pendingOf("unread");
 var REFRESH_LANES = [
   "session",
   "context",
@@ -66104,28 +66101,13 @@ var SourceRegistry = class _SourceRegistry {
   // (registerCachePolicy), never whether the node exists
   // [LAW:dataflow-not-control-flow].
   //
-  // [LAW:types-are-the-program] The node is pending until the first run
-  // answers (or stands in, for a key that never answered), and on a key's move
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first run answers, and on a key's move
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
   declareSource(name, read2, cache2, parse3) {
-    const node = this.publisherFor(name, parse3);
-    let answered = false;
-    const publish = (told) => {
-      switch (told.kind) {
-        case "answer":
-          answered = true;
-          node.answered(told.reading);
-          return;
-        case "pending":
-          if (!answered) node.unanswered(told.reading);
-          return;
-        case "none":
-          if (!answered) node.unanswered(told.why);
-          return;
-      }
-    };
+    const publish = this.publisherFor(name, parse3);
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run2 = computed(
       () => {
@@ -66134,29 +66116,21 @@ var SourceRegistry = class _SourceRegistry {
           runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
         ) : refresh;
       },
-      // A failure is what it says: it is the variable's standing fault and
-      // what a document with no default shows for a key that never answered,
-      // so a key throwing a moving message moves the failure, and no run.
+      // A failure is a failure whatever it says: its text is the variable's
+      // standing fault, so a key throwing a moving message moves no run.
       {
-        equals: (a, b) => {
-          if (a.kind === "ok" && b.kind === "ok")
-            return a.value.digest === b.value.digest;
-          if (a.kind === "failed" && b.kind === "failed")
-            return a.reason === b.reason;
-          return a.kind === b.kind;
-        }
+        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
       }
     );
     runInAction(() => {
       this.sourceNames.push(name);
       this.runs.set(name, run2);
     });
-    const factOf = (named2) => named2.kind === "ok" ? this.inputs.get().run(named2.value.digest) : void 0;
     this.cleanups.push(
       // The run's fault, as the host reads it, is the variable's standing
       // fault for as long as this source names that run.
       reaction(
-        () => factOf(run2.get())?.fault ?? null,
+        () => this.runFact(name)?.fault ?? null,
         (fault) => this.noteFault(
           this.runFaults,
           name,
@@ -66164,34 +66138,22 @@ var SourceRegistry = class _SourceRegistry {
         ),
         { fireImmediately: true }
       ),
-      // [LAW:dataflow-not-control-flow] One total mapping from the run to what
-      // the node is told, the way the draw reads a run (`sourceSummaryOf`): a
-      // named run is the host's reading of it, one whose key's values have not
-      // answered is pending, and one whose key failed names none.
       reaction(
-        () => {
-          const named2 = run2.get();
-          switch (named2.kind) {
-            case "failed":
-              return { kind: "none", why: named2 };
-            case "pending":
-              return { kind: "pending", reading: named2 };
-            case "ok": {
-              const fact = this.inputs.get().run(named2.value.digest).reading;
-              if (fact.kind === "pending")
-                return { kind: "pending", reading: fact };
-              const { at: _at, ...reading } = fact;
-              return { kind: "answer", reading };
-            }
-          }
+        () => this.runFact(name)?.reading,
+        (reading) => {
+          if (reading === void 0 || reading.kind === "pending") return;
+          const { at: _at, ...outcome } = reading;
+          publish(outcome);
         },
-        publish,
-        // Equal by what was told, so a stamp that moved nothing this source
-        // reads tells it nothing (a torn write's settle clock restarts on
-        // every telling).
-        { fireImmediately: true, equals: compareStructural }
+        { fireImmediately: true }
       )
     );
+  }
+  // The reading of the run `name` names, or nothing while its policy names
+  // none (one over values not answered yet).
+  runFact(name) {
+    const run2 = this.runs.get(name)?.get();
+    return run2?.kind === "ok" ? this.inputs.get().run(run2.value.digest) : void 0;
   }
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
   // the node it publishes: the text arms publish a string box, the json arm a
@@ -66209,23 +66171,18 @@ var SourceRegistry = class _SourceRegistry {
   }
   scalarPublisher(name, varDefault) {
     const fallback = varDefault ?? this.defaultEmptyValue;
-    this.store.defineBox(name, "string", pendingOf("unread"));
-    return {
-      unanswered: (reading) => this.store.setBox(name, reading.kind === "failed" ? fallback : reading),
-      answered: (outcome) => {
-        this.noteOutcome(name, outcome);
-        this.store.setBox(name, orElse(outcome, fallback));
-      }
+    this.store.defineBox(name, "string", fallback);
+    return (outcome) => {
+      this.noteOutcome(name, outcome);
+      this.store.setBox(name, orElse(outcome, fallback));
     };
   }
-  // A document is pending until its first scan — or until its key fails
-  // before any run is named, when it shows the stand-in below at once — then
-  // holds what the scan found — or, with a default, the default for a run
-  // that had nothing to read.
-  // Without one it holds absent for that run, or failed with its reason after
-  // a bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value to show for
-  // a run that read nothing, where a string has "".
+  // A document's fallback is the declared default, or NO document: without a
+  // default the node is pending until its first scan, then holds what the scan
+  // found — absent when it had nothing to read, failed with its reason after a
+  // bad one — which the scope proxy surfaces naming the variable
+  // [LAW:no-silent-failure]: a document has no honest empty value the way a
+  // string has "".
   //
   // The default stands in for a run that had nothing to READ — a missing
   // file, a command that failed, blank output — never for text that was read
@@ -66242,39 +66199,30 @@ var SourceRegistry = class _SourceRegistry {
   // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
   // that settle; a document that was never good shows it at once.
   documentPublisher(name, varDefault) {
-    const standIn3 = (failure2) => varDefault === void 0 ? failure2 : ok(varDefault);
-    this.store.defineDocument(name, pendingOf("unread"));
+    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
+    this.store.defineDocument(name, fallback);
     let clearSettling;
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    return {
-      // A key that failed before any run named one has read nothing, and its
-      // failure is the variable's standing fault already
-      // (`cachePolicyFaults`): the stand-in is what the document shows.
-      unanswered: (reading) => this.store.setDocument(
-        name,
-        reading.kind === "failed" ? standIn3(reading) : reading
-      ),
-      answered: (read2) => {
-        clearSettling?.();
-        const outcome = read2;
-        this.noteOutcome(name, outcome);
-        const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-        const next2 = readText ? outcome : standIn3(outcome);
-        const torn2 = showingRead && readText && outcome.kind !== "ok";
-        const show2 = () => {
-          showingRead = outcome.kind === "ok";
-          this.store.setDocument(name, next2);
-        };
-        if (torn2) {
-          clearSettling = this.store.clock.after(
-            `torn write settle ${name}`,
-            TORN_WRITE_SETTLE_MS,
-            show2
-          );
-        } else {
-          show2();
-        }
+    return (raw) => {
+      clearSettling?.();
+      const outcome = raw;
+      this.noteOutcome(name, outcome);
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next2 = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
+      const show2 = () => {
+        showingRead = outcome.kind === "ok";
+        this.store.setDocument(name, next2);
+      };
+      if (torn2) {
+        clearSettling = this.store.clock.after(
+          `torn write settle ${name}`,
+          TORN_WRITE_SETTLE_MS,
+          show2
+        );
+      } else {
+        show2();
       }
     };
   }
@@ -72761,13 +72709,14 @@ function composePayload(facts, inputs, draw2) {
   };
   return payload;
 }
+var sourceFactOf = (facts, name) => facts.sources[name] ?? pendingOf("unread");
 function sourceSummaryOf(names, runs, facts) {
   const named2 = [
     ...names.map((name) => [name, sourceFactOf(facts, name)]),
     ...[...runs].map(
       ([name, run2]) => [
         name,
-        run2.kind === "ok" ? runFactOf(facts, run2.value.digest).reading : run2
+        run2.kind === "ok" ? (facts.runs[run2.value.digest] ?? UNREAD_RUN).reading : run2
       ]
     )
   ];
@@ -73737,27 +73686,6 @@ function sessionOfEvent(event) {
     case "viewers":
     case "due":
       return null;
-  }
-}
-function worldStatesOf(event) {
-  switch (event.kind) {
-    case "context":
-    case "world-state":
-      return [event.worldState];
-    case "start":
-      return event.sessions.map(({ worldState }) => worldState);
-    case "request":
-    case "click":
-    case "retire":
-    case "effect-done":
-    case "stats":
-    case "debug":
-    case "close-journal":
-    case "close-views":
-    case "config":
-    case "viewers":
-    case "due":
-      return [];
   }
 }
 var COMMAND_KINDS = {
@@ -77183,10 +77111,10 @@ function sessionSource(deps) {
       facts: document,
       // [LAW:types-are-the-program] A digest the document does not carry is a
       // run the host has not read for this session yet.
-      run: (digest2) => runFactOf(document(), digest2),
+      run: (digest2) => document().runs[digest2] ?? UNREAD_RUN,
       // A variable the document does not carry is one the host has not
       // handed in for this session yet.
-      env: (name) => envFactOf(document(), name),
+      env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw2.read().effective
@@ -82050,12 +81978,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         clock,
         closing
       );
-      const held = collector.holds(session);
-      noteFacts(facts, {
-        waited: `${elapsedMs(clock, waitFrom)}ms`,
-        ended,
-        held: held.length === 0 ? "-" : held.join(",")
-      });
+      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
       if (!abandoned()) {
         const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
         delivered = await host.answer(
@@ -88447,42 +88370,6 @@ function restamp(prior, next2, at) {
   return { ...next2, at };
 }
 
-// src/facts/awaited.ts
-init_globals();
-function unreadOf(facts, { plugins: plugins2, runs, env: env2 }) {
-  const waited = [
-    ...AWAITED_BUILTINS.map((name) => [name, facts.builtins[name]]),
-    ...[...plugins2.keys()].map(
-      (name) => [`source:${name}`, sourceFactOf(facts, name)]
-    ),
-    ...[...runs.keys()].map(
-      (digest2) => [
-        `run:${shortDigest(digest2)}`,
-        runFactOf(facts, digest2).reading
-      ]
-    ),
-    ...env2.map((name) => [`env:${name}`, envFactOf(facts, name)])
-  ];
-  return waited.filter(([, fact]) => awaitedReading(fact)).map(([label2]) => label2);
-}
-var AWAITED = {
-  session: true,
-  today: false,
-  speed: true,
-  context: true,
-  metrics: true,
-  activity: true,
-  cache: true,
-  autocompact: true,
-  git: true,
-  pr: false,
-  tmux: true,
-  hostName: true,
-  hostUser: true
-};
-var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
-var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-
 // src/daemon/facts-assembly.ts
 var FACTS_VERSION = 5;
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
@@ -88529,13 +88416,13 @@ function assembleFacts(prior, session, readings, daemon2, at) {
   const sources = Object.fromEntries(
     [...lanes.sources].map(([name, reading]) => [
       name,
-      stamp2(prior && ownValue(prior.sources, name), reading)
+      stamp2(prior?.sources[name], reading)
     ])
   );
   const runs = Object.fromEntries(
     [...lanes.runs].map(([digest2, observation]) => {
       const { reading, fault } = observation;
-      const held2 = prior && ownValue(prior.runs, digest2);
+      const held2 = prior?.runs[digest2];
       const fact = stamp2(held2?.reading, reading);
       const privateOutput = isEnvironmentOutput(observation);
       return [
@@ -88565,65 +88452,12 @@ function assembleFacts(prior, session, readings, daemon2, at) {
     ...parts
   };
 }
-function failedStamp(prior, reason, daemon2, subscribed, at) {
-  const lost = () => restamp(void 0, failed(reason, "read"), at);
-  const unreadLost = (fact) => awaitedReading(fact) ? lost() : fact;
-  const withLacking = (held2, names, absent) => ({
-    ...held2,
-    ...Object.fromEntries(
-      [...names].filter((name) => ownValue(held2, name) === void 0).map((name) => [name, absent()])
-    )
-  });
-  const mapped = (held2, f) => Object.fromEntries(Object.entries(held2).map(([k, v]) => [k, f(v)]));
-  const kept = (now2, held2) => sameFacts(now2, held2) ? held2 : now2;
-  const builtins = kept(
-    Object.fromEntries(
-      Object.entries(prior.builtins).map(([key, fact]) => [
-        key,
-        unreadLost(fact)
-      ])
-    ),
-    prior.builtins
-  );
-  const sources = kept(
-    withLacking(
-      mapped(prior.sources, unreadLost),
-      subscribed.plugins.keys(),
-      lost
-    ),
-    prior.sources
-  );
-  const runs = kept(
-    withLacking(
-      mapped(prior.runs, (run2) => {
-        const reading = unreadLost(run2.reading);
-        return reading === run2.reading ? run2 : environmentOutput(
-          { reading, fault: run2.fault },
-          isEnvironmentOutput(run2)
-        );
-      }),
-      subscribed.runs.keys(),
-      () => ({ reading: lost(), fault: null })
-    ),
-    prior.runs
-  );
-  const env2 = kept(
-    withLacking(
-      mapped(prior.env, unreadLost),
-      subscribed.env,
-      lost
-    ),
-    prior.env
-  );
+function failedStamp(prior, reason, daemon2) {
   const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason && compareStructural(daemon2, prior.daemon) && builtins === prior.builtins && sources === prior.sources && runs === prior.runs && env2 === prior.env)
+  if (held?.reason === reason && compareStructural(daemon2, prior.daemon))
     return prior;
   return {
     ...prior,
-    builtins,
-    sources,
-    runs,
-    env: env2,
     daemon: daemon2,
     seq: prior.seq + 1,
     diagnostics: [
@@ -88673,6 +88507,33 @@ function capturing(pattern2) {
   }
   return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
 }
+
+// src/facts/awaited.ts
+init_globals();
+function awaitsReading({ builtins, sources, runs }, subscribed) {
+  return [
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
+    ...Object.values(sources),
+    ...[...subscribed].map((digest2) => (runs[digest2] ?? UNREAD_RUN).reading)
+  ].some(awaitedReading);
+}
+var AWAITED = {
+  session: true,
+  today: false,
+  speed: true,
+  context: true,
+  metrics: true,
+  activity: true,
+  cache: true,
+  autocompact: true,
+  git: true,
+  pr: false,
+  tmux: true,
+  hostName: true,
+  hostUser: true
+};
+var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
+var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
@@ -88761,14 +88622,9 @@ var Collector = class {
     return document;
   }
   // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
-  // model): until the renderer has answered the session's latest stamp, and
-  // that stamp has no fact its draw waits on that has never answered, over
-  // the plugin sources, runs and `env` variables its renderer subscribes to
-  // (`holds`), or the session is no longer read, or `signal` ends it.
-  // The renderer's answer is part of the wait because a source whose key is
-  // another's value names its run only once the renderer has read that
-  // value's landing: until its turn is taken, the subscriptions know nothing
-  // of the run that landing names.
+  // model): until the session's latest stamp has no fact its draw waits on
+  // that has never answered, over the runs its renderer subscribes to now
+  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
   // The wait triggers no read: the owners' reads follow the world, and each
   // stamp they move goes to the renderer ahead of the request, so the request
   // draws the world state the wait ended on. It reads the subscriptions as
@@ -88776,37 +88632,19 @@ var Collector = class {
   // longer names it) ends the wait on that run.
   async settled(session, signal) {
     try {
-      await when(() => this.holds(session).length === 0, { signal });
+      await when(
+        () => {
+          const record2 = this.records.get(session);
+          return record2?.phase.kind !== "live" || !awaitsReading(
+            record2.stamped.document,
+            record2.subscriptions.runs.keys()
+          );
+        },
+        { signal }
+      );
     } catch (e) {
       if (!signal.aborted) throw e;
     }
-  }
-  // [LAW:single-enforcer] What a request's wait on the session is held by
-  // now, none when it may go on: the renderer's turn on the latest stamp
-  // (`turn`), then each fact its draw waits on that has never answered. A
-  // session no longer read holds nothing. The wait and the request's record
-  // (`held=`) both read it, so the record names what the wait waited on.
-  holds(session) {
-    const record2 = this.records.get(session);
-    if (record2?.phase.kind !== "live") return [];
-    return [
-      ...record2.heard < record2.stamped.document.seq ? ["turn"] : [],
-      ...unreadOf(record2.stamped.document, record2.subscriptions)
-    ];
-  }
-  // [LAW:single-enforcer] The host's word that the renderer's turn on this
-  // world state is over, its subscriptions taken first (`subscribed`) when it
-  // answered, so a wait reads the run the state's landings named. It is told
-  // of a turn that threw or whose output could not be taken as well, so a
-  // wait whose turn cannot be answered ends instead of holding to its
-  // deadline. A turn on a session whose record is gone (retired while the
-  // turn ran) has nothing to tell.
-  heard(worldState) {
-    const record2 = this.records.get(worldState.session);
-    if (record2 === void 0) return;
-    runInAction(() => {
-      record2.heard = Math.max(record2.heard, worldState.seq);
-    });
   }
   // A click is a person's input naming the session, as a request is, so the
   // next sweep keeps it whatever the click's turn draws in the meantime. A
@@ -88938,7 +88776,6 @@ var Collector = class {
         session,
         stamped,
         subscriptions,
-        heard: 0,
         active: true,
         turns: 0,
         phase: this.watch(session, stamped, reader)
@@ -88986,14 +88823,7 @@ var Collector = class {
       () => reader.inputs.get(),
       (moved2) => runInAction(() => {
         if (moved2 === stamped.from) return;
-        if (this.stamp(
-          {
-            session,
-            stamped,
-            subscriptions: reader.declared.get().subscriptions
-          },
-          moved2
-        ))
+        if (this.stamp({ session, stamped }, moved2))
           this.deps.clock.detach(
             `world state delivery ${session}`,
             () => this.deps.deliver({
@@ -89040,7 +88870,7 @@ var Collector = class {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds3.size}`
         );
-      return { ...request2, lanes, subscriptions };
+      return { ...request2, lanes };
     } catch (e) {
       this.deps.log(
         "error",
@@ -89051,8 +88881,7 @@ var Collector = class {
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions
-        ),
-        subscriptions
+        )
       };
     }
   }
@@ -89070,15 +88899,15 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({
-    session,
-    stamped,
-    subscriptions
-  }, moved2) {
+  stamp({ session, stamped }, moved2) {
     const prior = stamped.document;
     const { owners, daemon: daemon2 } = moved2;
-    const at = instantAt(this.deps.clock);
-    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2, subscriptions, at) : this.assembled(prior, owners.value, daemon2, subscriptions, at);
+    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
+      prior,
+      owners.value,
+      daemon2,
+      instantAt(this.deps.clock)
+    );
     const failure2 = next2 === prior ? null : stampFailureOf(next2);
     if (failure2 !== null)
       this.deps.log(
@@ -89089,16 +88918,14 @@ var Collector = class {
     stamped.from = moved2;
     return next2 !== prior;
   }
-  assembled(prior, readings, daemon2, subscriptions, at) {
+  assembled(prior, readings, daemon2, at) {
     try {
       return assembleFacts(prior, prior.session, readings, daemon2, at);
     } catch (e) {
       return failedStamp(
         prior,
         `stamping the world state: ${String(e)}`,
-        daemon2,
-        subscriptions,
-        at
+        daemon2
       );
     }
   }
@@ -91402,7 +91229,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     return inMailbox(async (queuedMs, holds3) => {
       let restore;
-      let ending = null;
       try {
         let made;
         let starting = at === "first";
@@ -91426,7 +91252,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
-        ending = made.event;
         if (!starting && startFailure !== null && made.event.kind !== "effect-done")
           return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds3(made.event.kind);
@@ -91438,9 +91263,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         return { event: made.event, slotted };
       } finally {
-        if (ending !== null)
-          for (const worldState of worldStatesOf(ending))
-            recordTaken("world state heard", () => collector.heard(worldState));
         if (restore !== void 0) {
           const previous2 = restore;
           recordTaken("start config demand rollback", () => follow(previous2));
@@ -93520,7 +93342,6 @@ function createDaemon(inputs) {
         },
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
-        heard: (worldState) => collector.heard(worldState),
         recorded: () => {
         }
       },
