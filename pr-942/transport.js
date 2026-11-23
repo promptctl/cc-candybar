@@ -81968,6 +81968,17 @@ init_globals();
 // src/daemon/foundations/request-deadline.ts
 init_globals();
 var REQUEST_TIMEOUT_MS = 200;
+var BACKSTOP_BOUNDS_READ = {
+  render: true,
+  [SESSION_RENDER_KIND]: true,
+  subscribe: true,
+  "pane-session": true,
+  shutdown: true,
+  stats: true,
+  click: false,
+  recording: true,
+  debug: true
+};
 var timeoutResponse = (request2, error = `request exceeded ${REQUEST_TIMEOUT_MS}ms`) => ({
   ok: false,
   error,
@@ -83069,7 +83080,7 @@ function renderRecord(rendered) {
 }
 var replied = (reply) => ({ kind: "reply", ...reply });
 function closingResponse(parts, rawKind, accepted) {
-  const kind = rawKind === SESSION_RENDER_KIND ? "render" : rawKind === "render" || rawKind === "click" ? rawKind : "request";
+  const kind = eventOf(rawKind);
   const failure2 = failureOf(new DaemonClosing(kind));
   if (kind === "render" || kind === "click") {
     if (kind === "render") {
@@ -83098,16 +83109,17 @@ function refuseClosingInbound(parts, inbound, accepted) {
     }
   } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
 }
-var REPLY_KINDS = {
-  recording: true,
-  render: true,
-  [SESSION_RENDER_KIND]: true,
-  "pane-session": true,
-  shutdown: true,
-  stats: true,
-  click: true,
-  debug: true
+var REPLY_EVENTS = {
+  recording: "request",
+  render: "render",
+  [SESSION_RENDER_KIND]: "render",
+  "pane-session": "request",
+  shutdown: "request",
+  stats: "request",
+  click: "click",
+  debug: "request"
 };
+var eventOf = (kind) => typeof kind === "string" && Object.hasOwn(REPLY_EVENTS, kind) ? REPLY_EVENTS[kind] : "request";
 var refuse2 = (code2, error) => replied(stay({ ok: false, error, code: code2, daemonV: PROTOCOL_VERSION }));
 function subscription(req) {
   const sessionId2 = parseSessionId(req.sessionId);
@@ -83161,7 +83173,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
     );
   }
   if (req.kind === "subscribe") return subscription(req);
-  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
+  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_EVENTS, req.kind))
     return refuse2("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
