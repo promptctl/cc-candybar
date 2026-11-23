@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-938",
-      "ref": "refs/pull/938/merge",
-      "sha": "c5cc89cfb11523924aba7734ad115a711524219a",
-      "timestamp": "2026-11-23T17:48:04.868Z",
-      "commits": [
-        {
-          "sha": "c5cc89cfb11523924aba7734ad115a711524219a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:47:02-07:00",
-          "message": "Merge e522e770d303dbe4063ef91f8dc50c4ea4d8f85a into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
-        },
-        {
-          "sha": "e522e770d303dbe4063ef91f8dc50c4ea4d8f85a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:46:33-07:00",
-          "message": "ci: the Release workflow's checks run as parallel jobs under one Test gate, inside 5 minutes\n\nThe Test job ran lint, typecheck, the three test tiers and the Rust tests one\nafter another on one runner: ~7.5 min on main, and the worker tier alone held\n~300 s of wall time. They now run as parallel jobs (static checks, unit, four\nworker shards, process + e2e), each capped at 4 minutes, and Test is the one\ngate over them: it joins every job's test records, reports by layer, and names\nany job that did not pass.\n\nRefs brandon-unfiled-3248.o44h\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "2ebca655424d1cb92bea5a0befbfe9c07e01f696",
-      "timestamp": "2026-11-23T14:05:03.147Z",
+      "sha": "a4fa5033219305be8ae9d3b24c8700c208a1ac50",
+      "timestamp": "2026-11-23T18:01:45.308Z",
       "commits": [
         {
-          "sha": "2ebca655424d1cb92bea5a0befbfe9c07e01f696",
+          "sha": "a4fa5033219305be8ae9d3b24c8700c208a1ac50",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T07:03:58-07:00",
-          "message": "test(click): the click-words case treats the checkout path's own digits as the path (#936)\n\n* test(click): the click-words case treats the checkout path's own digits as the path\n\n* test(click): the click-words case never reads the machine's own text as a number\n\n* test(click): the click-words case reads the phrase a link says, from the product's own table\n\n* refactor(click): a phrase says what it quotes, and the face is derived once\n\n* docs(click): say plainly what a quoted phrase is"
+          "timestamp": "2026-11-23T11:00:42-07:00",
+          "message": "ci: the Release workflow's checks run as parallel jobs under one Test gate, inside 5 minutes (#938)\n\nThe Test job ran lint, typecheck, the three test tiers and the Rust tests one\nafter another on one runner: ~7.5 min on main, and the worker tier alone held\n~300 s of wall time. They now run as parallel jobs (static checks, unit, four\nworker shards, process + e2e), each capped at 4 minutes, and Test is the one\ngate over them: it joins every job's test records, reports by layer, and names\nany job that did not pass.\n\nRefs brandon-unfiled-3248.o44h"
         }
       ]
     }
