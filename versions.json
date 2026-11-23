@@ -4,15 +4,22 @@
     {
       "version": "pr-937",
       "ref": "refs/pull/937/merge",
-      "sha": "f8e77494a94e63ae9cfa268e667d01f39e62e66f",
-      "timestamp": "2026-11-23T16:10:30.732Z",
+      "sha": "64fdfd5b87f6678872dfb9e30ca56b625dafeb05",
+      "timestamp": "2026-11-23T16:43:32.768Z",
       "commits": [
         {
-          "sha": "f8e77494a94e63ae9cfa268e667d01f39e62e66f",
+          "sha": "64fdfd5b87f6678872dfb9e30ca56b625dafeb05",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T16:09:16Z",
-          "message": "Merge 7a11377662f82684b009f8e57adb1aea5b846b5c into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+          "timestamp": "2026-11-23T16:42:31Z",
+          "message": "Merge 7454183e81dad5c657864592526e0f0248dd787f into 2ebca655424d1cb92bea5a0befbfe9c07e01f696\n"
+        },
+        {
+          "sha": "7454183e81dad5c657864592526e0f0248dd787f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T09:42:15-07:00",
+          "message": "fix(sources): one place ends a renderer's turn on a world state, and a failed stamp lands its failure on the facts that never answered instead of switching the wait off\n"
         },
         {
           "sha": "7a11377662f82684b009f8e57adb1aea5b846b5c",

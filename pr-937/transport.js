@@ -73739,6 +73739,27 @@ function sessionOfEvent(event) {
       return null;
   }
 }
+function worldStatesOf(event) {
+  switch (event.kind) {
+    case "context":
+    case "world-state":
+      return [event.worldState];
+    case "start":
+      return event.sessions.map(({ worldState }) => worldState);
+    case "request":
+    case "click":
+    case "retire":
+    case "effect-done":
+    case "stats":
+    case "debug":
+    case "close-journal":
+    case "close-views":
+    case "config":
+    case "viewers":
+    case "due":
+      return [];
+  }
+}
 var COMMAND_KINDS = {
   stats: true,
   debug: true,
@@ -88426,6 +88447,42 @@ function restamp(prior, next2, at) {
   return { ...next2, at };
 }
 
+// src/facts/awaited.ts
+init_globals();
+function unreadOf(facts, { plugins: plugins2, runs, env: env2 }) {
+  const waited = [
+    ...AWAITED_BUILTINS.map((name) => [name, facts.builtins[name]]),
+    ...[...plugins2.keys()].map(
+      (name) => [`source:${name}`, sourceFactOf(facts, name)]
+    ),
+    ...[...runs.keys()].map(
+      (digest2) => [
+        `run:${shortDigest(digest2)}`,
+        runFactOf(facts, digest2).reading
+      ]
+    ),
+    ...env2.map((name) => [`env:${name}`, envFactOf(facts, name)])
+  ];
+  return waited.filter(([, fact]) => awaitedReading(fact)).map(([label2]) => label2);
+}
+var AWAITED = {
+  session: true,
+  today: false,
+  speed: true,
+  context: true,
+  metrics: true,
+  activity: true,
+  cache: true,
+  autocompact: true,
+  git: true,
+  pr: false,
+  tmux: true,
+  hostName: true,
+  hostUser: true
+};
+var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
+var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
+
 // src/daemon/facts-assembly.ts
 var FACTS_VERSION = 5;
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
@@ -88508,12 +88565,65 @@ function assembleFacts(prior, session, readings, daemon2, at) {
     ...parts
   };
 }
-function failedStamp(prior, reason, daemon2) {
+function failedStamp(prior, reason, daemon2, subscribed, at) {
+  const lost = () => restamp(void 0, failed(reason, "read"), at);
+  const unreadLost = (fact) => awaitedReading(fact) ? lost() : fact;
+  const withLacking = (held2, names, absent) => ({
+    ...held2,
+    ...Object.fromEntries(
+      [...names].filter((name) => ownValue(held2, name) === void 0).map((name) => [name, absent()])
+    )
+  });
+  const mapped = (held2, f) => Object.fromEntries(Object.entries(held2).map(([k, v]) => [k, f(v)]));
+  const kept = (now2, held2) => sameFacts(now2, held2) ? held2 : now2;
+  const builtins = kept(
+    Object.fromEntries(
+      Object.entries(prior.builtins).map(([key, fact]) => [
+        key,
+        unreadLost(fact)
+      ])
+    ),
+    prior.builtins
+  );
+  const sources = kept(
+    withLacking(
+      mapped(prior.sources, unreadLost),
+      subscribed.plugins.keys(),
+      lost
+    ),
+    prior.sources
+  );
+  const runs = kept(
+    withLacking(
+      mapped(prior.runs, (run2) => {
+        const reading = unreadLost(run2.reading);
+        return reading === run2.reading ? run2 : environmentOutput(
+          { reading, fault: run2.fault },
+          isEnvironmentOutput(run2)
+        );
+      }),
+      subscribed.runs.keys(),
+      () => ({ reading: lost(), fault: null })
+    ),
+    prior.runs
+  );
+  const env2 = kept(
+    withLacking(
+      mapped(prior.env, unreadLost),
+      subscribed.env,
+      lost
+    ),
+    prior.env
+  );
   const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason && compareStructural(daemon2, prior.daemon))
+  if (held?.reason === reason && compareStructural(daemon2, prior.daemon) && builtins === prior.builtins && sources === prior.sources && runs === prior.runs && env2 === prior.env)
     return prior;
   return {
     ...prior,
+    builtins,
+    sources,
+    runs,
+    env: env2,
     daemon: daemon2,
     seq: prior.seq + 1,
     diagnostics: [
@@ -88563,43 +88673,6 @@ function capturing(pattern2) {
   }
   return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
 }
-
-// src/facts/awaited.ts
-init_globals();
-function unreadOf(facts, { plugins: plugins2, runs, env: env2 }) {
-  const waited = [
-    ...AWAITED_BUILTINS.map((name) => [name, facts.builtins[name]]),
-    ...[...plugins2.keys()].map(
-      (name) => [`source:${name}`, sourceFactOf(facts, name)]
-    ),
-    ...[...runs.keys()].map(
-      (digest2) => [
-        `run:${shortDigest(digest2)}`,
-        runFactOf(facts, digest2).reading
-      ]
-    ),
-    ...env2.map((name) => [`env:${name}`, envFactOf(facts, name)])
-  ];
-  if (stampFailureOf(facts) !== null) return [];
-  return waited.filter(([, fact]) => awaitedReading(fact)).map(([label2]) => label2);
-}
-var AWAITED = {
-  session: true,
-  today: false,
-  speed: true,
-  context: true,
-  metrics: true,
-  activity: true,
-  cache: true,
-  autocompact: true,
-  git: true,
-  pr: false,
-  tmux: true,
-  hostName: true,
-  hostUser: true
-};
-var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
-var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
@@ -88913,7 +88986,14 @@ var Collector = class {
       () => reader.inputs.get(),
       (moved2) => runInAction(() => {
         if (moved2 === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved2))
+        if (this.stamp(
+          {
+            session,
+            stamped,
+            subscriptions: reader.declared.get().subscriptions
+          },
+          moved2
+        ))
           this.deps.clock.detach(
             `world state delivery ${session}`,
             () => this.deps.deliver({
@@ -88960,7 +89040,7 @@ var Collector = class {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds3.size}`
         );
-      return { ...request2, lanes };
+      return { ...request2, lanes, subscriptions };
     } catch (e) {
       this.deps.log(
         "error",
@@ -88971,7 +89051,8 @@ var Collector = class {
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions
-        )
+        ),
+        subscriptions
       };
     }
   }
@@ -88989,15 +89070,15 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({ session, stamped }, moved2) {
+  stamp({
+    session,
+    stamped,
+    subscriptions
+  }, moved2) {
     const prior = stamped.document;
     const { owners, daemon: daemon2 } = moved2;
-    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
-      prior,
-      owners.value,
-      daemon2,
-      instantAt(this.deps.clock)
-    );
+    const at = instantAt(this.deps.clock);
+    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2, subscriptions, at) : this.assembled(prior, owners.value, daemon2, subscriptions, at);
     const failure2 = next2 === prior ? null : stampFailureOf(next2);
     if (failure2 !== null)
       this.deps.log(
@@ -89008,14 +89089,16 @@ var Collector = class {
     stamped.from = moved2;
     return next2 !== prior;
   }
-  assembled(prior, readings, daemon2, at) {
+  assembled(prior, readings, daemon2, subscriptions, at) {
     try {
       return assembleFacts(prior, prior.session, readings, daemon2, at);
     } catch (e) {
       return failedStamp(
         prior,
         `stamping the world state: ${String(e)}`,
-        daemon2
+        daemon2,
+        subscriptions,
+        at
       );
     }
   }
@@ -90919,7 +91002,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       output = await renderer.answer(input);
     } catch (thrown2) {
       recordTaken("session release", release3);
-      turnEnded(input.event);
       const failure2 = failureOf(thrown2);
       if (input.event.kind === "start") endedStart({ kind: "threw", failure: failure2 });
       return unanswered(failure2, queuedMs);
@@ -90986,10 +91068,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const turnEnded = (event) => {
-    if (event.kind === "context" || event.kind === "world-state")
-      recordTaken("world state heard", () => collector.heard(event.worldState));
-  };
   const landInSlot = async (event, output, captures, receipt) => {
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
@@ -91009,7 +91087,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       requested,
       receipt
     );
-    turnEnded(event);
     let configFailure = null;
     const waited = [];
     const unreceived = [];
@@ -91325,6 +91402,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     return inMailbox(async (queuedMs, holds3) => {
       let restore;
+      let ending = null;
       try {
         let made;
         let starting = at === "first";
@@ -91348,6 +91426,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
+        ending = made.event;
         if (!starting && startFailure !== null && made.event.kind !== "effect-done")
           return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds3(made.event.kind);
@@ -91359,6 +91438,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         if (starting && slotted.turn.kind === "answered") restore = void 0;
         return { event: made.event, slotted };
       } finally {
+        if (ending !== null)
+          for (const worldState of worldStatesOf(ending))
+            recordTaken("world state heard", () => collector.heard(worldState));
         if (restore !== void 0) {
           const previous2 = restore;
           recordTaken("start config demand rollback", () => follow(previous2));
