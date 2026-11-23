@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-901",
-      "ref": "refs/pull/901/merge",
-      "sha": "fe899b38164e4ab923fbeb325fd317ff92cdb455",
-      "timestamp": "2026-11-23T12:02:31.202Z",
-      "commits": [
-        {
-          "sha": "fe899b38164e4ab923fbeb325fd317ff92cdb455",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T12:01:27Z",
-          "message": "Merge 7d1b3735c9b1b7ca089fdfefc774578a895b7ed2 into 9981658049e4a64f1743182196945f5de277f53e\n"
-        },
-        {
-          "sha": "7d1b3735c9b1b7ca089fdfefc774578a895b7ed2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T05:01:04-07:00",
-          "message": "fix(settings): a save's release reads the picks its caller settles on, and a stale-pick comment says what the PR does\n"
-        },
-        {
-          "sha": "7ed0440c1add7e952c22ace34379e7906ff8dbb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T04:51:50-07:00",
-          "message": "fix(settings): a save's release takes the preset it settles on instead of reading it from session state\n"
-        },
-        {
-          "sha": "8ab5b51dbf8b387918c66d3c8f8f96f55a03428a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T04:36:51-07:00",
-          "message": "fix(settings): list every member in a load refusal, share one retired-theme sentence, and pin the release paths\n"
-        },
-        {
-          "sha": "1250604feb4f644fe67236788fd4427463c88275",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T04:16:44-07:00",
-          "message": "fix(settings): own-key style membership, one installed-theme verdict for a plugin's theme-default action, and a logged release\n"
-        },
-        {
-          "sha": "f6f83906efe55013487729743e83d9731c990a45",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:25:47-07:00",
-          "message": "fix(settings): fold every pick through one setting table and warn on stale picks\n\nA session pick its setting can no longer hold (an uninstalled or retired theme, an undeclared style or preset, a dropped effect, an out-of-range value, a placement value outside its declaration) now reads through its setting's one parse as stale. The fold draws what lies beneath it and reports which rung decided, and the frame shows one stale warning per stale pick that decided, naming the setting, the spelling held, what the bar wears and what the setting can hold. Every save releases every pick that is not a draft against the config it wrote, and a state variable may no longer read a setting's session key.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "9981658049e4a64f1743182196945f5de277f53e",
-      "timestamp": "2026-11-23T10:57:51.382Z",
+      "sha": "8c5b69d401bf9d1fbab5442331abc77b0ebb11f6",
+      "timestamp": "2026-11-23T12:12:32.308Z",
       "commits": [
         {
-          "sha": "9981658049e4a64f1743182196945f5de277f53e",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-23T10:56:43Z",
-          "message": "chore(release): set `package.json` to 1.236.7\n\n## [1.236.7](https://github.com/promptctl/cc-candybar/compare/v1.236.6...v1.236.7) (2026-11-23)\n\n### Bug Fixes\n\n* **config:** give re-added placements a fresh id and keep edit-mode state in the edit ([#886](https://github.com/promptctl/cc-candybar/issues/886)) ([9b161b0](https://github.com/promptctl/cc-candybar/commit/9b161b0a3123064752b90d778c33e73d8089d89f))\n"
+          "sha": "8c5b69d401bf9d1fbab5442331abc77b0ebb11f6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T05:11:23-07:00",
+          "message": "fix(settings): fold every pick through one setting table and warn on stale picks (#901)\n\n* fix(settings): fold every pick through one setting table and warn on stale picks\n\nA session pick its setting can no longer hold (an uninstalled or retired theme, an undeclared style or preset, a dropped effect, an out-of-range value, a placement value outside its declaration) now reads through its setting's one parse as stale. The fold draws what lies beneath it and reports which rung decided, and the frame shows one stale warning per stale pick that decided, naming the setting, the spelling held, what the bar wears and what the setting can hold. Every save releases every pick that is not a draft against the config it wrote, and a state variable may no longer read a setting's session key.\n\n* fix(settings): own-key style membership, one installed-theme verdict for a plugin's theme-default action, and a logged release\n\n* fix(settings): list every member in a load refusal, share one retired-theme sentence, and pin the release paths\n\n* fix(settings): a save's release takes the preset it settles on instead of reading it from session state\n\n* fix(settings): a save's release reads the picks its caller settles on, and a stale-pick comment says what the PR does"
         }
       ]
     }

@@ -13655,12 +13655,12 @@ var require_validators2 = __commonJS({
         throw (0, argErrors_1.invalidArgType)(name, "of type object", value);
     };
     exports2.validateObject = validateObject;
-    var validateOneOf = (value, name, oneOf) => {
-      if (oneOf.includes(value))
+    var validateOneOf = (value, name, oneOf2) => {
+      if (oneOf2.includes(value))
         return;
       let allowed = "";
-      for (let i2 = 0; i2 < oneOf.length; i2++) {
-        const one = oneOf[i2];
+      for (let i2 = 0; i2 < oneOf2.length; i2++) {
+        const one = oneOf2[i2];
         allowed += (i2 ? ", " : "") + (typeof one === "string" ? "'" + one + "'" : String(one));
       }
       throw (0, argErrors_1.invalidArgValue)(name, value, "must be one of: " + allowed);
@@ -16809,10 +16809,10 @@ var require_validators3 = __commonJS({
         );
       }
     }
-    var validateOneOf = hideStackFrames((value, name, oneOf) => {
-      if (!ArrayPrototypeIncludes(oneOf, value)) {
+    var validateOneOf = hideStackFrames((value, name, oneOf2) => {
+      if (!ArrayPrototypeIncludes(oneOf2, value)) {
         const allowed = ArrayPrototypeJoin(
-          ArrayPrototypeMap(oneOf, (v) => typeof v === "string" ? `'${v}'` : String2(v)),
+          ArrayPrototypeMap(oneOf2, (v) => typeof v === "string" ? `'${v}'` : String2(v)),
           ", "
         );
         const reason = "must be one of: " + allowed;
@@ -35864,18 +35864,18 @@ function firstReaching(near, reached) {
       lo = mid;
   }
 }
-function beat(holds2) {
-  if (holds2.length === 0)
+function beat(holds3) {
+  if (holds3.length === 0)
     throw new RangeError("a beat needs at least one hold");
-  holds2.forEach((hold2, i2) => positiveSeconds(`beat hold ${i2}`, hold2));
-  const period = holds2.reduce((sum2, hold2) => sum2 + hold2, 0);
+  holds3.forEach((hold2, i2) => positiveSeconds(`beat hold ${i2}`, hold2));
+  const period = holds3.reduce((sum2, hold2) => sum2 + hold2, 0);
   const starts = [];
   let elapsed = 0;
-  for (const hold2 of holds2) {
+  for (const hold2 of holds3) {
     starts.push(elapsed);
     elapsed += hold2;
   }
-  const own2 = [...holds2];
+  const own2 = [...holds3];
   const index = (into) => {
     let i2 = own2.length - 1;
     while (starts[i2] > into)
@@ -38868,8 +38868,8 @@ var ABSENT = { seam: void 0, lead: "left", tail: "right" };
 var AUTHORED_IN = { seam: "seam", lead: "caps", tail: "caps" };
 function parseCell(cell3, form, part, refuse4) {
   const glyph = cell3.glyph;
-  const oneOf = typeof glyph === "object" && glyph !== null ? glyph.oneOf : void 0;
-  if (typeof glyph !== "string" && !(Array.isArray(oneOf) && oneOf.every((g) => typeof g === "string"))) {
+  const oneOf2 = typeof glyph === "object" && glyph !== null ? glyph.oneOf : void 0;
+  if (typeof glyph !== "string" && !(Array.isArray(oneOf2) && oneOf2.every((g) => typeof g === "string"))) {
     refuse4(`has a glyph that is neither a string nor a oneOf of strings: ${JSON.stringify(glyph)}`);
   }
   if (cell3.fg === "ground" && cell3.bg === "ground")
@@ -39899,7 +39899,7 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
       const partner = own2(pair, mine === "fg" ? "bg" : "fg");
       return [[pair, mine, partner === void 0 ? 0 : settled3.get(partner) ?? 0]];
     });
-    const holds2 = (share) => facing.every(([pair, mine, theirs]) => {
+    const holds3 = (share) => facing.every(([pair, mine, theirs]) => {
       const floor3 = floorOf(pair, depth);
       const at = (side, w) => touchedAt(touch, pair[side], (side === mine ? share : theirs) * w);
       return STRENGTHS.every((w) => {
@@ -39907,10 +39907,10 @@ function shares({ pairs: pairs2, depth, theme: theme24 }, colors, touch) {
         return contrastRatio(shown.fg, shown.bg) >= floor3;
       });
     });
-    let [lo, hi] = holds2(1) ? [1, 1] : [0, 1];
+    let [lo, hi] = holds3(1) ? [1, 1] : [0, 1];
     for (let i2 = 0; i2 < 20 && hi - lo > 1e-3; i2++) {
       const mid = (lo + hi) / 2;
-      [lo, hi] = holds2(mid) ? [mid, hi] : [lo, mid];
+      [lo, hi] = holds3(mid) ? [mid, hi] : [lo, mid];
     }
     settled3.set(hex, lo);
   }
@@ -41514,29 +41514,72 @@ var RETIRED_THEMES = /* @__PURE__ */ new Map([
   ["dark", "textual-dark"],
   ["light", "textual-light"]
 ]);
+function successorOf(name) {
+  return RETIRED_THEMES.get(name);
+}
+function retiredThemeSentence(name) {
+  const to = typeof name === "string" ? successorOf(name) : void 0;
+  return to === void 0 ? "" : `"${name}" was retired; write "${to}", the same palette`;
+}
 function retiredThemeNote(name) {
-  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : void 0;
-  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
+  const sentence = retiredThemeSentence(name);
+  return sentence === "" ? "" : ` \u2014 ${sentence}`;
+}
+function oneOf(members) {
+  return `one of ${members.map((m) => JSON.stringify(m)).join(", ")}`;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function sampledOneOf(members) {
+  if (members.length <= LISTED_MEMBERS) return oneOf(members);
+  return `one of ${members.length} values, such as ${members.slice(0, SAMPLED_MEMBERS).map((m) => JSON.stringify(m)).join(", ")}`;
+}
+function installedThemesNote() {
+  return oneOf([...listResolvablePaletteNames()].sort());
 }
 var THEME_FLOOR = "textual-dark";
+var UNSET = { kind: "unset" };
+function heldBy(raw, parse3) {
+  if (raw === null) return UNSET;
+  const value = parse3(raw);
+  return value === null ? { kind: "stale", raw } : { kind: "held", value };
+}
+function foldSetting(staged, held, beneath) {
+  if (staged !== null && staged !== void 0) {
+    return { value: staged, decidedBy: { kind: "staged" } };
+  }
+  switch (held.kind) {
+    case "held":
+      return { value: held.value, decidedBy: { kind: "picked" } };
+    case "stale":
+      return { value: beneath, decidedBy: { kind: "stale", raw: held.raw } };
+    case "unset":
+      return { value: beneath, decidedBy: { kind: "beneath" } };
+  }
+}
 function effectiveGlobal(staged, sessionPick, configDefault, floor3, parseSession) {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor3;
+  return foldSetting(
+    staged,
+    heldBy(sessionPick, parseSession),
+    configDefault ?? floor3
+  );
 }
 function listResolvablePaletteNames() {
   return listThemePalettes();
+}
+var installedThemes;
+function installedTheme(name) {
+  installedThemes ??= new Set(listResolvablePaletteNames());
+  return installedThemes.has(name) ? name : null;
 }
 var FOLLOW_BAR = "bar";
 function placementThemeNames() {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
 }
-var placementThemeSet;
 function isPlacementThemeName(name) {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
+  return name === FOLLOW_BAR || installedTheme(name) !== null;
 }
-function effectiveMemberName(stagedName2, sessionPick, configDefault, floor3, declared) {
-  const member = (raw) => Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+function effectiveMemberName(stagedName2, sessionPick, configDefault, floor3, member) {
   return effectiveGlobal(
     stagedName2 === void 0 ? null : member(stagedName2),
     sessionPick,
@@ -41561,8 +41604,8 @@ function resolveSelection(stagedName2, sessionPick, globalsValue, floor3, named2
 }
 var STYLE_FLOOR = "none";
 function namedStyle(name, declaredStyles) {
-  const value = declaredStyles[name];
-  return value === void 0 ? null : { kind: "decided", name, value };
+  if (!Object.hasOwn(declaredStyles, name)) return null;
+  return { kind: "decided", name, value: declaredStyles[name] };
 }
 function decideStyleName(name, declaredStyles) {
   return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
@@ -41751,6 +41794,9 @@ function* stateVarDecls(config) {
 var THEME_SETTING = "theme";
 var EFFECT_SETTING = "effect";
 var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
+function settingBeneath(node, name, decl) {
+  return node.settings?.[name] ?? decl.default;
+}
 function settingsOf(seg2) {
   return {
     ...seg2.settings,
@@ -41806,14 +41852,8 @@ function parseSettingSpelling(decl, raw) {
   if (typeof domain === "object" && "min" in domain) {
     return parseSessionInt(raw, domain) ?? void 0;
   }
-  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
-  return inSettingDomain(decl, value) ? value : void 0;
-}
-function placementSetting(node, name, decl, pick2) {
-  const saved = node.settings?.[name] ?? decl.default;
-  const draft = node.drafts?.[name];
-  const raw = draft === void 0 ? null : pick2(draft);
-  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
+  if (domain === "bool") return parseSessionBoolean(raw) ?? void 0;
+  return inSettingDomain(decl, raw) ? raw : void 0;
 }
 function describeSettingDomain(decl) {
   const { domain } = decl;
@@ -41822,7 +41862,7 @@ function describeSettingDomain(decl) {
     return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
   }
   if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
-  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
+  return oneOf(domain);
 }
 var JUSTIFY_MODES = [
   "left",
@@ -42551,7 +42591,7 @@ function validatePaletteName(ctx, path31, raw) {
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
       path: `${path31}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
       line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
     });
     return void 0;
@@ -43271,6 +43311,12 @@ function wireKindOf(field) {
   if (row.kind === "text") return "string";
   const { domain } = row;
   return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+}
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row) {
+  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
 }
 
 // src/config/setting-projections.ts
@@ -44053,11 +44099,11 @@ function closingFlash(fill, text4, begins) {
     fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
   });
   const dark = (colors) => colors;
-  const holds2 = CLOSING_FLASH.reduceRight(
+  const holds3 = CLOSING_FLASH.reduceRight(
     (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
     Animation.constant(dark)
   );
-  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
+  const idle = Animation.sequence(Animation.constant(dark), begins, holds3);
   return () => idle;
 }
 var NO_MOTION = {
@@ -49056,275 +49102,72 @@ function chainName(paths2, none2 = "bundled default (no config file loaded)") {
 // src/renderer/setting-drafts.ts
 init_globals();
 
-// src/config/loader/globals.ts
+// src/config/setting-table.ts
 init_globals();
-var LIVE_GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
-);
-function retired(spec, description) {
-  return {
-    ...spec,
-    json: { ...spec.json, deprecated: true, description },
-    parse(ctx, path31, field, raw) {
-      spec.parse(ctx, path31, field, raw);
-      return void 0;
-    }
-  };
-}
-var GLOBALS_FIELDS = {
-  ...LIVE_GLOBALS_FIELDS,
-  updateNotice: retired(
-    optionalBooleanSpec(),
-    "Obsolete in-bar update notice."
-  ),
-  experimentalBand: retired(
-    optionalBooleanSpec(),
-    "Obsolete Claude Code band mod."
-  ),
-  experimentalTmuxStatus: retired(
-    optionalBooleanSpec(),
-    "Obsolete tmux status renderer."
-  ),
-  renderer: retired(
-    optionalEnumSpec(["claude", "tmux"]),
-    "Obsolete tmux status renderer."
-  )
-};
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row) {
-  return "optionDomain" in row && row.optionDomain !== void 0 ? { from: row.optionDomain.name } : row.domain;
-}
-function fragmentRejection(description, message) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path31, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: message(`${path31}.${field}`),
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
-  );
-}
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
-  );
-}
-function nameOnlySpec(spec, subject, why) {
-  return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path31.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path31, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
-    ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
-    )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path31 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path31,
-        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path31, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path31, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path31, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(LIVE_GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor3);
-  }
-  return seeds;
-}
 
-// src/config/loader/persist-target.ts
+// src/config/setting-control.ts
 init_globals();
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
+
+// src/config/option-domain.ts
+init_globals();
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
   }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+  baseCache.set(name, palette);
+  return palette;
 }
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const installed = installedTheme(name);
+  return installed === null ? null : { kind: "decided", name, value: paletteForThemeName(installed) };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named2 = namedTheme(name);
+  if (named2 !== null) return named2;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
 }
 
 // src/config/presets.ts
@@ -49490,13 +49333,14 @@ var FLOOR_FRAGMENT = {};
 function presetNames(presets) {
   return [.../* @__PURE__ */ new Set([PRESET_FLOOR, ...Object.keys(presets)])];
 }
+var presetMember = (presets) => (raw) => presetNames(presets).includes(raw) ? raw : null;
 function effectivePresetName(sessionPreset, globalsPreset, declaredPresets) {
   return effectiveMemberName(
     void 0,
     sessionPreset,
     globalsPreset,
     PRESET_FLOOR,
-    declaredPresets
+    presetMember(declaredPresets)
   );
 }
 function presetByName(presets, name) {
@@ -49560,6 +49404,491 @@ function insertNotice(cell3, what) {
 }
 function presetGlobals(config, name) {
   return { ...config.globals, ...presetByName(config.presets, name).globals };
+}
+
+// src/config/option-domain.ts
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve2, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
+
+// src/config/setting-control.ts
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function describeControlDomain(domain, perConfigDomains, listing = oneOf) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const { members } = resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    );
+    return listing(members);
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/setting-table.ts
+function globalParse(config, field) {
+  const row = GLOBAL_FIELDS[field];
+  if (row.kind === "session") return row.parse;
+  switch (row.sessionKey) {
+    case "theme":
+      return installedTheme;
+    case "style":
+      return (raw) => namedStyle(raw, config.styles);
+    case "effect":
+      return namedEffect;
+    case "preset":
+      return presetMember(config.presets);
+  }
+}
+function placementRow(slot) {
+  return {
+    ...slot,
+    name: `"${slot.setting}" of placement "${slot.id}"`,
+    domain: controlDeclOf(slot.decl).domain,
+    parse: (raw) => parseSettingSpelling(slot.decl, raw) ?? null
+  };
+}
+function placementFold(row, raw) {
+  return foldSetting(void 0, heldBy(raw, row.parse), row.beneath);
+}
+var TABLES = /* @__PURE__ */ new WeakMap();
+function settingTable(config) {
+  const known = TABLES.get(config);
+  if (known !== void 0) return known;
+  const globals = Object.fromEntries(
+    CONTROLLED_FIELDS.map((field) => {
+      const name = settingNameOf(field);
+      const row = {
+        key: name,
+        name,
+        domain: settingControlDomain(field),
+        parse: globalParse(config, field)
+      };
+      return [name, row];
+    })
+  );
+  const placements = [
+    ...new Map(
+      presetNames(config.presets).flatMap(
+        (preset) => [...walkNodes(presetRoot(config, preset).node)].flatMap(
+          (node) => node.kind === "segment" ? Object.values(node.drafts ?? {}).map(
+            (slot) => [slot.key, placementRow(slot)]
+          ) : []
+        )
+      )
+    ).values()
+  ];
+  const table = {
+    rows: new Map([
+      ...Object.values(globals).map((row) => [row.key, row]),
+      ...placements.map((row) => [row.key, row])
+    ]),
+    globals,
+    placements
+  };
+  TABLES.set(config, table);
+  return table;
+}
+
+// src/config/loader/globals.ts
+init_globals();
+var LIVE_GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec])
+);
+function retired(spec, description) {
+  return {
+    ...spec,
+    json: { ...spec.json, deprecated: true, description },
+    parse(ctx, path31, field, raw) {
+      spec.parse(ctx, path31, field, raw);
+      return void 0;
+    }
+  };
+}
+var GLOBALS_FIELDS = {
+  ...LIVE_GLOBALS_FIELDS,
+  updateNotice: retired(
+    optionalBooleanSpec(),
+    "Obsolete in-bar update notice."
+  ),
+  experimentalBand: retired(
+    optionalBooleanSpec(),
+    "Obsolete Claude Code band mod."
+  ),
+  experimentalTmuxStatus: retired(
+    optionalBooleanSpec(),
+    "Obsolete tmux status renderer."
+  ),
+  renderer: retired(
+    optionalEnumSpec(["claude", "tmux"]),
+    "Obsolete tmux status renderer."
+  )
+};
+function fragmentRejection(description, message) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path31, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: message(`${path31}.${field}`),
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path31.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path31, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  charset: "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path31 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path31,
+        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected ${oneOf([...ctx.allowedPalettes].sort())}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path31, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path31, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path31, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path31, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path31, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(LIVE_GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row]) => "floor" in row && typeof row.floor === "number" ? [[field, row.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor3);
+  }
+  return seeds;
+}
+
+// src/config/loader/persist-target.ts
+init_globals();
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
 }
 
 // src/renderer/bundled-presets.ts
@@ -56996,244 +57325,6 @@ var laneOffReason = (lane) => {
   return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}`;
 };
 
-// src/config/setting-control.ts
-init_globals();
-
-// src/config/option-domain.ts
-init_globals();
-
-// src/themes/palette-resolvers.ts
-init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
-  }
-  return palette;
-}
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
-}
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
-}
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
-  );
-}
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
-}
-function decideThemeName(name, where, onUnresolvable) {
-  const named2 = namedTheme(name);
-  if (named2 !== null) return named2;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
-    )
-  );
-  return themeFloor();
-}
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
-  );
-}
-function themeFloor() {
-  return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
-  };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve2, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
-      {
-        members: Object.keys(config.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config.styles[option])
-      }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config.presets) }]
-  ]);
-}
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
-  }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/setting-control.ts
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
-  }
-  return parseSessionInt(value, domain) !== null;
-}
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted2 = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
-    const named2 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named2} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
-  }
-  return `an integer from ${domain.min} to ${domain.max}`;
-}
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
-    variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
-    },
-    list: { ref, rows }
-  };
-}
-
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
@@ -58172,12 +58263,16 @@ function configureParts(ctx, node, decls) {
   const controls = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(identity2, name);
     const variable = key;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
+    const slot = {
+      preset: ctx.preset,
+      id: id2,
+      setting: name,
+      decl,
       key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
+      beneath: settingBeneath(node, name, decl)
     };
-    drafts[name] = { id: id2, key, variable };
+    ctx.artifacts.variables[variable] = { kind: "setting", slot };
+    drafts[name] = { ...slot, variable };
     const segName = `${prefix}.setting.${placement}.${name}`;
     const control2 = settingControl(
       controlDeclOf(decl),
@@ -61680,10 +61775,7 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
     }
   }
   const resolved = Object.fromEntries(
-    Object.entries(declared).map(([n, d]) => [
-      n,
-      node.settings?.[n] ?? d.default
-    ])
+    Object.entries(declared).map(([n, d]) => [n, settingBeneath(node, n, d)])
   );
   const members = Object.entries(resolved).every(
     ([n, v]) => inSettingDomain(declared[n], v)
@@ -61869,9 +61961,9 @@ function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
     line: findKeyLine(ctx.source, keyPath)
   });
 }
-function checkSettingWrites(ctx, name, a, setting, optionDomains) {
+function checkSettingWrites(ctx, name, a, row, optionDomains) {
   const key = a.set;
-  const domain = settingControlDomain(SETTINGS[setting].configKey);
+  const { domain } = row;
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   if ("min" in a && (domain === "bool" || !("min" in domain))) {
     ctx.issues.push({
@@ -61890,9 +61982,7 @@ function checkSettingWrites(ctx, name, a, setting, optionDomains) {
     });
     return;
   }
-  const outside = writes.filter(
-    (w) => !controlDomainAdmits(domain, w.value, optionDomains)
-  );
+  const outside = writes.filter((w) => row.parse(w.value) === null);
   if (outside.length === 0) return;
   if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes.every((w) => isStyleEraEndcaps(w.value)))) {
     const endcaps = SETTINGS.endcaps.sessionKey;
@@ -61967,9 +62057,9 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
         line: findKeyLine(ctx.source, ["actions", name, "set"])
       });
     }
-    const setting = SESSION_KEY_TO_SETTING.get(a.set);
-    if (setting !== void 0) {
-      checkSettingWrites(ctx, name, a, setting, optionDomains);
+    const row = settingTable(cfg).rows.get(a.set);
+    if (row !== void 0) {
+      checkSettingWrites(ctx, name, a, row, optionDomains);
     }
   }
   for (const [name, a] of subjects(cfg.actions, subject)) {
@@ -62044,7 +62134,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
     if (target.scope === "theme-default" && !ctx.allowedPalettes.has(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have ${oneOf([...ctx.allowedPalettes].sort())})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
       continue;
@@ -62239,6 +62329,22 @@ function validateNoNesting(ctx, cfg, names) {
         line: findKeyLine(ctx.source, [...at])
       });
     }
+  }
+}
+
+// src/config/loader/setting-keys.ts
+init_globals();
+function refuseSettingKeyOwners(ctx, config) {
+  const { rows } = settingTable(config);
+  for (const [, decl, at] of declarationsAt(config)) {
+    if (decl.kind !== "state") continue;
+    const row = rows.get(decl.key);
+    if (row === void 0) continue;
+    ctx.issues.push({
+      path: [...at, "key"].join("."),
+      message: `${at.join(".")}: a state variable reads "${decl.key}", which is the session key of setting ${row.name} \u2014 the setting owns it; read its value from the "${row.name}.effective" variable`,
+      line: findKeyLine(ctx.source, [...at, "key"])
+    });
   }
 }
 
@@ -62505,7 +62611,7 @@ function checkPlugin(config, ns, replaces, filePath2, allowedPalettes) {
   const ctx = {
     source: "",
     issues,
-    allowedPalettes: /* @__PURE__ */ new Set(),
+    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: []
@@ -62636,6 +62742,7 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
     checked: () => true,
     authored: (name) => authored.has(name)
   });
+  refuseSettingKeyOwners(ctx, withChrome);
   refuseIfIssues();
   const actions = Object.fromEntries(
     Object.entries(withChrome.actions).map(([name, action2]) => [
@@ -64289,7 +64396,7 @@ function presetOf(config, sessionPick) {
 }
 function resolveEffectiveGlobals(config, sessionPick, presetCustomized) {
   const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset);
+  const declared = presetGlobals(config, preset.value);
   const staged = editGlobalsOf(config, sessionPick);
   const theme24 = resolveThemeSelection(
     staged.palette,
@@ -64298,29 +64405,42 @@ function resolveEffectiveGlobals(config, sessionPick, presetCustomized) {
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme24, config.themeDefaults)
+    themeDefaultsOf(theme24.value, config.themeDefaults)
+  );
+  const valued = VALUED_FIELDS.map(
+    (field) => [field, resolveValued(field, staged, sessionPick, globals)]
+  );
+  const style = resolveStyleSelection(
+    staged.style,
+    sessionPick(settingNameOf("style")),
+    globals.style,
+    config.styles
+  );
+  const effect = resolveEffectSelection(
+    staged.effect,
+    sessionPick(settingNameOf("effect")),
+    globals.effect
   );
   return {
     ...Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, sessionPick, globals)
-      ])
+      valued.map(([field, folded2]) => [field, folded2.value])
     ),
-    preset,
-    presetCustomized: presetCustomized(preset),
-    theme: theme24,
-    style: resolveStyleSelection(
-      staged.style,
-      sessionPick(settingNameOf("style")),
-      globals.style,
-      config.styles
-    ),
-    effect: resolveEffectSelection(
-      staged.effect,
-      sessionPick(settingNameOf("effect")),
-      globals.effect
-    ),
+    preset: preset.value,
+    presetCustomized: presetCustomized(preset.value),
+    theme: theme24.value,
+    style: style.value,
+    effect: effect.value,
+    decidedBy: {
+      ...Object.fromEntries(
+        valued.flatMap(
+          ([field, folded2]) => valuedRow(field).kind === "session" ? [[settingNameOf(field), folded2.decidedBy]] : []
+        )
+      ),
+      [settingNameOf("preset")]: preset.decidedBy,
+      [settingNameOf("palette")]: theme24.decidedBy,
+      [settingNameOf("style")]: style.decidedBy,
+      [settingNameOf("effect")]: effect.decidedBy
+    },
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
     // config` — the same `??`, minus the rungs it does not have.
     separator: staged.default_separator ?? globals.default_separator
@@ -64396,7 +64516,7 @@ function landingKey(config, preset, field) {
   return field in (presetByName(config.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
 }
 function durableLanding(config, sessionPick, key) {
-  const preset = presetOf(config, sessionPick);
+  const preset = presetOf(config, sessionPick).value;
   const target = parsePersistTarget(key);
   return {
     key: target?.scope === "globals" ? landingKey(config, preset, target.field) : key,
@@ -64404,13 +64524,10 @@ function durableLanding(config, sessionPick, key) {
   };
 }
 function placementDraftsIn(config, preset, sessionPick) {
-  return slotsOf(config, preset).flatMap(
-    ({ id: id2, setting, key, decl, saved }) => {
-      const pick2 = sessionPick(key);
-      const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
-      return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
-    }
-  );
+  return slotsOf(config, preset).flatMap((row) => {
+    const { value } = placementFold(row, sessionPick(row.key));
+    return settingSpelling(value) === settingSpelling(row.beneath) ? [] : [{ preset, id: row.id, setting: row.setting, key: row.key, value }];
+  });
 }
 function placementDrafts(config, sessionPick) {
   return presetNames(config.presets).flatMap(
@@ -64428,11 +64545,10 @@ function placementPickProblems(config, sessionPick, writes) {
       const own2 = slots.filter((s) => s.id === id2);
       const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
       const values2 = Object.fromEntries(
-        own2.map((s) => {
-          const pick2 = written2.get(s.key) ?? sessionPick(s.key);
-          const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
-          return [s.setting, value ?? s.saved];
-        })
+        own2.map((s) => [
+          s.setting,
+          placementFold(s, written2.get(s.key) ?? sessionPick(s.key)).value
+        ])
       );
       return settingOrderProblems(decls, values2).map(
         ({ message }) => `placement "${id2}": ${message}`
@@ -64440,27 +64556,8 @@ function placementPickProblems(config, sessionPick, writes) {
     });
   });
 }
-var SLOTS = /* @__PURE__ */ new WeakMap();
 function slotsOf(config, preset) {
-  const byPreset = SLOTS.get(config) ?? /* @__PURE__ */ new Map();
-  SLOTS.set(config, byPreset);
-  const known = byPreset.get(preset);
-  if (known !== void 0) return known;
-  const facts = [...walkNodes(presetRoot(config, preset).node)].flatMap(
-    (node) => node.kind !== "segment" || node.drafts === void 0 ? [] : Object.entries(node.drafts).map(([setting, { id: id2, key }]) => {
-      const decl = settingsOf(config.segments[node.name])[setting];
-      return {
-        id: id2,
-        setting,
-        key,
-        decl,
-        saved: node.settings?.[setting] ?? decl.default
-      };
-    })
-  );
-  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
-  byPreset.set(preset, slots);
-  return slots;
+  return settingTable(config).placements.filter((p2) => p2.preset === preset);
 }
 function presetSnapshot(config, sessionPick) {
   const session = sessionGlobals(config, sessionPick);
@@ -64758,6 +64855,9 @@ function describeWarning(warning) {
       break;
     case "when":
       subject = warning.where;
+      break;
+    case "stale":
+      subject = warning.key;
       break;
   }
   return {
@@ -66099,11 +66199,21 @@ var SourceRegistry = class _SourceRegistry {
       );
     }
     const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.defaultEmptyValue;
+    const empty2 = this.defaultEmptyValue;
     this.store.defineComputed(name, "string", () => {
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
+      return opts.read(sessionState.get(this.session(), opts.key)) ?? empty2;
     });
+  }
+  // The raw spelling the bound view's session holds at `key`, before any
+  // variable's default or fold reads it. [LAW:no-silent-failure] A registry with no session state cannot
+  // be asked, as `declareState` cannot be.
+  held(key) {
+    if (!this.sessionState) {
+      throw new Error(
+        `held("${key}"): SourceRegistry was constructed without a SessionState`
+      );
+    }
+    return this.sessionState.get(this.session(), key);
   }
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
@@ -67192,6 +67302,25 @@ function actionFuncs(runtime) {
   };
 }
 
+// src/dsl/stale-warnings.ts
+init_globals();
+function holds2(pick2, domains) {
+  const retired2 = typeof pick2.row.domain === "object" && "themes" in pick2.row.domain ? retiredThemeSentence(pick2.raw) : "";
+  return retired2 === "" ? `It can hold ${describeControlDomain(pick2.row.domain, domains, sampledOneOf)}` : retired2;
+}
+function staleWarnings(picks, domains) {
+  let built;
+  const domainsOnce = () => built ??= domains();
+  return [...new Map(picks.map((p2) => [p2.row.key, p2])).values()].map(
+    (pick2) => ({
+      kind: "stale",
+      key: pick2.row.key,
+      setting: pick2.row.name,
+      message: `Setting ${pick2.row.name} holds "${pick2.raw}", which it cannot hold, so the bar wears "${pick2.wears}". ${holds2(pick2, domainsOnce())}. Pick it again.`
+    })
+  );
+}
+
 // src/render/disclosure-close.ts
 init_globals();
 function disclosureCloseFragment(sessionId2, key) {
@@ -68272,6 +68401,7 @@ init_globals();
 var KIND_SCOPE = {
   input: "view",
   state: "view",
+  setting: "view",
   template: "view",
   time: "view",
   source: "view",
@@ -68483,6 +68613,7 @@ var segmentType = {
       name: node.name,
       placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
+      slots: Object.values(node.drafts ?? {}).map(placementRow),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...node.opens !== void 0 && {
@@ -68509,7 +68640,7 @@ var segmentType = {
   // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
   // hidden, gated off, drawn, broken — is reported to the session's record, so
   // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.placement.id, drawSegment(node, ctx))
+  render: (node, ctx) => ctx.placed(node, drawSegment(node, ctx))
 };
 function drawSegment(node, ctx) {
   const seg2 = ctx.lookupSegment(node.name);
@@ -69434,9 +69565,19 @@ function declareOne(registry, name, decl, cwd2, derivation) {
     case "state":
       registry.declareState(name, {
         key: decl.key,
-        ...decl.default !== void 0 && { varDefault: decl.default }
+        read: (raw) => raw ?? decl.default ?? null
       });
       break;
+    // [LAW:one-source-of-truth] A placement's setting reads its fold, the one
+    // every reader of its key shares (src/config/setting-table.ts).
+    case "setting": {
+      const row = placementRow(decl.slot);
+      registry.declareState(name, {
+        key: decl.slot.key,
+        read: (raw) => settingSpelling(placementFold(row, raw).value)
+      });
+      break;
+    }
   }
 }
 function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
@@ -69468,6 +69609,9 @@ function compileInputOf(config, region = systemRegion()) {
   const stateKeyToVar = /* @__PURE__ */ new Map();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in variables) stateKeyToVar.set(key, name);
+  }
+  for (const [name, decl] of Object.entries(variables)) {
+    if (decl.kind === "setting") stateKeyToVar.set(decl.slot.key, name);
   }
   for (const [name, decl] of stateVarDecls(config)) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
@@ -69635,22 +69779,25 @@ function compileDslConfig({
       );
     }
   };
+  const foldedRead = (draft, name) => {
+    const row = placementRow(draft);
+    return () => placementFold(
+      row,
+      String(
+        renderBinding(actionRuntime, `setting ${name}`).store.read(
+          draft.variable
+        )
+      )
+    ).value;
+  };
   const resolvedSettings = (node) => {
     const declared = settingsOf(config.segments[node.name]);
     const out = /* @__PURE__ */ Object.create(null);
     for (const [name, decl] of Object.entries(declared)) {
+      const draft = node.drafts?.[name];
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: () => placementSetting(
-          node,
-          name,
-          decl,
-          (draft) => String(
-            renderBinding(actionRuntime, `setting ${name}`).store.read(
-              draft.variable
-            )
-          )
-        )
+        get: draft === void 0 ? () => settingBeneath(node, name, decl) : foldedRead(draft, name)
       });
     }
     return Object.freeze(out);
@@ -69809,6 +69956,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
   try {
     const warnings = [];
     const warn = (warning) => void warnings.push(warning);
+    const drawnSlots = [];
     const segments = /* @__PURE__ */ new Map();
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
@@ -69946,7 +70094,11 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
         // [LAW:one-source-of-truth] The row ✕ names the session every other
         // affordance's URL does.
         closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
-        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
+        placed: (node2, lines2) => {
+          if (lines2.length > 0) drawnSlots.push(...node2.slots);
+          const { id: id2 } = node2.placement;
+          return record2.placed(id2, motion.placed(id2, lines2));
+        },
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
         decorations: (node2, palette2) => decoratedStyles(
@@ -69988,6 +70140,39 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
       ...rendered.map((row) => row.nextChange)
     );
     const frameMotion = Number.isFinite(nextChange) ? "moves" : armed() ? "can-move" : "still";
+    const table = settingTable(config);
+    const worn = (name) => {
+      switch (name) {
+        case "theme":
+          return theme24.name;
+        case "style":
+          return style.name;
+        case "effect":
+          return effect.name;
+        case "preset":
+          return preset;
+        default:
+          return settingSpelling(selection2[name]);
+      }
+    };
+    const stale = [
+      ...SETTING_NAMES.flatMap((name) => {
+        const decided = selection2.decidedBy[name];
+        return decided.kind === "stale" ? [{ row: table.globals[name], raw: decided.raw, wears: worn(name) }] : [];
+      }),
+      ...drawnSlots.flatMap((row) => {
+        const folded2 = placementFold(row, registry.held(row.key));
+        return folded2.decidedBy.kind === "stale" ? [
+          {
+            row,
+            raw: folded2.decidedBy.raw,
+            wears: settingSpelling(folded2.value)
+          }
+        ] : [];
+      })
+    ];
+    for (const warning of staleWarnings(stale, () => configOptionDomains(config)))
+      warn(warning);
     for (const [variable, fault] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
@@ -70344,15 +70529,13 @@ function deriveConfigActionValidators(config) {
 
 // src/daemon/foundations/state-validators.ts
 init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
 var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
 var validateTheme = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
+  if (installedTheme(raw) === null) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+      reason: `unknown theme "${raw}" (have ${installedThemesNote()})`
     };
   }
   return { ok: true, value: raw };
@@ -75059,15 +75242,19 @@ var EditTransactions = class {
 
 // src/renderer/verbs/key-seeds.ts
 init_globals();
-function stateKeySeed(config, sessionPick, key) {
+function stateKeyShown(config, sessionPick, key) {
   const setting = SESSION_KEY_TO_SETTING.get(key);
   if (setting !== void 0) {
     return sessionSettingValue(config, sessionPick, setting);
   }
-  for (const [, decl] of stateVarDecls(config)) {
-    if (decl.key === key) return decl.default ?? null;
+  const placement = settingTable(config).placements.find((p2) => p2.key === key);
+  if (placement !== void 0) {
+    return settingSpelling(placementFold(placement, sessionPick(key)).value);
   }
-  return null;
+  for (const [, decl] of stateVarDecls(config)) {
+    if (decl.key === key) return sessionPick(key) ?? decl.default ?? null;
+  }
+  return sessionPick(key);
 }
 function configKeySeed(globals, key) {
   const seed = numericGlobalsSeeds(globals).get(key);
@@ -75599,7 +75786,7 @@ function writeDrafts(store, layer, pairs2, placements) {
     ),
     before ?? ""
   );
-  commit2(
+  return commit2(
     store,
     into,
     before,
@@ -75733,8 +75920,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
       ownRow
     )
   );
-  commit2(store, into, before, placed2, refuseHidden);
-  return name;
+  return { name, config: commit2(store, into, before, placed2, refuseHidden) };
 }
 function writeThemeDefault(store, layer, theme24, look) {
   const into = seenBy(layer, (file) => store.read(file));
@@ -75967,12 +76153,11 @@ var stepState = (args, ctx) => {
       `step-state: key "${key}" is not a bounded (range) state key (have keys: ${gate2.listKeys().join(", ")})`
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped = stored && STEP_INT_RE.test(stored) ? clampTo(params, parseInt(stored, 10)) : stepFrom(
+  const clamped = stepFrom(
     "step-state",
     key,
     params,
-    stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key)
+    stateKeyShown(config, (k) => ctx.sessionState.get(sid, k), key)
   );
   const next2 = stepWithin(clamped, by, params.min, params.max);
   const result = gate2.validate(key, String(next2));
@@ -76003,14 +76188,14 @@ function refuseDisorderedPicks(ctx, verb, writes) {
 function clampTo(params, n) {
   return Math.max(params.min, Math.min(params.max, n));
 }
-function stepFrom(verb, key, params, declared) {
-  if (declared === null) return params.min;
-  if (!STEP_INT_RE.test(declared)) {
+function stepFrom(verb, key, params, shown) {
+  if (shown === null) return params.min;
+  if (!STEP_INT_RE.test(shown)) {
     throw new BadVerbArgs(
-      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`
+      `${verb}: "${key}" shows ${JSON.stringify(shown)}, not an integer to step`
     );
   }
-  return clampTo(params, parseInt(declared, 10));
+  return clampTo(params, parseInt(shown, 10));
 }
 function sessionOrigin(ctx) {
   if (ctx.context === null) {
@@ -76174,6 +76359,7 @@ var save = (args, ctx) => {
   const placements = placementDrafts(config, pick2);
   if (drafts.length + placements.length === 0) {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
+    releaseSaved(ctx, config);
     ctx.finishEdit("save");
     return;
   }
@@ -76185,13 +76371,7 @@ var save = (args, ctx) => {
   });
   gatePlacements("save", gate2, placements);
   const into = heldLayer2(ctx, origin, role);
-  writeDrafts(editStore(ctx, sid), into, pairs2, placements);
-  for (const key of [
-    ...drafts.map((d) => d.sessionKey),
-    ...placements.map((p2) => p2.key)
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
+  releaseSaved(ctx, writeDrafts(editStore(ctx, sid), into, pairs2, placements));
   ctx.finishEdit("save");
   ctx.log(
     "info",
@@ -76201,6 +76381,25 @@ var save = (args, ctx) => {
     ].join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
+function releaseSaved(ctx, written2, settled3 = {}) {
+  const sid = ctx.session;
+  const pick2 = settled3.read ?? ((key) => ctx.sessionState.get(sid, key));
+  const drafted = /* @__PURE__ */ new Set([
+    ...settingDrafts(written2, pick2).map((d) => d.sessionKey),
+    ...placementDrafts(written2, pick2).map((p2) => p2.key)
+  ]);
+  for (const key of settled3.movedOn ?? []) drafted.delete(key);
+  const released = [...settingTable(written2).rows].flatMap(([key, row]) => {
+    const raw = pick2(key);
+    return drafted.has(key) || raw === null ? [] : [{ key, stale: row.parse(raw) === null }];
+  });
+  for (const { key } of released) ctx.sessionState.clear(sid, key);
+  if (released.length > 0)
+    ctx.log(
+      "info",
+      `released: ${released.map((r) => `${r.key}${r.stale ? " (stale)" : ""}`).join(" ")} (session=${sid})`
+    );
+}
 var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
 function gatePlacements(verb, gate2, placements) {
   for (const p2 of placements) {
@@ -76225,7 +76424,7 @@ var savePreset = (args, ctx) => {
   });
   gatePlacements("save-preset", gate2, snapshot.placements);
   const into = heldLayer2(ctx, origin, role);
-  const name = writePreset(
+  const { name, config: written2 } = writePreset(
     editStore(ctx, sid),
     into,
     snapshot.from,
@@ -76233,13 +76432,11 @@ var savePreset = (args, ctx) => {
     picks,
     snapshot.placements
   );
-  for (const key of [
-    ...SETTING_PROJECTIONS.map((p2) => p2.sessionKey),
-    ...snapshot.placements.map((p2) => p2.key)
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
+  releaseSaved(ctx, written2, {
+    read: (key) => key === SETTINGS.preset.sessionKey ? name : ctx.sessionState.get(sid, key),
+    movedOn: snapshot.placements.map((p2) => p2.key)
+  });
   ctx.log(
     "info",
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${into.path} (session=${sid})`
@@ -76260,20 +76457,10 @@ var saveThemeDefault = (args, ctx) => {
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const written2 = writeThemeDefault(
-    editStore(ctx, sid),
-    into,
-    save2.theme,
-    save2.look
+  releaseSaved(
+    ctx,
+    writeThemeDefault(editStore(ctx, sid), into, save2.theme, save2.look)
   );
-  const pick2 = (key) => ctx.sessionState.get(sid, key);
-  const drafted = new Set(
-    settingDrafts(written2, pick2).map((d) => d.sessionKey)
-  );
-  const released = THEME_DEFAULT_FIELDS.map(
-    (f) => SETTINGS[f].sessionKey
-  ).filter((key) => !drafted.has(key));
-  for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${into.path} (session=${sid})`
@@ -79885,7 +80072,7 @@ var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
 });
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var heldBy2 = (state, handle) => state.kind === "listening" && state.handle === handle;
 var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var NO_OBSERVATIONS = /* @__PURE__ */ new Map();
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
@@ -80189,7 +80376,7 @@ var WatcherRegistry = class {
         this.logger("warn", `watcher error ${at}: ${e.message}`);
         if (this.counters) this.counters.watchErrors++;
         const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
+        if (!heldBy2(dir.state, handle)) return;
         this.closeHandle(at, handle, "error");
         const deafness = {
           kind: "failed",
@@ -80221,7 +80408,7 @@ var WatcherRegistry = class {
   // event naming the directory is judged against the folder there.
   heard(dir, handle, changed) {
     const { state } = dir;
-    if (!heldBy(state, handle)) return;
+    if (!heldBy2(state, handle)) return;
     this.tell(dir, namedOf(dir.path, changed));
     if (changed === import_node_path14.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
@@ -80796,12 +80983,12 @@ var KeyedSource = class {
   // and a refresh that throws past it is its clock task's, which every bar
   // shows, so its caller reports none. A declaration that THROWS is a bug
   // neither saw, reported by the session's declaration (declareLanes).
-  declare(holds2, input) {
+  declare(holds3, input) {
     if (this.closed)
       return settledLane(failed(`${this.spec.name} closed`, "read"));
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
-    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    holds3.take(`${this.spec.name}:${key}`, () => this.hold(entry));
     return { current: () => currentOf(entry) };
   }
   // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
@@ -81347,7 +81534,7 @@ var SourceRuns = class {
   // standing fault, so the bar draws the source's fallback beside a ⚠ that
   // says why. A shell run for a session whose environment the host does not
   // hold is refused the same way: the host's own is never a session's.
-  declare(holds2, judged, environment) {
+  declare(holds3, judged, environment) {
     const { digest: digest2 } = judged;
     const run2 = sessionRunOf(judged, environment);
     if (run2.kind === "failed") {
@@ -81355,7 +81542,7 @@ var SourceRuns = class {
       return { digest: digest2, current: () => lane2.current(), fault: () => run2.reason };
     }
     const held = run2.value;
-    const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
+    const lane = this.byKind[held.run.identity.read.kind].declare(holds3, held);
     return environmentOutput(
       {
         digest: digest2,
@@ -81379,11 +81566,11 @@ var SourceRuns = class {
     this.watchMgr.dispose();
   }
 };
-function declareRuns(sourceRuns, holds2, runs, environment, take) {
+function declareRuns(sourceRuns, holds3, runs, environment, take) {
   return new Map(
     [...runs].map(([digest2, judged]) => [
       digest2,
-      take(digest2, () => sourceRuns.declare(holds2, judged, environment))
+      take(digest2, () => sourceRuns.declare(holds3, judged, environment))
     ])
   );
 }
@@ -81448,7 +81635,7 @@ function gitAt({
     hookData2.workspace?.project_dir
   ];
 }
-function declareLanes(owners, holds2, facts, sources) {
+function declareLanes(owners, holds3, facts, sources) {
   const { environment } = facts;
   const pane = facts.hints.tmux ?? null;
   const faults = [];
@@ -81463,18 +81650,18 @@ function declareLanes(owners, holds2, facts, sources) {
   const lanes = {
     git: declare(
       "git",
-      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
+      () => owners.gitProvider.declare(holds3, ...gitAt(facts))
     ),
-    tmux: pane === null ? settledLane(ABSENT2) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
-    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
-    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
+    tmux: pane === null ? settledLane(ABSENT2) : declare("tmux", () => owners.tmuxService.declare(holds3, pane)),
+    hostName: declare("host.name", () => owners.hostService.declareName(holds3)),
+    hostUser: declare("host.user", () => owners.hostService.declareUser(holds3)),
     today: declare(
       "today",
-      () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
+      () => owners.usageStore.declareToday(holds3, facts.hints.claudeConfigDir)
     ),
     transcript: declare(
       "transcript",
-      () => owners.transcriptLanes.declare(holds2, {
+      () => owners.transcriptLanes.declare(holds3, {
         session: facts.hookData.session_id,
         transcript: facts.hookData.transcript_path,
         settings: settingsPathOf(facts.hints, owners.home)
@@ -81488,7 +81675,7 @@ function declareLanes(owners, holds2, facts, sources) {
         declare(
           name,
           () => owners.managedStorage.declare(
-            holds2,
+            holds3,
             folder,
             facts.hookData.session_id
           )
@@ -81499,7 +81686,7 @@ function declareLanes(owners, holds2, facts, sources) {
     // a declared run's own lane carries its watch's fault.
     runs: declareRuns(
       owners.sourceRuns,
-      holds2,
+      holds3,
       sources.runs,
       environment,
       (digest2, take) => ({
@@ -83475,8 +83662,8 @@ var GitDataProvider = class {
   // lane carries; one that throws past that is its clock task's, which every
   // bar shows. So its caller reports none. A declaration that THROWS is a bug
   // neither saw, reported by the view's declaration (declareLanes).
-  declare(holds2, workingDir, projectDir) {
-    const asked = this.asked(holds2, workingDir, projectDir);
+  declare(holds3, workingDir, projectDir) {
+    const asked = this.asked(holds3, workingDir, projectDir);
     if (asked.kind === "settled") return settledLane(asked.outcome);
     const { state } = asked;
     if (state.value.reading.get().kind === "pending") this.misses++;
@@ -83490,11 +83677,11 @@ var GitDataProvider = class {
   // that was mid-wait) would otherwise build a repo, and its watch, that
   // nothing drops, whose period re-arms after every pass while that home
   // holds it.
-  asked(holds2, workingDir, projectDir) {
+  asked(holds3, workingDir, projectDir) {
     if (this.closed) return { kind: "settled", outcome: CLOSED };
     const dir = this.resolution(workingDir, projectDir);
     if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
-    return { kind: "asked", state: this.ask(dir.value, holds2) };
+    return { kind: "asked", state: this.ask(dir.value, holds3) };
   }
   // A watch's window, whatever it says: the repo changed since any read in
   // flight began.
@@ -83626,13 +83813,13 @@ var GitDataProvider = class {
   // first ask, held by `holds` before any pass is queued, so the pass sees its
   // reader, and a first value and the PR's first key ride one pass (which reads
   // the remote beside the value).
-  ask(root, holds2) {
+  ask(root, holds3) {
     const known = this.repos.get(root);
     if (known !== void 0) this.touch(known);
     const state = known ?? this.built(root);
     const before = state.asked.size;
     if (known === void 0) state.asked.add("first");
-    holds2.take(holdKey(root), () => this.hold(state));
+    holds3.take(holdKey(root), () => this.hold(state));
     this.queue(state, before);
     return state;
   }
@@ -84934,10 +85121,10 @@ var SessionUsageStore = class {
   // no scan has answered starts its first one now — before the request or the
   // frame that reads it. The lane answers the set's day sums once a scan has
   // answered; which day of them is the draw's (`projectToday`).
-  declareToday(holds2, claudeConfigDir2) {
+  declareToday(holds3, claudeConfigDir2) {
     if (this.closed) return settledLane(failed("usage store closed", "read"));
     const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
-    const scans = this.scans.declare(holds2, claudePaths);
+    const scans = this.scans.declare(holds3, claudePaths);
     const set2 = this.daySet(claudePaths);
     return {
       current: () => {
@@ -86363,8 +86550,8 @@ var TmuxService = class {
   // [LAW:types-are-the-program] Takes the pane to ask about. "Not in tmux" is
   // the caller's fact (the hint is null), so there is no pane-less call to
   // answer.
-  declare(holds2, hint) {
-    return this.names.declare(holds2, hint);
+  declare(holds3, hint) {
+    return this.names.declare(holds3, hint);
   }
   getStats() {
     return this.names.stats();
@@ -86432,11 +86619,11 @@ var HostService = class {
       read: () => syscall("user", () => os_default.userInfo().username)
     });
   }
-  declareName(holds2) {
-    return this.name.declare(holds2, null);
+  declareName(holds3) {
+    return this.name.declare(holds3, null);
   }
-  declareUser(holds2) {
-    return this.user.declare(holds2, null);
+  declareUser(holds3) {
+    return this.user.declare(holds3, null);
   }
   // How many of its two sources a view holds now.
   held() {
@@ -86875,8 +87062,8 @@ var ManagedStorage = class {
   // A session's declaration of one session's file: held at (folder, session
   // id) until the session's next declaration takes it no more. If its folder
   // demand leaves first, the remaining lane refreshes as absent.
-  declare(holds2, folder, sessionId2) {
-    return this.sessions.declare(holds2, { folder, sessionId: sessionId2 });
+  declare(holds3, folder, sessionId2) {
+    return this.sessions.declare(holds3, { folder, sessionId: sessionId2 });
   }
   // [LAW:one-source-of-truth] The keyed source's one supersede: a program run
   // for the session is about to write this file.
@@ -87176,8 +87363,8 @@ var TranscriptLanes = class {
   source;
   // [LAW:single-enforcer] A session's declaration of its lanes: `holds` takes
   // the entry, so a session no entry follows yet starts its first read now.
-  declare(holds2, followed) {
-    return this.source.declare(holds2, followed);
+  declare(holds3, followed) {
+    return this.source.declare(holds3, followed);
   }
   stats() {
     return this.source.stats();
@@ -88293,10 +88480,10 @@ var sourcesOf2 = (subscriptions, prior) => ({
 var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && a.env.length === b.env.length && a.env.every((name, i2) => b.env[i2] === name);
 function release2({
   stop: stop2,
-  holds: holds2
+  holds: holds3
 }) {
   stop2();
-  holds2.close();
+  holds3.close();
 }
 var Collector = class {
   constructor(deps) {
@@ -88522,13 +88709,13 @@ var Collector = class {
     );
   }
   reader(keys2) {
-    const holds2 = new Holds();
-    const declared = observable.box(this.declared(keys2, holds2), {
+    const holds3 = new Holds();
+    const declared = observable.box(this.declared(keys2, holds3), {
       deep: false
     });
     const owners = computed(() => this.read(declared.get()));
     return {
-      holds: holds2,
+      holds: holds3,
       declared,
       inputs: computed(() => ({
         owners: owners.get(),
@@ -88570,17 +88757,17 @@ var Collector = class {
   // is released (`Holds.declare`).
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
-  declared({ session, request: request2, subscriptions }, holds2) {
+  declared({ session, request: request2, subscriptions }, holds3) {
     const sid = JSON.stringify(session);
     try {
       const {
         result: { lanes, faults },
         acquired,
         released
-      } = holds2.declare(
+      } = holds3.declare(
         () => declareLanes(
           this.deps.owners,
-          holds2,
+          holds3,
           locatorOf(request2),
           subscriptions
         )
@@ -88590,7 +88777,7 @@ var Collector = class {
       if (acquired + released > 0)
         this.deps.log(
           "info",
-          `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
+          `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds3.size}`
         );
       return { ...request2, lanes };
     } catch (e) {
@@ -90949,7 +91136,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       held.count++;
       pendingClicks.set(held.session, held);
     }
-    return inMailbox(async (queuedMs, holds2) => {
+    return inMailbox(async (queuedMs, holds3) => {
       let restore;
       try {
         let made;
@@ -90976,7 +91163,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         }
         if (!starting && startFailure !== null && made.event.kind !== "effect-done")
           return { event: null, slotted: unanswered(startFailure, queuedMs) };
-        holds2(made.event.kind);
+        holds3(made.event.kind);
         const slotted = await inSlot(
           stamped(made),
           queuedMs,
@@ -91069,8 +91256,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   return {
     name,
-    recordingBoundary: (operation) => inMailbox(async (_queued, holds2) => {
-      holds2("recording");
+    recordingBoundary: (operation) => inMailbox(async (_queued, holds3) => {
+      holds3("recording");
       return operation();
     }),
     answer: answer2,
@@ -92692,7 +92879,7 @@ function createDaemon(inputs) {
     },
     restateFaults
   );
-  const heldBy2 = (kind, slot) => {
+  const heldBy3 = (kind, slot) => {
     const event = slot.event();
     return event === null ? [] : [{ kind, about: kind, event }];
   };
@@ -92703,8 +92890,8 @@ function createDaemon(inputs) {
         launcher: launcher.standing(),
         held: [
           ...launchPipes.held(),
-          ...heldBy2("renderer-ended", rendererEnded),
-          ...heldBy2("act-failed", actFailed),
+          ...heldBy3("renderer-ended", rendererEnded),
+          ...heldBy3("act-failed", actFailed),
           ...taskThrows.held()
         ]
       })
