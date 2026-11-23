@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-935",
+      "ref": "refs/pull/935/merge",
+      "sha": "f975b5732f12e1778cc50179720955d9ae4184f5",
+      "timestamp": "2026-11-23T12:29:33.231Z",
+      "commits": [
+        {
+          "sha": "f975b5732f12e1778cc50179720955d9ae4184f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T05:28:29-07:00",
+          "message": "Merge 0c109a77dc50af51d690b1497353e3bf7fca0ca4 into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
+        },
+        {
+          "sha": "0c109a77dc50af51d690b1497353e3bf7fca0ca4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T05:27:59-07:00",
+          "message": "fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "1c5a40b642d34fb27fa6936298168aa0cce67159",
