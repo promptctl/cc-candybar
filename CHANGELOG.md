@@ -1,3 +1,9 @@
+## [1.236.9](https://github.com/promptctl/cc-candybar/compare/v1.236.8...v1.236.9) (2026-11-23)
+
+### Bug Fixes
+
+* **config:** judge a persisted value by its setting's row at load, and refuse a step over a stored non-number ([#935](https://github.com/promptctl/cc-candybar/issues/935)) ([341c494](https://github.com/promptctl/cc-candybar/commit/341c494d0eada140f82fa3ae26638e0ef19e42de))
+
 ## [1.236.8](https://github.com/promptctl/cc-candybar/compare/v1.236.7...v1.236.8) (2026-11-23)
 
 ### Bug Fixes
