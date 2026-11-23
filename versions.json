@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-935",
-      "ref": "refs/pull/935/merge",
-      "sha": "59fd95ee99111269fc9f742a2fc774a30642d357",
-      "timestamp": "2026-11-23T13:13:16.863Z",
-      "commits": [
-        {
-          "sha": "59fd95ee99111269fc9f742a2fc774a30642d357",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T13:12:14Z",
-          "message": "Merge 78f7887a9d0dcd617180b5e063a4df5f7c070944 into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
-        },
-        {
-          "sha": "78f7887a9d0dcd617180b5e063a4df5f7c070944",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:11:53-07:00",
-          "message": "fix(config): take a persisted name's membership from the field's own row and judge a segment palette by the loader's segment schema\n"
-        },
-        {
-          "sha": "d02f466c014189fab99b014e3b396a64a5316124",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T06:02:15-07:00",
-          "message": "fix(config): carry a persist target's file place and schema once, judge a segment's palette and a stepper's field by it, and step only over a stored integer\n"
-        },
-        {
-          "sha": "8341974020ab38bb62c072aa2d3c11cbc8e7b57c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T05:46:00-07:00",
-          "message": "fix(config): judge a persisted value by the loader's verdict on the file it writes, and refuse a step over any stored value that is no in-range integer\n"
-        },
-        {
-          "sha": "0c109a77dc50af51d690b1497353e3bf7fca0ca4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T05:27:59-07:00",
-          "message": "fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1c5a40b642d34fb27fa6936298168aa0cce67159",
-      "timestamp": "2026-11-23T12:19:44.138Z",
+      "sha": "341c494d0eada140f82fa3ae26638e0ef19e42de",
+      "timestamp": "2026-11-23T13:21:09.087Z",
       "commits": [
         {
-          "sha": "1c5a40b642d34fb27fa6936298168aa0cce67159",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-23T12:18:34Z",
-          "message": "chore(release): set `package.json` to 1.236.8\n\n## [1.236.8](https://github.com/promptctl/cc-candybar/compare/v1.236.7...v1.236.8) (2026-11-23)\n\n### Bug Fixes\n\n* **settings:** fold every pick through one setting table and warn on stale picks ([#901](https://github.com/promptctl/cc-candybar/issues/901)) ([8c5b69d](https://github.com/promptctl/cc-candybar/commit/8c5b69d401bf9d1fbab5442331abc77b0ebb11f6))\n"
+          "sha": "341c494d0eada140f82fa3ae26638e0ef19e42de",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:20:09-07:00",
+          "message": "fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number (#935)\n\n* fix(config): judge a persisted value by its setting's row at load, and refuse a step over a stored non-number\n\n* fix(config): judge a persisted value by the loader's verdict on the file it writes, and refuse a step over any stored value that is no in-range integer\n\n* fix(config): carry a persist target's file place and schema once, judge a segment's palette and a stepper's field by it, and step only over a stored integer\n\n* fix(config): take a persisted name's membership from the field's own row and judge a segment palette by the loader's segment schema"
         }
       ]
     }

@@ -43312,6 +43312,27 @@ function wireKindOf(field) {
   const { domain } = row;
   return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
 }
+function optionDomainOf(key) {
+  if (!Object.hasOwn(GLOBAL_FIELDS, key)) return null;
+  const row = GLOBAL_FIELDS[key];
+  if (row.kind === "text") return null;
+  const { domain } = row;
+  return typeof domain === "object" && "from" in domain && typeof domain.from === "string" ? domain.from : null;
+}
+var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
+function liftToFile(kind, raw) {
+  if (kind === "string") return { value: raw };
+  if (kind === "number") {
+    const n = Number(raw);
+    return Number.isInteger(n) && String(n) === raw ? { value: n } : { reason: `expects an integer written plainly, got "${raw}"` };
+  }
+  if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
+  if (BOOLEAN_FALSY.has(raw)) return { value: false };
+  return {
+    reason: `expects boolean-ish (1, 0, true, false), got "${raw}"`
+  };
+}
 function settingControlDomain(field) {
   return rangedDomain(GLOBAL_FIELDS[field]);
 }
@@ -49840,340 +49861,81 @@ function numericGlobalsSeeds(globals) {
 
 // src/config/loader/persist-target.ts
 init_globals();
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
-  }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
-}
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
-}
 
-// src/renderer/bundled-presets.ts
+// src/config/loader/segments.ts
 init_globals();
 
-// src/config/default-dsl-config.ts
+// src/config/segment-groups.ts
 init_globals();
-
-// src/config/dsl-loader.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/merge.ts
-init_globals();
-
-// src/config/payload-inputs.ts
-init_globals();
-function effectiveInput(field, effectiveVar) {
-  const row = GLOBAL_FIELDS[field];
-  const kind = wireKindOf(field);
-  const floor3 = row.kind === "session" || row.kind === "config" ? row.floor : "";
-  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor3 };
-}
-var EFFECTIVE_INPUTS = Object.fromEntries(
-  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
-    effectiveVar,
-    effectiveInput(field, effectiveVar)
-  ])
-);
-var LANE_FEED_TYPES = {
-  subscribers: "number",
-  fps: "number",
-  shown: "boolean"
+var SEGMENT_GROUPS = [
+  "location",
+  "git",
+  "model-context",
+  "cost-limits",
+  "activity",
+  "session-tools"
+];
+var OTHER_GROUP = "other";
+var LIBRARY_GROUPS = [
+  ...SEGMENT_GROUPS,
+  OTHER_GROUP
+];
+var GROUP_LABELS = {
+  location: "location",
+  git: "git",
+  "model-context": "model & context",
+  "cost-limits": "cost & limits",
+  activity: "activity",
+  "session-tools": "session tools",
+  other: "other"
 };
-var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
-var TERM_COLS_FLOOR = 80;
-var PAYLOAD_INPUTS = {
-  project_dir: {
-    kind: "input",
-    path: "workspace.project_dir",
-    default: ""
-  },
-  "session.id": { kind: "input", path: "session_id", default: "" },
-  // Transcript path (a top-level hookData field, spread onto the payload
-  // root by composePayload). Read by the quick-action tray's
-  // openTranscript action — pass-through, no projection.
-  transcript_path: {
-    kind: "input",
-    path: "transcript_path",
-    default: ""
-  },
-  // The session's resume command and the config file it renders from
-  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`. Every payload carries a resume command,
-  // so it has no default: a payload without one is a recorded error. A config
-  // path of "" is "none", which hides `↗ config`.
-  resume_command: { kind: "input", path: "resumeCommand" },
-  config_path: { kind: "input", path: "configPath", default: "" },
-  // [LAW:one-source-of-truth] The value every setting and config-only global
-  // renders with, whichever rung produced it — the theme, style and effect as
-  // the view settles them, every other one as the daemon resolved it. A
-  // trigger's label and a picker's current-selection mark read it back, so
-  // the label and the bar trace to one resolution. The daemon always provides
-  // each; the default is the unreachable-absence floor.
-  ...EFFECTIVE_INPUTS,
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
-  // file author the active preset's root, resolved alongside preset.effective
-  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
-  // customized" segment gates on this directly; a hand-authored config can
-  // read it too for its own reset affordance.
-  "preset.customized": {
-    kind: "input",
-    path: "preset.customized",
-    type: "boolean",
-    default: false
-  },
-  // Does the bundled default declare the active preset (RenderPayload
-  // .preset.bundled) — false for a preset the user authored, which the
-  // settings menu offers to delete.
-  "preset.bundled": {
-    kind: "input",
-    path: "preset.bundled",
-    type: "boolean",
-    default: true
-  },
-  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
-  // per field of LANE_FEED_TYPES.
-  ...Object.fromEntries(
-    LANE_NAMES.flatMap(
-      (lane) => LANE_FEED_FIELDS.map((field) => [
-        laneFeedVar(lane, field),
-        {
-          kind: "input",
-          path: laneFeedVar(lane, field),
-          type: LANE_FEED_TYPES[field],
-          default: UNFOLLOWED[field]
-        }
-      ])
-    )
-  ),
-  // Who this render is drawn for (Drawing): the daemon sets it beside the
-  // payload, and a caller rendering without one draws as a request does.
-  [drawingVar("by")]: {
-    kind: "input",
-    path: drawingVar("by"),
-    default: ANSWERING.by
-  },
-  [drawingVar("fps")]: {
-    kind: "input",
-    path: drawingVar("fps"),
-    type: "number",
-    default: 0
-  },
-  // The settings door's indicator (src/render/diagnostics.ts,
-  // DiagnosticsProjection): its label, "" while there is nothing to show, the
-  // colours of the worst level the draw's diagnostics hold, and the key of
-  // the message its click opens.
-  ...Object.fromEntries(
-    ["label", "fg", "bg", "open"].map((field) => [
-      `diagnostics.${field}`,
-      { kind: "input", path: `diagnostics.${field}`, default: "" }
-    ])
-  ),
-  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
-  // carries it, the same width a draw's `opts.width` holds: the value a row
-  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
-  // it and the wrap algebra can never disagree. Never cached: a resize is just
-  // a new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without a bound width.
-  "term.cols": {
-    kind: "input",
-    path: "term.cols",
-    type: "number",
-    default: TERM_COLS_FLOOR
-  },
-  // The tmux pane this session's Claude Code runs in, as its client reported
-  // it; "" outside tmux (and for a client too old to say). It is the pane a
-  // `slash` click types into, so IN_TMUX below is the gate for one.
-  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
-  // Claude Code's auto-compact window as its `/autocompact` last wrote it
-  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
-  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
-  // to the model's context window; `lower`/`higher` are the windows − and +
-  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
-  // settings file the daemon could not read, and the only field set when it
-  // is.
-  "autocompact.window": {
-    kind: "input",
-    path: "autocompact.window",
-    type: "number",
-    default: -1
-  },
-  ...Object.fromEntries(
-    ["applied", "lower", "higher"].map((field) => [
-      `autocompact.${field}`,
-      {
-        kind: "input",
-        path: `autocompact.${field}`,
-        type: "number",
-        default: 0
-      }
-    ])
-  ),
-  "autocompact.error": {
-    kind: "input",
-    path: "autocompact.error",
-    default: ""
-  },
-  // Where the session is, as the daemon read it from the checkout on the
-  // request, so these answer before the git lane does. `noRepo` is a read that found none.
-  "location.main": { kind: "input", path: "location.main", default: "" },
-  "location.worktree": {
-    kind: "input",
-    path: "location.worktree",
-    default: ""
-  },
-  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
-  "location.noRepo": {
-    kind: "input",
-    path: "location.noRepo",
-    type: "boolean",
-    default: false
-  },
-  // The repo's browsable web page, transposed from its remote by the daemon.
-  // "" is the genuine "no remote a browser can open" (local-only repo, bare
-  // path remote) — the quick-action tray's link reads that value, not a flag.
-  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
-};
-var DRAW_PROJECTIONS = {
-  today: "the day the draw is at",
-  feeds: "the frames a lane was sent up to the draw's instant",
-  drawing: "who the draw is for",
-  diagnostics: "the errors and warnings the draw owes its reader"
-};
-function drawProjectionAt(path31) {
-  const root = path31.split(".", 1)[0];
-  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
-}
-var SLOT_PATHS = Object.fromEntries(
-  EXPRESSION_SLOTS.map((slot) => [
-    slot,
-    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
-  ])
-);
-function slotAt(path31) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path31);
-}
 
-// src/config/loader/merge.ts
-function mergeWithDefault(raw, dflt) {
-  return {
-    globals: { ...dflt.globals, ...raw.globals ?? {} },
-    // [LAW:single-enforcer] The daemon's payload inputs have the last word
-    // over every base and every layer, so no config reads another value.
-    variables: {
-      ...dflt.variables,
-      ...raw.variables ?? {},
-      ...PAYLOAD_INPUTS
-    },
-    segments: overlayByName(
-      dflt.segments,
-      segmentDeltas(dflt.segments, raw.segments ?? {})
-    ),
-    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
-    // declares only the actions that differ from the bundled default (which
-    // ships none).
-    actions: { ...dflt.actions, ...raw.actions ?? {} },
-    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
-    // overrides one adaptation by re-declaring its name; the bundled stdlib
-    // (incl. the "none" identity floor) survives every merge by construction.
-    styles: { ...dflt.styles, ...raw.styles ?? {} },
-    // [LAW:one-source-of-truth] presets merge by name then by field, the
-    // segments overlay — a user retunes one arrangement's root without
-    // restating its globals; the bundled stdlib (incl. the "default"
-    // empty-fragment floor effectivePresetName collapses to) survives every
-    // merge by construction, exactly as styles' "none" does.
-    presets: overlayByName(
-      dflt.presets,
-      presetDeltas(dflt.presets, raw.presets ?? {})
-    ),
-    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
-    // field, the presets overlay — a file setting one theme's shade keeps the
-    // variation and style the bundled entry for that theme carries.
-    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
-    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
-    // `globals` cascade above, not the by-name cascades around it, because it
-    // IS a globals fragment: a user retuning edit mode's separator says nothing
-    // about its `endcaps`, exactly as a user setting `globals.padding` says
-    // nothing about `globals.endcaps`.
-    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
-    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
-    // overrides one formatter helper by re-declaring its name; the rest inherit
-    // from the bundled default.
-    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
-  };
-}
-function segmentDeltas(base, over2) {
-  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
-  return Object.fromEntries(
-    Object.entries(over2).map(([name, delta]) => [
-      name,
-      byName(name, "partials", byName(name, "settings", delta))
-    ])
-  );
-}
-function presetDeltas(base, over2) {
-  return Object.fromEntries(
-    Object.entries(over2).map(([name, delta]) => [
-      name,
-      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
-    ])
-  );
-}
-function overlayByName(base, over2) {
-  return {
-    ...base,
-    ...Object.fromEntries(
-      Object.entries(over2).map(([name, delta]) => [
-        name,
-        { ...base[name], ...delta }
-      ])
-    )
-  };
+// src/config/loader/renamed-segments.ts
+init_globals();
+var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
+  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
+  // The one-line summary became the collapsed form of `gitaculous`
+  // (brandon-git-segment-ixf.tl0).
+  ["git", { kind: "built-in", to: "gitaculous" }],
+  // The settings menu's anchor left `settings.` so `.settings` could be a
+  // placement's own settings (brandon-segment-settings-i4n).
+  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
+  // lit's ticket moved out of the bundled bar into the plugin lit's repository
+  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  [
+    "ticket",
+    {
+      kind: "plugin",
+      to: "plugins.lit.ticket",
+      source: "promptctl/links-issue-tracker"
+    }
+  ],
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
+    }
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
+    }
+  ]
+]);
+function renamedHint(name) {
+  const renamed = RENAMED_SEGMENTS.get(name);
+  if (renamed === void 0) return "";
+  switch (renamed.kind) {
+    case "built-in":
+      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
+    case "plugin":
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
+    case "removed":
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
+  }
 }
 
 // src/config/loader/variables.ts
@@ -50698,82 +50460,6 @@ function variablesMapJson() {
   return { type: "object", additionalProperties: variableDeclJson() };
 }
 
-// src/config/loader/segments.ts
-init_globals();
-
-// src/config/segment-groups.ts
-init_globals();
-var SEGMENT_GROUPS = [
-  "location",
-  "git",
-  "model-context",
-  "cost-limits",
-  "activity",
-  "session-tools"
-];
-var OTHER_GROUP = "other";
-var LIBRARY_GROUPS = [
-  ...SEGMENT_GROUPS,
-  OTHER_GROUP
-];
-var GROUP_LABELS = {
-  location: "location",
-  git: "git",
-  "model-context": "model & context",
-  "cost-limits": "cost & limits",
-  activity: "activity",
-  "session-tools": "session tools",
-  other: "other"
-};
-
-// src/config/loader/renamed-segments.ts
-init_globals();
-var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
-  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
-  // The one-line summary became the collapsed form of `gitaculous`
-  // (brandon-git-segment-ixf.tl0).
-  ["git", { kind: "built-in", to: "gitaculous" }],
-  // The settings menu's anchor left `settings.` so `.settings` could be a
-  // placement's own settings (brandon-segment-settings-i4n).
-  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
-  // lit's ticket moved out of the bundled bar into the plugin lit's repository
-  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
-  [
-    "ticket",
-    {
-      kind: "plugin",
-      to: "plugins.lit.ticket",
-      source: "promptctl/links-issue-tracker"
-    }
-  ],
-  [
-    "ceiling",
-    {
-      kind: "removed",
-      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
-    }
-  ],
-  [
-    "themeSwitcher",
-    {
-      kind: "removed",
-      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
-    }
-  ]
-]);
-function renamedHint(name) {
-  const renamed = RENAMED_SEGMENTS.get(name);
-  if (renamed === void 0) return "";
-  switch (renamed.kind) {
-    case "built-in":
-      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
-    case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
-    case "removed":
-      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
-  }
-}
-
 // src/config/loader/settings.ts
 init_globals();
 var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -51204,6 +50890,375 @@ var SEGMENT_DEF_NAME = "Segment";
 var SEGMENT_DELTA_DEF_NAME = "SegmentDelta";
 var SEGMENT_REF = `#/definitions/${SEGMENT_DEF_NAME}`;
 var SEGMENT_DELTA_REF = `#/definitions/${SEGMENT_DELTA_DEF_NAME}`;
+
+// src/config/loader/persist-target.ts
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
+}
+var PLACE_SCHEMAS = {
+  globals: GLOBALS_SCHEMA,
+  "preset-globals": PRESET_GLOBALS_SCHEMA,
+  "theme-default": THEME_DEFAULT_SCHEMA,
+  "segment-palette": SEGMENT_DELTA_SCHEMA
+};
+function wireKindOfTarget(target) {
+  return target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
+}
+function persistedValueOf(target, raw) {
+  return liftToFile(wireKindOfTarget(target), raw);
+}
+function holdsInteger(target) {
+  return wireKindOfTarget(target) === "number";
+}
+function persistedValueIssue(ctx, target, raw) {
+  const lifted = persistedValueOf(target, raw);
+  if ("reason" in lifted) return lifted.reason;
+  const steps2 = persistPath(target);
+  const scratch = {
+    ...ctx,
+    source: "",
+    issues: [],
+    groups: [],
+    unplaced: [],
+    inherited: []
+  };
+  record(scratch, PLACE_SCHEMAS[target.scope], steps2.slice(0, -1).join("."), {
+    [steps2[steps2.length - 1]]: lifted.value
+  });
+  return scratch.issues[0]?.message ?? null;
+}
+
+// src/renderer/bundled-presets.ts
+init_globals();
+
+// src/config/default-dsl-config.ts
+init_globals();
+
+// src/config/dsl-loader.ts
+init_globals();
+var import_node_path7 = __toESM(require_path_browserify(), 1);
+
+// src/config/loader/merge.ts
+init_globals();
+
+// src/config/payload-inputs.ts
+init_globals();
+function effectiveInput(field, effectiveVar) {
+  const row = GLOBAL_FIELDS[field];
+  const kind = wireKindOf(field);
+  const floor3 = row.kind === "session" || row.kind === "config" ? row.floor : "";
+  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor3 };
+}
+var EFFECTIVE_INPUTS = Object.fromEntries(
+  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
+    effectiveVar,
+    effectiveInput(field, effectiveVar)
+  ])
+);
+var LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean"
+};
+var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
+var TERM_COLS_FLOOR = 80;
+var PAYLOAD_INPUTS = {
+  project_dir: {
+    kind: "input",
+    path: "workspace.project_dir",
+    default: ""
+  },
+  "session.id": { kind: "input", path: "session_id", default: "" },
+  // Transcript path (a top-level hookData field, spread onto the payload
+  // root by composePayload). Read by the quick-action tray's
+  // openTranscript action — pass-through, no projection.
+  transcript_path: {
+    kind: "input",
+    path: "transcript_path",
+    default: ""
+  },
+  // The session's resume command and the config file it renders from
+  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
+  // tray's `⎘ resume` and `↗ config`. Every payload carries a resume command,
+  // so it has no default: a payload without one is a recorded error. A config
+  // path of "" is "none", which hides `↗ config`.
+  resume_command: { kind: "input", path: "resumeCommand" },
+  config_path: { kind: "input", path: "configPath", default: "" },
+  // [LAW:one-source-of-truth] The value every setting and config-only global
+  // renders with, whichever rung produced it — the theme, style and effect as
+  // the view settles them, every other one as the daemon resolved it. A
+  // trigger's label and a picker's current-selection mark read it back, so
+  // the label and the bar trace to one resolution. The daemon always provides
+  // each; the default is the unreachable-absence floor.
+  ...EFFECTIVE_INPUTS,
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+  // file author the active preset's root, resolved alongside preset.effective
+  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
+  // customized" segment gates on this directly; a hand-authored config can
+  // read it too for its own reset affordance.
+  "preset.customized": {
+    kind: "input",
+    path: "preset.customized",
+    type: "boolean",
+    default: false
+  },
+  // Does the bundled default declare the active preset (RenderPayload
+  // .preset.bundled) — false for a preset the user authored, which the
+  // settings menu offers to delete.
+  "preset.bundled": {
+    kind: "input",
+    path: "preset.bundled",
+    type: "boolean",
+    default: true
+  },
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap(
+      (lane) => LANE_FEED_FIELDS.map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: LANE_FEED_TYPES[field],
+          default: UNFOLLOWED[field]
+        }
+      ])
+    )
+  ),
+  // Who this render is drawn for (Drawing): the daemon sets it beside the
+  // payload, and a caller rendering without one draws as a request does.
+  [drawingVar("by")]: {
+    kind: "input",
+    path: drawingVar("by"),
+    default: ANSWERING.by
+  },
+  [drawingVar("fps")]: {
+    kind: "input",
+    path: drawingVar("fps"),
+    type: "number",
+    default: 0
+  },
+  // The settings door's indicator (src/render/diagnostics.ts,
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
+  ...Object.fromEntries(
+    ["label", "fg", "bg", "open"].map((field) => [
+      `diagnostics.${field}`,
+      { kind: "input", path: `diagnostics.${field}`, default: "" }
+    ])
+  ),
+  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
+  "term.cols": {
+    kind: "input",
+    path: "term.cols",
+    type: "number",
+    default: TERM_COLS_FLOOR
+  },
+  // The tmux pane this session's Claude Code runs in, as its client reported
+  // it; "" outside tmux (and for a client too old to say). It is the pane a
+  // `slash` click types into, so IN_TMUX below is the gate for one.
+  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
+  // Claude Code's auto-compact window as its `/autocompact` last wrote it
+  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+  // to the model's context window; `lower`/`higher` are the windows − and +
+  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+  // settings file the daemon could not read, and the only field set when it
+  // is.
+  "autocompact.window": {
+    kind: "input",
+    path: "autocompact.window",
+    type: "number",
+    default: -1
+  },
+  ...Object.fromEntries(
+    ["applied", "lower", "higher"].map((field) => [
+      `autocompact.${field}`,
+      {
+        kind: "input",
+        path: `autocompact.${field}`,
+        type: "number",
+        default: 0
+      }
+    ])
+  ),
+  "autocompact.error": {
+    kind: "input",
+    path: "autocompact.error",
+    default: ""
+  },
+  // Where the session is, as the daemon read it from the checkout on the
+  // request, so these answer before the git lane does. `noRepo` is a read that found none.
+  "location.main": { kind: "input", path: "location.main", default: "" },
+  "location.worktree": {
+    kind: "input",
+    path: "location.worktree",
+    default: ""
+  },
+  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
+  "location.noRepo": {
+    kind: "input",
+    path: "location.noRepo",
+    type: "boolean",
+    default: false
+  },
+  // The repo's browsable web page, transposed from its remote by the daemon.
+  // "" is the genuine "no remote a browser can open" (local-only repo, bare
+  // path remote) — the quick-action tray's link reads that value, not a flag.
+  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
+};
+var DRAW_PROJECTIONS = {
+  today: "the day the draw is at",
+  feeds: "the frames a lane was sent up to the draw's instant",
+  drawing: "who the draw is for",
+  diagnostics: "the errors and warnings the draw owes its reader"
+};
+function drawProjectionAt(path31) {
+  const root = path31.split(".", 1)[0];
+  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
+}
+var SLOT_PATHS = Object.fromEntries(
+  EXPRESSION_SLOTS.map((slot) => [
+    slot,
+    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
+  ])
+);
+function slotAt(path31) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path31);
+}
+
+// src/config/loader/merge.ts
+function mergeWithDefault(raw, dflt) {
+  return {
+    globals: { ...dflt.globals, ...raw.globals ?? {} },
+    // [LAW:single-enforcer] The daemon's payload inputs have the last word
+    // over every base and every layer, so no config reads another value.
+    variables: {
+      ...dflt.variables,
+      ...raw.variables ?? {},
+      ...PAYLOAD_INPUTS
+    },
+    segments: overlayByName(
+      dflt.segments,
+      segmentDeltas(dflt.segments, raw.segments ?? {})
+    ),
+    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
+    // declares only the actions that differ from the bundled default (which
+    // ships none).
+    actions: { ...dflt.actions, ...raw.actions ?? {} },
+    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
+    // overrides one adaptation by re-declaring its name; the bundled stdlib
+    // (incl. the "none" identity floor) survives every merge by construction.
+    styles: { ...dflt.styles, ...raw.styles ?? {} },
+    // [LAW:one-source-of-truth] presets merge by name then by field, the
+    // segments overlay — a user retunes one arrangement's root without
+    // restating its globals; the bundled stdlib (incl. the "default"
+    // empty-fragment floor effectivePresetName collapses to) survives every
+    // merge by construction, exactly as styles' "none" does.
+    presets: overlayByName(
+      dflt.presets,
+      presetDeltas(dflt.presets, raw.presets ?? {})
+    ),
+    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
+    // field, the presets overlay — a file setting one theme's shade keeps the
+    // variation and style the bundled entry for that theme carries.
+    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
+    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
+    // `globals` cascade above, not the by-name cascades around it, because it
+    // IS a globals fragment: a user retuning edit mode's separator says nothing
+    // about its `endcaps`, exactly as a user setting `globals.padding` says
+    // nothing about `globals.endcaps`.
+    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
+    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
+    // overrides one formatter helper by re-declaring its name; the rest inherit
+    // from the bundled default.
+    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
+  };
+}
+function segmentDeltas(base, over2) {
+  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
+  return Object.fromEntries(
+    Object.entries(over2).map(([name, delta]) => [
+      name,
+      byName(name, "partials", byName(name, "settings", delta))
+    ])
+  );
+}
+function presetDeltas(base, over2) {
+  return Object.fromEntries(
+    Object.entries(over2).map(([name, delta]) => [
+      name,
+      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
+    ])
+  );
+}
+function overlayByName(base, over2) {
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(over2).map(([name, delta]) => [
+        name,
+        { ...base[name], ...delta }
+      ])
+    )
+  };
+}
 
 // src/config/loader/layout.ts
 init_globals();
@@ -61455,36 +61510,28 @@ function missingSegmentHint(name, segments) {
   return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
 }
 function validateCrossReferences(ctx, cfg, authored, presence2) {
-  const styleFragments = [
-    [["globals"], cfg.globals.style, "globals.endcaps"],
-    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
+  const memberDomains = perConfigDomainsFor(cfg);
+  const fragments = [
+    [["globals"], cfg.globals],
+    [["editGlobals"], cfg.editGlobals],
     ...Object.entries(cfg.presets).map(
-      ([name, preset]) => [
-        ["presets", name, "globals"],
-        preset.globals?.style,
-        `presets.${name}.globals.endcaps`
-      ]
+      ([name, preset]) => [["presets", name, "globals"], preset.globals ?? {}]
     ),
     ...Object.entries(cfg.themeDefaults).map(
-      ([theme24, fragment]) => [["themeDefaults", theme24], fragment.style, "globals.endcaps"]
+      ([theme24, fragment]) => [["themeDefaults", theme24], fragment]
     )
   ];
-  for (const [at, name, endcapsAt] of styleFragments) {
-    if (name === void 0 || isExpression(name) || Object.prototype.hasOwnProperty.call(cfg.styles, name))
-      continue;
-    const where = `${at.join(".")}.style`;
-    ctx.issues.push({
-      path: where,
-      message: isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
-      line: findKeyLine(ctx.source, [...at, "style"])
-    });
-  }
-  if (cfg.globals.preset !== void 0 && !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)) {
-    ctx.issues.push({
-      path: "globals.preset",
-      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
-      line: findKeyLine(ctx.source, ["globals", "preset"])
-    });
+  for (const [at, fragment] of fragments) {
+    for (const [field, value] of Object.entries(fragment)) {
+      if (typeof value !== "string") continue;
+      const message = undeclaredMemberMessage(memberDomains, at, field, value);
+      if (message === null) continue;
+      ctx.issues.push({
+        path: `${at.join(".")}.${field}`,
+        message,
+        line: findKeyLine(ctx.source, [...at, field])
+      });
+    }
   }
   const templateScope = templateScopeOf(cfg);
   for (const name of templateScope.names) {
@@ -61961,6 +62008,49 @@ function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
     line: findKeyLine(ctx.source, keyPath)
   });
 }
+function endcapsHome(at) {
+  return at[0] === "themeDefaults" ? "globals.endcaps" : [...at, "endcaps"].join(".");
+}
+function undeclaredMemberMessage(domains, at, field, name) {
+  const domain = optionDomainOf(field);
+  const members = domain === null ? void 0 : domains.get(domain)?.members;
+  if (members === void 0 || isExpression(name) || members.includes(name)) {
+    return null;
+  }
+  const where = `${at.join(".")}.${field}`;
+  return field === "style" && isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsHome(at)) : `${where} "${name}" does not match any declared ${field} (have: ${members.join(", ")})`;
+}
+function checkPersistedValues(ctx, name, a, optionDomains) {
+  const target = parsePersistTarget(a.persist);
+  const writes = valuesWritten(a, optionDomains);
+  if (target === null || target.scope === "preset-root" || writes === null) {
+    return;
+  }
+  if ("min" in a && !holdsInteger(target)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer \u2014 use "to", "from", or "cycle" instead`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"])
+    });
+    return;
+  }
+  const steps2 = persistPath(target);
+  const at = steps2.slice(0, -1);
+  const reasonOf2 = (raw) => persistedValueIssue(ctx, target, raw) ?? undeclaredMemberMessage(optionDomains, at, steps2[steps2.length - 1], raw);
+  for (const field of new Set(writes.map((w) => w.field))) {
+    const refused2 = writes.filter((w) => w.field === field).flatMap((w) => {
+      const reason = reasonOf2(w.value);
+      return reason === null ? [] : [{ value: w.value, reason }];
+    });
+    if (refused2.length === 0) continue;
+    const where = `actions.${name}.${field}`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: persisting ${shownValues(refused2.map((r) => r.value))} would write a file the loader refuses \u2014 ${refused2[0].reason}`,
+      line: findKeyLine(ctx.source, ["actions", name, field])
+    });
+  }
+}
 function checkSettingWrites(ctx, name, a, row, optionDomains) {
   const key = a.set;
   const { domain } = row;
@@ -61973,7 +62063,7 @@ function checkSettingWrites(ctx, name, a, row, optionDomains) {
     });
     return;
   }
-  const writes = setWrites(a, optionDomains);
+  const writes = valuesWritten(a, optionDomains);
   if (writes === ANY_INTEGER) {
     ctx.issues.push({
       path: `actions.${name}.int`,
@@ -62004,19 +62094,22 @@ function checkSettingWrites(ctx, name, a, row, optionDomains) {
     return;
   }
   for (const field of new Set(outside.map((w) => w.field))) {
-    const values2 = outside.filter((w) => w.field === field).map((w) => JSON.stringify(w.value));
-    const shown = values2.length <= REPORTED_VALUES ? values2.join(", ") : `${values2.slice(0, REPORTED_VALUES).join(", ")} and ${values2.length - REPORTED_VALUES} more`;
+    const values2 = outside.filter((w) => w.field === field).map((w) => w.value);
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
+      message: `${where}: ${shownValues(values2)} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field])
     });
   }
 }
 var REPORTED_VALUES = 3;
+function shownValues(values2) {
+  const quoted2 = values2.map((v) => JSON.stringify(v));
+  return quoted2.length <= REPORTED_VALUES ? quoted2.join(", ") : `${quoted2.slice(0, REPORTED_VALUES).join(", ")} and ${quoted2.length - REPORTED_VALUES} more`;
+}
 var ANY_INTEGER = /* @__PURE__ */ Symbol("any integer");
-function setWrites(a, optionDomains) {
+function valuesWritten(a, optionDomains) {
   if ("to" in a) return [{ field: "to", value: a.to }];
   if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
   if ("from" in a) {
@@ -62031,7 +62124,7 @@ function setWrites(a, optionDomains) {
       { field: "max", value: String(a.max) }
     ];
   }
-  return ANY_INTEGER;
+  return "int" in a ? ANY_INTEGER : null;
 }
 function subjects(record2, subject) {
   return Object.entries(record2).filter(([name]) => subject(name));
@@ -62049,6 +62142,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       });
       continue;
     }
+    if ("persist" in a) checkPersistedValues(ctx, name, a, optionDomains);
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -62144,14 +62238,6 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
         message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    if ("min" in a) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) \u2014 use "to", "from", or "cycle" instead`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
     }
@@ -75257,7 +75343,10 @@ function stateKeyShown(config, sessionPick, key) {
   return sessionPick(key);
 }
 function configKeySeed(globals, key) {
-  const seed = numericGlobalsSeeds(globals).get(key);
+  const target = parsePersistTarget(key);
+  const seed = numericGlobalsSeeds(globals).get(
+    target !== null && "field" in target ? target.field : key
+  );
   return seed === void 0 ? null : String(seed);
 }
 
@@ -75430,26 +75519,12 @@ function closingView(store, nestOf2, log) {
 // src/renderer/config-file-store.ts
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
-var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
-  const target = requireValueTarget(key);
-  const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
-  if (kind === "string") return JSON.stringify(raw);
-  if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      throw new Error(
-        `persistValueText: "${key}" expects a number, got "${raw}"`
-      );
-    }
-    return String(n);
+  const lifted = persistedValueOf(requireValueTarget(key), raw);
+  if ("reason" in lifted) {
+    throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
-  if (BOOLEAN_TRUTHY.has(raw)) return "true";
-  if (BOOLEAN_FALSY.has(raw)) return "false";
-  throw new Error(
-    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
-  );
+  return JSON.stringify(lifted.value);
 }
 function docOf(text4) {
   return /^\s*$/.test(text4) ? null : parseDocument(text4);
@@ -75764,11 +75839,12 @@ function refuseNewDrops(into, was, will) {
     );
   }
 }
-function readValue(text4, key) {
+function readDeclared(text4, key) {
   const target = requireValueTarget(key);
   const doc = docOf(text4 ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
-  return node !== void 0 && "value" in node ? node.value : void 0;
+  if (node === void 0) return { kind: "none" };
+  return node.kind === "number" && Number.isInteger(node.value) ? { kind: "integer", value: node.value } : { kind: "other", source: textOf(text4 ?? "", node) };
 }
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
@@ -76330,11 +76406,16 @@ var stepConfig = (args, ctx) => {
     key
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(
+  const declared = readDeclared(
     requireLayerText(into.path, store.read(into.path)),
     landing.key
   );
-  const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
+  if (declared.kind === "other") {
+    throw new BadVerbArgs(
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`
+    );
+  }
+  const current = declared.kind === "integer" ? clampTo(params, declared.value) : stepFrom(
     "step-config",
     key,
     params,
