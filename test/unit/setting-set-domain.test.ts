@@ -220,7 +220,7 @@ describe("a persist is judged by the loader's verdict on the file it writes", ()
     // enum and a theme's default style refuse it, a theme or style rule loads.
     [
       "{ persist: 'padding', to: '{{ .session.model }}' }",
-      refused('"\\{\\{ \\.session\\.model \\}\\}"', "expects a number"),
+      refused('"\\{\\{ \\.session\\.model \\}\\}"', "expects an integer"),
     ],
     [
       "{ persist: 'shade', to: '{{ .session.model }}' }",
@@ -232,6 +232,26 @@ describe("a persist is judged by the loader's verdict on the file it writes", ()
         '"\\{\\{ \\.session\\.model \\}\\}"',
         "a rule is not allowed here",
       ),
+    ],
+    // A segment's palette is judged by the loader's palette check, as the
+    // theme default and the top-level field are.
+    [
+      "{ persist: 'segments.s.palette', to: 'no-such-theme' }",
+      refused('"no-such-theme"', 'Unknown palette "no-such-theme"'),
+    ],
+    [
+      "{ persist: 'segments.s.palette', cycle: ['no-such-theme', 'also-not'] }",
+      refused('"no-such-theme", "also-not"', 'Unknown palette "no-such-theme"'),
+    ],
+    // The file holds the integer as the session does: as written, plainly.
+    [
+      "{ persist: 'padding', to: '0x10' }",
+      refused('"0x10"', "expects an integer written plainly"),
+    ],
+    // A stepper writes integers, which a boolean field does not hold.
+    [
+      "{ persist: 'autoWrap', min: 0, max: 1, by: 1 }",
+      /actions\.pick: a stepper writes the integers from 0 to 1, and autoWrap does not hold an integer/,
     ],
     // A field no session pick sets is judged by its own schema all the same.
     [

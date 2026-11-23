@@ -40,12 +40,7 @@ import {
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
-import {
-  fileFieldIssue,
-  listGlobalsFieldNames,
-  removedGlobalPointer,
-} from "./globals.js";
-import { fileValueOf } from "../globals-fields.js";
+import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
 import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import { describeControlDomain } from "../setting-control.js";
 import { settingTable, type SettingRow } from "../setting-table.js";
@@ -58,7 +53,12 @@ import {
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
-import { parsePersistTarget, type PersistTarget } from "./persist-target.js";
+import {
+  holdsInteger,
+  parsePersistTarget,
+  persistedValueIssue,
+  persistPath,
+} from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import {
   fragmentNode,
@@ -205,34 +205,26 @@ export function validateCrossReferences(
   // name no rung can decide falls through to the next in silence
   // (brandon-themes-owl).
   //
-  // Each fragment carries where an endcaps name written in its `style` belongs:
-  // beside it in a globals fragment, and in `globals` for a theme's default,
-  // which holds no endcaps.
   const styleFragments: ReadonlyArray<
-    readonly [readonly string[], string | undefined, string]
+    readonly [readonly string[], string | undefined]
   > = [
-    [["globals"], cfg.globals.style, "globals.endcaps"],
-    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
+    [["globals"], cfg.globals.style],
+    [["editGlobals"], cfg.editGlobals.style],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [
-          ["presets", name, "globals"],
-          preset.globals?.style,
-          `presets.${name}.globals.endcaps`,
-        ] as const,
+        [["presets", name, "globals"], preset.globals?.style] as const,
     ),
     ...Object.entries(cfg.themeDefaults).map(
       ([theme, fragment]) =>
-        [["themeDefaults", theme], fragment.style, "globals.endcaps"] as const,
+        [["themeDefaults", theme], fragment.style] as const,
     ),
   ];
-  for (const [at, name, endcapsAt] of styleFragments) {
+  for (const [at, name] of styleFragments) {
     if (name === undefined) continue;
-    const where = `${at.join(".")}.style`;
-    const message = undeclaredStyleMessage(cfg, where, name, endcapsAt);
+    const message = undeclaredStyleMessage(cfg, at, name);
     if (message === null) continue;
     ctx.issues.push({
-      path: where,
+      path: `${at.join(".")}.style`,
       message,
       line: findKeyLine(ctx.source, [...at, "style"]),
     });
@@ -248,7 +240,7 @@ export function validateCrossReferences(
   const undeclaredPreset =
     cfg.globals.preset === undefined
       ? null
-      : undeclaredPresetMessage(cfg, "globals.preset", cfg.globals.preset);
+      : undeclaredPresetMessage(cfg, ["globals"], cfg.globals.preset);
   if (undeclaredPreset !== null) {
     ctx.issues.push({
       path: "globals.preset",
@@ -1138,77 +1130,91 @@ function checkHelperIssue(
   });
 }
 
+// Where an endcaps name written beside a fragment's `style` belongs: in the
+// fragment, and in `globals` for a theme's default, which holds no endcaps.
+function endcapsHome(at: readonly string[]): string {
+  return at[0] === "themeDefaults"
+    ? "globals.endcaps"
+    : [...at, "endcaps"].join(".");
+}
+
 // [LAW:single-enforcer] The one refusal of a style name the merged config does
 // not declare, for the file's own `style` and for the value a persist would
-// write there. A rule is exempt: only a render can settle what it names.
+// write there, `at` being the record that holds it. A rule is exempt: only a
+// render can settle what it names.
 function undeclaredStyleMessage(
   cfg: DslConfig,
-  where: string,
+  at: readonly string[],
   name: string,
-  endcapsAt: string,
 ): string | null {
   if (isExpression(name) || Object.hasOwn(cfg.styles, name)) return null;
+  const where = `${at.join(".")}.style`;
   return isStyleEraEndcaps(name)
-    ? endcapsNameMessage(where, name, endcapsAt)
+    ? endcapsNameMessage(where, name, endcapsHome(at))
     : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
 }
 
 function undeclaredPresetMessage(
   cfg: DslConfig,
-  where: string,
+  at: readonly string[],
   name: string,
 ): string | null {
   // [LAW:one-source-of-truth] The floor preset is a member whether or not a
   // config declares it (`presetNames`), as it is for a pick.
   return presetNames(cfg.presets).includes(name)
     ? null
-    : `${where} "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
+    : `${at.join(".")}.preset "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
 }
+
+// [LAW:dataflow-not-control-flow] What only the merged config decides about a
+// value a field's file schema accepts, by the field's name: the styles and
+// presets it declares. A field absent here has no such membership.
+type Membership = (
+  cfg: DslConfig,
+  at: readonly string[],
+  name: string,
+) => string | null;
+const MEMBERSHIP: ReadonlyMap<string, Membership> = new Map([
+  ["style", undeclaredStyleMessage],
+  ["preset", undeclaredPresetMessage],
+]);
+const NO_MEMBERSHIP: Membership = () => null;
+
+type PersistAction = Extract<ActionDecl, { readonly persist: string }>;
 
 // [LAW:no-silent-failure] A `persist` writes the file the loader reads, so each
 // value it can write gets the verdict the loader gives that value in that
-// file: the schema of the place it lands (loader/globals.ts), then the
+// file: the schema of the place it lands (persistedValueIssue), then the
 // membership only the merged config decides. One that the file would refuse
 // fails here, at the field of the action that states it, rather than at the
-// click that writes it. Only a tree op, which writes a layout, and a target no
-// globals field holds are left alone: neither writes a field's value.
+// click that writes it. A tree op writes a layout, and a target no globals
+// field holds writes no value: neither is judged.
 function checkPersistedValues(
   ctx: ValidateCtx,
   cfg: DslConfig,
   name: string,
-  a: ActionDecl,
+  a: PersistAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): void {
-  const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+  const target = parsePersistTarget(a.persist);
   const writes = valuesWritten(a, optionDomains);
-  if (
-    target === null ||
-    !Array.isArray(writes) ||
-    (target.scope !== "globals" &&
-      target.scope !== "preset-globals" &&
-      target.scope !== "theme-default")
-  ) {
+  if (target === null || target.scope === "preset-root" || writes === null) {
     return;
   }
-  const { path, endcapsAt } = fileLocation(target);
-  const reasonOf = (raw: string): string | null => {
-    const lifted = fileValueOf(target.field, raw);
-    if ("reason" in lifted) return lifted.reason;
-    const refused = fileFieldIssue(
-      ctx,
-      target.scope,
-      path,
-      target.field,
-      lifted.value,
-    );
-    if (refused !== null) return refused;
-    if (target.field === "style") {
-      return undeclaredStyleMessage(cfg, `${path}.style`, raw, endcapsAt);
-    }
-    return target.scope === "globals" && target.field === "preset"
-      ? undeclaredPresetMessage(cfg, `${path}.preset`, raw)
-      : null;
-  };
+  // A stepper writes integers, which only an integer field holds.
+  if ("min" in a && !holdsInteger(target)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"]),
+    });
+    return;
+  }
+  const steps = persistPath(target);
+  const at = steps.slice(0, -1);
+  const membership = MEMBERSHIP.get(steps[steps.length - 1]!) ?? NO_MEMBERSHIP;
+  const reasonOf = (raw: string): string | null =>
+    persistedValueIssue(ctx, target, raw) ?? membership(cfg, at, raw);
   for (const field of new Set(writes.map((w) => w.field))) {
     const refused = writes
       .filter((w) => w.field === field)
@@ -1218,38 +1224,11 @@ function checkPersistedValues(
       });
     if (refused.length === 0) continue;
     const where = `actions.${name}.${field}`;
-    const [first] = refused;
-    const more =
-      refused.length === 1 ? "" : ` (and ${refused.length - 1} more)`;
     ctx.issues.push({
       path: where,
-      message: `${where}: persisting ${JSON.stringify(first!.value)} would write a file the loader refuses${more} — ${first!.reason}`,
+      message: `${where}: persisting ${shownValues(refused.map((r) => r.value))} would write a file the loader refuses — ${refused[0]!.reason}`,
       line: findKeyLine(ctx.source, ["actions", name, field]),
     });
-  }
-}
-
-// Where in the file a persist target's value lands, and where an endcaps name
-// written there belongs — the same places the loader checks a `style` at.
-function fileLocation(
-  target: Extract<
-    PersistTarget,
-    { scope: "globals" | "preset-globals" | "theme-default" }
-  >,
-): { readonly path: string; readonly endcapsAt: string } {
-  switch (target.scope) {
-    case "globals":
-      return { path: "globals", endcapsAt: "globals.endcaps" };
-    case "preset-globals":
-      return {
-        path: `presets.${target.preset}.globals`,
-        endcapsAt: `presets.${target.preset}.globals.endcaps`,
-      };
-    case "theme-default":
-      return {
-        path: `themeDefaults.${target.theme}`,
-        endcapsAt: "globals.endcaps",
-      };
   }
 }
 
@@ -1321,23 +1300,25 @@ function checkSettingWrites(
     return;
   }
   for (const field of new Set(outside.map((w) => w.field))) {
-    const values = outside
-      .filter((w) => w.field === field)
-      .map((w) => JSON.stringify(w.value));
-    const shown =
-      values.length <= REPORTED_VALUES
-        ? values.join(", ")
-        : `${values.slice(0, REPORTED_VALUES).join(", ")} and ${values.length - REPORTED_VALUES} more`;
+    const values = outside.filter((w) => w.field === field).map((w) => w.value);
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
+      message: `${where}: ${shownValues(values)} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field]),
     });
   }
 }
 
 const REPORTED_VALUES = 3;
+
+// The values a refusal names: the first few, then how many more.
+function shownValues(values: readonly string[]): string {
+  const quoted = values.map((v) => JSON.stringify(v));
+  return quoted.length <= REPORTED_VALUES
+    ? quoted.join(", ")
+    : `${quoted.slice(0, REPORTED_VALUES).join(", ")} and ${quoted.length - REPORTED_VALUES} more`;
+}
 
 type SetAction = Extract<ActionDecl, { readonly set: string }>;
 
@@ -1359,9 +1340,9 @@ function valuesWritten(
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): WrittenValues | typeof ANY_INTEGER;
 function valuesWritten(
-  a: ActionDecl,
+  a: PersistAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
-): WrittenValues | typeof ANY_INTEGER | null;
+): WrittenValues | null;
 function valuesWritten(
   a: ActionDecl,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,

@@ -142,7 +142,10 @@ describe("persistValueText", () => {
 
   test("throws loudly on an undeliverable numeric string", () => {
     expect(() => persistValueText("padding", "not-a-number")).toThrow(
-      /expects a number/,
+      /expects an integer/,
+    );
+    expect(() => persistValueText("padding", "0x10")).toThrow(
+      /expects an integer/,
     );
   });
 
@@ -672,7 +675,7 @@ describe("persist action click → the config file", () => {
   // from the value the bar draws.
   test.each([
     ["a string", "'7'", "\"7\"|'7'"],
-    ["a number outside the range", "99", "99"],
+    ["a fraction", "3.5", "3.5"],
     ["a null", "null", "null"],
     ["a list", "[3]", "\\[3\\]"],
   ])(
@@ -686,12 +689,24 @@ describe("persist action click → the config file", () => {
       const before = durable.text();
       await expect(click(url)).rejects.toThrow(
         new RegExp(
-          `step-config: padding holds (${shown}) in .*, not an integer from 0 to 16 to step`,
+          `step-config: padding holds (${shown}) in .*, not an integer to step`,
         ),
       );
       expect(durable.text()).toBe(before);
     },
   );
+
+  // A file integer the loader accepts but the stepper's own range excludes is
+  // stepped from its clamp into that range, as it was before the stepper
+  // learned to refuse what the file holds that is no integer.
+  test("a persist stepper over an integer outside its own range steps from the clamp", async () => {
+    const narrow = SRC2.replace("min: 0, max: 16", "min: 2, max: 8");
+    const { render, click } = buildPersistRuntime(narrow);
+    const url = ownUrls(render())[2]!;
+    durable.write(narrow.replace("globals: {},", "globals: { padding: 12 },"));
+    await click(url);
+    expect(globalsInFile()).toEqual({ padding: 2 });
+  });
 
   // brandon-settings-2ov: a preset whose fragment names a field wins over
   // top-level globals, so a durable click there lands in that preset's own
@@ -748,6 +763,20 @@ describe("persist action click → the config file", () => {
     await click(ownUrls(render())[2]!);
     expect(barUnder("compact", withCompact).padding).toBe(1);
     expect(globalsInFile()).toEqual({});
+  });
+
+  // A key that spells the preset's own globals is the same field, so it seeds
+  // from what the bar draws there rather than from the stepper's minimum.
+  test("a persist stepper keyed to a preset's globals seeds from what the bar draws", async () => {
+    const { render, click, sessionState } = buildPersistRuntime(
+      SRC_UNDER_PRESET.replace("padding: 4, ", "").replace(
+        "persist: 'padding'",
+        "persist: 'presets.roomy.globals.padding'",
+      ),
+    );
+    sessionState.set(S1, "preset", "roomy");
+    await click(ownUrls(render())[0]!);
+    expect(barUnder("roomy").padding).toBe(3);
   });
 
   test("a persist stepper under a preset silent on its field still writes top-level globals", async () => {

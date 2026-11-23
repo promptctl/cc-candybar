@@ -675,10 +675,13 @@ export function fileValueOf(field: GlobalField, raw: string): FileValue {
   const kind = wireKindOf(field);
   if (kind === "string") return { value: raw };
   if (kind === "number") {
+    // Every number field is an integer range, and the file holds the integer
+    // as written: a spelling that parses to another (`0x10`, `1e1`, `3.0`)
+    // would write a number its author never wrote.
     const n = Number(raw);
-    return Number.isFinite(n)
+    return Number.isInteger(n) && String(n) === raw
       ? { value: n }
-      : { reason: `expects a number, got "${raw}"` };
+      : { reason: `expects an integer written plainly, got "${raw}"` };
   }
   if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
   if (BOOLEAN_FALSY.has(raw)) return { value: false };

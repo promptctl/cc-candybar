@@ -50,10 +50,7 @@ import type {
   RootFragment,
   SettingValue,
 } from "../config/dsl-types.js";
-import {
-  fileValueOf,
-  type ThemeDefaultField,
-} from "../config/globals-fields.js";
+import type { ThemeDefaultField } from "../config/globals-fields.js";
 import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
@@ -81,21 +78,21 @@ import {
 import {
   parsePersistTarget,
   persistPath,
+  persistedValueOf,
   presetGlobalsKey,
   type ConfigPath,
   type PersistTarget,
+  type ValueTarget,
 } from "../config/loader/persist-target.js";
 
 // [LAW:parse-dont-validate] The write gate canonicalizes to a STRING (the
 // wire currency); this is the boundary that lifts it into the JSON5 text of
-// the typed value the file declares (`fileValueOf`). An out-of-range/non-numeric
+// the typed value the file declares (`persistedValueOf`). An out-of-range/non-numeric
 // string for a "number" field is a caller bug (the range validator already
 // canonicalized it), so it throws loudly rather than writing a wrongly-typed
 // value.
 export function persistValueText(key: string, raw: string): string {
-  const target = requireValueTarget(key);
-  if (target.scope === "segment-palette") return JSON.stringify(raw);
-  const lifted = fileValueOf(target.field, raw);
+  const lifted = persistedValueOf(requireValueTarget(key), raw);
   if ("reason" in lifted) {
     throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
@@ -176,10 +173,6 @@ function requireDeclared(
     );
   }
 }
-
-// [LAW:types-are-the-program] A target that names a VALUE — every scope but
-// the preset root, whose edits are structural (a row, not a scalar).
-type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 
 // The path a value write splices at. A globals field is always declared; a
 // segment field needs its segment declared somewhere, since the one field
@@ -714,25 +707,23 @@ function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
 }
 
 /**
- * What the file declares at a value target: nothing (undefined), or the value
- * as written and, when it is a number, the number. A string, a null, a list
- * and an object are each declared, so a reader that wants a number can tell
- * them from nothing.
+ * What the file declares at a value target. A string, a null, a list, an
+ * object and a fraction are each declared (`other`, with the text as written),
+ * so a reader that steps an integer can tell them from nothing.
  */
-export function readDeclared(
-  text: string | null,
-  key: string,
-):
-  | { readonly source: string; readonly number: number | undefined }
-  | undefined {
+export type Declared =
+  | { readonly kind: "none" }
+  | { readonly kind: "integer"; readonly value: number }
+  | { readonly kind: "other"; readonly source: string };
+
+export function readDeclared(text: string | null, key: string): Declared {
   const target = requireValueTarget(key);
   const doc = docOf(text ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
-  if (node === undefined) return undefined;
-  return {
-    source: textOf(text ?? "", node),
-    number: node.kind === "number" ? node.value : undefined,
-  };
+  if (node === undefined) return { kind: "none" };
+  return node.kind === "number" && Number.isInteger(node.value)
+    ? { kind: "integer", value: node.value }
+    : { kind: "other", source: textOf(text ?? "", node) };
 }
 
 /**

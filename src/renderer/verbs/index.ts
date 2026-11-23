@@ -731,34 +731,24 @@ const stepConfig: VerbHandler = (args, ctx) => {
     requireLayerText(into.path, store.read(into.path)),
     landing.key,
   );
-  // [LAW:no-silent-failure] A layer that declares the key holds an integer in
-  // the stepper's range or a value the loader refuses (a string, a null, a
-  // list, a number outside the range): the latter is refused naming what the
-  // layer holds, never stepped over from a clamp of it or from the value the
-  // bar draws.
-  const stored = declared?.number;
-  if (
-    declared !== undefined &&
-    !(
-      stored !== undefined &&
-      Number.isInteger(stored) &&
-      stored >= params.min &&
-      stored <= params.max
-    )
-  ) {
+  // [LAW:no-silent-failure] A layer that declares the key holds an integer, to
+  // step from (clamped into the stepper's own range), or something else, which
+  // is refused naming what the layer holds: a step from the value the bar draws
+  // would overwrite what its author wrote.
+  if (declared.kind === "other") {
     throw new BadVerbArgs(
-      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer from ${params.min} to ${params.max} to step`,
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`,
     );
   }
   const current =
-    stored === undefined
-      ? stepFrom(
+    declared.kind === "integer"
+      ? clampTo(params, declared.value)
+      : stepFrom(
           "step-config",
           key,
           params,
           configKeySeed(landing.globals, key),
-        )
-      : stored;
+        );
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
