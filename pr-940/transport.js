@@ -82094,17 +82094,17 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         );
       }
       if (answer2 === null) return ended({ kind: "unpresented", turn });
-      const answers = (ending2) => {
+      const answersAfterWait = (ending2) => {
         if (!abandoned()) return ended(ending2);
         turn.settlePresentation(answer2, DRAW_ABANDONED.message);
         return ended({ kind: "abandoned", turn });
       };
       const { awaiting } = answer2;
       if (awaiting.kind === "settled")
-        return answers({ kind: "settled", turn, answer: answer2 });
+        return ended({ kind: "settled", turn, answer: answer2 });
       if (draws === 1) waitedFor = awaiting.names;
       if (awaiting.seq <= drewSeq)
-        return answers({
+        return ended({
           kind: "stale",
           turn,
           answer: answer2,
@@ -82112,14 +82112,14 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         });
       drewSeq = awaiting.seq;
       if (awaiting.kind === "stalled")
-        return answers({
+        return ended({
           kind: "stalled",
           turn,
           answer: answer2,
           cause: awaiting.reason
         });
       const left = recipient.waitEndsAt - clock.monotonic();
-      if (left <= 0) return answers({ kind: "deadline", turn, answer: answer2 });
+      if (left <= 0) return ended({ kind: "deadline", turn, answer: answer2 });
       const waitFrom = clock.monotonic();
       const wait = await waitWithin(
         `render wait ${session}`,
@@ -82135,13 +82135,13 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       };
       if (wait.end === "closed") return closed();
       if (wait.end === "deadline")
-        return answers({ kind: "deadline", turn, answer: answer2 });
+        return answersAfterWait({ kind: "deadline", turn, answer: answer2 });
       switch (wait.value.kind) {
         case "aborted":
           if (closing.aborted) return closed();
-          return answers({ kind: "deadline", turn, answer: answer2 });
+          return answersAfterWait({ kind: "deadline", turn, answer: answer2 });
         case "gone":
-          return answers({ kind: "gone", turn, answer: answer2 });
+          return answersAfterWait({ kind: "gone", turn, answer: answer2 });
         case "moved":
           turn.settlePresentation(
             answer2,
