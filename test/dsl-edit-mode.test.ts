@@ -557,7 +557,14 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
     await click(
-      open(menuStateKey("picky", "pick", undefined), menuMember("pick")),
+      open(
+        menuStateKey(
+          { preset: "default", id: "picky", segment: "picky" },
+          "pick",
+          undefined,
+        ),
+        menuMember("pick"),
+      ),
     );
     const { fg, bg } = colorsAt(render(), `${REMOVE_GLYPH}m`);
     expect(

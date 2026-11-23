@@ -82,6 +82,9 @@ export interface CompiledSegmentNode {
   // declaration — every declared setting present, the placement's value else
   // the default — so the render reads a finished object, never a fallback.
   readonly id: string;
+  // The preset whose tree holds it: with `id` and `name`, the placement's
+  // identity (config/placement-identity.ts).
+  readonly preset: string;
   readonly settings: PlacementSettings;
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
@@ -181,6 +184,8 @@ export type RenderedLines = readonly RenderedLine[];
 // module needn't import the driver.
 export interface NodeCompileCtx {
   readonly path: string;
+  // The preset whose tree this node is compiled into.
+  readonly preset: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
   // The step THIS node is placed at in its parent (`placeChildren`): none at
@@ -708,6 +713,7 @@ const segmentType: NodeType<"segment"> = {
       when: cctx.when,
       name: node.name,
       id: placementId(node),
+      preset: cctx.preset,
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.

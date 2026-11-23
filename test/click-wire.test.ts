@@ -143,7 +143,15 @@ describe("a link says in words what its click does", () => {
     [
       {
         verb: VERB_SET_STATE,
-        args: [SID, menuStateKey("clock-a1", "pick.style", undefined), "open"],
+        args: [
+          SID,
+          menuStateKey(
+            { preset: "default", id: "clock-a1", segment: "clock" },
+            "pick.style",
+            undefined,
+          ),
+          "open",
+        ],
       },
       "open pick.style on clock-a1",
     ],

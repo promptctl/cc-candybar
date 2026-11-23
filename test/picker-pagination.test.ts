@@ -21,6 +21,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { swatch } from "../src/render/swatch";
 import { menuPageKey } from "../src/config/menu-keys";
 import { buildRig } from "./helpers/rig";
+import { menuKeyOf } from "./helpers/menu-key";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -257,8 +258,8 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
     }`;
   }
 
-  const THEME_OPEN = "menus.themeMenu.applyTheme";
-  const ENDCAPS_OPEN = "menus.endcapsMenu.applyEndcaps";
+  const THEME_OPEN = menuKeyOf("themeMenu", "applyTheme");
+  const ENDCAPS_OPEN = menuKeyOf("endcapsMenu", "applyEndcaps");
   // The synthesized page cursors: derived from identity (menuPageKey), one per
   // disclosure state key.
   const THEME_PAGE = menuPageKey(THEME_OPEN);

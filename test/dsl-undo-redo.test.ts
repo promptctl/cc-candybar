@@ -356,7 +356,14 @@ describe("undo/redo click → the session's settings history", () => {
     const runtime = undoBar(src);
     await press(runtime, "pickTheme"); // the slot now renders the menu's trigger
     expect(
-      runtime.sessionState.get(S1, menuStateKey("bar", "pickTheme", undefined)),
+      runtime.sessionState.get(
+        S1,
+        menuStateKey(
+          { preset: "default", id: "bar", segment: "bar" },
+          "pickTheme",
+          undefined,
+        ),
+      ),
     ).toBe("pickTheme");
     expect(runtime.history.depth(S1)).toEqual({
       undo: 0,

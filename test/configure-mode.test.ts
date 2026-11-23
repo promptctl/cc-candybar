@@ -157,8 +157,13 @@ function configureBar(src: string, preset?: string) {
   return { config, sessionState, render, click, urlWriting, enter, ctx };
 }
 
+// A placement's segment: `vcs2` is the second placement of `vcs`.
+const segmentOf = (id: string): string => (id === "vcs2" ? "vcs" : id);
 const draftKey = (id: string, setting: string): string =>
-  placementDraftKey("default", id, setting);
+  placementDraftKey(
+    { preset: "default", id, segment: segmentOf(id) },
+    setting,
+  );
 
 // The configure links: each writes the configure key to a placement.
 const configureUrls = (out: Frame): string[] =>
@@ -569,7 +574,10 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     );
     durable.write(src);
     const rt = configureBar(src, "p");
-    const key = placementDraftKey("p", "vcs2", "detail");
+    const key = placementDraftKey(
+      { preset: "p", id: "vcs2", segment: "vcs" },
+      "detail",
+    );
     configurePlacement(rt.ctx, SID, "p", "vcs2");
     await rt.click(rt.urlWriting(rt.render(), key, "true"));
     await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);

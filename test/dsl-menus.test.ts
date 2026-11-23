@@ -66,6 +66,7 @@ import {
   menuStateKey,
   sharedMenuStateKey,
 } from "../src/config/menu-keys";
+import { menuKeyOf } from "./helpers/menu-key";
 
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
@@ -197,7 +198,7 @@ const MENU_SRC = `{
   root: { h: ['label', 'themepicker'] },
 }`;
 
-const TKEY = "menus.themepicker.applyTheme";
+const TKEY = menuKeyOf("themepicker", "applyTheme");
 const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
@@ -293,11 +294,12 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`, ALLOWED);
-    expect(menuStateKey("s", "a-b", undefined)).not.toBe(
-      menuStateKey("s", "a_b", undefined),
+    const s = { preset: "default", id: "s", segment: "s" };
+    expect(menuStateKey(s, "a-b", undefined)).not.toBe(
+      menuStateKey(s, "a_b", undefined),
     );
-    expect(config.variables[menuStateKey("s", "a-b", undefined)]).toBeDefined();
-    expect(config.variables[menuStateKey("s", "a_b", undefined)]).toBeDefined();
+    expect(config.variables[menuStateKey(s, "a-b", undefined)]).toBeDefined();
+    expect(config.variables[menuStateKey(s, "a_b", undefined)]).toBeDefined();
   });
 
   test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {
@@ -798,21 +800,21 @@ describe("independent default (no shared key)", () => {
       menuBar(INDEPENDENT_SRC);
     // Distinct keys — neither click writes the other's key — and each key
     // brings its own synthesized page cursor.
-    expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
-    expect(config.variables["menus.endcapsMenu.applyEndcaps"]).toBeDefined();
+    expect(config.variables[menuKeyOf("themeMenu", "applyTheme")]).toBeDefined();
+    expect(config.variables[menuKeyOf("endcapsMenu", "applyEndcaps")]).toBeDefined();
     expect(
-      config.variables[menuPageKey("menus.themeMenu.applyTheme")],
+      config.variables[menuPageKey(menuKeyOf("themeMenu", "applyTheme"))],
     ).toBeDefined();
     expect(
-      config.variables[menuPageKey("menus.endcapsMenu.applyEndcaps")],
+      config.variables[menuPageKey(menuKeyOf("endcapsMenu", "applyEndcaps"))],
     ).toBeDefined();
 
-    await clickToggle(render(), "menus.themeMenu.applyTheme", "applyTheme");
+    await clickToggle(render(), menuKeyOf("themeMenu", "applyTheme"), "applyTheme");
     let out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸"); // style still closed — independence
     // Open style too: theme stays open (NOT mutually exclusive).
-    await clickToggle(render(), "menus.endcapsMenu.applyEndcaps", "applyEndcaps");
+    await clickToggle(render(), menuKeyOf("endcapsMenu", "applyEndcaps"), "applyEndcaps");
     out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▾"); // both open
@@ -910,19 +912,19 @@ const TESTER_SRC = `{
 describe('the "theme tester" — N menus in one segment', () => {
   test("each menu is a DISTINCT addressable disclosure (no identity collision)", () => {
     const config = parseAndValidate("<test>", TESTER_SRC, ALLOWED);
-    expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
-    expect(config.variables["menus.tester.applyEndcaps"]).toBeDefined();
-    expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
+    expect(config.variables[menuKeyOf("tester", "applyTheme")]).toBeDefined();
+    expect(config.variables[menuKeyOf("tester", "applyEndcaps")]).toBeDefined();
+    expect(config.variables[menuKeyOf("tester", "applyTheme2")]).toBeDefined();
     // Three distinct state keys + their three page cursors, all synthesized
     // from one segment — the old (rowKey,segName) identity would have
     // collapsed all three to one.
-    // Restricted to THIS segment's menus: every bar also carries the settings
-    // menu's own picker and edit chrome's `+` menus, synthesized under the same
-    // namespace but keyed by their own host segments.
+    // Restricted to THIS segment's menus in the drawn preset's tree: every bar
+    // also carries the settings menu's own picker and edit chrome's `+` menus,
+    // synthesized under the same namespace but keyed by their own host
+    // segments, and every preset mints its own.
+    const hosted = menuKeyOf("tester", "");
     const menuKeys = Object.keys(config.variables).filter(
-      (k) =>
-        k.startsWith("menus.tester.") ||
-        k.startsWith(menuPageKey("menus.tester.")),
+      (k) => k.startsWith(hosted) || k.startsWith(menuPageKey(hosted)),
     );
     expect(menuKeys).toHaveLength(6);
   });
@@ -937,7 +939,7 @@ describe('the "theme tester" — N menus in one segment', () => {
   test("a mid-segment menu keeps content AFTER it on row 0; its body drops below", async () => {
     const { render, clickToggle } = menuBar(TESTER_SRC);
     // Open only the FIRST menu (mid-segment, followed by ' | ▸ | ▸ END').
-    await clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
+    await clickToggle(render(), menuKeyOf("tester", "applyTheme"), "applyTheme");
     const lines = textOf(render()).split("\n");
     expect(lines).toHaveLength(2); // row 0 + one drop
     // The first glyph flipped, and EVERYTHING after it is still on row 0 —
@@ -949,9 +951,9 @@ describe('the "theme tester" — N menus in one segment', () => {
 
   test("all three open independently: three bodies stack below one inline row", async () => {
     const { render, clickToggle } = menuBar(TESTER_SRC);
-    await clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
-    await clickToggle(render(), "menus.tester.applyEndcaps", "applyEndcaps");
-    await clickToggle(render(), "menus.tester.applyTheme2", "applyTheme2");
+    await clickToggle(render(), menuKeyOf("tester", "applyTheme"), "applyTheme");
+    await clickToggle(render(), menuKeyOf("tester", "applyEndcaps"), "applyEndcaps");
+    await clickToggle(render(), menuKeyOf("tester", "applyTheme2"), "applyTheme2");
     const lines = textOf(render()).split("\n");
     expect(lines[0]).toContain("TEST ▾ | ▾ | ▾ END"); // all three open, all inline
     expect(lines).toHaveLength(4); // row 0 + three dropped bodies
@@ -1112,7 +1114,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
     expect(closed).toContain("P ▸");
 
     await clickToggle(render(), "groups.grp", "grp");
-    await clickToggle(render(), "menus.picker.applyTheme", "applyTheme");
+    await clickToggle(render(), menuKeyOf("picker", "applyTheme"), "applyTheme");
     const open = textOf(render());
     expect(open).toContain("G ▾");
     expect(open).toContain("P ▾");
@@ -1125,7 +1127,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
     const closed = textOf(render()).split("\n");
     expect(closed.some((l) => l.includes("P +"))).toBe(true);
 
-    await clickToggle(render(), "menus.picker.applyTheme", "applyTheme");
+    await clickToggle(render(), menuKeyOf("picker", "applyTheme"), "applyTheme");
     // Still `+`, and the picker body now drops onto the line below it — the
     // open state is carried by the body, not by a glyph swap.
     const open = textOf(render()).split("\n");
@@ -1270,7 +1272,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     },
     root: { h: ['themepicker', 'lookpicker'] },
   }`;
-  const LKEY = "menus.lookpicker.applyStyle";
+  const LKEY = menuKeyOf("lookpicker", "applyStyle");
 
   test("every theme option is its name in the list's own text, beside that theme's swatch", async () => {
     // The fixture's globals wear `dim`: the names are written in the text of

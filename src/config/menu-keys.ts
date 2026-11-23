@@ -3,8 +3,8 @@
 // and the renderer (which READS openness + emits the toggle) agree on "which key
 // holds which open menu". A `{{ menu }}` helper is context-free about its NAME
 // (it cannot see the placement it sits in), so the loader and the render walk
-// both derive identity from the same two facts — the host placement's id
-// (`placementId`) and the menu's own apply-action name — and MUST produce
+// both derive identity from the same two facts — the host placement
+// (`PlacementIdentity`) and the menu's own apply-action name — and MUST produce
 // identical strings or a click would
 // write a key the render never reads. Keeping the rule in one module makes that
 // agreement structural rather than a coincidence of two copies.
@@ -13,7 +13,7 @@
 //   • member  = the menu's apply-action name — unique per menu within a segment,
 //               so two menus in ONE segment are distinct.
 //   • stateKey = the SessionState key whose value names the open member. By
-//               DEFAULT each menu owns a UNIQUE key (`menus.<placement>.<apply>`), so
+//               DEFAULT each menu owns a UNIQUE key (`menus.<preset>.<id>.<segment>.<apply>`), so
 //               it toggles only itself — menus are INDEPENDENT, and two
 //               placements of one segment are two menus. Passing an
 //               explicit shared key makes sibling menus share one key
@@ -25,6 +25,11 @@
 //               can see in the template, never on tree position.
 
 import { escapedIdent, unescapedIdent } from "./ident.js";
+import {
+  placementOfScope,
+  placementScope,
+  type PlacementIdentity,
+} from "./placement-identity.js";
 import { EDIT_NS, MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
 import { isEditModeKey } from "./session-key.js";
 import {
@@ -64,25 +69,27 @@ function menuScope(host: string): MenuScope {
 }
 
 // [LAW:single-enforcer] THE state key for a menu. Independent (no shared key):
-// unique per (placement, apply) so the menu toggles only itself. Shared key:
+// unique per (placement, apply) so the menu toggles only itself, a placement
+// being its preset, id and segment (placement-identity.ts). Shared key:
 // the key all siblings passing the same string agree on, so one open member
 // wins (accordion). The shared form ignores the placement on purpose — that is
 // how menus in DIFFERENT placements become mutually exclusive.
 //
 // [LAW:types-are-the-program] Spelled injectively and prefix-free: every
 // authored part is `escapedIdent`, which emits no `.` and no `_`, so an
-// independent key is exactly two parts under the namespace and a shared one
+// independent key is exactly four parts under the namespace (the placement's
+// three and the apply action) and a shared one
 // exactly one part led by `_`. No key is another's dot-path prefix, so a
 // shared key `s` and the menus of a placement `s` are two states, and no
 // two spellings of a name meet in one key.
 export function menuStateKey(
-  placementId: string,
+  host: PlacementIdentity,
   applyName: string,
   sharedKey: string | undefined,
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : `${menuScope(placementId)}${MENU_NS}${escapedIdent(placementId)}.${escapedIdent(applyName)}`;
+    : `${menuScope(host.id)}${MENU_NS}${placementScope(host)}.${escapedIdent(applyName)}`;
 }
 
 // [LAW:decomposition] The shared arm of that derivation, named so the settings
@@ -107,10 +114,12 @@ export function menuOfKey(
     const shared = unescapedIdent(rest.slice(1));
     return shared === undefined ? undefined : { menu: shared, page };
   }
-  const [host, apply, ...more] = rest.split(".").map(unescapedIdent);
-  return host === undefined || apply === undefined || more.length > 0
+  const parts = rest.split(".");
+  const host = placementOfScope(parts.slice(0, 3).join("."));
+  const apply = unescapedIdent(parts[3] ?? "");
+  return host === undefined || apply === undefined || parts.length !== 4
     ? undefined
-    : { menu: `${apply} on ${host}`, page };
+    : { menu: `${apply} on ${host.id}`, page };
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its

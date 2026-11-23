@@ -223,8 +223,11 @@ describe("cancel drops every session write the edit held", () => {
     expect(fs.readFileSync(b.configPath, "utf8")).toBe(CONFIG);
     await b.restart();
     const keys = Object.values(b.stored()).flatMap((v) => Object.keys(v));
-    expect(keys).toContain(menuStateKey("clock", "applyStyle", undefined));
-    expect(keys).not.toContain(menuStateKey(fresh!, "applyStyle", undefined));
+    const clock = { preset: "default", id: "clock", segment: "clock" };
+    expect(keys).toContain(menuStateKey(clock, "applyStyle", undefined));
+    expect(keys).not.toContain(
+      menuStateKey({ ...clock, id: fresh! }, "applyStyle", undefined),
+    );
   });
 });
 

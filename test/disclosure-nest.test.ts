@@ -21,6 +21,7 @@ import { insertGap } from "../src/config/edit-chrome";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
+import { menuKeyOf } from "./helpers/menu-key";
 
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
@@ -249,7 +250,7 @@ const GROUPS = `{
     { kind: 'group', name: 'other', label: 'other', key: 'acc', children: ['model'] },
   ] },
 }`;
-const MENU_KEY = "menus.picky.applyTheme";
+const MENU_KEY = menuKeyOf("picky", "applyTheme");
 
 describe("cases 7–9: a config's nested groups and menus", () => {
   test("case 7: a nested group closes with its parent", async () => {

@@ -11,6 +11,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { menuKeyOf } from "./helpers/menu-key";
 import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
@@ -124,8 +125,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
 
   test("each placement's menu is keyed by its id, and opening one leaves the other closed", async () => {
     const rt = placementBar(SRC);
-    expect(rt.config.variables["menus.picker.applyTheme"]).toBeDefined();
-    expect(rt.config.variables["menus.second.applyTheme"]).toBeDefined();
+    expect(rt.config.variables[menuKeyOf("picker", "applyTheme")]).toBeDefined();
+    expect(rt.config.variables[menuKeyOf("picker", "applyTheme", "second")]).toBeDefined();
     const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
         effectsOf(u).some(
@@ -135,8 +136,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
       if (url === undefined) throw new Error(`no toggle for ${key}`);
       await rt.click(url);
     };
-    await open("menus.second.applyTheme");
-    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
+    await open(menuKeyOf("picker", "applyTheme", "second"));
+    expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second"))).toBe(
       "applyTheme",
     );
     rt.render();
@@ -144,11 +145,11 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.segments().get("second")!.length).toBeGreaterThan(
       rt.segments().get("picker")!.length,
     );
-    await open("menus.picker.applyTheme");
-    expect(rt.sessionState.get(S1, "menus.picker.applyTheme")).toBe(
+    await open(menuKeyOf("picker", "applyTheme"));
+    expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme"))).toBe(
       "applyTheme",
     );
-    expect(rt.sessionState.get(S1, "menus.second.applyTheme")).toBe(
+    expect(rt.sessionState.get(S1, menuKeyOf("picker", "applyTheme", "second"))).toBe(
       "applyTheme",
     );
   });
@@ -186,7 +187,12 @@ describe("a placement is named by its id", () => {
       }`,
       ALLOWED,
     );
-    expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
+    // Each preset's tree holds its own placement, so each mints its own state.
+    const inA = menuKeyOf("menuA", "applyTheme", "picker", "a");
+    const inB = menuKeyOf("menuB", "applyTheme", "picker", "b");
+    expect(config.variables[inA]).toBeDefined();
+    expect(config.variables[inB]).toBeDefined();
+    expect(inA).not.toBe(inB);
   });
 
   test("two placements of a keyed menu share the open state its key names", () => {

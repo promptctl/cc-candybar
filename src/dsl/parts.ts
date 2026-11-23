@@ -853,6 +853,7 @@ function placeOf(
   return {
     segName: node.name,
     placementId: node.id,
+    preset: node.preset,
     palette: colours.palette,
     disclosure: colours.disclosure,
     tint: colours.tint,

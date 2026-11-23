@@ -33,6 +33,7 @@ import {
   type ReferencedCall,
 } from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
+import type { PlacementIdentity } from "../placement-identity.js";
 import { fragmentNode } from "../root.js";
 import type { ValidateCtx } from "./validate-core.js";
 import {
@@ -208,7 +209,7 @@ function parseCalls(
 // reader asking which menus sit in a body finds the keys a click writes.
 export function hostedMenus(
   template: string,
-  placement: string,
+  placement: PlacementIdentity,
 ): readonly Disclosure[] {
   const calls = parseCalls(template);
   return calls === "parse-failed"
@@ -438,7 +439,11 @@ export function synthesizePlacementMenus(
         }
         const { apply, options } = call;
         const member = menuMember(apply);
-        const stateKey = menuStateKey(id, apply, options.key);
+        const stateKey = menuStateKey(
+          { preset, id, segment: node.name },
+          apply,
+          options.key,
+        );
         const pageKey = menuPageKey(stateKey);
         const identity = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;

@@ -105,7 +105,15 @@ function renderMenu(
   // — comes from the SAME menu-keys derivation the loader synthesis used, so the
   // key this render reads/writes is the key whose state var + int gate the
   // loader emitted. No page-action argument to mis-wire.
-  const stateKey = menuStateKey(placement.placementId, applyName, options.key);
+  const stateKey = menuStateKey(
+    {
+      preset: placement.preset,
+      id: placement.placementId,
+      segment: placement.segName,
+    },
+    applyName,
+    options.key,
+  );
   const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
 

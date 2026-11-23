@@ -22,6 +22,7 @@ import {
   type SegmentNode,
 } from "./dsl-types.js";
 import { hostedMenus } from "./loader/menu-synth.js";
+import { placementScope } from "./placement-identity.js";
 import { presetNames, presetRoot } from "./presets.js";
 
 // One key a disclosure inside a parent holds, and the values it holds for a
@@ -57,23 +58,30 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
   // Every preset places most segments again, so each placement's template is
   // parsed once, not once per preset (the bundled presets: half the build).
   const menus = new Map<string, readonly Disclosure[]>();
-  const hostedBy = (node: SegmentNode): readonly Disclosure[] => {
-    // An id is unique per preset tree, so two presets may give one to
-    // different segments.
-    const id = `${node.name}\0${placementId(node)}`;
+  const hostedBy = (
+    preset: string,
+    node: SegmentNode,
+  ): readonly Disclosure[] => {
+    // A placement is its preset, id and segment: an id is unique per preset
+    // tree, so two presets may give one to different segments.
+    const placement = { preset, id: placementId(node), segment: node.name };
+    const id = placementScope(placement);
     const memo = menus.get(id);
     if (memo !== undefined) return memo;
     const template = config.segments[node.name]?.template;
     const found =
-      template === undefined ? [] : hostedMenus(template, placementId(node));
+      template === undefined ? [] : hostedMenus(template, placement);
     menus.set(id, found);
     return found;
   };
   // The disclosures a placement is the trigger of: the body it opens, and
   // every `{{ menu }}` it hosts.
-  const triggeredBy = (node: SegmentNode): readonly Disclosure[] => [
+  const triggeredBy = (
+    preset: string,
+    node: SegmentNode,
+  ): readonly Disclosure[] => [
     ...(node.opens === undefined ? [] : [node.opens.ref]),
-    ...hostedBy(node),
+    ...hostedBy(preset, node),
   ];
   const defaults = new Map<string, string>();
   const declaredWithin = new Map<string, readonly Disclosure[]>();
@@ -96,22 +104,26 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
     children.set(idOf(child), child);
     inside.set(idOf(parent), children);
   };
-  const walk = (node: LayoutNode, enclosing: readonly Disclosure[]): void => {
+  const walk = (
+    preset: string,
+    node: LayoutNode,
+    enclosing: readonly Disclosure[],
+  ): void => {
     if (node.kind === "container") {
-      for (const child of node.children) walk(child, enclosing);
+      for (const child of node.children) walk(preset, child, enclosing);
       return;
     }
-    for (const child of triggeredBy(node)) {
+    for (const child of triggeredBy(preset, node)) {
       known(child);
       hung.set(idOf(child), child);
       for (const parent of enclosing) note(parent, child);
     }
     if (node.opens !== undefined) {
-      walk(node.opens.body, [...enclosing, node.opens.ref]);
+      walk(preset, node.opens.body, [...enclosing, node.opens.ref]);
     }
   };
   for (const preset of presetNames(config.presets)) {
-    walk(presetRoot(config, preset).node, []);
+    walk(preset, presetRoot(config, preset).node, []);
   }
   // A disclosure the bar toggles from where it is not hung (edit mode, from
   // the door's ✎ arrange) is known by its toggle.

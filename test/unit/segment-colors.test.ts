@@ -117,7 +117,7 @@ function resolve(
   scope: object = {},
 ): Style {
   return resolveSegmentColors(
-    openSegment(h.ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT),
+    openSegment(h.ref, SEG, SEG, "default", palette, DISCLOSURE, TINT, PAIRED_TEXT),
     ColorDepth.TRUECOLOR,
     bg,
     fg,
@@ -279,7 +279,7 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
       ...TEST_ENGINE,
       extraFuncs: segmentColorFuncs(ref),
     });
-    openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
+    openSegment(ref, SEG, SEG, "default", palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
       .parse(`{{ errorRedOn "${ground}" }}`)
       .evaluate({})
@@ -591,6 +591,7 @@ describe("segment color functions in the engine", () => {
       ref,
       SEG,
       SEG,
+      "default",
       makeTestPalette(),
       DISCLOSURE,
       TINT,

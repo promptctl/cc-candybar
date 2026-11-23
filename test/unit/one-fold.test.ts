@@ -7,6 +7,7 @@
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { unauthored } from "../../src/config/dsl-loader";
 import { declaredVariables } from "../../src/config/loader/refs";
+import { menuStateKey } from "../../src/config/menu-keys";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
@@ -35,6 +36,15 @@ const overDefault = (src: string): DslConfig =>
 
 const MENU = `{{ menu "applyTheme" "theme ▸" "theme ▾" }}`;
 
+// The key of the menu a bare placement of `segment` hosts in the default
+// preset's tree.
+const applyThemeOf = (segment: string): string =>
+  menuStateKey(
+    { preset: "default", id: segment, segment },
+    "applyTheme",
+    undefined,
+  );
+
 describe("no declared name sits under another", () => {
   test("in the built bundled config, settings menu and edit chrome included", () => {
     const built = validateConfig(unauthored(DEFAULT_DSL_CONFIG));
@@ -54,9 +64,7 @@ describe("no declared name sits under another", () => {
         { kind: "group", name: "details", label: "details", children: [{ kind: "segment", name: "body" }] },
       ] },
     }`);
-    expect(Object.keys(built.variables)).toContain(
-      "menus.themeMenu.applyTheme",
-    );
+    expect(Object.keys(built.variables)).toContain(applyThemeOf("themeMenu"));
     expect(Object.keys(built.variables)).toContain("groups.details");
     expect(nested(built)).toEqual([]);
   });
@@ -75,7 +83,7 @@ describe("no declared name sits under another", () => {
         },
         root: { h: ["themeMenu", "other"] },
       }`);
-    expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
+    expect(config.variables[applyThemeOf("themeMenu")]).toBeDefined();
     expect(config.variables["menus._themeMenu"]).toBeDefined();
   });
 
@@ -86,7 +94,7 @@ describe("no declared name sits under another", () => {
         root: { h: ["candybar_gearPickers"] },
       }`);
     expect(
-      config.variables["menus.candybarZ00005fgearPickers.applyTheme"],
+      config.variables[applyThemeOf("candybar_gearPickers")],
     ).toBeDefined();
   });
 
@@ -99,7 +107,7 @@ describe("no declared name sits under another", () => {
         root: { h: ["themeMenu"] },
       }`),
     ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus"/,
+      `"${applyThemeOf("themeMenu")}" is declared under the variable "menus"`,
     );
   });
 

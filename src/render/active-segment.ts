@@ -32,6 +32,8 @@ export interface ActiveSegment {
    * placements of one segment open their menus independently.
    */
   readonly placementId: string;
+  /** The preset whose tree holds it, the rest of the placement's identity. */
+  readonly preset: string;
   /**
    * The disclosure this segment would open: the vocabulary hue its address
    * was dealt, at its band depth. A `{{ menu }}`'s body colours its option
@@ -116,6 +118,7 @@ export function openSegment(
   ref: ActiveSegmentRef,
   segName: string,
   placementId: string,
+  preset: string,
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
@@ -124,6 +127,7 @@ export function openSegment(
   const active: ActiveSegment = {
     segName,
     placementId,
+    preset,
     palette,
     disclosure,
     tint,
@@ -157,6 +161,7 @@ export function inSegment<T>(
         ref,
         place.segName,
         place.placementId,
+        place.preset,
         place.palette,
         place.disclosure,
         place.tint,

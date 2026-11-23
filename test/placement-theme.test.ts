@@ -49,6 +49,8 @@ const SID = sessionIdOf("s1");
 const PIN = "nord";
 const BAR_A = "gruvbox";
 const BAR_B = "dracula";
+// The bare placement of the segment `tag`.
+const TAG = { preset: "default", id: "tag", segment: "tag" };
 
 // Two placements of one segment: one follows the bar, one wears its own.
 const configWith = (segment: string, placements: string): string => `{
@@ -222,7 +224,7 @@ describe("configure mode picks a placement's theme", () => {
     durable.write(TWO);
     const rt = themeBar(TWO);
     configurePlacement(rt.ctx, SID, "default", "tag");
-    const key = placementDraftKey("default", "tag", "theme");
+    const key = placementDraftKey(TAG, "theme");
     // The control is the theme picker, `theme ▀▀▀` (brandon-theme-swatch-
     // 8v9r); its label opens the row of swatches. The open click is the one
     // whose write names the theme control's own segment as the open member.
@@ -353,7 +355,7 @@ describe("the layout preview while arranging", () => {
     expect(drawn).toContain(paletteForThemeName(PIN));
     rt.ctx.sessionState.set(
       SID,
-      placementDraftKey("default", "tag", "theme"),
+      placementDraftKey(TAG, "theme"),
       BAR_B,
     );
     expect(previewPalette(rt, "tag")).toEqual([

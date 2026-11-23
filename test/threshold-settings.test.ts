@@ -35,6 +35,9 @@ const SID = sessionIdOf("s1");
 const THEME = "nord";
 const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
 
+// Every placement here is a segment placed bare, so its id is its segment's.
+const bare = (id: string) => ({ preset: "default", id, segment: id });
+
 const withRoot = (root: string): string => `{ root: ${root} }`;
 const BLOCK_ONLY = withRoot("{ v: [ { h: ['block'] } ] }");
 
@@ -76,7 +79,7 @@ function thresholdBar(src: string, utilization: number) {
     }).frame;
   // The one stepper link that steps `setting` of `id` by `by`.
   const stepper = (id: string, setting: string, by: number): string => {
-    const key = placementDraftKey("default", id, setting);
+    const key = placementDraftKey(bare(id), setting);
     const hits = linkUrls(render()).filter((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === String(by)),
     );
@@ -84,7 +87,7 @@ function thresholdBar(src: string, utilization: number) {
     return hits[0]!;
   };
   const pick = (id: string, setting: string): string | null =>
-    rig.ctx.edits.view.get(SID, placementDraftKey("default", id, setting));
+    rig.ctx.edits.view.get(SID, placementDraftKey(bare(id), setting));
   // `rig.click` goes through the verb the URL names — `dispatch` included,
   // which is what turns a refused effect into the bar's transient `candybar.clickError`.
   return { ...rig, render, stepper, pick };
@@ -133,8 +136,8 @@ describe("block's thresholds are settings configure mode steps", () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
     // A placement's draft is written inside an edit.
     arrange(rt.ctx, SID);
-    const warn = placementDraftKey("default", "block", "warnAt");
-    const error = placementDraftKey("default", "block", "errorAt");
+    const warn = placementDraftKey(bare("block"), "warnAt");
+    const error = placementDraftKey(bare("block"), "errorAt");
     const setState = CLICK_VERBS.get("set-state")!;
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
     expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx)).toThrow(
@@ -152,7 +155,7 @@ describe("a stride wider than 1 reaches both ends", () => {
   test("a step past a bound stops on it; only a step from the bound wraps", async () => {
     const rt = thresholdBar(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
     configurePlacement(rt.ctx, SID, "default", "session");
-    const budget = placementDraftKey("default", "session", "budget");
+    const budget = placementDraftKey(bare("session"), "budget");
     rt.ctx.sessionState.set(SID, budget, "9998");
     await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("10000");

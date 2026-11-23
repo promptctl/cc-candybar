@@ -699,8 +699,16 @@ describe("a user menu cannot join a synthesized accordion", () => {
 
   test("a shared key and an independent key never meet, and neither nests in the other", () => {
     const keys = [
-      menuStateKey("settings", "pickers", undefined),
-      menuStateKey("s", "x", undefined),
+      menuStateKey(
+        { preset: "default", id: "settings", segment: "settings" },
+        "pickers",
+        undefined,
+      ),
+      menuStateKey(
+        { preset: "default", id: "s", segment: "s" },
+        "x",
+        undefined,
+      ),
       sharedMenuStateKey("s"),
       sharedMenuStateKey("settings.pickers"),
       sharedMenuStateKey("candybar-pickers"),

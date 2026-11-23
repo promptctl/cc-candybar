@@ -46,6 +46,10 @@ import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { escapedIdent } from "./ident.js";
+import {
+  placementScope,
+  type PlacementIdentity,
+} from "./placement-identity.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -319,16 +323,16 @@ function configureRefsIn(nodes: readonly LayoutNode[]): DisclosureRef[] {
 }
 
 // [LAW:one-source-of-truth] THE session key an unsaved value of one
-// placement's setting lives at: the preset (a placement's id is unique only in
-// the tree one preset renders), the id, and the setting. A setting name is an
-// identifier and a preset's ident holds no `.`, so the last segment is always
-// the setting and the second the preset — the key names one value.
+// placement's setting lives at: the placement's identity (its preset, id and
+// segment, so a placement whose segment changed under a kept id starts with
+// none of the old segment's drafts) and the setting. A setting name is an
+// identifier and the identity's parts hold no `.`, so the last segment is
+// always the setting — the key names one value.
 export function placementDraftKey(
-  presetIdent: string,
-  id: string,
+  placement: PlacementIdentity,
   setting: string,
 ): string {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
+  return `${PLACEMENT_DRAFT_NS}${placementScope(placement)}.${setting}`;
 }
 
 // What configure mode adds to one placement: the `🔧` that
@@ -375,7 +379,10 @@ function configureParts(
   };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id, name);
+    const key = placementDraftKey(
+      { preset: ctx.preset, id, segment: node.name },
+      name,
+    );
     // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
     // preset or placement may lead with a digit, which a field name may not —
     // hence `p` and `d`. The key, not the name, is what a session
@@ -680,7 +687,15 @@ export function insertGap(
   const gap = `${relation}.${escapedIdent(anchor)}`;
   const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
+  return {
+    apply,
+    host,
+    stateKey: menuStateKey(
+      { preset, id: host, segment: host },
+      apply,
+      undefined,
+    ),
+  };
 }
 
 // One splice's context, threaded unchanged through the recursion.
