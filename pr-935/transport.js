@@ -43319,7 +43319,7 @@ function fileValueOf(field, raw) {
   if (kind === "string") return { value: raw };
   if (kind === "number") {
     const n = Number(raw);
-    return Number.isFinite(n) ? { value: n } : { reason: `expects a number, got "${raw}"` };
+    return Number.isInteger(n) && String(n) === raw ? { value: n } : { reason: `expects an integer written plainly, got "${raw}"` };
   }
   if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
   if (BOOLEAN_FALSY.has(raw)) return { value: false };
@@ -49821,16 +49821,6 @@ function validateGlobals(ctx, path31, raw) {
 function validatePresetGlobals(ctx, path31, raw) {
   return record(ctx, PRESET_GLOBALS_SCHEMA, path31, raw) ?? {};
 }
-var FILE_SCHEMAS = {
-  globals: GLOBALS_SCHEMA,
-  "preset-globals": PRESET_GLOBALS_SCHEMA,
-  "theme-default": THEME_DEFAULT_SCHEMA
-};
-function fileFieldIssue(ctx, scope, path31, field, value) {
-  const scratch = { ...ctx, source: "", issues: [] };
-  record(scratch, FILE_SCHEMAS[scope], path31, { [field]: value });
-  return scratch.issues[0]?.message ?? null;
-}
 function presetGlobalsJson() {
   return recordJson(PRESET_GLOBALS_SCHEMA);
 }
@@ -49914,6 +49904,31 @@ function persistPath(target) {
     case "theme-default":
       return ["themeDefaults", target.theme, target.field];
   }
+}
+var PLACE_SCHEMAS = {
+  globals: GLOBALS_SCHEMA,
+  "preset-globals": PRESET_GLOBALS_SCHEMA,
+  "theme-default": THEME_DEFAULT_SCHEMA,
+  "segment-palette": {
+    noun: "segment key",
+    fields: { palette: paletteSpec() }
+  }
+};
+function persistedValueOf(target, raw) {
+  return target.scope === "segment-palette" ? { value: raw } : fileValueOf(target.field, raw);
+}
+function holdsInteger(target) {
+  return target.scope !== "segment-palette" && wireKindOf(target.field) === "number";
+}
+function persistedValueIssue(ctx, target, raw) {
+  const lifted = persistedValueOf(target, raw);
+  if ("reason" in lifted) return lifted.reason;
+  const steps2 = persistPath(target);
+  const scratch = { ...ctx, source: "", issues: [] };
+  record(scratch, PLACE_SCHEMAS[target.scope], steps2.slice(0, -1).join("."), {
+    [steps2[steps2.length - 1]]: lifted.value
+  });
+  return scratch.issues[0]?.message ?? null;
 }
 
 // src/renderer/bundled-presets.ts
@@ -61481,31 +61496,26 @@ function missingSegmentHint(name, segments) {
 }
 function validateCrossReferences(ctx, cfg, authored, presence2) {
   const styleFragments = [
-    [["globals"], cfg.globals.style, "globals.endcaps"],
-    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
+    [["globals"], cfg.globals.style],
+    [["editGlobals"], cfg.editGlobals.style],
     ...Object.entries(cfg.presets).map(
-      ([name, preset]) => [
-        ["presets", name, "globals"],
-        preset.globals?.style,
-        `presets.${name}.globals.endcaps`
-      ]
+      ([name, preset]) => [["presets", name, "globals"], preset.globals?.style]
     ),
     ...Object.entries(cfg.themeDefaults).map(
-      ([theme24, fragment]) => [["themeDefaults", theme24], fragment.style, "globals.endcaps"]
+      ([theme24, fragment]) => [["themeDefaults", theme24], fragment.style]
     )
   ];
-  for (const [at, name, endcapsAt] of styleFragments) {
+  for (const [at, name] of styleFragments) {
     if (name === void 0) continue;
-    const where = `${at.join(".")}.style`;
-    const message = undeclaredStyleMessage(cfg, where, name, endcapsAt);
+    const message = undeclaredStyleMessage(cfg, at, name);
     if (message === null) continue;
     ctx.issues.push({
-      path: where,
+      path: `${at.join(".")}.style`,
       message,
       line: findKeyLine(ctx.source, [...at, "style"])
     });
   }
-  const undeclaredPreset = cfg.globals.preset === void 0 ? null : undeclaredPresetMessage(cfg, "globals.preset", cfg.globals.preset);
+  const undeclaredPreset = cfg.globals.preset === void 0 ? null : undeclaredPresetMessage(cfg, ["globals"], cfg.globals.preset);
   if (undeclaredPreset !== null) {
     ctx.issues.push({
       path: "globals.preset",
@@ -61988,36 +61998,40 @@ function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
     line: findKeyLine(ctx.source, keyPath)
   });
 }
-function undeclaredStyleMessage(cfg, where, name, endcapsAt) {
+function endcapsHome(at) {
+  return at[0] === "themeDefaults" ? "globals.endcaps" : [...at, "endcaps"].join(".");
+}
+function undeclaredStyleMessage(cfg, at, name) {
   if (isExpression(name) || Object.hasOwn(cfg.styles, name)) return null;
-  return isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
+  const where = `${at.join(".")}.style`;
+  return isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsHome(at)) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
 }
-function undeclaredPresetMessage(cfg, where, name) {
-  return presetNames(cfg.presets).includes(name) ? null : `${where} "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
+function undeclaredPresetMessage(cfg, at, name) {
+  return presetNames(cfg.presets).includes(name) ? null : `${at.join(".")}.preset "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
 }
+var MEMBERSHIP = /* @__PURE__ */ new Map([
+  ["style", undeclaredStyleMessage],
+  ["preset", undeclaredPresetMessage]
+]);
+var NO_MEMBERSHIP = () => null;
 function checkPersistedValues(ctx, cfg, name, a, optionDomains) {
-  const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+  const target = parsePersistTarget(a.persist);
   const writes = valuesWritten(a, optionDomains);
-  if (target === null || !Array.isArray(writes) || target.scope !== "globals" && target.scope !== "preset-globals" && target.scope !== "theme-default") {
+  if (target === null || target.scope === "preset-root" || writes === null) {
     return;
   }
-  const { path: path31, endcapsAt } = fileLocation(target);
-  const reasonOf2 = (raw) => {
-    const lifted = fileValueOf(target.field, raw);
-    if ("reason" in lifted) return lifted.reason;
-    const refused2 = fileFieldIssue(
-      ctx,
-      target.scope,
-      path31,
-      target.field,
-      lifted.value
-    );
-    if (refused2 !== null) return refused2;
-    if (target.field === "style") {
-      return undeclaredStyleMessage(cfg, `${path31}.style`, raw, endcapsAt);
-    }
-    return target.scope === "globals" && target.field === "preset" ? undeclaredPresetMessage(cfg, `${path31}.preset`, raw) : null;
-  };
+  if ("min" in a && !holdsInteger(target)) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"])
+    });
+    return;
+  }
+  const steps2 = persistPath(target);
+  const at = steps2.slice(0, -1);
+  const membership = MEMBERSHIP.get(steps2[steps2.length - 1]) ?? NO_MEMBERSHIP;
+  const reasonOf2 = (raw) => persistedValueIssue(ctx, target, raw) ?? membership(cfg, at, raw);
   for (const field of new Set(writes.map((w) => w.field))) {
     const refused2 = writes.filter((w) => w.field === field).flatMap((w) => {
       const reason = reasonOf2(w.value);
@@ -62025,29 +62039,11 @@ function checkPersistedValues(ctx, cfg, name, a, optionDomains) {
     });
     if (refused2.length === 0) continue;
     const where = `actions.${name}.${field}`;
-    const [first2] = refused2;
-    const more = refused2.length === 1 ? "" : ` (and ${refused2.length - 1} more)`;
     ctx.issues.push({
       path: where,
-      message: `${where}: persisting ${JSON.stringify(first2.value)} would write a file the loader refuses${more} \u2014 ${first2.reason}`,
+      message: `${where}: persisting ${shownValues(refused2.map((r) => r.value))} would write a file the loader refuses \u2014 ${refused2[0].reason}`,
       line: findKeyLine(ctx.source, ["actions", name, field])
     });
-  }
-}
-function fileLocation(target) {
-  switch (target.scope) {
-    case "globals":
-      return { path: "globals", endcapsAt: "globals.endcaps" };
-    case "preset-globals":
-      return {
-        path: `presets.${target.preset}.globals`,
-        endcapsAt: `presets.${target.preset}.globals.endcaps`
-      };
-    case "theme-default":
-      return {
-        path: `themeDefaults.${target.theme}`,
-        endcapsAt: "globals.endcaps"
-      };
   }
 }
 function checkSettingWrites(ctx, name, a, row, optionDomains) {
@@ -62093,17 +62089,20 @@ function checkSettingWrites(ctx, name, a, row, optionDomains) {
     return;
   }
   for (const field of new Set(outside.map((w) => w.field))) {
-    const values2 = outside.filter((w) => w.field === field).map((w) => JSON.stringify(w.value));
-    const shown = values2.length <= REPORTED_VALUES ? values2.join(", ") : `${values2.slice(0, REPORTED_VALUES).join(", ")} and ${values2.length - REPORTED_VALUES} more`;
+    const values2 = outside.filter((w) => w.field === field).map((w) => w.value);
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
+      message: `${where}: ${shownValues(values2)} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field])
     });
   }
 }
 var REPORTED_VALUES = 3;
+function shownValues(values2) {
+  const quoted2 = values2.map((v) => JSON.stringify(v));
+  return quoted2.length <= REPORTED_VALUES ? quoted2.join(", ") : `${quoted2.slice(0, REPORTED_VALUES).join(", ")} and ${quoted2.length - REPORTED_VALUES} more`;
+}
 var ANY_INTEGER = /* @__PURE__ */ Symbol("any integer");
 function valuesWritten(a, optionDomains) {
   if ("to" in a) return [{ field: "to", value: a.to }];
@@ -75347,7 +75346,10 @@ function stateKeyShown(config, sessionPick, key) {
   return sessionPick(key);
 }
 function configKeySeed(globals, key) {
-  const seed = numericGlobalsSeeds(globals).get(key);
+  const target = parsePersistTarget(key);
+  const seed = numericGlobalsSeeds(globals).get(
+    target !== null && "field" in target ? target.field : key
+  );
   return seed === void 0 ? null : String(seed);
 }
 
@@ -75521,9 +75523,7 @@ function closingView(store, nestOf2, log) {
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
 function persistValueText(key, raw) {
-  const target = requireValueTarget(key);
-  if (target.scope === "segment-palette") return JSON.stringify(raw);
-  const lifted = fileValueOf(target.field, raw);
+  const lifted = persistedValueOf(requireValueTarget(key), raw);
   if ("reason" in lifted) {
     throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
@@ -75846,11 +75846,8 @@ function readDeclared(text4, key) {
   const target = requireValueTarget(key);
   const doc = docOf(text4 ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
-  if (node === void 0) return void 0;
-  return {
-    source: textOf(text4 ?? "", node),
-    number: node.kind === "number" ? node.value : void 0
-  };
+  if (node === void 0) return { kind: "none" };
+  return node.kind === "number" && Number.isInteger(node.value) ? { kind: "integer", value: node.value } : { kind: "other", source: textOf(text4 ?? "", node) };
 }
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
@@ -76416,18 +76413,17 @@ var stepConfig = (args, ctx) => {
     requireLayerText(into.path, store.read(into.path)),
     landing.key
   );
-  const stored = declared?.number;
-  if (declared !== void 0 && !(stored !== void 0 && Number.isInteger(stored) && stored >= params.min && stored <= params.max)) {
+  if (declared.kind === "other") {
     throw new BadVerbArgs(
-      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer from ${params.min} to ${params.max} to step`
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer to step`
     );
   }
-  const current = stored === void 0 ? stepFrom(
+  const current = declared.kind === "integer" ? clampTo(params, declared.value) : stepFrom(
     "step-config",
     key,
     params,
     configKeySeed(landing.globals, key)
-  ) : stored;
+  );
   const next2 = stepWithin(current, by, params.min, params.max);
   const result = gate2.validate(key, String(next2));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);

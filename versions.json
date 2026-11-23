@@ -4,15 +4,22 @@
     {
       "version": "pr-935",
       "ref": "refs/pull/935/merge",
-      "sha": "a0ff75310ef9e2893c75f25ee3364207b6c0cfac",
-      "timestamp": "2026-11-23T12:47:30.964Z",
+      "sha": "c6be2e715e263185bbc01de17e169858a5ae282a",
+      "timestamp": "2026-11-23T13:03:43.010Z",
       "commits": [
         {
-          "sha": "a0ff75310ef9e2893c75f25ee3364207b6c0cfac",
+          "sha": "c6be2e715e263185bbc01de17e169858a5ae282a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T12:46:17Z",
-          "message": "Merge 8341974020ab38bb62c072aa2d3c11cbc8e7b57c into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
+          "timestamp": "2026-11-23T13:02:32Z",
+          "message": "Merge d02f466c014189fab99b014e3b396a64a5316124 into 1c5a40b642d34fb27fa6936298168aa0cce67159\n"
+        },
+        {
+          "sha": "d02f466c014189fab99b014e3b396a64a5316124",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T06:02:15-07:00",
+          "message": "fix(config): carry a persist target's file place and schema once, judge a segment's palette and a stepper's field by it, and step only over a stored integer\n"
         },
         {
           "sha": "8341974020ab38bb62c072aa2d3c11cbc8e7b57c",
