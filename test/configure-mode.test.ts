@@ -722,6 +722,28 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     ).toEqual(["default"]);
   });
 
+  test("two presets that render one row, holding different drafts for it, refuse the save and keep both", async () => {
+    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
+    durable.write(src);
+    const rt = configureBar(src);
+    arrange(rt.ctx, SID);
+    const keyB = placementDraftKey(
+      { preset: "b", id: "vcs2", segment: "vcs" },
+      "depth",
+    );
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "depth"), "3");
+    rt.ctx.sessionState.set(SID, keyB, "1");
+    const save = linkUrls(rt.render()).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_SAVE),
+    );
+    await expect(rt.click(save!)).rejects.toThrow(
+      /presets "default" and "b" both render root .* different values for vcs2\.depth/,
+    );
+    expect(durable.text()).toBe(src);
+    expect(rt.ctx.edits.view.get(SID, keyB)).toBe("1");
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "depth"))).toBe("3");
+  });
+
   test("configure mode names its preset: another preset's placement of the id stays closed", () => {
     const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
     durable.write(src);

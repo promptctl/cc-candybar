@@ -808,15 +808,29 @@ function withPlacements(
   placements: readonly PlacementValue[],
   own: (text: string, under: DslConfig, preset: string, id: string) => string,
 ): string {
+  // [LAW:no-silent-failure] Presets that restage nothing render one shared
+  // row, so drafts filed under two presets can address the same setting of the
+  // same placement in the file, which holds one value. Two that differ are
+  // refused naming both presets, never resolved by whichever is written last.
+  const landed = new Map<string, { preset: string; value: string }>();
   return placements.reduce((prior, { preset, id, setting, value }) => {
     const acc = own(prior, under, preset, id);
     const placement = layoutPlacementOf(docOf(acc), under, preset, id);
+    const spelled = json5Text(value);
+    const slot = `${placement.path.join(".")}\u0000${id}\u0000${setting}`;
+    const rival = landed.get(slot);
+    if (rival !== undefined && rival.value !== spelled) {
+      throw new BadVerbArgs(
+        `presets "${rival.preset}" and "${preset}" both render ${placement.path.join(".")} in ${file} and hold different values for ${id}.${setting}: reset one of the drafts`,
+      );
+    }
+    landed.set(slot, { preset, value: spelled });
     const set = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
       id,
       setting,
-      json5Text(value),
+      spelled,
     );
     if (set === null) {
       throw new BadVerbArgs(
