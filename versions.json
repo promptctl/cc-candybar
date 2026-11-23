@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-942",
+      "ref": "refs/pull/942/merge",
+      "sha": "bbc6093e90485fa894d8839da13f4a12e2a5dcc6",
+      "timestamp": "2026-11-23T18:30:43.711Z",
+      "commits": [
+        {
+          "sha": "bbc6093e90485fa894d8839da13f4a12e2a5dcc6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:29:46-07:00",
+          "message": "Merge 95260d63f061c9b97a07fce2270c94d86ec39aab into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+        },
+        {
+          "sha": "95260d63f061c9b97a07fce2270c94d86ec39aab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T11:29:21-07:00",
+          "message": "fix(daemon): a TIMEOUT to a click means it ran nothing, and url-handle and the click helpers act on that\n\nA click request read in time is answered with its own outcome instead of\nbeing bounded by the request guard, so a TIMEOUT now means the frame was read\nafter the guard fired and the click was refused at its turn. url-handle tells\na refused click to be clicked again and a click its own clock cut off that the\noutcome is unknown. The e2e click helper sends again on TIMEOUT and no longer\nreads the daemon log for an outcome.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-941",
       "ref": "refs/pull/941/merge",
       "sha": "ce87bf8c2ca4f9f8fee851a797d89d40f31c1357",
