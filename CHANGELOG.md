@@ -1,3 +1,9 @@
+## [1.236.12](https://github.com/promptctl/cc-candybar/compare/v1.236.11...v1.236.12) (2026-11-23)
+
+### Bug Fixes
+
+* **daemon:** a TIMEOUT to a click means it ran nothing, and url-handle and the click helpers act on that ([#942](https://github.com/promptctl/cc-candybar/issues/942)) ([3763dd0](https://github.com/promptctl/cc-candybar/commit/3763dd05489840ead63be1c83351a0e51a0c63f3))
+
 ## [1.236.11](https://github.com/promptctl/cc-candybar/compare/v1.236.10...v1.236.11) (2026-11-23)
 
 ### Bug Fixes
