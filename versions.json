@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "a3da8f9db90b8e27fb883db81e687a3e39f1ea9f",
+      "timestamp": "2026-11-23T19:50:25.698Z",
+      "commits": [
+        {
+          "sha": "a3da8f9db90b8e27fb883db81e687a3e39f1ea9f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T19:48:29Z",
+          "message": "chore(release): set `package.json` to 1.236.11\n\n## [1.236.11](https://github.com/promptctl/cc-candybar/compare/v1.236.10...v1.236.11) (2026-11-23)\n\n### Bug Fixes\n\n* **render:** a request waits for exactly what its frame draws pending ([#940](https://github.com/promptctl/cc-candybar/issues/940)) ([8c0bb1d](https://github.com/promptctl/cc-candybar/commit/8c0bb1d6a482c98263a00d5db9cd63d931555cce))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-941",
       "ref": "refs/pull/941/merge",
       "sha": "0499eb9261a9de90930caa8c85b173e1f9adc0c7",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T11:26:53-07:00",
           "message": "docs(design): the design docs and memory files say what the code does now\n\nhost-and-renderer.md points at the renderer interface instead of copying it,\nstates Address as object keys with arrays addressed whole, and describes the\nhost's start and environment as they are (no LaunchAgent is written; launchd\nstays planned). The inventory cites files that exist and counts the verbs the\ncode declares. Memory drops identifiers, the removed tmux status line, click\nrestart and Doctor-as-living lines, and states a diagnostic's identity as\nproducers name it.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "8c0bb1d6a482c98263a00d5db9cd63d931555cce",
-      "timestamp": "2026-11-23T19:46:33.943Z",
-      "commits": [
-        {
-          "sha": "8c0bb1d6a482c98263a00d5db9cd63d931555cce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T12:45:18-07:00",
-          "message": "fix(render): a request waits for exactly what its frame draws pending (#940)\n\n* fix(render): a request waits for exactly what its frame draws pending, and an unanswered source draws as pending\n\nThe draw reports what it still owes with every frame (settled, owed names, or stalled by a failed stamp), each with the seq of the world state it drew. The host waits for that and nothing it recomputes, redraws when a later world state reaches the renderer, and ends on a draw that owes nothing, a stalled stamp, a turn that threw or was refused, or the client's deadline, recording what held a wait that ran out. Text, file and json variables are pending until their first run answers; their fallback stands in only for a run that read nothing. Today's day sums and the branch's PR draw deferred, which no request waits on.\n\n* fix(render): a request's draws end as one typed result, and what landed at the renderer never moves back\n\nReview pass 1 on the request wait: the loop's ending is one value, an\nabandoned draw is no throw, a rejected delivery tells the waiting request\nwhy, the deferral spelling is one call per deferred built-in, and the wait\nreturns what it waited on.\n\n* fix(render): the world state a request's own context carries wakes the waits on older draws, and a frame answers only a recipient that is still there\n\nReview pass 2 on the request wait: what landed at the renderer moves for the\ncontext turn's world state too, the one admission rule for a frame covers\nevery ending, a draw that throws during the close is the renderer's failure,\nand a wait its own signal ended says so.\n\n* fix(render): a request's wait ends on the next stamp, and a redraw that reads no newer world state ends it as stale\n\nReview pass 3 on the request wait: the host's own record of what reached the\nrenderer is deleted. Mailbox order puts a stamp's delivery ahead of the\nredraw, and a renderer that refused it fails the redraw, so the record only\nre-answered both and missed paths to the renderer.\n\n* fix(render): a draw already in flight when its client leaves still answers, and only a frame a wait ended on is refused for a recipient that left"
         }
       ]
     },
