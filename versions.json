@@ -4,22 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "eb860acbc953e33fd8f7fb0253cd5f1cbb3a289e",
-      "timestamp": "2026-11-23T08:53:08.768Z",
+      "sha": "45495ab6e8b3e35f6f352ca444be32f05d9c5f05",
+      "timestamp": "2026-11-23T09:03:29.915Z",
       "commits": [
         {
-          "sha": "eb860acbc953e33fd8f7fb0253cd5f1cbb3a289e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T01:52:00-07:00",
-          "message": "fix(daemon): a launcher pipe event leaves the daemon's facts once no bar can show it (#934)\n\n* fix(daemon): a launcher pipe event leaves the daemon's facts once no bar can show it\n\nThe launcher reports each pipe event to its observer and keeps none of it.\nThe daemon holds the latest in a held slot, as it holds a renderer's end and\nan act's failure: shown by the one event hold, answered by a confirmed write,\nand let go once no bar can show it. A pipe event that recurs while one is\nheld is counted, and what recurred is held afresh when the slot lets go, so\na flood moves no bar.\n\nThe daemon's facts carry the pipe event as its own field, so the private\nrenderer wire moves to version 15.\n\n* fix(daemon): each pipe event is held and counted on its own\n\nA pipe event that recurred while another was held used to be folded into\nthe held one, so a different event was misnamed or never reached a bar.\nPipe events and task throws are now one family of recurring events, held\nper subject: an occurrence while its subject is held is counted, and the\nlatest is held afresh with its count when the slot lets go.\n\nThe daemon's facts carry its held events as one list the renderer judges\nby the one hold, the launcher's lifeline warning is a single value, the\nlauncher's unused instant is gone, and both kinds say how often they\nrecurred in the same words.\n\n* fix(daemon): recurring events close with their owner and stamp one way\n\nA closed family of recurring events takes no occurrence, so a pipe event\nthat lands after close arms no end on a closed daemon. The family stamps\nevery event it shows at the instant it is shown, a first occurrence and a\nrecurrence alike, where a task throw used to carry the instant it was\ncaught. The wording of a recurrence moves to the event hold with the rest of\nthe events' vocabulary, and the hold-end task is named from the kind.\n\nThe draw tells an error from a warning once, and names what a standing\nwarning is about beside the warning, not by whether it has a subject. The\nframe record names each pipe event's hold.\n\n* fix(daemon): a daemon event is always about something\n\nEvery event of the daemon's own carries what it is about, a kind that holds\none event at a time being about itself, so the feed's cover of an answer and\nthe owner's acknowledgement of it ask one question of an event's identity.\nA recurring subject is held only when its slot holds, so a subject whose event\ncould not be built is shown by its next occurrence. What a diagnostic is\nabout is built in one place, the repository question included."
-        },
-        {
-          "sha": "7e6b5e5c82b2b65761435a047c890ba77ff34587",
-          "author_name": "GitHub Action",
-          "author_email": "action@github.com",
-          "timestamp": "2026-11-22T09:25:29Z",
-          "message": "chore: update pricing data 2026-11-22 [skip ci]\n"
+          "sha": "45495ab6e8b3e35f6f352ca444be32f05d9c5f05",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T09:01:54Z",
+          "message": "chore(release): set `package.json` to 1.236.6\n\n## [1.236.6](https://github.com/promptctl/cc-candybar/compare/v1.236.5...v1.236.6) (2026-11-23)\n\n### Bug Fixes\n\n* **daemon:** a launcher pipe event leaves the daemon's facts once no bar can show it ([#934](https://github.com/promptctl/cc-candybar/issues/934)) ([eb860ac](https://github.com/promptctl/cc-candybar/commit/eb860acbc953e33fd8f7fb0253cd5f1cbb3a289e))\n"
         }
       ]
     },
