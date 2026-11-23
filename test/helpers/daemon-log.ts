@@ -53,14 +53,19 @@ export const renderEventsOf = (
 ): string[] =>
   lines.filter((l) => l.includes(`] render sid=${valueOf(sessionId)} `));
 
-// The click event a request's id names, which a TIMEOUT carries back.
+// The click event a request's id names, which a TIMEOUT carries back, among the
+// lines from `from` on: ids restart with each daemon, and a log outlives it.
 export const clickEventOf = (
   lines: readonly string[],
+  from: number,
   request: RequestId,
 ): string | undefined =>
-  lines.find(
-    (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(request),
-  );
+  lines
+    .slice(from)
+    .find(
+      (l) =>
+        l.includes("] click ") && fieldsOf(l).get("req") === String(request),
+    );
 
 // [LAW:one-source-of-truth] Count the session's render answers. A backstop
 // or an abandoned draw can log an attempt that only produced a timeout.

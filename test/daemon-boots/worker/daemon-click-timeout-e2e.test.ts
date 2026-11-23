@@ -84,10 +84,10 @@ test("a click read after the guard fired is answered TIMEOUT and ran nothing; ur
 
     const lines = await loggedWhen(
       env,
-      (all) => clickEventOf(all.slice(from), request) !== undefined,
+      (all) => clickEventOf(all, from, request) !== undefined,
       "the refused click's event",
     );
-    const event = fieldsOf(clickEventOf(lines.slice(from), request)!);
+    const event = fieldsOf(clickEventOf(lines, from, request)!);
     expect(event.get("outcome")).toBe("abandoned");
     expect(event.get("timedOut")).toBe("Y");
     expect(bar.pinned()).toBeUndefined();

@@ -59,11 +59,15 @@ export interface TransientOutcome {
   message: string;
 }
 
-// `phase` is whose clock ended the wait, and how far the request had got:
+// `phase` is whose clock ended the wait, and how far the request had got. Only
+// a click request's reader (url-handle) reads it: a render's TIMEOUT means a
+// draw the daemon dropped or a guard that fired, and its callers act on `busy`
+// alone.
 // - "connect": our clock, before the listener accepted the request.
 // - "deadline": our clock, after the request was sent.
-// - "backstop": the daemon's guard answered TIMEOUT. What that says of a click
-//   is connection.ts's rule.
+// - "backstop": the daemon answered TIMEOUT. A click's TIMEOUT has one sender,
+//   the guard, so to a click it means the frame was read after the guard
+//   fired and the click was refused (request-deadline.ts).
 export type BusyPhase = TimeoutPhase | "backstop";
 
 export interface BusyOutcome {
@@ -227,7 +231,8 @@ export function interpretResponse<T>(
         daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
-      // Daemon is alive, and its own guard ended the wait.
+      // Daemon is alive, and it ended the wait. The phase is read for a click
+      // only (see BusyPhase), which is why one value covers every sender.
       return { kind: "busy", phase: "backstop", message: errorMessage };
     case "BAD_REQUEST":
       return { kind: "permanent", cause: "bad_request", message: errorMessage };

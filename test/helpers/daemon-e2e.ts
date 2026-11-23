@@ -334,9 +334,9 @@ export const linkTo = (frame: Frame, text: string): string => {
 // before the round trip does. The daemon's answer is returned as it came,
 // refusal included; a TIMEOUT only once the budget is spent.
 //
-// [LAW:no-ambient-temporal-coupling] A TIMEOUT to a click is safe to send
-// again (connection.ts), so a click is asked again as a render is, and its
-// answer is never read off the daemon's log.
+// [LAW:one-source-of-truth] A TIMEOUT to a click is safe to send again
+// (request-deadline.ts), so a click is asked again as a render is, and what
+// became of it is the daemon's answer, never a second reading off its log.
 export async function sendClick(
   target: DaemonTarget,
   url: string,
