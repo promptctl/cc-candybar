@@ -1,3 +1,9 @@
+## [1.236.7](https://github.com/promptctl/cc-candybar/compare/v1.236.6...v1.236.7) (2026-11-23)
+
+### Bug Fixes
+
+* **config:** give re-added placements a fresh id and keep edit-mode state in the edit ([#886](https://github.com/promptctl/cc-candybar/issues/886)) ([9b161b0](https://github.com/promptctl/cc-candybar/commit/9b161b0a3123064752b90d778c33e73d8089d89f))
+
 ## [1.236.6](https://github.com/promptctl/cc-candybar/compare/v1.236.5...v1.236.6) (2026-11-23)
 
 ### Bug Fixes
