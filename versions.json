@@ -4,15 +4,22 @@
     {
       "version": "pr-940",
       "ref": "refs/pull/940/merge",
-      "sha": "aef788ffc74d7fdd3fc97de69e7af9bb0dc68c9c",
-      "timestamp": "2026-11-23T18:52:24.394Z",
+      "sha": "2fd30dc764e03734a9c0e6c584551c06e119255c",
+      "timestamp": "2026-11-23T19:10:03.655Z",
       "commits": [
         {
-          "sha": "aef788ffc74d7fdd3fc97de69e7af9bb0dc68c9c",
+          "sha": "2fd30dc764e03734a9c0e6c584551c06e119255c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T18:50:20Z",
-          "message": "Merge 52d5bf46d13d6ebed22687340f22cde171db0a65 into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+          "timestamp": "2026-11-23T19:08:51Z",
+          "message": "Merge 330f7385e4786bc46fa1ffbc43e99f5a2285adfa into 7dea1a27bd6e661b5b96a252c21c8b713f1ccad7\n"
+        },
+        {
+          "sha": "330f7385e4786bc46fa1ffbc43e99f5a2285adfa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T12:08:34-07:00",
+          "message": "fix(render): the world state a request's own context carries wakes the waits on older draws, and a frame answers only a recipient that is still there\n\nReview pass 2 on the request wait: what landed at the renderer moves for the\ncontext turn's world state too, the one admission rule for a frame covers\nevery ending, a draw that throws during the close is the renderer's failure,\nand a wait its own signal ended says so.\n"
         },
         {
           "sha": "52d5bf46d13d6ebed22687340f22cde171db0a65",

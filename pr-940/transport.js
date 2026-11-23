@@ -66143,10 +66143,11 @@ var SourceRegistry = class _SourceRegistry {
           runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
         ) : refresh;
       },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
+      // A failure is equal to another by what it says: a never-answered node
+      // draws it, so a key throwing a moving message must move what the cell
+      // shows along with the variable's standing fault.
       {
-        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === "pending" && b.kind === "pending" ? a.why === b.why : a.kind === b.kind
+        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === "pending" && b.kind === "pending" ? a.why === b.why : a.kind === "failed" && b.kind === "failed" ? a.reason === b.reason : a.kind === b.kind
       }
     );
     runInAction(() => {
@@ -82089,22 +82090,27 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         if (turn.failure === DRAW_ABANDONED)
           return ended({ kind: "abandoned", turn });
         return ended(
-          closing.aborted ? { kind: "closed", turn } : { kind: "threw", turn, failure: turn.failure }
+          turn.failure.kind === "closing" ? { kind: "closed", turn } : { kind: "threw", turn, failure: turn.failure }
         );
       }
       if (answer2 === null) return ended({ kind: "unpresented", turn });
+      const answers = (ending2) => {
+        if (!abandoned()) return ended(ending2);
+        turn.settlePresentation(answer2, DRAW_ABANDONED.message);
+        return ended({ kind: "abandoned", turn });
+      };
       const { awaiting } = answer2;
       if (awaiting.kind === "settled")
-        return ended({ kind: "settled", turn, answer: answer2 });
+        return answers({ kind: "settled", turn, answer: answer2 });
       if (awaiting.kind === "stalled")
-        return ended({
+        return answers({
           kind: "stalled",
           turn,
           answer: answer2,
           cause: awaiting.reason
         });
       const left = recipient.waitEndsAt - clock.monotonic();
-      if (left <= 0) return ended({ kind: "deadline", turn, answer: answer2 });
+      if (left <= 0) return answers({ kind: "deadline", turn, answer: answer2 });
       const waitFrom = clock.monotonic();
       const wait = await waitWithin(
         `render wait ${session}`,
@@ -82114,17 +82120,21 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
         closing
       );
       waited += elapsedMs(clock, waitFrom);
-      if (wait.end === "closed") {
+      const closed = () => {
         turn.settlePresentation(answer2, "the daemon closed");
         return ended({ kind: "closed", turn });
-      }
+      };
+      if (wait.end === "closed") return closed();
       if (wait.end === "deadline")
-        return ended({ kind: "deadline", turn, answer: answer2 });
+        return answers({ kind: "deadline", turn, answer: answer2 });
       switch (wait.value.kind) {
+        case "aborted":
+          if (closing.aborted) return closed();
+          return answers({ kind: "deadline", turn, answer: answer2 });
         case "gone":
-          return ended({ kind: "gone", turn, answer: answer2 });
+          return answers({ kind: "gone", turn, answer: answer2 });
         case "untaken":
-          return ended({
+          return answers({
             kind: "untaken",
             turn,
             answer: answer2,
@@ -82144,6 +82154,11 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       unlessClosing({ kind: "context", context: req, worldState })
     );
     recorded(facts, configured);
+    collector.landed(
+      session,
+      worldState,
+      configured.kind === "threw" ? configured.failure.message : null
+    );
     if (checkoutError !== null) noteFacts(facts, { checkoutError });
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
@@ -88817,8 +88832,7 @@ var Collector = class {
   // request's next draw reads the world state the wait ended on. It judges
   // the renderer's side, never the stamp alone, so a wait cannot end on a
   // world state its next draw cannot read. `signal` ends it from outside (the
-  // wait's deadline or its owner's close), and the answer of a wait so ended
-  // is read by no one.
+  // wait's deadline or its owner's close), and a wait so ended says so.
   async moved(session, after, signal) {
     const read2 = () => {
       const record2 = this.records.get(session);
@@ -88832,7 +88846,21 @@ var Collector = class {
     } catch (e) {
       if (!signal.aborted) throw e;
     }
-    return read2() ?? { kind: "gone" };
+    return read2() ?? { kind: "aborted" };
+  }
+  // [LAW:single-enforcer] The one place what reached the renderer moves: a
+  // delivery's settling, and the context turn that carried a request's own
+  // stamp. It never moves back, because a session that changed renderer has
+  // turns settling from two mailboxes, in either order.
+  landed(session, document, untaken) {
+    const record2 = this.records.get(session);
+    if (record2 !== void 0) this.settled(record2.stamped, document, untaken);
+  }
+  settled(stamped, document, untaken) {
+    runInAction(() => {
+      if (document.seq > stamped.landed.seq)
+        stamped.landed = { seq: document.seq, untaken };
+    });
   }
   // A click is a person's input naming the session, as a request is, so the
   // next sweep keeps it whatever the click's turn draws in the meantime. A
@@ -89017,17 +89045,14 @@ var Collector = class {
             `world state delivery ${session}`,
             async () => {
               const untaken = await this.deps.deliver({ kind: "world-state", worldState: document }).catch((e) => {
-                const threw2 = `its delivery threw: ${inspect(e)}`;
+                const threw2 = `its delivery threw: ${failureOf(e).message}`;
                 this.deps.log(
                   "error",
                   `world state ${threw2} sid=${JSON.stringify(session)}`
                 );
                 return threw2;
               });
-              runInAction(() => {
-                if (document.seq > stamped.landed.seq)
-                  stamped.landed = { seq: document.seq, untaken };
-              });
+              this.settled(stamped, document, untaken);
             }
           );
         }
