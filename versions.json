@@ -4,15 +4,22 @@
     {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
-      "sha": "dbf200f85d6327c079cc9779f5e070eb18b08695",
-      "timestamp": "2026-11-23T10:03:22.956Z",
+      "sha": "3f84903125505263c2e38d2526362bb5df003282",
+      "timestamp": "2026-11-23T10:18:57.898Z",
       "commits": [
         {
-          "sha": "dbf200f85d6327c079cc9779f5e070eb18b08695",
+          "sha": "3f84903125505263c2e38d2526362bb5df003282",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:02:10Z",
-          "message": "Merge 5af3a60b6cc917f6c1a02d1fbe578fdc5f1712a2 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+          "timestamp": "2026-11-23T10:17:49Z",
+          "message": "Merge 318cee5bb9d9b8f0e2d105a0b74376696e28c9ec into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+        },
+        {
+          "sha": "318cee5bb9d9b8f0e2d105a0b74376696e28c9ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T03:17:27-07:00",
+          "message": "fix(config): a save writes the drafts of every preset, and the edit namespace test no longer ties menu keys to the classifier\n"
         },
         {
           "sha": "5af3a60b6cc917f6c1a02d1fbe578fdc5f1712a2",

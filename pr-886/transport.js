@@ -40945,6 +40945,9 @@ var RESERVED_NAMESPACES = [
 function reservedNamespaceOf(name) {
   return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }
+function isEditNamespaced(name) {
+  return name.startsWith(EDIT_NS);
+}
 function isMenuStateKey(key) {
   return key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS);
 }
@@ -43358,7 +43361,7 @@ function confirmStep(key, labels, fires) {
 
 // src/config/session-key.ts
 function sessionKeyKind(key) {
-  if (key.startsWith(EDIT_NS))
+  if (isEditNamespaced(key))
     return {
       kind: "edit",
       part: key === EDIT_MODE_KEY ? "mode" : key.startsWith(PLACEMENT_DRAFT_NS) ? "draft" : "view"
@@ -43434,7 +43437,7 @@ function menuMember(applyName) {
   return applyName;
 }
 function menuScope(host) {
-  return isEditModeKey(host) ? EDIT_NS : "";
+  return isEditNamespaced(host) ? EDIT_NS : "";
 }
 function menuStateKey(host, applyName, sharedKey) {
   return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : `${menuScope(host.id)}${MENU_NS}${placementKeyScope(host)}.${escapedIdent(applyName)}`;
@@ -64400,14 +64403,18 @@ function durableLanding(config, sessionPick, key) {
     globals: presetGlobals(config, preset)
   };
 }
-function placementDrafts(config, sessionPick) {
-  const { preset } = sessionGlobals(config, sessionPick);
+function placementDraftsIn(config, preset, sessionPick) {
   return slotsOf(config, preset).flatMap(
     ({ id: id2, setting, key, decl, saved }) => {
       const pick2 = sessionPick(key);
       const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
       return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
     }
+  );
+}
+function placementDrafts(config, sessionPick) {
+  return presetNames(config.presets).flatMap(
+    (preset) => placementDraftsIn(config, preset, sessionPick)
   );
 }
 function placementPickProblems(config, sessionPick, writes) {
@@ -64468,7 +64475,9 @@ function presetSnapshot(config, sessionPick) {
       baseOf(config, sessionPick),
       (row) => row.configKey
     ),
-    placements: placementDrafts(config, sessionPick)
+    // The copy is of the preset the session is in, so a draft filed under
+    // another preset is not part of it.
+    placements: placementDraftsIn(config, session.preset, sessionPick)
   };
 }
 function themeOwnLook(config, theme24) {
