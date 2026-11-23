@@ -40945,6 +40945,9 @@ var RESERVED_NAMESPACES = [
 function reservedNamespaceOf(name) {
   return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
 }
+function isMenuStateKey(key) {
+  return key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS);
+}
 function isReservedName(name) {
   return reservedNamespaceOf(name) !== void 0;
 }
@@ -43361,8 +43364,7 @@ function sessionKeyKind(key) {
       part: key === EDIT_MODE_KEY ? "mode" : key.startsWith(PLACEMENT_DRAFT_NS) ? "draft" : "view"
     };
   if (SESSION_KEY_TO_SETTING.has(key)) return { kind: "setting" };
-  if (key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS))
-    return { kind: "menu" };
+  if (isMenuStateKey(key)) return { kind: "menu" };
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
   if (key === CLICK_ERROR_KEY) return { kind: "record" };
@@ -43409,10 +43411,10 @@ function unescapedIdent(spelled2) {
 
 // src/config/placement-identity.ts
 init_globals();
-function placementScope(identity2) {
+function placementKeyScope(identity2) {
   return `p${escapedIdent(identity2.preset)}.d${escapedIdent(identity2.id)}.s${escapedIdent(identity2.segment)}`;
 }
-function placementOfScope(scope) {
+function placementOfKeyScope(scope) {
   const [preset, id2, segment, ...more] = scope.split(".");
   if (preset === void 0 || id2 === void 0 || segment === void 0 || more.length > 0 || !preset.startsWith("p") || !id2.startsWith("d") || !segment.startsWith("s"))
     return void 0;
@@ -43435,7 +43437,7 @@ function menuScope(host) {
   return isEditModeKey(host) ? EDIT_NS : "";
 }
 function menuStateKey(host, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : `${menuScope(host.id)}${MENU_NS}${placementScope(host)}.${escapedIdent(applyName)}`;
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : `${menuScope(host.id)}${MENU_NS}${placementKeyScope(host)}.${escapedIdent(applyName)}`;
 }
 function sharedMenuStateKey(sharedKey) {
   return `${menuScope(sharedKey)}${MENU_NS}_${escapedIdent(sharedKey)}`;
@@ -43451,7 +43453,7 @@ function menuOfKey(key) {
     return shared === void 0 ? void 0 : { menu: shared, page: page2 };
   }
   const parts = rest2.split(".");
-  const host = placementOfScope(parts.slice(0, 3).join("."));
+  const host = placementOfKeyScope(parts.slice(0, 3).join("."));
   const apply2 = unescapedIdent(parts[3] ?? "");
   return host === void 0 || apply2 === void 0 || parts.length !== 4 ? void 0 : { menu: `${apply2} on ${host.id}`, page: page2 };
 }
@@ -56443,7 +56445,7 @@ var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
 function configureMember(placement) {
-  return placementScope(placement);
+  return placementKeyScope(placement);
 }
 var EDIT_MODE_REF = {
   variable: EDIT_MODE_KEY,
@@ -58143,7 +58145,7 @@ function configureRefsIn(nodes) {
   );
 }
 function placementDraftKey(placement, setting) {
-  return `${PLACEMENT_DRAFT_NS}${placementScope(placement)}.${setting}`;
+  return `${PLACEMENT_DRAFT_NS}${placementKeyScope(placement)}.${setting}`;
 }
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
@@ -65472,7 +65474,7 @@ function makeProxy(store, names, prefix) {
     }
   });
 }
-function placementScope2(scope, settings) {
+function placementScope(scope, settings) {
   return new Proxy(scope, {
     has: (target, key) => key === "settings" || Reflect.has(target, key),
     get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
@@ -68470,7 +68472,6 @@ var segmentType = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
-      id: placementId(node),
       placement: placementIdentityOf(cctx.preset, node),
       settings: cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
@@ -68499,7 +68500,7 @@ var segmentType = {
   // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
   // hidden, gated off, drawn, broken — is reported to the session's record, so
   // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+  render: (node, ctx) => ctx.placed(node.placement.id, drawSegment(node, ctx))
 };
 function drawSegment(node, ctx) {
   const seg2 = ctx.lookupSegment(node.name);
@@ -68507,7 +68508,7 @@ function drawSegment(node, ctx) {
     throw new Error(`Layout segment "${node.name}" has no matching segment`);
   }
   if (ctx.gate.kind === "hidden") return [];
-  const scope = placementScope2(ctx.scope, node.settings);
+  const scope = placementScope(ctx.scope, node.settings);
   if (ctx.gate.kind === "failed") {
     return brokenSegment(node, scope, ctx, ctx.gate.message);
   }
@@ -68525,7 +68526,7 @@ function drawSegment(node, ctx) {
     }
     const palette = placementPalette(node.settings.theme, ctx.palette);
     const placement = {
-      id: node.id,
+      id: node.placement.id,
       effect: node.settings.effect,
       ground: groundOf(palette)
     };
@@ -68586,7 +68587,7 @@ function drawSegment(node, ctx) {
     }));
     const laidLines = [...stays, ...dropLines];
     ctx.segments.set(
-      node.id,
+      node.placement.id,
       [
         ...laidLines.flatMap((line) => line.cells),
         ...bodyLines.flatMap(leadOf)
@@ -68646,7 +68647,7 @@ function drawnRows2(segment, layoutOf) {
 var LOADING_GLYPH = "\u2026";
 function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
   ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
+  const last2 = ctx.lastDrawn(node.placement.id);
   if (last2?.kind === "hidden") return null;
   const styles = ctx.decorations(node, palette);
   const style = bodyOpen ? styles.trigger : styles.closed;
@@ -68685,12 +68686,12 @@ function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
 function brokenSegment(node, scope, ctx, message) {
-  ctx.brokenPlacement(node.id, message);
+  ctx.brokenPlacement(node.placement.id, message);
   const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        [new RichText(`\u26A0 ${node.placement.id}: ${oneLine}`, { end: "" })],
         {
           width: "auto",
           justify: "left",
@@ -68700,7 +68701,7 @@ function brokenSegment(node, scope, ctx, message) {
           // failure it reports may be the read of this placement's own
           // settings.
           placement: {
-            id: node.id,
+            id: node.placement.id,
             effect: FOLLOW_BAR,
             ground: groundOf(ctx.palette)
           },
@@ -68720,7 +68721,11 @@ function errorAffix(affix, node, scope, ctx) {
   } catch (err) {
     const pending2 = readPending(err);
     if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.brokenPlacement(node.id, err.message ?? String(err));
+    else
+      ctx.brokenPlacement(
+        node.placement.id,
+        err.message ?? String(err)
+      );
     return [];
   }
 }
@@ -69157,22 +69162,22 @@ var Placement = class {
   constructor(view, node) {
     const seg2 = view.source.segments[node.name];
     const ref = view.source.activeSegment;
-    const scope = placementScope2(view.scope, node.settings);
+    const scope = placementScope(view.scope, node.settings);
     const { when: when2, bg, fg, template } = seg2;
     const { lead, trail } = node;
     const opens = node.opens?.open;
     this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
+      `${node.placement.id} when`,
       view.readsInstant(when2),
       () => outsideSegments(ref, () => gateOf2(when2, scope))
     );
     this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
+      `${node.placement.id} body gate`,
       view.readsInstant(opens),
       () => outsideSegments(ref, () => gateOf2(opens, view.scope))
     );
     this.colours = view.derive(
-      `${node.id} colours`,
+      `${node.placement.id} colours`,
       view.readsInstant(bg, fg),
       () => {
         const { palette, region } = this.where.get();
@@ -69189,7 +69194,7 @@ var Placement = class {
       }
     );
     this.body = view.derive(
-      `${node.id} body`,
+      `${node.placement.id} body`,
       view.readsInstant(template),
       () => {
         const { colours, bodyOpen } = this.ground.get();
@@ -69197,7 +69202,7 @@ var Placement = class {
       }
     );
     this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
+      `${node.placement.id} affixes`,
       view.readsInstant(lead, trail),
       () => {
         const { colours, open: open2 } = this.opened.get();
@@ -69781,7 +69786,7 @@ function ruleName(slot, rule, outcome, warn, frame2) {
   }
 }
 function placementsUnder(node) {
-  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.id);
+  return segmentsUnder(node).filter((segment) => !segment.name.startsWith(EDIT_NS)).map((segment) => segment.placement.id);
 }
 function segmentsUnder(node) {
   if (node.kind === "container") return node.children.flatMap(segmentsUnder);
@@ -74048,6 +74053,7 @@ var ConfigWrites = class {
 // src/renderer/navigation-history.ts
 init_globals();
 function followedBy(timeline, visit) {
+  if (movedKeys(visit.from, visit.to).length === 0) return timeline;
   const visits = [...timeline.visits.slice(0, timeline.cursor), visit].slice(
     -MAX_VISITS
   );
@@ -74187,8 +74193,7 @@ var NavigationHistory = class {
     const next2 = /* @__PURE__ */ new Map();
     for (const [sid, visit] of visits) {
       const landed = { from: outside(visit.from), to: outside(visit.to) };
-      if (movedKeys(landed.from, landed.to).length > 0)
-        next2.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
+      next2.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
     }
     this.publish(next2);
   }
@@ -74747,13 +74752,18 @@ function routedWrites(store, draftOf, unheld) {
   const write = (sid, pairs2) => {
     const draft = draftOf(sid);
     const stored = [];
+    const flush = () => {
+      if (stored.length > 0) store.setBatch(sid, stored.splice(0));
+    };
     runInAction(() => {
       for (const { key, value } of pairs2)
         if (draft !== null && isHeldByEdit(key)) draft.put(key, value);
         else if (isEditModeKey(key)) unheld.put(sid, key, value);
-        else if (value === null) store.clear(sid, key);
-        else stored.push({ key, value });
-      if (stored.length > 0) store.setBatch(sid, stored);
+        else if (value === null) {
+          flush();
+          store.clear(sid, key);
+        } else stored.push({ key, value });
+      flush();
     });
   };
   return {
@@ -74776,10 +74786,9 @@ function heldAside() {
     held: (sid) => aside.get(sid) ?? /* @__PURE__ */ new Map()
   };
 }
-function staleEditWrite(log, sid, what) {
-  log(
-    "warn",
-    `edit: dropped ${[...what].join(",")} \u2014 no edit is open (session=${sid})`
+function staleEdit(what) {
+  return new BadVerbArgs(
+    `edit: dropped ${[...what].join(",")} \u2014 no edit is open`
   );
 }
 var ENDED = { get: () => null, put: () => {
@@ -74842,8 +74851,13 @@ var EditDraft = class {
       sinceEdit: this.files.size
     };
   }
+  // [LAW:one-source-of-truth] Whether edit mode is open is the draft's
+  // existence, so an edit with no write of its mode reads `arrange`; a write
+  // of it (the click that leaves) is the request the click's consequence
+  // consumes, and reads as written until then.
   read(key) {
     if (this.writes.has(key)) return this.writes.get(key);
+    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
     return this.committed.get(this.session, key);
   }
   put(key, value) {
@@ -74941,7 +74955,7 @@ var EditTransactions = class {
     this.log = log;
     const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
       get: () => null,
-      put: (sid, key) => staleEditWrite(log, sid, [key])
+      put: (sid, key) => log("warn", `${staleEdit([key]).message} (session=${sid})`)
     });
     this.view = {
       get: routed.get,
@@ -76495,10 +76509,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
       journal,
       readConfigFile: (edit?.files ?? files).read,
       finishEdit: (finish) => {
-        if (edit === void 0) {
-          staleEditWrite(ctx.log, sid, [finish]);
-          return;
-        }
+        if (edit === void 0) return;
         requested.finish = finish;
         sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
       },
@@ -76546,7 +76557,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
         if (entering) {
           ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edited.size > 0) staleEditWrite(ctx.log, sid, edited.keys());
+        } else if (edited.size > 0) failed3.push(staleEdit(edited.keys()));
       } else if (saved !== null) {
         saved.commit();
         end();
@@ -91073,13 +91084,10 @@ function parseSessionPicks(value) {
     reason: `has a ${JSON.stringify(bad)} that is not a string`
   };
 }
-var RETIRED_CLICK_ERROR_KEY = "click.error";
 function retiredBecause(key, value) {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
-  if ((key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS)) && menuOfKey(key) === void 0)
+  if (isMenuStateKey(key) && menuOfKey(key) === void 0)
     return "no menu is keyed that way now";
-  if (key === RETIRED_CLICK_ERROR_KEY)
-    return "a failed click is recorded elsewhere now";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
     return "not a record of a failed click";
   return void 0;

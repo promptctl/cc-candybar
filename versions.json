@@ -4,15 +4,22 @@
     {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
-      "sha": "39b32bdfee3f79f630a366eb8fa93eb3d5753576",
-      "timestamp": "2026-11-23T09:35:10.659Z",
+      "sha": "dbf200f85d6327c079cc9779f5e070eb18b08695",
+      "timestamp": "2026-11-23T10:03:22.956Z",
       "commits": [
         {
-          "sha": "39b32bdfee3f79f630a366eb8fa93eb3d5753576",
+          "sha": "dbf200f85d6327c079cc9779f5e070eb18b08695",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T09:34:07Z",
-          "message": "Merge 7893e1fdf3508cb309c708db274ceccff5c0eaf8 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+          "timestamp": "2026-11-23T10:02:10Z",
+          "message": "Merge 5af3a60b6cc917f6c1a02d1fbe578fdc5f1712a2 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+        },
+        {
+          "sha": "5af3a60b6cc917f6c1a02d1fbe578fdc5f1712a2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T03:01:46-07:00",
+          "message": "fix(config): derive edit mode from the open edit, fail a stale click loudly, and keep a batch's order\n"
         },
         {
           "sha": "7893e1fdf3508cb309c708db274ceccff5c0eaf8",
