@@ -20,15 +20,12 @@ import {
 } from "../../helpers/drive-bar";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
+import { doesOf, longNumbersSaid } from "../../helpers/click-words";
 
 jest.setTimeout(60_000);
 
 const CLICKS = 150;
 
-// The words a link says, as a hover's reader decodes them; empty on a link with
-// none.
-const doesOf = (url: string): string =>
-  new URLSearchParams(url.split("/dispatch/")[1] ?? "").get("does") ?? "";
 const withoutDoes = (url: string): string => url.replace(/does=[^&]*&/, "");
 const barLinks = (rendered: Frame): DrawnLink[] =>
   linksOf(rendered).filter((l) => isBarLink(l.url));
@@ -43,14 +40,6 @@ const DRAWN_ONLY_AFTER = [
   /^open edit\.default\.insert\./,
   /^turn .* to page /,
 ];
-
-// The long numbers in a link's words that the bar has no reason to show. A
-// link may name the checkout the bar runs in (copy its path, open it in an
-// editor), and an agent worktree's name can hold a run of digits, so a run the
-// path itself holds is the path and not a number; the words may cut the path
-// short, which leaves a run that is still part of it.
-const unshownNumbers = (words: string, checkout: string): string[] =>
-  (words.match(/\d{7,}/g) ?? []).filter((run) => !checkout.includes(run));
 
 // Every `2/6` a frame draws: where each paged list stands.
 const positionsIn = (rendered: Frame): string[] =>
@@ -109,7 +98,10 @@ async function walk(bar: Bar): Promise<Walked> {
 // The example config, where its plugin's path still reads: a bar copies the
 // config it is given into a scratch directory.
 function pluginConfig(): string {
-  const example = path.resolve("examples/plugin-deploy.json5");
+  const example = path.resolve(
+    __dirname,
+    "../../../examples/plugin-deploy.json5",
+  );
   const config = path.join(
     fs.mkdtempSync(path.join(os.tmpdir(), "click-does-")),
     "config.json5",
@@ -118,37 +110,29 @@ function pluginConfig(): string {
     config,
     fs
       .readFileSync(example, "utf8")
-      .replace("./plugins", path.join(path.dirname(example), "plugins")),
+      .replace("./plugins", () => path.join(path.dirname(example), "plugins")),
   );
   return config;
 }
 
-// [LAW:verifiable-goals] The check passes from any checkout path and still
-// catches a number the bar never shows: it is held here on both sides, without
-// a bar, so a path with digits does not have to be where the suite runs.
-describe("the long numbers a link's words may not hold", () => {
-  const checkout = "/work/agent-12345678-ab";
-  test("a path's own digits are the path, whole or cut short", () => {
-    expect(unshownNumbers(`open ${checkout} in vs code`, checkout)).toEqual([]);
-    expect(unshownNumbers("copy /work/...nt-12345678-ab", checkout)).toEqual(
-      [],
-    );
-    expect(unshownNumbers("copy /work/agent-1234567...", checkout)).toEqual([]);
-  });
-  test("any other long number is one the bar never shows", () => {
-    expect(
-      unshownNumbers(`open ${checkout} and set 1700000000000`, checkout),
-    ).toEqual(["1700000000000"]);
-    expect(unshownNumbers("step 98765432 up by 1", checkout)).toEqual([
-      "98765432",
-    ]);
-  });
-});
+// A checkout whose path holds a long run of digits, as an agent worktree's
+// name can: the bar runs from it, and the words that name it say so.
+const digitCheckout = (): string =>
+  fs.mkdtempSync(path.join(os.tmpdir(), "click-does-12345678-"));
 
 describe.each([
-  ["the default bar", () => null],
-  ["a bar with a plugin's long segment name", pluginConfig],
-])("%s: its links say what their clicks do", (_, config) => {
+  ["the default bar", () => null, () => process.cwd()],
+  [
+    "a bar with a plugin's long segment name",
+    pluginConfig,
+    () => process.cwd(),
+  ],
+  [
+    "a bar run from a checkout whose path holds digits",
+    () => null,
+    digitCheckout,
+  ],
+])("%s: its links say what their clicks do", (_, config, checkout) => {
   let bar: Bar;
   let frames: DrawnLink[][];
   let turns: Turn[];
@@ -160,7 +144,7 @@ describe.each([
         width: 160,
         rows: 60,
         config: config(),
-        cwd: process.cwd(),
+        cwd: checkout(),
         ssh: false,
       },
       startBarDaemon,
@@ -188,11 +172,7 @@ describe.each([
   });
 
   test("no link's words hold a number the bar never shows", () => {
-    expect(
-      links
-        .map((l) => doesOf(l.url))
-        .filter((t) => unshownNumbers(t, process.cwd()).length > 0),
-    ).toEqual([]);
+    expect(links.flatMap((l) => longNumbersSaid(l.url))).toEqual([]);
   });
 
   test("every bar link says something, in printable ASCII", () => {

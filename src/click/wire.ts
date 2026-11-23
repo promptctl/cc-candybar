@@ -272,9 +272,10 @@ function sayWrite(key: string, value: string): string {
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Only a
-// copy is cut, because it alone has no natural length: the rest are names, paths
-// and what an author wrote. Both ends stay, by code point: a path differs at its
-// end, and half a surrogate pair cannot be encoded.
+// copy is cut, because it alone carries text of any length (a command, a whole
+// diagnostic); the rest say the name, path or authored value they act on whole.
+// Both ends stay, by code point: a path differs at its end, and half a
+// surrogate pair cannot be encoded.
 const COPIED_LENGTH = 60;
 const ELISION = "...";
 function saidCopy(text: string): string {
