@@ -69,6 +69,7 @@ import {
 } from "../daemon/foundations/click-error.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
+  aboutOf,
   collectDiagnostics,
   diagnosticCopies,
   type SourcedText,
@@ -404,8 +405,9 @@ export function drawRender(
   evaluated: number;
   cellBreaks: number;
   clickShown: ClickErrorRecord | null;
-  // The held events this draw showed (the launcher's pipe event, the last
-  // renderer's end), which an answer carrying them marks answered.
+  // The daemon's events this draw showed (each pipe event, the last
+  // renderer's end, an act that failed, a task that threw), which an answer
+  // carrying them marks answered.
   eventsShown: readonly DaemonEvent[] | undefined;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
@@ -531,7 +533,7 @@ export function drawRender(
   const daemonWarnings = daemonEvents.filter(isWarned).map(
     ({ shown, hold }): Standing<DaemonEventWarning> => ({
       warning: { kind: shown.kind, message: shown.event.text, hold },
-      subject: shown.kind === "launch-pipes" ? shown.about : undefined,
+      subject: shown.about,
     }),
   );
   const standing: readonly Standing[] = [
@@ -861,12 +863,6 @@ interface FactsWarning {
   readonly kind: "facts";
   readonly message: string;
 }
-
-// [LAW:single-enforcer] What a diagnostic is about: its kind, and for a kind
-// with several (a task that threw, a file a load dropped) its subject too, so
-// one never stands for another.
-const aboutOf = (kind: string, subject?: string): string =>
-  subject === undefined ? kind : `${kind}\0${subject}`;
 
 type ThrewEvent = Extract<DaemonEvent, { kind: "task-threw" }>;
 

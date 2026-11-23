@@ -830,10 +830,12 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   const event = { text: "an act failed", at: 7 as Instant, answered: false };
   const first: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { ...event, revision: 1 },
   };
   const second: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { ...event, revision: 2 },
   };
   const older = frame(S, "warning", null, 1, [first]);
@@ -862,6 +864,23 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   expect(acknowledged).toEqual([first, second]);
 });
 
+test("equal pane bytes with the same occurrence of another subject require a new confirmed write", () => {
+  const { feeds, took, acknowledged } = rig();
+  const pane = deferredSubscriber("pane");
+  feeds.subscribe(S, pane.sub);
+  const event = { text: "a pipe was cut", at: 7 as Instant, answered: false };
+  const cut: DaemonEvent = { kind: "launch-pipes", about: "cut", event };
+  const unread: DaemonEvent = { kind: "launch-pipes", about: "unread", event };
+  took([
+    frame(S, "warning", null, 1, [cut]),
+    frame(S, "warning", null, 2, [unread]),
+  ]);
+  expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
+  pane.finish(true);
+  pane.finish(true);
+  expect(acknowledged).toEqual([cut, unread]);
+});
+
 test.each([
   ["pane", "warning"],
   ["statusline", "handoff warning"],
@@ -873,6 +892,7 @@ test.each([
     feeds.subscribe(S, initial.sub);
     const shown: DaemonEvent = {
       kind: "renderer-ended",
+      about: "renderer-ended",
       event: { text: "the renderer ended", at: 7 as Instant, answered: false },
     };
     const offered = frame(S, "warning", "handoff warning", 1, [shown]);
@@ -904,10 +924,12 @@ test("a slower pane confirmation reports its own event after another pane confir
   };
   const first: DaemonEvent = {
     kind: "renderer-ended",
+    about: "renderer-ended",
     event: { ...event, revision: 1 },
   };
   const second: DaemonEvent = {
     kind: "renderer-ended",
+    about: "renderer-ended",
     event: { ...event, revision: 2 },
   };
   const older = frame(S, "old", null, 1, [first]);
@@ -947,6 +969,7 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
   });
   const shown: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
   const offered = frame(S, "warning", null, 1, [shown]);

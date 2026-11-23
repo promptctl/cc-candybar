@@ -216,6 +216,27 @@ test("what recurred reaches the event it is shown as at the close, and nothing i
   expect(clock.pending()).toBe(0);
 });
 
+test("a subject whose event could not be built is shown by its next occurrence", () => {
+  const clock = heldClock(new Date("2026-01-01T00:00:00Z"));
+  let attempts = 0;
+  const events = new RecurringEvents<string>(
+    clock,
+    "task-threw",
+    (about) => about,
+    (said, _more, at) => {
+      if (attempts++ === 0) throw new Error("its message would not read");
+      return { text: said, at, answered: false };
+    },
+    () => {},
+  );
+  expect(() => events.occur("sweep")).toThrow("would not read");
+  expect(events.held()).toEqual([]);
+  events.occur("sweep");
+  expect(events.held()).toEqual([
+    expect.objectContaining({ about: "sweep", event: expect.anything() }),
+  ]);
+});
+
 test("an occurrence after the close, of a subject never held, holds nothing and arms no end", () => {
   const { clock, events, heard } = recurring();
   events.dispose();

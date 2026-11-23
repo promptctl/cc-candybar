@@ -115,6 +115,13 @@ export function diagnosticSpan(
 }
 export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 
+// [LAW:single-enforcer] What a message is about, as its producer names it: its
+// kind, and for a kind with several (a task that threw, a file a load
+// dropped, a repository asked about) its subject too, so one never stands for
+// another.
+export const aboutOf = (kind: string, subject?: string): string =>
+  subject === undefined ? kind : `${kind}\0${subject}`;
+
 // One message: its severity, what it is about, its verbatim text, what ⧉
 // copies (the text, or a prompt that fixes what the text reports), and the
 // lines the viewer shows. Non-empty by construction — a

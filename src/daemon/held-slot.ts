@@ -112,7 +112,7 @@ export class HeldSlot {
 }
 
 // The kinds of daemon event that recur, each held per subject.
-type RecurringKind = Extract<DaemonEvent, { about: string }>["kind"];
+type RecurringKind = "launch-pipes" | "task-threw";
 
 interface Subject<R> {
   readonly slot: HeldSlot;
@@ -155,8 +155,11 @@ export class RecurringEvents<R> {
   occur(occurrence: R): void {
     if (this.closed) return;
     const about = this.about(occurrence);
-    const subject = this.subjects.get(about);
-    if (subject === undefined) this.show(this.subjectOf(about), occurrence, 0);
+    const subject = this.subjects.get(about) ?? this.subjectOf(about);
+    // [LAW:one-source-of-truth] A subject is held when its slot holds: an
+    // entry whose event could not be built holds nothing, so its next
+    // occurrence is shown as a first one.
+    if (subject.slot.event() === null) this.show(subject, occurrence, 0);
     else
       subject.recurred = {
         count: (subject.recurred?.count ?? 0) + 1,
@@ -185,8 +188,9 @@ export class RecurringEvents<R> {
   }
 
   private show(subject: Subject<R>, occurrence: R, more: number): void {
+    const event = this.shown(occurrence, more, instantAt(this.clock));
     subject.recurred = null;
-    subject.slot.hold(this.shown(occurrence, more, instantAt(this.clock)));
+    subject.slot.hold(event);
     this.changed();
   }
 

@@ -31,7 +31,7 @@ import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
 import type { LogLevel } from "../utils/logger";
-import { sameOccurrence, type DaemonEvent } from "../utils/event-hold.js";
+import { sameDaemonEvent, type DaemonEvent } from "../utils/event-hold.js";
 import type {
   FeedFrame,
   LaneViewers,
@@ -129,10 +129,9 @@ function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
   return (
     offered.displayedEvents === undefined ||
     offered.displayedEvents.every(
-      ({ kind, event }) =>
-        prior.displayedEvents?.some(
-          (seen) => seen.kind === kind && sameOccurrence(seen.event, event),
-        ) ?? false,
+      (event) =>
+        prior.displayedEvents?.some((seen) => sameDaemonEvent(seen, event)) ??
+        false,
     )
   );
 }

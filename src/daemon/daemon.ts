@@ -290,9 +290,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     clock,
   });
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
+  // world state carries them: whether file events are heard, what the
+  // launcher stands behind, and the events held. Restated whenever any may
+  // have moved, and compared whole, so a restatement that moved nothing moves
+  // no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
@@ -335,12 +336,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     },
     restateFaults,
   );
+  // A kind that holds one event at a time is about itself.
   const heldBy = (
     kind: "renderer-ended" | "act-failed",
     slot: HeldSlot,
   ): DaemonEvent[] => {
     const event = slot.event();
-    return event === null ? [] : [{ kind, event }];
+    return event === null ? [] : [{ kind, about: kind, event }];
   };
   function restateFaults(): void {
     runInAction(() =>

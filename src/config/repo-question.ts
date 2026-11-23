@@ -8,6 +8,7 @@ import { REPO_ANSWERS } from "./loader/repo-gate.js";
 import type { RepoQuestion } from "./config-snapshot.js";
 import {
   APPROVAL_SEVERITY,
+  aboutOf,
   diagnosticSpan,
   type DiagnosticMessage,
   type DiagnosticLine,
@@ -34,7 +35,7 @@ export function repoQuestions(
     const line: DiagnosticLine = [diagnosticSpan(message, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
-      about: `repo-question\0${dir}`,
+      about: aboutOf("repo-question", dir),
       message,
       copy: message,
       lines: [line],

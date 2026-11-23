@@ -34,7 +34,8 @@ function talkingRenderer(): TimedRenderer {
   return timed(
     {
       answer: async (input) => {
-        if (input.event.kind === "close-views") throw new Error("close refused");
+        if (input.event.kind === "close-views")
+          throw new Error("close refused");
         return {
           kind: "answered",
           record: [],
@@ -121,6 +122,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
   const displayedEvents: readonly DaemonEvent[] = [
     {
       kind: "act-failed",
+      about: "act-failed",
       event: joinedEvent(null, "a daemon failure", 7 as Instant),
     },
   ];
@@ -237,9 +239,11 @@ test("a selection change crosses the wire without republishing unchanged resourc
   const { renderer } = linesOver(undefined, {
     renderer: declaring([opened, selected, selected]),
   });
-  const before = (await renderer.answer(command("close-journal"))).subscriptions;
+  const before = (await renderer.answer(command("close-journal")))
+    .subscriptions;
   const after = (await renderer.answer(command("close-journal"))).subscriptions;
-  const repeated = (await renderer.answer(command("close-journal"))).subscriptions;
+  const repeated = (await renderer.answer(command("close-journal")))
+    .subscriptions;
   expect(after.configSelections).toEqual(selected.configSelections);
   expect(after.managedFolders).toBe(before.managedFolders);
   expect(after.configs).toBe(before.configs);
@@ -253,11 +257,11 @@ test("a replacement process sends the same nonempty declaration on its first ans
       heard,
       renderer: declaring([opened]),
     });
-    await expect(renderer.answer(command("close-journal"))).resolves.toMatchObject(
-      {
-        subscriptions: opened,
-      },
-    );
+    await expect(
+      renderer.answer(command("close-journal")),
+    ).resolves.toMatchObject({
+      subscriptions: opened,
+    });
     expect(heard).toMatchObject([
       { kind: "output", output: { subscriptions: opened } },
     ]);
@@ -279,9 +283,9 @@ test("reusing a declaration before the first replacement rejects the turn", asyn
     n: asked.n,
     output: {
       kind: "answered",
-          record: [],
-          effects: [],
-          frames: [],
+      record: [],
+      effects: [],
+      frames: [],
       reply: { kind: "close-journal" },
       wake: null,
       turnMs: 0,
@@ -333,8 +337,14 @@ describe("a renderer's boot line", () => {
       "invalid resolved locations",
     ],
     [{ ...boot, region: null }, "locale and time zone"],
-    [{ ...boot, region: { locale: "not valid", timeZone: "UTC" } }, "unsupported locale or time zone"],
-    [{ ...boot, region: { locale: "en-US", timeZone: "invented" } }, "unsupported locale or time zone"],
+    [
+      { ...boot, region: { locale: "not valid", timeZone: "UTC" } },
+      "unsupported locale or time zone",
+    ],
+    [
+      { ...boot, region: { locale: "en-US", timeZone: "invented" } },
+      "unsupported locale or time zone",
+    ],
     [{ ...boot, memoryLimitBytes: -1 }, "memoryLimitBytes"],
     [{ ...boot, stored: {} }, "stored.sessions"],
     [

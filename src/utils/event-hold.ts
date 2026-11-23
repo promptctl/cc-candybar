@@ -20,7 +20,7 @@ export const DAEMON_EVENT_HOLD_S = 60;
 export interface HeldEvent {
   // What the bar presents.
   readonly text: string;
-  // When the event happened.
+  // When it began to show, which its hold runs from.
   readonly at: Instant;
   // [LAW:types-are-the-program] Joined events can have the same instant and
   // clipped text. Advance their own revision without relying on a clock.
@@ -30,24 +30,31 @@ export interface HeldEvent {
   readonly answered: boolean;
 }
 
+export type DaemonEventKind =
+  | "renderer-ended"
+  | "act-failed"
+  | "launch-pipes"
+  | "task-threw";
+
 // [LAW:types-are-the-program] An event of the daemon's own, as its facts
 // carry it and a frame that showed it names it back to its owner: the kind
-// that owns it, and for a kind that recurs, the subject it is about (the task
-// that threw, a pipe event's words). Session click errors never leave the
-// renderer's delivery record.
-export type DaemonEvent =
-  | {
-      readonly kind: "renderer-ended" | "act-failed";
-      readonly event: HeldEvent;
-    }
-  | RecurringDaemonEvent<"launch-pipes">
-  | RecurringDaemonEvent<"task-threw">;
+// that owns it, and the subject it is about (the task that threw, a pipe
+// event's words; a kind that holds one event at a time is about itself).
+// Session click errors never leave the renderer's delivery record.
+export type DaemonEvent<Kind extends DaemonEventKind = DaemonEventKind> =
+  Kind extends DaemonEventKind
+    ? {
+        readonly kind: Kind;
+        readonly about: string;
+        readonly event: HeldEvent;
+      }
+    : never;
 
-interface RecurringDaemonEvent<Kind extends string> {
-  readonly kind: Kind;
-  readonly about: string;
-  readonly event: HeldEvent;
-}
+// [LAW:single-enforcer] Whether two daemon events are one: the same subject
+// of one kind, and the same occurrence of it. The feed's cover of an answer
+// and the owner's acknowledgement of it both ask this.
+export const sameDaemonEvent = (a: DaemonEvent, b: DaemonEvent): boolean =>
+  a.kind === b.kind && a.about === b.about && sameOccurrence(a.event, b.event);
 
 // [LAW:single-enforcer] How every event of the daemon's own says it recurred
 // `more` times since it was last shown.
