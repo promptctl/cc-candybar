@@ -1712,6 +1712,11 @@ export function drawDsl(
       error: fault.message,
       message: `variable "${variable}" cannot refresh: ${fault.message}`,
     });
+  // [LAW:one-source-of-truth] The one list of what the frame drew as not
+  // answered yet: the frame names them, and the wait reads why.
+  const pendingReads = [...waited]
+    .map(([variable, why]) => ({ variable, why }))
+    .sort((a, b) => (a.variable < b.variable ? -1 : 1));
   return {
     frame: {
       depth: drawOpts.colorCompatibility,
@@ -1720,11 +1725,9 @@ export function drawDsl(
       ),
       nextChange,
       motion: frameMotion,
-      pending: [...waited.keys()].sort(),
+      pending: pendingReads.map(({ variable }) => variable),
     },
-    waited: [...waited]
-      .map(([variable, why]) => ({ variable, why }))
-      .sort((a, b) => (a.variable < b.variable ? -1 : 1)),
+    waited: pendingReads,
     memory,
     warnings,
     segments,

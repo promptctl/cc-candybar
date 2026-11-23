@@ -20,18 +20,11 @@ describe("what a request waits for", () => {
     expect(awaits("deferred")).toBe(false);
   });
 
-  test("a built-in's first answer is waited for, except today's day sums and the branch's PR, which draw deferred", () => {
-    expect(spelled("git", pendingOf("unread"))).toEqual(pendingOf("unread"));
-    expect(spelled("today", pendingOf("unread"))).toEqual(
-      pendingOf("deferred"),
-    );
-    expect(spelled("pr", pendingOf("unread"))).toEqual(pendingOf("deferred"));
-    // Only a first answer is deferred: what the daemon superseded and what
-    // answered are spelled as they are.
-    expect(spelled("pr", pendingOf("superseded"))).toEqual(
-      pendingOf("superseded"),
-    );
-    expect(spelled("pr", ok(1))).toEqual(ok(1));
+  test("a first answer spelled as deferred draws deferred, and only a first answer does", () => {
+    expect(spelled(pendingOf("unread"))).toEqual(pendingOf("deferred"));
+    // What the daemon superseded and what answered are spelled as they are.
+    expect(spelled(pendingOf("superseded"))).toEqual(pendingOf("superseded"));
+    expect(spelled(ok(1))).toEqual(ok(1));
   });
 });
 

@@ -187,9 +187,11 @@ interface Meets {
     session: unknown,
     after: number,
     signal: AbortSignal,
-  ) => Promise<Moved | null>;
+  ) => Promise<Moved>;
   readonly waitEndsAt?: number;
   readonly closing?: AbortSignal;
+  // Whether the client has hung up.
+  readonly gone?: () => boolean;
 }
 
 async function answer(
@@ -231,7 +233,7 @@ async function answer(
       },
       holding,
       // A draw that owes nothing never waits.
-      moved: meets.moved ?? (async () => null),
+      moved: meets.moved ?? (async () => ({ kind: "gone" })),
     },
     CLOCK,
     meets.closing ?? NOT_CLOSING,
@@ -240,7 +242,7 @@ async function answer(
     REQ,
     TEST_ENVIRONMENT,
     REQUEST,
-    { waitEndsAt: meets.waitEndsAt ?? 0, gone: () => false },
+    { waitEndsAt: meets.waitEndsAt ?? 0, gone: meets.gone ?? (() => false) },
     facts,
   );
   return { answered, facts: new Map(facts) };
@@ -586,9 +588,9 @@ describe("the request's draws, and its wait for what a draw owes", () => {
   const held = () => {
     let end = (_moved: Moved): void => {};
     const moved = (_session: unknown, _after: number, signal: AbortSignal) =>
-      new Promise<Moved | null>((resolve) => {
+      new Promise<Moved>((resolve) => {
         end = resolve;
-        signal.addEventListener("abort", () => resolve(null));
+        signal.addEventListener("abort", () => resolve({ kind: "gone" }));
       });
     return { moved, end: (m: Moved) => end(m) };
   };
@@ -694,6 +696,39 @@ describe("the request's draws, and its wait for what a draw owes", () => {
     expect(requests).toHaveLength(1);
     expect(facts.get("ended")).toBe("untaken");
     expect(facts.get("cause")).toBe("no view of the session");
+  });
+
+  test("a client gone before any draw is answered abandoned, and no draw is sent", async () => {
+    const { renderer, requests } = scripted(output([present(1)]));
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
+      gone: () => true,
+      waitEndsAt: 5000,
+    });
+    expect(answered.outcome).toMatchObject({ kind: "abandoned" });
+    expect(requests).toHaveLength(0);
+    expect(facts.has("ended")).toBe(false);
+  });
+
+  test("a client that leaves while its draw waited is answered abandoned, the frame it drew refused and its draw named, not a throw", async () => {
+    let left = false;
+    const { renderer, requests, heard } = scripted(output([owing(1, OWED)]));
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
+      gone: () => left,
+      moved: async () => {
+        left = true;
+        return { kind: "landed" };
+      },
+      waitEndsAt: 5000,
+    });
+    expect(answered.outcome).toMatchObject({ kind: "abandoned" });
+    expect(requests).toHaveLength(1);
+    expect(facts.get("ended")).toBe("abandoned");
+    // The draw that ran is still on the record.
+    expect(facts.get("drew")).not.toBe("-");
+    await drained();
+    expect(heard).toMatchObject([
+      { kind: "effect-done", of: 1, outcome: { kind: "failed" } },
+    ]);
   });
 
   test("a session no longer read ends the request with the frame it drew", async () => {

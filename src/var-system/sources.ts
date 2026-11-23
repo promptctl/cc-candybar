@@ -69,6 +69,7 @@ import {
 } from "../facts/source-identity.js";
 import { UNREAD_ENV, UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 import type { Fact } from "../facts/fact.js";
+import { awaits } from "../facts/awaited.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
 
@@ -716,13 +717,13 @@ export class SourceRegistry {
         { fireImmediately: true },
       ),
       reaction(
-        () => this.toldOf(name),
+        () => this.toldOf(run),
         (told) => {
-          // [LAW:single-enforcer] exception: whether this source has answered
-          // is the effect's own memory, as a run's last key is
-          // (`answeredUnder`). The store cannot say it, because what stands
-          // in for a key that failed before it ever answered is a value like
-          // any answer.
+          // [LAW:types-are-the-program] exception: whether this source has
+          // answered is the effect's own memory, as a run's last key is
+          // (`answeredUnder`). The node's value cannot say it, because what
+          // stands in for a key that failed before it ever answered is a
+          // value like any answer.
           if (told.kind === "answer") {
             answered = true;
             // The instant the reading first differed is the world state's;
@@ -744,8 +745,8 @@ export class SourceRegistry {
   // What the run `name` names says to its node: the host's reading of the run
   // when it names one, else why it names none (a key over a value not answered
   // yet, a key that failed before it ever answered).
-  private toldOf(name: string): Told {
-    const run = this.runs.get(name)!.get();
+  private toldOf(named: IComputedValue<SourceRun>): Told {
+    const run = named.get();
     if (run.kind !== "ok") return { kind: "unanswered", reading: run };
     const reading = this.inputs.get().run(run.value.digest).reading;
     return reading.kind === "pending"
@@ -1144,17 +1145,18 @@ export class SourceRegistry {
         // whether the update executes.
         return this.answeredUnder(name, () => {
           const keys = policy.varNames.map((n) => this.store.changeKey(n));
-          const values = keys.flatMap((key) =>
-            key.kind === "ok" ? [key.value] : [],
-          );
-          if (values.length === keys.length) return ok(values);
           // [LAW:types-are-the-program] The source waits for what any of its
           // dependencies waits for: a request waits for a first answer, so one
-          // dependency unread makes the source's own first answer owed.
+          // dependency unread makes the source's own first answer owed. With
+          // none pending every dependency answered, and its keys name the run.
           const waiting = keys.flatMap((key) =>
             key.kind === "pending" ? [key] : [],
           );
-          return waiting.find((key) => key.why === "unread") ?? waiting[0]!;
+          return (
+            waiting.find((key) => awaits(key.why)) ??
+            waiting[0] ??
+            ok(keys.flatMap((key) => (key.kind === "ok" ? [key.value] : [])))
+          );
         });
       }
     }

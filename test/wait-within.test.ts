@@ -20,7 +20,7 @@ test("work that ends inside the time answers, and its signal is aborted once the
     systemTimekeeper,
     OPEN,
   );
-  expect(end).toBe("answered");
+  expect(end.end).toBe("answered");
   expect(seen?.aborted).toBe(true);
 });
 
@@ -36,14 +36,14 @@ test("work still out at the deadline ends the wait there, and its signal aborts"
     systemTimekeeper,
     OPEN,
   );
-  expect(end).toBe("deadline");
+  expect(end.end).toBe("deadline");
   expect(seen?.aborted).toBe(true);
 });
 
 test("a wait ends when its time does, and not before", async () => {
   jest.useFakeTimers();
   try {
-    let end: string | undefined;
+    let end: { readonly end: string } | undefined;
     void waitWithin(
       "test wait",
       () => new Promise(() => {}),
@@ -56,7 +56,7 @@ test("a wait ends when its time does, and not before", async () => {
     await jest.advanceTimersByTimeAsync(109);
     expect(end).toBeUndefined();
     await jest.advanceTimersByTimeAsync(1);
-    expect(end).toBe("deadline");
+    expect(end?.end).toBe("deadline");
   } finally {
     jest.useRealTimers();
   }
@@ -89,7 +89,7 @@ test("a rejection after the deadline is the clock's, as the wait's task after it
     clock,
     OPEN,
   );
-  expect(end).toBe("deadline");
+  expect(end.end).toBe("deadline");
   await after(60);
   expect(reported).toEqual([
     { task: "test wait after its wait", thrown: new Error("late bug") },
@@ -113,7 +113,7 @@ test("work that throws before it returns, in a wait begun closed, is the clock's
     clock,
     closed.signal,
   );
-  expect(end).toBe("closed");
+  expect(end.end).toBe("closed");
   await new Promise((resolve) => setImmediate(resolve));
   expect(reported).toEqual([
     { task: "test wait after its wait", thrown: broke },
@@ -159,7 +159,7 @@ test("its owner closing ends the wait there, with its timer cleared and its work
     owner.signal,
   );
   owner.abort();
-  expect(await waiting).toBe("closed");
+  expect((await waiting).end).toBe("closed");
   expect(seen?.aborted).toBe(true);
   expect(cleared).toEqual(["timer"]);
 });
@@ -175,5 +175,5 @@ test("a wait begun after its owner closed ends at once", async () => {
       systemTimekeeper,
       owner.signal,
     ),
-  ).toBe("closed");
+  ).toEqual({ end: "closed" });
 });

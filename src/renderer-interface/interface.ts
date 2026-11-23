@@ -352,8 +352,9 @@ export interface Present {
   readonly frame: WireFrame;
   readonly displayedEvents?: readonly DaemonEvent[];
   // [LAW:single-enforcer] What the draw says the frame still owes, about the
-  // world state it drew from: the host waits for the stamp to move past
-  // `awaiting.seq` while it is owed, and for nothing else.
+  // world state it drew from: the host waits for a later world state to land
+  // at the renderer (`Collector.moved`) while it is owed, and for nothing
+  // else.
   readonly awaiting: Awaiting;
 }
 
@@ -567,6 +568,8 @@ export type TurnOutcome = {
 export const WORLD_STATE_UNTAKEN: Field = ["world-state", "no-live-session"];
 
 export function untakenBy(turn: TurnOutcome): string | null {
+  // `message`, not `detail`: this lands on a one-line field of the request's
+  // record, and a detail carries an Error's stack.
   if (turn.kind === "threw") return turn.failure.message;
   return turn.record.some(
     ([key, value]) =>

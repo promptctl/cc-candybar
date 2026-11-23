@@ -134,7 +134,7 @@ function collectorOver(
     readonly watched?: ReadonlySet<SessionId>;
     readonly retired?: () => Promise<Untaken>;
     // Why the renderer did not take a world state, or null: it did.
-    readonly taken?: () => Untaken;
+    readonly taken?: () => Untaken | Promise<Untaken>;
   } = {},
 ) {
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
@@ -148,7 +148,7 @@ function collectorOver(
     watched: (session) => watched.has(session),
     deliver: async (event) => {
       handedIn.push(event);
-      return event.kind === "retire" ? retired() : taken();
+      return event.kind === "retire" ? retired() : await taken();
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
@@ -333,7 +333,9 @@ describe("a request's wait for a later world state", () => {
     const signal = new AbortController();
     const waiting = collector.moved(SID, drawn.seq, signal.signal);
     signal.abort();
-    expect(await waiting).toBeNull();
+    // It ends; what it answers is read by no one.
+    await waiting;
+    expect(signal.signal.aborted).toBe(true);
   });
 
   test("ends saying why when the renderer did not take the world state, so no later draw reads it", async () => {
@@ -353,6 +355,47 @@ describe("a request's wait for a later world state", () => {
       kind: "untaken",
       reason: "the renderer holds no view of the session",
     });
+  });
+
+  test("ends saying why when the delivery itself rejects, never at the request's deadline", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock, logged } = collectorOver(owners, {
+      taken: () => Promise.reject(new Error("the mailbox broke")),
+    });
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const waiting = collector.moved(
+      SID,
+      drawn.seq,
+      new AbortController().signal,
+    );
+    land("host.name", ok("box"));
+    expect(await waiting).toMatchObject({
+      kind: "untaken",
+      reason: expect.stringContaining("the mailbox broke"),
+    });
+    expect(logged.join("\n")).toContain("the mailbox broke");
+  });
+
+  test("never moves back: a delivery that settles after a later one leaves what the later one landed", async () => {
+    const { owners, land } = handLanded();
+    const settles: Array<(untaken: Untaken) => void> = [];
+    const { collector, clock } = collectorOver(owners, {
+      taken: () => new Promise<Untaken>((settle) => settles.push(settle)),
+    });
+    land("host.name", UNREAD);
+    const drawn = await opened(collector, clock);
+    const before = settles.length;
+    land("host.name", ok("one"));
+    land("host.name", ok("two"));
+    expect(settles).toHaveLength(before + 2);
+    // The later world state is taken, then the earlier one is refused.
+    settles[before + 1]!(null);
+    settles[before]!("the renderer holds no view of the session");
+    await drained();
+    expect(
+      await collector.moved(SID, drawn.seq, new AbortController().signal),
+    ).toEqual({ kind: "landed" });
   });
 });
 

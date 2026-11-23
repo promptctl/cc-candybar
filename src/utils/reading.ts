@@ -111,9 +111,12 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
-// How a bounded wait ended: what it waited on answered, its time ran out, or
-// its owner closed.
-export type WaitEnd = "answered" | "deadline" | "closed";
+// [LAW:types-are-the-program] How a bounded wait ended: what it waited on
+// answered (with its answer), its time ran out, or its owner closed.
+export type Waited<T> =
+  | { readonly end: "answered"; readonly value: T }
+  | { readonly end: "deadline" }
+  | { readonly end: "closed" };
 
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
 // wait over work that does not end at a signal of its own (a wait that does,
@@ -125,20 +128,20 @@ export type WaitEnd = "answered" | "deadline" | "closed";
 // nothing behind. What it does not, a run it started, goes on, and a failure
 // of it after the wait ended is no one's answer: it is the clock's, as the
 // wait's task after its wait, saying what the work threw.
-export function waitWithin(
+export function waitWithin<T>(
   // The wait's task name: its deadline's, and its work's past the wait.
   task: string,
-  work: (signal: AbortSignal) => Promise<unknown>,
+  work: (signal: AbortSignal) => Promise<T>,
   ms: number,
   clock: Pick<Timekeeper, "after" | "failed">,
   closing: AbortSignal,
-): Promise<WaitEnd> {
+): Promise<Waited<T>> {
   const wait = new AbortController();
   const end = (why: "deadline" | "closed") => () => wait.abort(why);
   const clear = clock.after(task, Math.max(0, ms), end("deadline"));
-  const ended = new Promise<WaitEnd>((resolve, reject) => {
+  const ended = new Promise<Waited<T>>((resolve, reject) => {
     wait.signal.addEventListener("abort", () =>
-      resolve(wait.signal.reason as WaitEnd),
+      resolve({ end: wait.signal.reason as "deadline" | "closed" }),
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
@@ -147,14 +150,14 @@ export function waitWithin(
     // clock's after, as a task of its own, a wait begun closed included. Work
     // that answered never rejects, so a wait aborted before it ended at its
     // deadline or close.
-    let working: Promise<unknown>;
+    let working: Promise<T>;
     try {
       working = work(wait.signal);
     } catch (thrown) {
       working = Promise.reject(thrown);
     }
     working.then(
-      () => resolve("answered"),
+      (value) => resolve({ end: "answered", value }),
       (e: unknown) => {
         if (wait.signal.aborted) clock.failed(`${task} after its wait`, e);
         else reject(e);

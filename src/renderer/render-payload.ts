@@ -754,7 +754,7 @@ export function composePayload(
     speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
-    pr: spelled("pr", unstamped(built.pr)),
+    pr: spelled(unstamped(built.pr)),
     tmux: unstamped(built.tmux),
     hostName: unstamped(built.hostName),
     hostUser: unstamped(built.hostUser),
@@ -1071,7 +1071,7 @@ export function instantFacts(
   builtins: { readonly today: Reading<TodayFacts> },
   at: Instant,
 ): { readonly today: TodayPayload | Pending | undefined } {
-  return { today: todayOf(spelled("today", builtins.today), at) };
+  return { today: todayOf(spelled(builtins.today), at) };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the

@@ -447,7 +447,7 @@ export async function requestPayload(
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
-    today: todayOf(spelled("today", todayReadingOf(inputs)), at),
+    today: todayOf(spelled(todayReadingOf(inputs)), at),
   };
 }
 

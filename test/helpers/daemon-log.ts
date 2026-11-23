@@ -63,9 +63,7 @@ export const answeredRender = (line: string): boolean => {
 
 // The names a render event lists under `name`, none for `-`.
 const listedBy = (event: string, name: string): string[] =>
-  (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
-    .split(",")
-    .filter((v) => v !== "-");
+  (fieldsOf(event).get(name) ?? "-").split(",").filter((v) => v !== "-");
 
 // What the request waited for and its last draw still owed (`owed=`): the
 // draw's own statement, the one thing the host's wait reads.
@@ -106,7 +104,7 @@ export const drewAwaitedPending = (event: string): boolean =>
 // `renderLines` drops what it decided, so a render is read as the one event
 // its client kept.
 export const retriedRender = (event: string): boolean =>
-  (owedBy(event).length > 0 && / ended=deadline(?: |$)/.test(event)) ||
+  (owedBy(event).length > 0 && fieldsOf(event).get("ended") === "deadline") ||
   (owedBy(event).length === 0 && owedLandings(event).length > 0);
 
 // A session's render events, one per render its client kept, in log order.

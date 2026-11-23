@@ -146,7 +146,7 @@ export function renderFrame(
     const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
       drawRender(parts, setup, { by: "feed", fps }, feeds);
     const bar = drawn.body;
-    const statusline = statuslineOf(
+    const { frame: statusline } = statuslineOf(
       setup,
       parts.sessionState,
       drawn,
@@ -985,19 +985,15 @@ export function answerRequest(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(presentation.client ?? null) === "statusline";
-  const frame = toStatusline
+  const { frame, waited } = toStatusline
     ? statuslineOf(setup, parts.sessionState, drawn, elsewhere)
-    : drawn.body;
+    : { frame: drawn.body, waited: drawn.waited };
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
   // long the turn took is the host's `drew=`, timed around the turn.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
   });
-  // A frame the handoff stands in for drew nothing of the bar's.
-  const awaiting = awaitingOf(
-    frame === drawn.body ? drawn.waited : [],
-    drawn.document,
-  );
+  const awaiting = awaitingOf(waited, drawn.document);
   // [LAW:nothing-unseen] What the frame owes, by name; `-` for nothing.
   noteFacts(facts, {
     owed: awaiting.kind === "settled" ? "-" : awaiting.names.join(","),
@@ -1041,15 +1037,19 @@ export function deliver(
 // draw it `elsewhere` — the handoff line, which says where, with the bar's
 // indicator after it. [LAW:one-source-of-truth] The indicator reads the draw's
 // one list, and its click opens the one viewer: while it is open the statusline
-// shows it, the same body the lanes draw.
+// shows it, the same body the lanes draw. [LAW:single-enforcer] It says what
+// the frame it returns drew as not answered yet, so the frame and what it owes
+// are decided together: the handoff line stands in for the bar and draws none
+// of the bar's.
 function statuslineOf(
   { sessionId, state, view }: RenderSetup,
   picks: SessionStateRW,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
-): Frame {
+): { readonly frame: Frame; readonly waited: readonly PendingRead[] } {
   const first = elsewhere[0];
-  if (first === undefined || drawn.viewerOpen) return drawn.body;
+  if (first === undefined || drawn.viewerOpen)
+    return { frame: drawn.body, waited: drawn.waited };
 
   const effective = view.source.effective();
   const defaultsAfterReset = state.remainingLanes.get(effective.preset);
@@ -1064,18 +1064,21 @@ function statuslineOf(
     (lane) =>
       editGlobals[LANES[lane].switch.setting] ?? defaultsAfterReset[lane],
   );
-  return standIn(
-    drawn.body,
-    handoffRows(
-      laneHandoff(
+  return {
+    frame: standIn(
+      drawn.body,
+      handoffRows(
+        laneHandoff(
+          sessionId,
+          writableRoles(view.configAccess()),
+          [first, ...elsewhere.slice(1)],
+          remaining,
+        ),
+        drawn.diagnostics,
         sessionId,
-        writableRoles(view.configAccess()),
-        [first, ...elsewhere.slice(1)],
-        remaining,
+        drawn.geometry,
       ),
-      drawn.diagnostics,
-      sessionId,
-      drawn.geometry,
     ),
-  );
+    waited: [],
+  };
 }

@@ -1,25 +1,20 @@
 import { when } from "mobx";
 import { awaits, spelled } from "../../src/facts/awaited";
-import {
-  UNREAD_RUN,
-  type BuiltinFacts,
-  type WorldState,
-} from "../../src/facts/world-state";
+import { UNREAD_RUN, type WorldState } from "../../src/facts/world-state";
 
-// Whether a world state still holds a fact a draw waits for: some built-in a
-// request waits for, some source, or some run the view subscribes to, never
-// answered. The one table of what a request waits for (`spelled`) says which
-// built-ins count.
+// Whether a world state still holds a fact a draw waits for: some built-in,
+// some source, or some run the view subscribes to, never answered. The two
+// built-ins the payload composes through `spelled` (the day's sums and the
+// branch's PR) are the ones no request waits for.
 function unanswered(
   { builtins, sources, runs }: WorldState,
   subscribed: Iterable<string>,
 ): boolean {
-  const builtin = (name: keyof BuiltinFacts) => {
-    const fact = builtins[name];
-    return fact.kind === "pending" ? spelled(name, fact) : fact;
-  };
+  const { today, pr, ...awaited } = builtins;
   return [
-    ...(Object.keys(builtins) as Array<keyof BuiltinFacts>).map(builtin),
+    ...Object.values(awaited),
+    spelled(today),
+    spelled(pr),
     ...Object.values(sources),
     ...[...subscribed].map((digest) => (runs[digest] ?? UNREAD_RUN).reading),
   ].some((reading) => reading.kind === "pending" && awaits(reading.why));

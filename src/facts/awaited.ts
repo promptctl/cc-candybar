@@ -4,11 +4,7 @@
 // the renderer says so with every frame it draws (`Awaiting`).
 
 import { pendingOf, type PendingWhy, type Reading } from "../utils/outcome.js";
-import {
-  stampFailureOf,
-  type BuiltinFacts,
-  type WorldState,
-} from "./world-state.js";
+import { stampFailureOf, type WorldState } from "./world-state.js";
 
 // Whether a request waits for a pending: a first answer nothing defers. A
 // `superseded` value the daemon itself made stale (a click's move) draws its
@@ -17,40 +13,18 @@ import {
 // decides, never which value it is [LAW:dataflow-not-control-flow].
 export const awaits = (why: PendingWhy): boolean => why === "unread";
 
-// [LAW:types-are-the-program] Whether a request waits for each built-in's
-// first answer, every one named, so a new built-in fails the build here until
-// it says. The two that are not are slow and external: today's day sums (a
-// scan of every transcript under the Claude Code directory) and the branch's
-// PR (a forge's network call). A first bar that waited on them would be as
-// slow as the slowest, and a bar with every built-in placed always reads both,
-// so they draw pending and land in a later frame.
-const AWAITED_BUILTIN: Readonly<Record<keyof BuiltinFacts, boolean>> = {
-  session: true,
-  today: false,
-  speed: true,
-  context: true,
-  metrics: true,
-  activity: true,
-  cache: true,
-  autocompact: true,
-  git: true,
-  pr: false,
-  tmux: true,
-  hostName: true,
-  hostUser: true,
-};
-
-// [LAW:single-enforcer] The one place a built-in's first answer, not read
-// yet, is spelled for a draw: `unread` for the answers a request waits for,
-// `deferred` for the ones it does not. A fact never carries `deferred`; the
-// payload that composes the draw's reading does.
-export const spelled = <T>(
-  name: keyof BuiltinFacts,
-  reading: Reading<T>,
-): Reading<T, PendingWhy> =>
-  reading.kind === "pending" &&
-  reading.why === "unread" &&
-  !AWAITED_BUILTIN[name]
+// [LAW:single-enforcer] The one place a first answer, not read yet, is spelled
+// `deferred`, for a draw: one a request does not wait for, because it is slow
+// and external. Two built-ins are, and the payload that composes the draw's
+// reading passes exactly those through here: today's day sums (a scan of every
+// transcript under the Claude Code directory) and the branch's PR (a forge's
+// network call). A first bar that waited on them would be as slow as the
+// slowest, and a bar with every built-in placed always reads both, so they
+// draw pending and land in a later frame. A fact never carries `deferred`, and
+// the other built-ins' types do not admit it, so what is spelled here is all
+// that is.
+export const spelled = <T>(reading: Reading<T>): Reading<T, PendingWhy> =>
+  reading.kind === "pending" && reading.why === "unread"
     ? pendingOf("deferred")
     : reading;
 

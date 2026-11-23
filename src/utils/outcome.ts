@@ -98,7 +98,7 @@ export type Present<T, W extends PendingWhy = FactPendingWhy> = Exclude<
   { kind: "absent" }
 >;
 
-const PENDINGS: Readonly<Record<PendingWhy, Pending>> = {
+const PENDINGS: { readonly [W in PendingWhy]: Pending<W> } = {
   unread: Object.freeze({ kind: "pending", why: "unread" }),
   superseded: Object.freeze({ kind: "pending", why: "superseded" }),
   deferred: Object.freeze({ kind: "pending", why: "deferred" }),
@@ -107,7 +107,7 @@ const PENDINGS: Readonly<Record<PendingWhy, Pending>> = {
 // Shared per `why` only so a payload recomputed from the same pending is the
 // same value to a MobX identity comparer; every test of pending is `isPending`.
 export function pendingOf<W extends PendingWhy>(why: W): Pending<W> {
-  return PENDINGS[why] as Pending<W>;
+  return PENDINGS[why];
 }
 
 // What a payload node the daemon built can be. `unknown` is not among them: a
