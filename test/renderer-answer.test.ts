@@ -82,7 +82,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import { joinedEvent } from "../src/utils/event-hold";
+import { DAEMON_EVENT_HOLD_S, joinedEvent } from "../src/utils/event-hold";
 import {
   repoConfigs,
   repoConfigsPath,
@@ -854,28 +854,65 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("reports which launcher event the statusline drew alongside the frame", async () => {
-    const event = {
-      text: "a launched program's pipe outlived its launch",
+  test("owes a request each pipe event past its hold until an answer has carried it, as its own warning", async () => {
+    const event = (text: string, answered: boolean) => ({
+      text,
       ...READ,
-      answered: false,
-    };
+      answered,
+    });
+    const cut = event(
+      "a launched program's pipe outlived its launch: cut",
+      false,
+    );
+    const unread = event(
+      "a launched program's pipe outlived its launch: read",
+      true,
+    );
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      launcher: [
-        {
-          kind: "lifeline",
-          message: "programs launched now would outlive their launcher",
-        },
-        { kind: "launch-pipes", event },
+      held: [
+        { kind: "launch-pipes", about: cut.text, event: cut },
+        { kind: "launch-pipes", about: unread.text, event: unread },
+      ],
+    }));
+    const { effects, record } = answered(
+      await request(t, {
+        at: (READ.at + DAEMON_EVENT_HOLD_S + 600) as Instant,
+        tick: READ.tick,
+      }),
+    );
+    // The answered one is over; the one no answer carried is still owed.
+    expect(new Map(record).get("pipeEvent")).toBe("owed");
+    expect(presentOf(effects).displayedEvents).toEqual([
+      { kind: "launch-pipes", about: cut.text, event: cut },
+    ]);
+  });
+
+  test("reports which launcher events the statusline drew alongside the frame, one warning each", async () => {
+    const event = (text: string) => ({ text, ...READ, answered: false });
+    const cut = event("a launched program's pipe outlived its launch: cut");
+    const unread = event("a launched program's pipe outlived its launch: read");
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      launcher: {
+        kind: "lifeline",
+        message: "programs launched now would outlive their launcher",
+      },
+      held: [
+        { kind: "launch-pipes", about: cut.text, event: cut },
+        { kind: "launch-pipes", about: unread.text, event: unread },
       ],
     }));
     const { effects, record } = answered(await request(t));
     const facts = new Map(record);
-    expect(facts.get("warn")).toBe("lifeline,launch-pipes");
-    expect(facts.get("pipeEvent")).toBe("held");
+    expect(facts.get("warn")).toBe("lifeline,launch-pipes,launch-pipes");
+    expect(facts.get("pipeEvent")).toBe("held,held");
+    // Each pipe event is its own fault: one never stands for the other.
+    expect(facts.get("faults")).toEqual(expect.stringContaining(cut.text));
+    expect(facts.get("faults")).toEqual(expect.stringContaining(unread.text));
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "launch-pipes", event },
+      { kind: "launch-pipes", about: cut.text, event: cut },
+      { kind: "launch-pipes", about: unread.text, event: unread },
     ]);
   });
 
@@ -883,12 +920,12 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      actFailed: event,
+      held: [{ kind: "act-failed", about: "act-failed", event }],
     }));
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "act-failed", event },
+      { kind: "act-failed", about: "act-failed", event },
     ]);
   });
 
@@ -897,14 +934,14 @@ describe("a statusline request", () => {
     const event = joinedEvent(null, `${task} threw: it broke`, READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
-      taskThrows: [{ task, event }],
+      held: [{ kind: "task-threw", about: task, event }],
     }));
     const { effects, record } = answered(await request(t));
     const facts = new Map(record);
     expect(facts.get("err")).toBe("Y");
     expect(facts.get("faults")).toEqual(expect.stringContaining(event.text));
     expect(presentOf(effects).displayedEvents).toEqual([
-      { kind: "task-threw", task, event },
+      { kind: "task-threw", about: task, event },
     ]);
   });
 
@@ -1007,6 +1044,45 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
+  // A feed is owed nothing past the hold, where a request is owed what no
+  // answer has carried.
+  test.each([
+    [DAEMON_EVENT_HOLD_S - 1, true],
+    [DAEMON_EVENT_HOLD_S + 1, false],
+  ])(
+    "a pane frame %s seconds after a pipe event shows it: %s",
+    async (elapsed, shown) => {
+      const event = {
+        text: "a launched program's pipe outlived its launch: cut",
+        ...READ,
+        answered: false,
+      };
+      const t = renderer(undefined, () => ({
+        ...daemonFactsOf(),
+        held: [{ kind: "launch-pipes", about: event.text, event }],
+      }));
+      await configure(t, checked("%1"));
+      answered(
+        await handIn(t.r, {
+          kind: "viewers",
+          viewers: {
+            [SESSION]: {
+              lanes: { pane: { drawing: true, subscribers: 1 } },
+              shown: true,
+              joined: 1,
+            },
+          },
+        }),
+      );
+      const frame = await dueFrame(t.r, elapsed);
+      expect(frame.displayedEvents).toEqual(
+        shown
+          ? [{ kind: "launch-pipes", about: event.text, event }]
+          : undefined,
+      );
+    },
+  );
+
   test.each([false, true])(
     "a pane frame displays the daemon warning while its answered state is %s",
     async (shown) => {
@@ -1016,7 +1092,7 @@ describe("a feed's frame", () => {
       };
       const t = renderer(undefined, () => ({
         ...daemonFactsOf(),
-        actFailed: event,
+        held: [{ kind: "act-failed", about: "act-failed", event }],
       }));
       await configure(t, checked("%1"));
       answered(
@@ -1033,7 +1109,9 @@ describe("a feed's frame", () => {
       );
       const frame = await dueFrame(t.r);
       expect(frame.displayedEvents).toEqual(
-        shown ? undefined : [{ kind: "act-failed", event }],
+        shown
+          ? undefined
+          : [{ kind: "act-failed", about: "act-failed", event }],
       );
       const confirmed = answered(
         await done(t.r, { session: SESSION, id: frame.receipt }, true),

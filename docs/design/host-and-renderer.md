@@ -351,7 +351,7 @@ interface Program {
 
 | Condition | What the user sees | Who reports it |
 |---|---|---|
-| A renderer crashed or its bundle changed | The supervisor restarts it from a complete start after its backoff. Its unsaved state (open menus, armed confirms) does not survive, as today, and every bar carries a `⚠` naming how it ended and saying so, held as a launcher's pipe event is: for the hold, and past it until an answer has carried it | The supervisor, through the daemon's world state |
+| A renderer crashed or its bundle changed | The supervisor restarts it from a complete start after its backoff. Its unsaved state (open menus, armed confirms) does not survive, as today, and every bar carries a `⚠` naming how it ended and saying so, held as the daemon holds a launched program's pipe event: for the hold, and past it until an answer has carried it | The supervisor, through the daemon's world state |
 | A renderer stopped answering | It is ended and restarted as one that crashed, the `⚠` saying it stopped answering | The supervisor's ping |
 | An input while no renderer is live | A failure naming the renderer and how it ended, which the client prints; a click's reply says the same | The supervisor |
 | The host and its renderer together pass the memory limit | A post-mortem of both processes, and the host restarts as today | The memory backstop |

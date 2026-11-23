@@ -5,6 +5,7 @@ import {
   type TimerSource,
 } from "../time.js";
 import { failureOf } from "./foundations/verb-error.js";
+import { recurrence } from "../utils/event-hold.js";
 
 // A throw as the clock reported it: the task's name, what it threw, and the
 // wall reading when it was caught.
@@ -23,8 +24,7 @@ export function thrownText(
   more = 0,
 ): { readonly shown: string; readonly logged: string } {
   const failure = failureOf(reported.thrown);
-  const again = more === 0 ? "" : more === 1 ? " again" : ` ${more} more times`;
-  const threw = `${reported.task} threw${again}`;
+  const threw = `${reported.task} threw${recurrence(more)}`;
   return {
     shown: `${threw}: ${failure.message}`,
     logged: `${threw}: ${failure.detail}`,

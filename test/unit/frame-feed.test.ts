@@ -35,7 +35,7 @@ import {
 } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
-import type { DisplayedEvent } from "../../src/utils/event-hold";
+import type { DaemonEvent } from "../../src/utils/event-hold";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -59,7 +59,7 @@ function rig(
     reject: (thrown: Error) => void;
   }> = [];
   const logged: string[] = [];
-  const acknowledged: DisplayedEvent[] = [];
+  const acknowledged: DaemonEvent[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
     publishFrame,
@@ -166,7 +166,7 @@ const frame = (
   bar = "r",
   handoff: string | null = "s",
   receipt = 1,
-  displayedEvents?: readonly DisplayedEvent[],
+  displayedEvents?: readonly DaemonEvent[],
 ): PushedFrame => ({
   session,
   frame: {
@@ -828,12 +828,14 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   const pane = deferredSubscriber("pane");
   feeds.subscribe(S, pane.sub);
   const event = { text: "an act failed", at: 7 as Instant, answered: false };
-  const first: DisplayedEvent = {
+  const first: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { ...event, revision: 1 },
   };
-  const second: DisplayedEvent = {
+  const second: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { ...event, revision: 2 },
   };
   const older = frame(S, "warning", null, 1, [first]);
@@ -862,6 +864,23 @@ test("equal pane bytes with a different event require a new confirmed write", ()
   expect(acknowledged).toEqual([first, second]);
 });
 
+test("equal pane bytes with the same occurrence of another subject require a new confirmed write", () => {
+  const { feeds, took, acknowledged } = rig();
+  const pane = deferredSubscriber("pane");
+  feeds.subscribe(S, pane.sub);
+  const event = { text: "a pipe was cut", at: 7 as Instant, answered: false };
+  const cut: DaemonEvent = { kind: "launch-pipes", about: "cut", event };
+  const unread: DaemonEvent = { kind: "launch-pipes", about: "unread", event };
+  took([
+    frame(S, "warning", null, 1, [cut]),
+    frame(S, "warning", null, 2, [unread]),
+  ]);
+  expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
+  pane.finish(true);
+  pane.finish(true);
+  expect(acknowledged).toEqual([cut, unread]);
+});
+
 test.each([
   ["pane", "warning"],
   ["statusline", "handoff warning"],
@@ -871,8 +890,9 @@ test.each([
     const { feeds, took, settled, acknowledged } = rig();
     const initial = deferredSubscriber(lane);
     feeds.subscribe(S, initial.sub);
-    const shown: DisplayedEvent = {
+    const shown: DaemonEvent = {
       kind: "renderer-ended",
+      about: "renderer-ended",
       event: { text: "the renderer ended", at: 7 as Instant, answered: false },
     };
     const offered = frame(S, "warning", "handoff warning", 1, [shown]);
@@ -902,12 +922,14 @@ test("a slower pane confirmation reports its own event after another pane confir
     at: 7 as Instant,
     answered: false,
   };
-  const first: DisplayedEvent = {
+  const first: DaemonEvent = {
     kind: "renderer-ended",
+    about: "renderer-ended",
     event: { ...event, revision: 1 },
   };
-  const second: DisplayedEvent = {
+  const second: DaemonEvent = {
     kind: "renderer-ended",
+    about: "renderer-ended",
     event: { ...event, revision: 2 },
   };
   const older = frame(S, "old", null, 1, [first]);
@@ -945,8 +967,9 @@ test("a pane write confirmed while its lane's refusal is flushing still answers 
       }),
     refused: (resp) => out.end(JSON.stringify(resp)),
   });
-  const shown: DisplayedEvent = {
+  const shown: DaemonEvent = {
     kind: "act-failed",
+    about: "act-failed",
     event: { text: "an act failed", at: 7 as Instant, answered: false },
   };
   const offered = frame(S, "warning", null, 1, [shown]);
