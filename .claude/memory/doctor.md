@@ -6,7 +6,7 @@ The probes found that most facts a doctor needs are visible only to the statusli
 
 ## Claude Code settings
 
-- The old checks assumed the first scope that sets statusLine wins it whole; that was never verified. env merges key by key.
+- Whether the first scope that sets statusLine wins it whole is unverified. env merges key by key.
 - Never write managed settings or a project's shared `settings.json`. The first is an administrator's policy, and the second is somebody's repository.
 - Claude Code parses settings strictly: keys must be quoted and trailing commas aren't allowed. Edit settings files in that dialect.
 - Refresh cadence is judged from the settings chain the session reads, not from request timing. Under load, no arrival pattern tells a timer from the events of a busy turn. And a statusLine from --settings, MDM or server-managed settings outranks every file a fix could write.

@@ -1,8 +1,8 @@
 // What the statusline client IS — the one fact about a render only the client
 // that sent it can state: which program drew the bar, and which bundle it
 // belongs to. The host records it with each render and its stats reply reports
-// it, so an install's currency can be judged from what actually rendered,
-// because the settings file only says what is
+// it; nothing judges an install's currency from it today. It is the fact to
+// judge from, because the settings file only says what is
 // supposed to run — a launcher script, managed settings, or a project file
 // may stand between it and the client that actually rendered.
 //

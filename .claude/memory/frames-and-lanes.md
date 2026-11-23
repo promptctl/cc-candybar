@@ -43,3 +43,7 @@ While a lane that draws the bar somewhere else is on and actually followed, Clau
 ## The attach launcher
 
 A Bun-compiled Claude Code honours BUN_OPTIONS. It doesn't honour BUN_INSPECT_PRELOAD or NODE_OPTIONS. BUN_INSPECT names a single socket, so two sessions can't share it, and BUN_INSPECT_CONNECT_TO dials out without holding the process. This was measured on one Claude Code release, so recheck it if attaching stops working. The preload execs node with the launcher in the same pid and removes itself from BUN_OPTIONS, so no Bun child process runs it again. When it can't attach, it refuses rather than start a stock session.
+
+## The resume command
+
+`--resume` finds no conversation for a session that has no transcript yet, so such a session needs `--session-id` instead. The copied resume command always passes `--resume`, and nothing chooses `--session-id` for that case.

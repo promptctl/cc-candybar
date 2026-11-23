@@ -481,8 +481,8 @@ export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
 // attribution is gone. Newest first: the leading ISO timestamp orders the
 // identities lexically, the trailing -<pid> only tiebreaks same-instant
 // writes. A file no breach wrote is not ours, so it is no post-mortem.
-// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
-// a listing reads it whole.
+// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, and a
+// listing reads it whole.
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
   const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
   for (const file of files) {

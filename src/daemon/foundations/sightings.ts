@@ -32,7 +32,7 @@ export interface TranscriptSaid {
 // itself (`Frame`, src/render/frame.ts): whether anything on it changes
 // without new data — an effect, a transition, a template's `frames` — so the
 // stats reply says whether the bar needs Claude Code to redraw it a second at
-// a time (brandon-doctor-v62x.tgp). A render that threw drew nothing.
+// a time. A render that threw drew nothing.
 // `can-move`: still now, but the config can start motion at any render
 // without a click — a `globals.effect` rule, placements fading as they come
 // and go, a placement wearing its own effect — so it needs the redraw a moving

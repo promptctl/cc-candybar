@@ -252,7 +252,7 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
 }
 
 // [LAW:one-source-of-truth] Where the user's config and installed plugins live,
-// and the home they default under: the one derivation the config loader, the
+// and the home they default under: the one derivation the config loader and the
 // plugin installer share, so an empty `XDG_CONFIG_HOME` means the default in
 // both (the XDG rule `xdgEnv` applies to every variable
 // here). Pure over the host, parsed once by the root and handed down.

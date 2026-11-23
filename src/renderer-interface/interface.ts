@@ -5,8 +5,11 @@
 // [LAW:one-way-deps] The host depends on this module and the renderer
 // implements it. It sits in the shared zone (scripts/import-zones.mjs), so what
 // it imports is the vocabulary both sides speak (the session context, the
-// world state, the frame, the instant) and the failure shape with its one
-// converter, so a thrown value crosses as the same data whichever side threw it.
+// world state, the frame, the instant) and the failure shape with the
+// converter a renderer reports through (`rendererFailureOf`), so a thrown value
+// crosses as the same data whichever side threw it. The host's own converter
+// (`failureOf`) classifies the same way and renders the detail differently:
+// it keeps the native stack, and the renderer's answer leaves it out.
 // The renderer's portion of the stats reply is a module below both
 // (./renderer-stats), which the host's stats snapshot embeds.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
@@ -331,10 +334,10 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
-// A request's answer and a publication to a subscriber are two behaviors, so
-// they have two types: a statusline frame returns as the present of the
-// request it answers, and a frame a feed draws for a subscriber leaves as
-// `RendererOutput.frames`, which the host publishes.
+// [LAW:one-type-per-behavior] A request's answer and a publication to a
+// subscriber are two behaviors, so they have two types: a statusline frame
+// returns as the present of the request it answers, and a frame a feed draws
+// for a subscriber leaves as `RendererOutput.frames`, which the host publishes.
 export interface Present {
   readonly kind: "present";
   readonly id: EffectId;
