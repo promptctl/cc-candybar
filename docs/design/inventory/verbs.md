@@ -91,7 +91,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 - **Click errors:** `dispatch` calls `holdClickError`, and `answeredClickError` later marks it at the request boundary.
 - **After an update:** success triggers `binaryWatch.checkNow`, then `shutdown(0)`, which restores tmux and aborts runs.
 - **After a run:** sources resume, and a failure lands in `candybar.clickError`.
-- **Client timeout:** a click read in time is answered with its own outcome. A TIMEOUT to a click means it was refused unread and ran nothing, and a url frame's click still lands after its writer stopped waiting.
+- **Client timeout:** a click read in time is answered with its own outcome. A TIMEOUT to a click means it was refused unread and its action did not run. A url frame's click is under the guard too: one whose turn starts after the guard is refused, though its writer stopped waiting long before.
 
 ## (2) Module-level mutable state in `server.ts`
 

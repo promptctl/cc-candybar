@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] What a click's reader is told when the daemon's loop
 // is held past its request guard. A click read after the guard fired is
-// answered TIMEOUT and ran nothing, and a click read in time is answered with
-// its own outcome however long its turn takes. A bar's click writes the file
+// answered TIMEOUT and its action does not run, and a click read in time is
+// answered with its own outcome however long its turn takes. A bar's click writes the file
 // the link names, so a landed click is a file written. The reader the answer
 // reaches is `cc-candybar url-handle`, whose message is read off the daemon's
 // own answer.
@@ -60,7 +60,7 @@ function projectWithPin() {
   };
 }
 
-test("a click read after the guard fired is answered TIMEOUT and ran nothing; url-handle says to click again", async () => {
+test("a click read after the guard fired is answered TIMEOUT and its action does not run; url-handle says to click again", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-late");
   const bar = projectWithPin();
   const clock = heldClock(new Date(), reportingClock);

@@ -491,6 +491,12 @@ export interface UrlHandlePlan {
 // our own clock ends while a click may be queued, running, done or refused, and
 // a second click on one that ran can revert it. It exits 0, as the click may
 // well have landed, and the text claims neither result.
+// `backstop` reads a TIMEOUT as a refusal, which holds only against a daemon
+// that answers a click read in time with its own outcome. A new url-handle
+// against an older daemon is told wrongly for a window: that daemon's TIMEOUT
+// could mean the click ran. The window is short, since the daemon restarts when
+// the binary changes, and the cure, a protocol version bump, would push every
+// running statusline client through VERSION_MISMATCH.
 const BUSY: {
   readonly [P in BusyPhase]: { readonly why: string; readonly code: 0 | 1 };
 } = {

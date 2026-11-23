@@ -1,7 +1,7 @@
 // The e2e click helper on a click the daemon answered TIMEOUT. A TIMEOUT to a
-// click means the daemon refused it unread and ran nothing, so the helper
-// sends it again within its budget, and reads what became of it from the
-// answer it got, never from the daemon's log.
+// click means the daemon refused it unread and its action did not run, so the
+// helper sends it again within its budget, and reads what became of it from
+// the answer it got, never from the daemon's log.
 
 import net from "node:net";
 

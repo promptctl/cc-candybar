@@ -26,8 +26,8 @@
 // whose verb acts on the developer's machine
 // (src/click/read HOST_VERBS: the clipboard, VS Code, a rebuild of this
 // checkout) is never sent: it comes back as not sent, naming its effects, and
-// the bar renders as it was. A click the daemon answers TIMEOUT ran nothing,
-// so it is sent again, and what became of it is the answer it gets.
+// the bar renders as it was. A click the daemon answers TIMEOUT did not run
+// its action, so it is sent again, and what became of it is the answer it gets.
 
 import fs from "node:fs";
 import os from "node:os";

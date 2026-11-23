@@ -207,7 +207,7 @@ describe("a connection over a stream", () => {
     expect(settle.mock.calls).toEqual([[false]]);
   });
 
-  // [LAW:verifiable-goals] A TIMEOUT to a click means it ran nothing, so a
+  // [LAW:verifiable-goals] A TIMEOUT to a click means its action did not run, so a
   // click that was read in time is answered with its own outcome, however long
   // it takes, and a click read after the backstop is the one refused.
   describe("a click request", () => {

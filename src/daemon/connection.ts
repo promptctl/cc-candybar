@@ -47,8 +47,10 @@ const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
 // - `unattended`: a url frame is read. The URL handler app waits for no
 //   outcome, reading the verdict on its link at most, so its hanging up is its
 //   design, not a peer leaving: the frame stays in flight until its click is
-//   handled, under the same deadline every request has (a click past it is
-//   refused, so a repeat click cannot revert it, src/daemon/reply.ts).
+//   handled, under the backstop's deadline, which a click read in time is the
+//   one request to escape (`BACKSTOP_BOUNDS_READ`): a url frame's click whose
+//   turn starts past it is refused, so a repeat click cannot revert it
+//   (src/daemon/reply.ts).
 //   `lapsed`: the deadline passed, and no one was told. `told`: its writer
 //   was written its verdict, the socket's one answer.
 // - `answered`: the socket's one answer is written: the reply (a refusal of

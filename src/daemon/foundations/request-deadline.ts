@@ -16,17 +16,18 @@ import {
   type Request,
 } from "./protocol";
 
-// [LAW:single-enforcer] Every handler's backstop: the connection's own timer
-// answers TIMEOUT at this, whatever its request is still doing, once its frame
-// is read for the kinds `BACKSTOP_BOUNDS_READ` bounds.
+// [LAW:single-enforcer] The one backstop: the connection's own timer answers
+// TIMEOUT at this, whatever its request is still doing. A frame not yet read is
+// always bounded by it, and one read is bounded for the kinds
+// `BACKSTOP_BOUNDS_READ` names.
 export const REQUEST_TIMEOUT_MS = 200;
 
 // [LAW:types-are-the-program] Whether the backstop still answers for a request
 // once its frame is read, by kind: the compiler names a kind added to the
 // protocol until it says. A click read in time is answered with its own
 // outcome however long its turn takes, so a TIMEOUT to a click means its frame
-// was unread when the backstop fired: it was refused at its turn, ran nothing,
-// and can be sent again (src/daemon/reply.ts). A render's TIMEOUT stays
+// was unread when the backstop fired: it was refused at its turn, its action did
+// not run, and it can be sent again (src/daemon/reply.ts). A render's TIMEOUT stays
 // bounded, since the statusline client relies on it for a draw that is slow.
 export const BACKSTOP_BOUNDS_READ: Readonly<Record<Request["kind"], boolean>> =
   {
