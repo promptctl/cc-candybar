@@ -811,23 +811,21 @@ const save: VerbHandler = (args, ctx) => {
 // the session holds is released: letting go of nothing writes nothing, which
 // matters for an edit mode key with no edit open.
 //
-// [LAW:no-ambient-temporal-coupling] The drafts are judged against the preset
-// the save settles on, which is an input (`preset`): the session's own pick
-// of it is what a save that switches presets is about to write, so the release
-// never depends on whether that write has landed.
+// [LAW:no-ambient-temporal-coupling] The drafts are judged against the picks
+// the save settles on, which is an input (`read`): a save that switches
+// presets passes the session's picks with the new preset over them, so the
+// release never depends on whether that write has landed.
 function releaseSaved(
   ctx: ClickContext,
   written: DslConfig,
   settled: {
-    readonly preset?: string;
+    readonly read?: (key: string) => string | null;
     readonly movedOn?: readonly string[];
   } = {},
 ): void {
   const sid = ctx.session;
-  const pick = (key: string) =>
-    key === SETTINGS.preset.sessionKey && settled.preset !== undefined
-      ? settled.preset
-      : ctx.sessionState.get(sid, key);
+  const pick =
+    settled.read ?? ((key: string) => ctx.sessionState.get(sid, key));
   const drafted = new Set([
     ...settingDrafts(written, pick).map((d) => d.sessionKey),
     ...placementDrafts(written, pick).map((p) => p.key),
@@ -901,7 +899,10 @@ const savePreset: VerbHandler = (args, ctx) => {
   );
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   releaseSaved(ctx, written, {
-    preset: name,
+    read: (key) =>
+      key === SETTINGS.preset.sessionKey
+        ? name
+        : ctx.sessionState.get(sid, key),
     movedOn: snapshot.placements.map((p) => p.key),
   });
   ctx.log(

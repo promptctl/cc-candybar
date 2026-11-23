@@ -1091,7 +1091,8 @@ export function inSettingDomain(
 // back. A session holds strings, so a pick crosses the click wire in this
 // spelling and the render parses it against the declaration — `undefined` for
 // a string the domain does not hold (a pick made before the declaration
-// changed), which the caller reads as "no pick", as a stale theme name is.
+// changed). That is a stale pick, not "no pick": the caller keeps the three
+// apart (unset, held, stale — `heldBy` in src/themes/policy.ts).
 export function settingSpelling(value: SettingValue): string {
   return String(value);
 }
