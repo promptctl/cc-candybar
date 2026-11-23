@@ -171,7 +171,14 @@ export interface StateOptions {
 
 // The publish half of a source, closed over its store node: takes what the
 // run yielded, parsed, and writes the node — value or fallback.
-type Publish = (outcome: Outcome<unknown>) => void;
+// What a source's node takes: the reading of a run that answered, and the
+// word that no run will, so a variable whose run was refused or whose key
+// threw before it ever ran still shows what stands in for a run that read
+// nothing.
+interface Publish {
+  readonly answered: (outcome: Outcome<unknown>) => void;
+  readonly unrun: () => void;
+}
 
 // [LAW:one-source-of-truth] The parser's identity, without its default: what
 // the run digests.
@@ -638,7 +645,7 @@ export class SourceRegistry {
   // [LAW:dataflow-not-control-flow].
   //
   // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first run answers, and on a key's move
+  // node is pending until the first run answers, and on a key's move
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
@@ -695,7 +702,16 @@ export class SourceRegistry {
           // The instant the reading first differed is the world state's; the
           // store holds what the run answered.
           const { at: _at, ...outcome } = reading;
-          publish(outcome);
+          publish.answered(outcome);
+        },
+        { fireImmediately: true },
+      ),
+      // A run that cannot be named (its key threw, its refresh was refused)
+      // never answers, and what it read is nothing.
+      reaction(
+        () => this.runs.get(name)?.get().kind === "failed",
+        (unrun) => {
+          if (unrun) publish.unrun();
         },
         { fireImmediately: true },
       ),
@@ -731,10 +747,24 @@ export class SourceRegistry {
     varDefault: string | undefined,
   ): Publish {
     const fallback = varDefault ?? this.defaultEmptyValue;
-    this.store.defineBox(name, "string", fallback);
-    return (outcome) => {
-      this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+    // [LAW:one-source-of-truth] Not answered yet is its own state, so the node
+    // is pending until its first run answers, as a document without a default
+    // and an `env` variable are. The fallback stands in for a run that read
+    // nothing (a missing file, a failed command, blank output), which a run
+    // that has not run is not.
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    return {
+      answered: (outcome) => {
+        this.noteOutcome(name, outcome);
+        this.store.setBox(name, orElse(outcome as Outcome<string>, fallback));
+      },
+      // The run's fault is the variable's standing error already
+      // (`cachePolicyFaults`, `runFaults`), so only the value is set, and only
+      // while nothing has answered.
+      unrun: () => {
+        if (isPending(this.store.stored(name)))
+          this.store.setBox(name, fallback);
+      },
     };
   }
 
@@ -742,8 +772,8 @@ export class SourceRegistry {
   // default the node is pending until its first scan, then holds what the scan
   // found — absent when it had nothing to read, failed with its reason after a
   // bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value the way a
-  // string has "".
+  // [LAW:no-silent-failure]: a document has no honest empty value to show for
+  // a run that read nothing, where a string has "".
   //
   // The default stands in for a run that had nothing to READ — a missing
   // file, a command that failed, blank output — never for text that was read
@@ -772,7 +802,7 @@ export class SourceRegistry {
     // Whether the document showing was READ (not the default standing in).
     let showingRead = false;
     this.cleanups.push(() => clearSettling?.());
-    return (raw) => {
+    const answered = (raw: Outcome<unknown>): void => {
       clearSettling?.();
       const outcome = raw as Outcome<JsonValue>;
       this.noteOutcome(name, outcome);
@@ -795,6 +825,9 @@ export class SourceRegistry {
         show();
       }
     };
+    // A document without a default is pending until a scan answers, and one
+    // with a default already shows it: neither has a stand-in to set.
+    return { answered, unrun: () => {} };
   }
 
   // template: a variable whose value is derived by evaluating a go-template

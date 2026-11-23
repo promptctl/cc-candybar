@@ -56,9 +56,9 @@ import {
   type SpeedObservation,
   type SpeedSample,
   type TodayFacts,
-  UNREAD_RUN,
+  runFactOf,
+  sourceFactOf,
   type WorldState,
-  type SourceValue,
 } from "../facts/world-state.js";
 import { projectToday } from "../daemon/foundations/today-facts.js";
 import { contextOver } from "../segments/context.js";
@@ -943,16 +943,6 @@ export function composePayload(
   return payload;
 }
 
-// [LAW:dataflow-not-control-flow] A source the view's config declares, as its
-// world state carries it. The host learns a view's sources from the output of
-// the turn that opened it, so the world state that turn drew from carries none
-// of them yet, and each is not read yet: pending, never missing, so a segment
-// over it waits rather than drawing its default.
-export const sourceFactOf = (
-  facts: Pick<WorldState, "sources">,
-  name: string,
-): Fact<SourceValue> => facts.sources[name] ?? pendingOf("unread");
-
 // What the draw knows of each source the view declares, including the
 // reason it is pending. Both check and the render record read these values.
 export function sourceSummaryOf(
@@ -973,9 +963,7 @@ export function sourceSummaryOf(
       ([name, run]) =>
         [
           name,
-          run.kind === "ok"
-            ? (facts.runs[run.value.digest] ?? UNREAD_RUN).reading
-            : run,
+          run.kind === "ok" ? runFactOf(facts, run.value.digest).reading : run,
         ] as const,
     ),
   ];

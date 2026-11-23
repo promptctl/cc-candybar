@@ -121,10 +121,10 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   const { status, changed, open } = setUp();
   using held = open("s");
   await until(
-    () => held.view.store.read("status") === "green",
+    () => held.view.store.stored("status") === "green",
     "the source's first read",
   );
-  // Its first read is a change from the default the view opened with.
+  // Its first read is a change from the pending state the view opened with.
   const settled = changed.length;
   expect(changed).toEqual(["s", "s"]);
   // Twenty periods of re-reads of the same text.
@@ -157,7 +157,7 @@ test("a view a reload retired says nothing more while a render still holds it", 
   const { status, changed, writeConfig, reload, open } = setUp();
   using old = open("s");
   await until(
-    () => old.view.store.read("status") === "green",
+    () => old.view.store.stored("status") === "green",
     "the first read",
   );
   // An edit, and the save's reload of it. The config's watch hears the write

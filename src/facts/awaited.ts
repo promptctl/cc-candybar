@@ -3,7 +3,9 @@
 
 import type { Reading } from "../utils/outcome.js";
 import {
-  UNREAD_RUN,
+  envFactOf,
+  runFactOf,
+  sourceFactOf,
   type BuiltinFacts,
   type WorldState,
 } from "./world-state.js";
@@ -17,19 +19,29 @@ import {
 // so they draw pending and land in a later world state. A fact the daemon
 // itself superseded (a click's move) is not waited on either: it draws its
 // loading cell, and its landing reaches the next frame.
-// The runs it waits on are the ones the session's renderer subscribes to, by
-// digest: a run the renderer names is subscribed before its request is
-// delivered, and until the host reads it the world state has no entry for
-// it. A doctor run is not waited on: its read probes the terminal, fonts and
-// the forge, so its report lands in a later world state, as the PR does.
+// What it waits on past the built-ins is what the session's renderer
+// subscribes to: each plugin source by name, each run by digest and each `env`
+// variable by name. A key the renderer names is subscribed before its request
+// is delivered, and until the host reads it the world state has no entry for
+// it, so a key the document does not carry is waited on as one that never
+// answered: the draw reads it the same way (`runFactOf`). A doctor run is not
+// waited on: its read probes the terminal, fonts and the forge, so its report
+// lands in a later world state, as the PR does.
+export interface Subscribed {
+  readonly plugins: Iterable<string>;
+  readonly runs: Iterable<string>;
+  readonly env: Iterable<string>;
+}
+
 export function awaitsReading(
-  { builtins, sources, runs }: WorldState,
-  subscribed: Iterable<string>,
+  facts: WorldState,
+  { plugins, runs, env }: Subscribed,
 ): boolean {
   return [
-    ...AWAITED_BUILTINS.map((name) => builtins[name]),
-    ...Object.values(sources),
-    ...[...subscribed].map((digest) => (runs[digest] ?? UNREAD_RUN).reading),
+    ...AWAITED_BUILTINS.map((name) => facts.builtins[name]),
+    ...[...plugins].map((name) => sourceFactOf(facts, name)),
+    ...[...runs].map((digest) => runFactOf(facts, digest).reading),
+    ...[...env].map((name) => envFactOf(facts, name)),
   ].some(awaitedReading);
 }
 

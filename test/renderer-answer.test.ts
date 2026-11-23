@@ -854,6 +854,57 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
+  test("whose view closed after its config turn draws an env variable its config reads as read, not pending", async () => {
+    const t = renderer();
+    const context = checked();
+    fs.writeFileSync(
+      path.join(dir, "config.json5"),
+      `{
+        variables: { home: { kind: "env", name: "HOME", default: "none" } },
+        segments: { probe: { template: "probe={{ .home }}" } },
+        root: "probe",
+      }`,
+    );
+    await configure(t, context);
+    // An eviction between the two turns.
+    t.rig.cache.retireSession(SESSION);
+    const { record } = answered(
+      await t.r.answer({
+        kind: "event",
+        ...READ,
+        event: { kind: "request", id: REQUEST, context },
+      }),
+    );
+    expect(new Map(record).get("pending")).toBe("-");
+  });
+
+  test("draws a text source its run has not answered as pending, and says so on its record", async () => {
+    const t = renderer();
+    const context = checked();
+    fs.writeFileSync(
+      path.join(dir, "config.json5"),
+      `{
+        variables: {
+          probed: { kind: "shell", command: "echo up", cache: { never: true } },
+        },
+        segments: { probe: { template: "probe={{ .probed }}" } },
+        root: "probe",
+      }`,
+    );
+    await configure(t, context);
+    const { record } = answered(
+      await t.r.answer({
+        kind: "event",
+        ...READ,
+        event: { kind: "request", id: REQUEST, context },
+      }),
+    );
+    // No run's reading is handed to this renderer, so the source is unread:
+    // its fallback is for a run that read nothing, never for one not read.
+    expect(new Map(record).get("pending")).toMatch(/probe/);
+    expect(new Map(record).get("sourcesPending")).toBe("probed:unread");
+  });
+
   test("owes a request each pipe event past its hold until an answer has carried it, as its own warning", async () => {
     const event = (text: string, answered: boolean) => ({
       text,

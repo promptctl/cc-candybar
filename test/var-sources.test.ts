@@ -1678,7 +1678,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       ]);
 
       // A key that throws is no key: the source does not run under it, and
-      // having never answered, the run it names is the failure.
+      // having never answered, the run it names is the failure, and the
+      // fallback stands in for the run that will not happen.
       await ran(registry);
       expect(store.read("val")).toBe("");
       expect(registry.getLastError("val")?.message).toMatch(fault);
@@ -3410,6 +3411,38 @@ describe("SourceRegistry — parse seam", () => {
     expect(doc(store, "doc").a).toBe(1);
   });
 
+  it("a text source is pending until its first run answers, and its default stands in only for a run that read nothing", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
+      const { store, registry } = make();
+      registry.declareShell("held", `${gate.hold}; echo up`, {
+        cwd: process.cwd(),
+        env: SHELL_ENV,
+        parse: text("fallback"),
+        cache: { kind: "never" },
+      });
+      registry.declareShell("failed", `exit 3`, {
+        cwd: process.cwd(),
+        env: SHELL_ENV,
+        parse: text("fallback"),
+        cache: { kind: "never" },
+      });
+      await until(
+        () => store.stored("failed") === "fallback",
+        "the failed run's fallback",
+      );
+      // The run that read nothing is its fallback; the one not read is not.
+      expect(store.stored("held")).toEqual(pendingOf("unread"));
+      gate.open();
+      expect(await settledOf(registry, 3000)).toEqual([]);
+      expect(store.read("held")).toBe("up");
+    } finally {
+      cleanup();
+    }
+  });
+
   it("settled() names the sources still in flight at its deadline", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -3428,7 +3461,7 @@ describe("SourceRegistry — parse seam", () => {
         parse: TEXT,
         cache: { kind: "never" },
       });
-      await until(() => store.read("fast") === "y", "fast's run publishing");
+      await until(() => store.stored("fast") === "y", "fast's run publishing");
       expect(await settledOf(registry, 0)).toEqual(["slow"]);
       gate.open();
       expect(await settledOf(registry, 3000)).toEqual([]);
@@ -3545,9 +3578,10 @@ describe("SourceRegistry — in-flight runs", () => {
       const spawns = path.join(dir, "spawns");
       const { store, registry } = make();
       // A is the slow one: its first publish lands while settled() is
-      // waiting, and that publish is what re-runs B. B's own first run is
-      // long done by then, so the re-run is a new in-flight entry that only
-      // a re-snapshot of inFlight after A's publish can await.
+      // waiting, and that publish is what starts B, whose key is A's value
+      // and so names no run before A answers. B's run is a new in-flight entry
+      // that only a re-snapshot of inFlight after A's publish can await, and
+      // it is B's one run: it never ran over A's fallback.
       registry.declareShell("A", "sleep 0.5; echo a", {
         cwd: process.cwd(),
         env: SHELL_ENV,
@@ -3566,7 +3600,7 @@ describe("SourceRegistry — in-flight runs", () => {
       );
       expect(await settledOf(registry, 3000)).toEqual([]);
       expect(store.read("A")).toBe("a");
-      expect(store.read("B")).toBe("2");
+      expect(store.read("B")).toBe("1");
     } finally {
       cleanup();
     }
@@ -3678,7 +3712,10 @@ describe("SourceRegistry — in-flight runs", () => {
     heldOf(registry).runs.close();
     await until(() => !alive(marker), "the run's child ending", 3000);
     expect(alive(nap)).toBe(false);
-    expect(store.read("s")).toBe("pending");
+    // Nothing was published, so the value is still not answered: the
+    // fallback stands in for a run that read nothing, not for one that never
+    // finished.
+    expect(store.stored("s")).toEqual(pendingOf("unread"));
     expect(registry.getLastError("s")).toBeUndefined();
   });
 });

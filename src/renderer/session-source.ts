@@ -27,10 +27,9 @@ import type { ViewSource } from "../dsl/view-source.js";
 import {
   type WorldState,
   stampFailureOf,
-  UNREAD_ENV,
-  UNREAD_RUN,
+  envFactOf,
+  runFactOf,
 } from "../facts/world-state.js";
-import { ownValue } from "../utils/plain.js";
 import type { WorldStates } from "./world-states.js";
 import { writableRoles, type SourceOf } from "./render-cache.js";
 import {
@@ -134,10 +133,10 @@ export function sessionSource(
       facts: document,
       // [LAW:types-are-the-program] A digest the document does not carry is a
       // run the host has not read for this session yet.
-      run: (digest) => document().runs[digest] ?? UNREAD_RUN,
+      run: (digest) => runFactOf(document(), digest),
       // A variable the document does not carry is one the host has not
       // handed in for this session yet.
-      env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
+      env: (name) => envFactOf(document(), name),
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw.read().effective,

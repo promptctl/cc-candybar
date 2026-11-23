@@ -6,6 +6,7 @@ import type { MetricsFold } from "../segments/metrics";
 import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
+import { ownValue } from "../utils/plain";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
@@ -46,6 +47,27 @@ export const UNREAD_RUN: RunFact = {
   reading: pendingOf("unread"),
   fault: null,
 };
+
+// [LAW:single-enforcer] The one place a keyed fact the document does not carry
+// is read: it is unread, the same pending a carried one that never answered
+// is. The request's wait (src/facts/awaited.ts) and the draw's pending both
+// read through these, so a key absent and a key explicitly unread cannot be
+// two answers. A key is a name or a digest, so each is read as its own member,
+// never one an object inherits.
+export const runFactOf = (
+  facts: Pick<WorldState, "runs">,
+  digest: string,
+): RunFact => ownValue(facts.runs, digest) ?? UNREAD_RUN;
+
+export const envFactOf = (
+  facts: Pick<WorldState, "env">,
+  name: string,
+): Fact<string> => ownValue(facts.env, name) ?? UNREAD_ENV;
+
+export const sourceFactOf = (
+  facts: Pick<WorldState, "sources">,
+  name: string,
+): Fact<SourceValue> => ownValue(facts.sources, name) ?? pendingOf("unread");
 
 // The tmux session the pane belongs to.
 export interface TmuxFacts {

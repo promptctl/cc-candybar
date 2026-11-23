@@ -284,10 +284,11 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
           const record = this.records.get(session);
           return (
             record?.phase.kind !== "live" ||
-            !awaitsReading(
-              record.stamped.document,
-              record.subscriptions.runs.keys(),
-            )
+            !awaitsReading(record.stamped.document, {
+              plugins: record.subscriptions.plugins.keys(),
+              runs: record.subscriptions.runs.keys(),
+              env: record.subscriptions.env,
+            })
           );
         },
         { signal },

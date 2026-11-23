@@ -155,7 +155,9 @@ function configure(cwd: string, edition = 0): void {
       },
     },
     segments: {
-      who: { template: "who={{ .sid }} {{ .perSession }} {{ .perDirectory }}" },
+      // Reads the session value alone: this rig hands a view no run's
+      // reading, so a segment over a run's variable would draw pending.
+      who: { template: "who={{ .sid }}" },
     },
     root: { h: ["who"] },
   };

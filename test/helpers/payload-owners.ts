@@ -53,7 +53,7 @@ import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/daemon/cache/host-identity";
 import { assembleFacts } from "../../src/daemon/facts-assembly";
 import { instantOf } from "../../src/utils/instant";
-import { settledWorld } from "./settled";
+import { NOTHING_SUBSCRIBED, settledWorld } from "./settled";
 import {
   composePayload,
   todayOf,
@@ -183,7 +183,7 @@ export function todayReadingOf(inputs: LanedInputs) {
 export async function settleLanes(inputs: LanedInputs): Promise<void> {
   await settledWorld(
     () => documentOf(inputs),
-    () => [],
+    () => NOTHING_SUBSCRIBED,
   );
 }
 
@@ -358,7 +358,12 @@ export function withTranscriptLanes<O extends FixtureOwners>(
     transcriptLanes: new TranscriptLanes({
       owners: laned,
       watchers: {
-        acquire: () => ({ release: () => {}, observed: () => {}, deaf: [], ridesStream: false }),
+        acquire: () => ({
+          release: () => {},
+          observed: () => {},
+          deaf: [],
+          ridesStream: false,
+        }),
       },
       clock,
       logger: owners.log,

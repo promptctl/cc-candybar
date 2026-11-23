@@ -18,7 +18,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload } from "../src/renderer/render-payload";
-import { settledWorld } from "./helpers/settled";
+import { settledWorld, subscribedBy } from "./helpers/settled";
 import type { Readings } from "../src/daemon/readings";
 import { readTranscriptLanes } from "./helpers/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -250,7 +250,7 @@ describe("what wakes a view", () => {
     });
     await settledWorld(
       () => rig.served.worldStates.of(SID),
-      () => [...view.registry.namedRuns().values()].map((r) => r.digest),
+      () => subscribedBy(view),
     );
     expect(view.source.facts()).toBe(document);
     expect(view.source.payload()).toBe(payload);
