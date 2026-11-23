@@ -4,15 +4,22 @@
     {
       "version": "pr-901",
       "ref": "refs/pull/901/merge",
-      "sha": "61b8f755ed6cd4f21504c43b10d4424785e9179a",
-      "timestamp": "2026-11-23T11:38:11.608Z",
+      "sha": "d7e52e2e9a47f377b78714546cfa0b2ae219386a",
+      "timestamp": "2026-11-23T11:53:15.926Z",
       "commits": [
         {
-          "sha": "61b8f755ed6cd4f21504c43b10d4424785e9179a",
+          "sha": "d7e52e2e9a47f377b78714546cfa0b2ae219386a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T11:37:05Z",
-          "message": "Merge 688ce7a54281f1172aab1a8994a5bf18d312c44d into 9981658049e4a64f1743182196945f5de277f53e\n"
+          "timestamp": "2026-11-23T11:52:04Z",
+          "message": "Merge 063100e1fcd252c60eee3478be2c657587086917 into 9981658049e4a64f1743182196945f5de277f53e\n"
+        },
+        {
+          "sha": "063100e1fcd252c60eee3478be2c657587086917",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-23T04:51:50-07:00",
+          "message": "fix(settings): a save's release takes the preset it settles on instead of reading it from session state\n"
         },
         {
           "sha": "688ce7a54281f1172aab1a8994a5bf18d312c44d",
