@@ -76383,7 +76383,7 @@ var save = (args, ctx) => {
 };
 function releaseSaved(ctx, written2, settled3 = {}) {
   const sid = ctx.session;
-  const pick2 = (key) => key === SETTINGS.preset.sessionKey && settled3.preset !== void 0 ? settled3.preset : ctx.sessionState.get(sid, key);
+  const pick2 = settled3.read ?? ((key) => ctx.sessionState.get(sid, key));
   const drafted = /* @__PURE__ */ new Set([
     ...settingDrafts(written2, pick2).map((d) => d.sessionKey),
     ...placementDrafts(written2, pick2).map((p2) => p2.key)
@@ -76434,7 +76434,7 @@ var savePreset = (args, ctx) => {
   );
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   releaseSaved(ctx, written2, {
-    preset: name,
+    read: (key) => key === SETTINGS.preset.sessionKey ? name : ctx.sessionState.get(sid, key),
     movedOn: snapshot.placements.map((p2) => p2.key)
   });
   ctx.log(
