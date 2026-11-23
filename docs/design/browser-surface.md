@@ -53,7 +53,7 @@ WebSocket wins on ordering and on the connection cap. `upgrade` yields a `net.So
 
 ### Listener
 
-`src/daemon/browser-listener.ts`, started in `onListening`, so only the renderer that won the socket binds. One `teardown` row. Its `error` handler logs and continues, because an `EADDRINUSE` must never reach the socket's exit path.
+A daemon module of its own, not yet written, started in `onListening`, so only the renderer that won the socket binds. One `teardown` row. Its `error` handler logs and continues, because an `EADDRINUSE` must never reach the socket's exit path.
 
 Renderers restart routinely, so an open tab needs the same port back. `{port, token}` persists in a 0600 state file, using the `link-key.ts` create pattern. The file's presence means the listener is wanted, so a user who never asks for a browser binds nothing. An isolated test renderer must not contend for a port.
 

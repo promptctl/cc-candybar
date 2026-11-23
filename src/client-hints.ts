@@ -64,8 +64,8 @@ export function detectClientHints(
     // settings.json from THIS session's Claude Code directory.
     claudeConfigDir: detectClaudeConfigDir(env, cwd),
     // Total like tmux: always an object, so an absent hint means only "client
-    // too old". The doctor reads which terminal draws the bar from these
-    // (src/doctor/terminal.ts).
+    // too old". No code reads them today; they name the terminal that draws the
+    // bar (src/terminal-hint.ts).
     terminalEnv: detectTerminalEnv(env),
   };
 }

@@ -82,7 +82,7 @@ export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
 // It lives HERE, beside the vocabulary it completes, rather than in
 // settings-menu.ts where the rest of that menu's spellings live, because the
 // CLI text that tells a user what to click (help-text.ts, install's success
-// message, the doctor's fix hint) must spell the same glyph the bar renders,
+// message) must spell the same glyph the bar renders,
 // and settings-menu.ts already imports help-text.ts — homing it there would be
 // a cycle [LAW:one-way-deps]. Every consumer already imports this module for
 // the arrows, so this is downhill from all of them.

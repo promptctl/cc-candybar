@@ -10,8 +10,8 @@ import type {
   Effect,
   EffectId,
   EffectOutcome,
-  RendererStats,
 } from "../../renderer-interface/interface.js";
+import type { RendererStats } from "../../renderer-interface/renderer-stats.js";
 import type { IdleSpan, MenuIdle } from "../menu-idle.js";
 import type { Feeds } from "../feeds.js";
 import type { SessionContext } from "../../renderer-interface/request-context.js";

@@ -204,7 +204,7 @@ export interface LimitsHandle {
   check(): Promise<boolean>;
   describeNextRestart(): string | null;
   // [LAW:one-source-of-truth] The one producer of `ServingDaemon`, from one
-  // memory reading: daemon-stats carries it, a doctor click calls it.
+  // memory reading: the stats reply carries it.
   serving(): ServingDaemon;
   arm(intervalMs?: number): void;
   disarm(): void;
@@ -221,7 +221,7 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
   // [LAW:one-source-of-truth] The one reading: the breach verdict, the restart
-  // forecast and the doctor's daemon row all read it, never one of their own.
+  // forecast and the serving report all read it, never one of their own.
   let latest: MemoryReading = { kind: "unmeasured" };
   // [LAW:no-ambient-temporal-coupling] The reading in flight, shared: a
   // second caller while one is out waits on the same reading rather than
@@ -465,8 +465,7 @@ function breachArtifacts(dir: string): string[] {
 }
 
 // [LAW:one-source-of-truth] The post-mortems the daemons' breaches left in
-// the state directory, read as rotation reads them: what the doctor judges,
-// whichever process reads it.
+// the state directory, read as rotation reads them. Only tests call it today.
 export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
   try {
     return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };
@@ -482,8 +481,8 @@ export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
 // attribution is gone. Newest first: the leading ISO timestamp orders the
 // identities lexically, the trailing -<pid> only tiebreaks same-instant
 // writes. A file no breach wrote is not ours, so it is no post-mortem.
-// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
-// doctor reads it whole.
+// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, and a
+// listing reads it whole.
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
   const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
   for (const file of files) {

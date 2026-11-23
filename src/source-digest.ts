@@ -82,8 +82,8 @@ export function sourceDigest(srcDir: string): string {
 export const CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"] as const;
 
 // [LAW:one-source-of-truth] The native client's build stamp: `just
-// install-rust` bakes it in (scripts/crate-digest.ts) and the doctor
-// recomputes it over the checkout (src/doctor/edge.ts), one function.
+// install-rust` bakes it in (scripts/crate-digest.ts) and the bench
+// recomputes it over the checkout (scripts/bench/environment.ts), one function.
 export function crateDigest(crateDir: string): string {
   return digestOf(
     sourceEntries(crateDir, crateDir, (name) =>

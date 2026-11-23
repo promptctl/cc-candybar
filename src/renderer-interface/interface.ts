@@ -3,8 +3,15 @@
 // the host to perform, what it needs read, and the record of its turn.
 //
 // [LAW:one-way-deps] The host depends on this module and the renderer
-// implements it; it imports only types, the vocabulary both sides speak: the
-// session context, the world state, the frame, the instant.
+// implements it. It sits in the shared zone (scripts/import-zones.mjs), so what
+// it imports is the vocabulary both sides speak (the session context, the
+// world state, the frame, the instant) and the failure shape with the
+// converter a renderer reports through (`rendererFailureOf`), so a thrown value
+// crosses as the same data whichever side threw it. The host's own converter
+// (`failureOf`) classifies the same way and renders the detail differently:
+// it keeps the native stack, and the renderer's answer leaves it out.
+// The renderer's portion of the stats reply is a module below both
+// (./renderer-stats), which the host's stats snapshot embeds.
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
@@ -24,11 +31,7 @@ import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
 import type { DaemonEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
-import type {
-  MenuIdleStats,
-  RenderCacheStats,
-  StatsSnapshot,
-} from "../daemon/foundations/stats-snapshot";
+import type { RendererStats } from "./renderer-stats";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -182,15 +185,6 @@ export function isCommand(event: Event): event is Command {
   return Object.hasOwn(COMMAND_KINDS, event.kind);
 }
 
-export interface RendererStats {
-  readonly renderCache: RenderCacheStats;
-  readonly effectCache: StatsSnapshot["effectCache"];
-  readonly sessionState: StatsSnapshot["sessionState"];
-  readonly menuIdle: MenuIdleStats;
-  readonly rendererTurns: StatsSnapshot["rendererTurns"];
-  readonly framesDrawn: number;
-}
-
 // [LAW:types-are-the-program] Every input and output of a turn is plain data.
 export const INPUTS_CROSS: Crosses<EventInput> = true;
 export const OUTPUTS_CROSS: Crosses<RendererOutput> = true;
@@ -340,8 +334,10 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
-// [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
-// the statusline's arm carries the request it answers.
+// [LAW:one-type-per-behavior] A request's answer and a publication to a
+// subscriber are two behaviors, so they have two types: a statusline frame
+// returns as the present of the request it answers, and a frame a feed draws
+// for a subscriber leaves as `RendererOutput.frames`, which the host publishes.
 export interface Present {
   readonly kind: "present";
   readonly id: EffectId;
@@ -487,8 +483,8 @@ export interface Subscriptions {
   // Its address came from the host's plugin discovery.
   readonly managedFolders: readonly string[];
   // The lanes each session with an open view switches on, as it draws them:
-  // the host gates every subscriber by its lane, and holds the tmux status
-  // line row of each session whose switch is on, in the pane its newest
+  // the host gates every subscriber by its lane, and reconciles the tmux bar
+  // pane of each session from its `pane` switch, in the pane its newest
   // request reports. A session with no view has no switch to read.
   readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
   // The origins whose config the renderer holds: each live session's, and

@@ -66,11 +66,11 @@ Carrying values in place of running them drew byte-identically with nothing run 
 
 ### `env`
 
-`declareEnv` reads `process.env` once. That's the spawning shell's for a detached daemon, which `CLAUDE.md` calls wrong for session facts. It's a removal candidate: `file` and `shell` are the expansion points, and an honest `env` needs per-session client work (option D in [../inventory/sources.md](../inventory/sources.md)). If it stays, a renderer started for a session has that session's environment, but the main renderer still doesn't.
+The `env` source reads the session's environment, which the client sends with the session's context, never the daemon's own: a detached daemon's environment is the spawning shell's, which `CLAUDE.md` calls wrong for session facts. See [Host and renderer](../host-and-renderer.md) §7.
 
 ### Diagnostics
 
-Gather's share crosses in `SessionFacts`. A renderer merges it through the pure `collectDiagnostics`, so its `⚠` shows Gather's faults. Load errors, questions, update notices and render warnings are the renderer's own. A failed scalar source doesn't reach the indicator today, and `SourceReading` would allow that.
+Gather's share crosses in `SessionFacts`. A renderer merges it through the pure `collectDiagnostics`, so its `⚠` shows Gather's faults. Load errors, questions and render warnings are the renderer's own. A failed scalar source doesn't reach the indicator today, and `SourceReading` would allow that.
 
 The full survey is in [../inventory/sources.md](../inventory/sources.md).
 

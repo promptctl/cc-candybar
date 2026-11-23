@@ -101,16 +101,14 @@ export function stableAttachPreload(runningBundle: string, host: Host): string {
 }
 
 // [LAW:one-source-of-truth] Where the forwarder's executable sits inside the
-// app bundle install assembles, kept beside the writer: the doctor reads it to
-// tell the forwarder from an applet an older install registered.
+// app bundle install assembles, kept beside the writer.
 export function forwarderExecutable(app: string): string {
   return path.join(app, "Contents", "MacOS", APP_NAME);
 }
 
 // The forwarder binary: a checkout's own build (`just install-url-handler`),
 // or the one the darwin platform package ships, by the running bundle's
-// provenance — the same reading the doctor makes
-// (sourceCheckoutOf). [LAW:no-silent-failure] Neither present is an error
+// provenance (sourceCheckoutOf). [LAW:no-silent-failure] Neither present is an error
 // naming the path and how to make it exist; no applet is built in its place.
 function resolveForwarder(sourceDist: string): string {
   const checkout = sourceCheckoutOf(sourceDist);
@@ -664,11 +662,11 @@ function updateClaudeSettings(
     return;
   }
 
-  // [LAW:one-source-of-truth] Splices through the editor the doctor's fixes
-  // use, not a rewrite, so every byte install does not own survives.
+  // [LAW:one-source-of-truth] Splices, not a rewrite, so every byte install
+  // does not own survives.
   // [LAW:types-are-the-program] What it owns depends on the shape it finds: a
-  // statusLine object is amended — its other keys, the `refreshInterval` the
-  // doctor sets among them, survive an upgrade — and anything else (none, or a
+  // statusLine object is amended — its other keys, such as a `refreshInterval`
+  // the user set, survive an upgrade — and anything else (none, or a
   // value Claude Code runs nothing from) is replaced whole.
   const command = buildStatusLineCommand(binPath, rendererArgs);
   const edits: readonly SettingsEdit[] = isJsonObject(statusLine)

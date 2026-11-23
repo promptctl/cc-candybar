@@ -28,8 +28,8 @@ export type Outcome<T> =
 export type Ok<T> = Extract<Outcome<T>, { kind: "ok" }>;
 
 // A question put to a system that answers or fails, never "no opinion", and
-// whose failure has no read or parse phase to carry: the doctor's probes and
-// the state files it shares with the daemon.
+// whose failure has no read or parse phase to carry: a state file, a link's
+// key, a repository's answers.
 export type Asked<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "failed"; readonly reason: string };

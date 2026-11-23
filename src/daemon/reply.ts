@@ -52,7 +52,7 @@ import { recordingCommandOf } from "./foundations/recording-command.js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
 import { renderDeadlines } from "./foundations/request-deadline.js";
-import type { RendererStats } from "../renderer-interface/interface.js";
+import type { RendererStats } from "../renderer-interface/renderer-stats.js";
 import {
   noteFacts,
   requestEvent,

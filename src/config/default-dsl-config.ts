@@ -245,9 +245,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     //
     //   • `host.ssh` is the client's judgement over three variables (any of
     //     `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY` set), carried as a wire
-    //     hint (the `termCols` pattern), so the payload holds one boolean that
-    //     the bar and the doctor read alike; an `env` variable reads one
-    //     string.
+    //     hint (the `termCols` pattern), so the payload holds one boolean; an
+    //     `env` variable reads one string.
     //   • `host.name`/`host.user` are machine facts the daemon reads directly,
     //     so they cost two syscalls instead of a per-render subprocess.
     //

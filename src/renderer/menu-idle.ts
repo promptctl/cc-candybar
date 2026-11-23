@@ -11,7 +11,7 @@
 
 import { closesAt } from "../config/menu-timeout.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { MenuIdleStats } from "../daemon/foundations/stats-snapshot.js";
+import type { MenuIdleStats } from "../renderer-interface/renderer-stats.js";
 import {
   earliestOf,
   type Instant,

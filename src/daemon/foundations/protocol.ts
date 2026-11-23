@@ -159,7 +159,7 @@ export type SessionRenderRequest = Pick<
 //   • `tmux` has THREE states, and they are never collapsed: absent — the
 //     client did not report (too old, same as `ssh`); `null` — the client
 //     reported "not in tmux" (total, like `ssh: false`); an object — the tmux
-//     facts the doctor's tmux-truecolor check reasons over (src/doctor). A
+//     facts (src/tmux-hint.ts) an act reads to find its pane. A
 //     click, which carries no hints of its own, reads its session's newest
 //     request's, and none are kept past the daemon's life: what a client
 //     reports now is true only while it is running.
@@ -177,8 +177,7 @@ export type SessionRenderRequest = Pick<
 //     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
 //     settings.json that session's Claude Code reads.
 //   • `client` absent — the client did not REPORT what it is: a client too
-//     old to carry the field, which is itself the doctor's finding (an
-//     install whose client predates its daemon). Present, it is total: the
+//     old to carry the field (an install whose client predates its daemon). Present, it is total: the
 //     client's kind, the bundle it runs, its build stamp (src/client-hint.ts).
 export interface ClientHints {
   readonly termCols?: number;

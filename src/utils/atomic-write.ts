@@ -138,7 +138,7 @@ function noted(e: unknown, staged: string, removal: Error | null): Error {
 
 // The write for every file a user may be reading while we write it — the
 // config file, the settings history, and Claude Code's settings.json (the
-// doctor fix and `install`): published by rename. Without a `mode` the
+// `install`): published by rename. Without a `mode` the
 // existing file's mode survives (a hand-authored file keeps whatever the user
 // gave it) and a first-ever file takes the process umask.
 // A symlinked file is written where it points — a dotfiles-managed

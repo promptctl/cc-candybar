@@ -345,7 +345,7 @@ const CHECKS = [
   },
   // What the native client says it is: the field names of the `client` hint.
   // A renamed field would make every native render read as "unreported" to
-  // the doctor's install check, on the one client path that ships.
+  // the stats reply that reports it, on the one client path that ships.
   {
     label: "client hint fields",
     ts: memberSet(
@@ -376,8 +376,8 @@ const CHECKS = [
     ),
   },
   // What "this session is in tmux" MEANS, and which env var Claude Code's own
-  // truecolor switch lives in. Same drift hazard as the SSH row: the doctor's
-  // tmux-truecolor check reasons over whichever client rendered last. Both
+  // truecolor switch lives in. Same drift hazard as the SSH row: a session's
+  // tmux facts are whichever client rendered last's. Both
   // sides are named roles, so the member is `role=VAR` — a swapped pair is
   // drift even when the set of names is unchanged.
   {
@@ -427,9 +427,8 @@ const CHECKS = [
     ),
   },
   // Which env vars name the session's terminal. Same drift hazard: a variable
-  // one runtime stops reporting would not fail — the doctor would read the
-  // session's terminal as one it cannot name under whichever client rendered
-  // last.
+  // one runtime stops reporting would not fail — the session's terminal would
+  // go unnamed under whichever client rendered last.
   {
     label: "terminal env vocabulary",
     ts: memberSet(

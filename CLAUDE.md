@@ -50,7 +50,7 @@ How they show up here:
 - `.claude/memory/colour.md`: decoration by address, open triggers and bands, contrast floors, styles and theme selection, colour functions. Read before you change anything that picks a colour.
 - `.claude/memory/config.md`: resolution and merge, the config file as the durable store, settings rows, drafts, save, reset, undo, edit mode and placements. Read before you touch the loader, a setting, or a click that writes the config.
 - `.claude/memory/interaction.md`: actions and gates, pickers, disclosures, the settings menu, slash commands. Read before you add an action, a menu or a control.
-- `.claude/memory/frames-and-lanes.md`: pushed frames, the animation lanes, relaunching Claude Code, the tmux status line. Read before you touch feeds, lanes or tmux.
+- `.claude/memory/frames-and-lanes.md`: pushed frames, the animation lanes, the attach launcher, the resume command, tmux. Read before you touch feeds, lanes, resume or tmux.
 - `.claude/memory/doctor.md` records the retired Doctor’s probe history for the planned rebuild.
 - `.claude/memory/testing.md`: test isolation and the traps in reading a draw. Read before you write a test.
 
@@ -71,7 +71,7 @@ Leave out:
 
 Example:
 
-- WRONG: "The render cache (`src/daemon/cache/render.ts`) is bounded by bytes: `renderCacheBudget()` evicts LRU entries while `entries × ENTRY_BYTES` exceeds it (abc.123: each entry used to hold its own 9.3 MB compile)."
+- WRONG: "The render cache (`src/renderer/render-cache.ts`) is bounded by bytes: `renderCacheBudget()` evicts LRU entries while `entries × ENTRY_BYTES` exceeds it (abc.123: each entry used to hold its own 9.3 MB compile)."
 - RIGHT: "Entries share one compile, because a new entry appears for every directory a session renders from, and one compile per entry exhausts the memory limit. So a compile captures nothing that differs per directory."
 
 Keep the index to one line per file. A new area gets a new file and a line here.
