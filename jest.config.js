@@ -23,7 +23,7 @@ const jestReporter = AGENT_ENV_VARS.some((key) => (process.env[key] ?? "") !== "
   : "default";
 
 // [LAW:nothing-unseen] Every run keeps one record per test file, named for the
-// run so the two CI steps and a local `pnpm test` do not overwrite each other.
+// run so the runs of `pnpm test` do not overwrite each other.
 export function reportersFor(run) {
   return [
     jestReporter,
@@ -76,7 +76,7 @@ export default {
       {
         useESM: true,
         // [LAW:single-enforcer] Types are checked once, by `tsc --noEmit`
-        // (the Test job's typecheck step, and publish). The transform only
+        // (CI's static checks, and publish). The transform only
         // transpiles: with a type-check it re-reads the module graph in every
         // worker on a cold cache, which is seconds per test file on CI. The
         // switch is tsconfig's `isolatedModules`, which ts-jest reads; it is
