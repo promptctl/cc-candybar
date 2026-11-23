@@ -4,67 +4,67 @@
     {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
-      "sha": "3d26c439178c49868b2647b395f322e91882eb08",
-      "timestamp": "2026-11-23T10:30:42.977Z",
+      "sha": "7bcd9e046377ee64f098f675736a8c06af5112b6",
+      "timestamp": "2026-11-23T10:37:51.036Z",
       "commits": [
         {
-          "sha": "3d26c439178c49868b2647b395f322e91882eb08",
+          "sha": "7bcd9e046377ee64f098f675736a8c06af5112b6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T10:29:39Z",
-          "message": "Merge 3d33bec6336d7fb4ae47924d3a65c4e3c2695dd2 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
+          "timestamp": "2026-11-23T10:36:40Z",
+          "message": "Merge 54d4eafc54b6e2f6bc9d57c8b8a9d0fcb67d6886 into 45495ab6e8b3e35f6f352ca444be32f05d9c5f05\n"
         },
         {
-          "sha": "3d33bec6336d7fb4ae47924d3a65c4e3c2695dd2",
+          "sha": "54d4eafc54b6e2f6bc9d57c8b8a9d0fcb67d6886",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T03:29:21-07:00",
           "message": "fix(config): a save refuses two presets' differing drafts for one shared placement, and memory names the placement's identity\n"
         },
         {
-          "sha": "318cee5bb9d9b8f0e2d105a0b74376696e28c9ec",
+          "sha": "eaf0e316a621e95b6b84b9e1660401354b244022",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T03:17:27-07:00",
           "message": "fix(config): a save writes the drafts of every preset, and the edit namespace test no longer ties menu keys to the classifier\n"
         },
         {
-          "sha": "5af3a60b6cc917f6c1a02d1fbe578fdc5f1712a2",
+          "sha": "3609ef348b8aa070de00003a3b2c911477b01407",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T03:01:46-07:00",
           "message": "fix(config): derive edit mode from the open edit, fail a stale click loudly, and keep a batch's order\n"
         },
         {
-          "sha": "7893e1fdf3508cb309c708db274ceccff5c0eaf8",
+          "sha": "0eff7f346a367bba103fcf79e6c86c55d8ca418b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T02:33:48-07:00",
           "message": "fix(config): one identity builder, one load filter for retired keys, and a failed click's record outside the edit\n"
         },
         {
-          "sha": "6738750f22bbaf685d38f8c27b86b508a29da80d",
+          "sha": "39bacf1e1d0d92ab837eaf3c7982b33a4825f526",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-23T02:08:42-07:00",
           "message": "fix(config): a placement's menus and drafts are filed under its preset, id and segment\n\nA placement's state key named too little of it. An id is unique only in one\npreset's tree, so two presets' placements of one id shared a menu, and a kept\nid that came to name another segment inherited the old segment's open menus\nand unsaved settings. The menu key and the draft key now carry the preset, the\nid and the segment together, spelled in one place and read the same way by the\nloader, edit chrome, the disclosure nest and the render walk, which compiles\neach preset's tree knowing its preset. Each part leads with a letter, since a\ntemplate reads a state key as a field path and a field name cannot lead with a\ndigit.\n"
         },
         {
-          "sha": "5038437afb3a9da79e71674ee1ca8b4b63274103",
+          "sha": "b79612d1656aff064c175d6c41d6311799027d6b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:27:36-07:00",
           "message": "fix(config): one key classifier, one write router, and Back steps that end with their edit\n\nWhat a session key is (edit mode's own, a setting, a confirm, the\nviewer, a menu, an author's) is decided by one function, and every\nreader and writer switches on it. Every session write passes one\nrouter: an open edit holds it, and with none open edit mode's keys are\nset aside for the edit a click opens, or dropped and logged. An edit\nholds the Back steps taken in it, and the click that ends it lands its\nown step outside, without edit mode's keys. Whether an edit has work is\nthe files it changed and the drafts a save writes, one count for the\nsave cell, cancel and the idle close. The duplicate-id hint is fixed\ntext, the click error reads only records this build writes, and a\nsession left empty by the load takes no slot.\n"
         },
         {
-          "sha": "b2823b8fbdae24ef3165f927dd7abd5563756087",
+          "sha": "f4e4910ba82f3a6e094eeb7ff8603b1d4ea7a37b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:06:19-07:00",
           "message": "fix(config): decide edit-or-store once per click and check authored keys wherever they load\n\nA click outside an edit holds edit mode's keys aside: they open the edit\nit starts, or are dropped and logged at warn. Every reader takes the\nedit's view, the main undo never records an edit key, and drafts are\nneither main-undo nor navigation state. A closed edit's steps are never\nBack destinations because its state never reaches the store.\n\nThe authored-key check runs for plugins too, refuses raw keys by\nnamespace and accordion keys only where they meet the bar's own. The\nclick error lives under the settings namespace. Hover text decodes menu\nkeys. Minted placement ids retry a bounded number of times and throw.\n"
         },
         {
-          "sha": "cb6d90848879bfdcf3e8d0bf9ce750bace6b518c",
+          "sha": "f541c57a76e428d94ce5998e673cfb6984f919a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
