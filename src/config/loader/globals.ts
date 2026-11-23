@@ -319,6 +319,30 @@ export function validatePresetGlobals(
   return record(ctx, PRESET_GLOBALS_SCHEMA, path, raw) ?? {};
 }
 
+// [LAW:single-enforcer] The loader's own verdict on one field written into a
+// file at `path`, for the three places a persist can write one (top-level
+// globals, a preset's, a theme's default), each read by its own schema: a rule
+// is a member only where that schema takes one. `null` when the file would
+// hold it; else the message the loader would refuse the file with. What the
+// merged config alone can decide (a declared style or preset) is cross-ref's.
+const FILE_SCHEMAS = {
+  globals: GLOBALS_SCHEMA,
+  "preset-globals": PRESET_GLOBALS_SCHEMA,
+  "theme-default": THEME_DEFAULT_SCHEMA,
+} as const;
+
+export function fileFieldIssue(
+  ctx: ValidateCtx,
+  scope: keyof typeof FILE_SCHEMAS,
+  path: string,
+  field: string,
+  value: string | number | boolean,
+): string | null {
+  const scratch: ValidateCtx = { ...ctx, source: "", issues: [] };
+  record(scratch, FILE_SCHEMAS[scope], path, { [field]: value });
+  return scratch.issues[0]?.message ?? null;
+}
+
 // [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
 // the validator interprets — `globals` emit is `recordJson(GLOBALS_SCHEMA)`,
 // symmetric to `validateGlobals` calling `record(GLOBALS_SCHEMA)`.

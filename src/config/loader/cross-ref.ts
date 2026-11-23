@@ -40,10 +40,14 @@ import {
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
-import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
+import {
+  fileFieldIssue,
+  listGlobalsFieldNames,
+  removedGlobalPointer,
+} from "./globals.js";
+import { fileValueOf } from "../globals-fields.js";
 import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import { describeControlDomain } from "../setting-control.js";
-import { isControlledField, settingNameOf } from "../globals-fields.js";
 import { settingTable, type SettingRow } from "../setting-table.js";
 import {
   EXPRESSION_SLOTS,
@@ -54,7 +58,7 @@ import {
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
-import { parsePersistTarget } from "./persist-target.js";
+import { parsePersistTarget, type PersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import {
   fragmentNode,
@@ -223,18 +227,13 @@ export function validateCrossReferences(
     ),
   ];
   for (const [at, name, endcapsAt] of styleFragments) {
-    if (
-      name === undefined ||
-      isExpression(name) ||
-      Object.prototype.hasOwnProperty.call(cfg.styles, name)
-    )
-      continue;
+    if (name === undefined) continue;
     const where = `${at.join(".")}.style`;
+    const message = undeclaredStyleMessage(cfg, where, name, endcapsAt);
+    if (message === null) continue;
     ctx.issues.push({
       path: where,
-      message: isStyleEraEndcaps(name)
-        ? endcapsNameMessage(where, name, endcapsAt)
-        : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      message,
       line: findKeyLine(ctx.source, [...at, "style"]),
     });
   }
@@ -246,13 +245,14 @@ export function validateCrossReferences(
   // and re-readable, so naming a preset that does not exist is a mistake we can
   // point at; a session pick is a click made against a config that has since
   // changed, which is not [LAW:no-silent-failure].
-  if (
-    cfg.globals.preset !== undefined &&
-    !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)
-  ) {
+  const undeclaredPreset =
+    cfg.globals.preset === undefined
+      ? null
+      : undeclaredPresetMessage(cfg, "globals.preset", cfg.globals.preset);
+  if (undeclaredPreset !== null) {
     ctx.issues.push({
       path: "globals.preset",
-      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
+      message: undeclaredPreset,
       line: findKeyLine(ctx.source, ["globals", "preset"]),
     });
   }
@@ -1138,6 +1138,121 @@ function checkHelperIssue(
   });
 }
 
+// [LAW:single-enforcer] The one refusal of a style name the merged config does
+// not declare, for the file's own `style` and for the value a persist would
+// write there. A rule is exempt: only a render can settle what it names.
+function undeclaredStyleMessage(
+  cfg: DslConfig,
+  where: string,
+  name: string,
+  endcapsAt: string,
+): string | null {
+  if (isExpression(name) || Object.hasOwn(cfg.styles, name)) return null;
+  return isStyleEraEndcaps(name)
+    ? endcapsNameMessage(where, name, endcapsAt)
+    : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
+}
+
+function undeclaredPresetMessage(
+  cfg: DslConfig,
+  where: string,
+  name: string,
+): string | null {
+  // [LAW:one-source-of-truth] The floor preset is a member whether or not a
+  // config declares it (`presetNames`), as it is for a pick.
+  return presetNames(cfg.presets).includes(name)
+    ? null
+    : `${where} "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
+}
+
+// [LAW:no-silent-failure] A `persist` writes the file the loader reads, so each
+// value it can write gets the verdict the loader gives that value in that
+// file: the schema of the place it lands (loader/globals.ts), then the
+// membership only the merged config decides. One that the file would refuse
+// fails here, at the field of the action that states it, rather than at the
+// click that writes it. Only a tree op, which writes a layout, and a target no
+// globals field holds are left alone: neither writes a field's value.
+function checkPersistedValues(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  name: string,
+  a: ActionDecl,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): void {
+  const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+  const writes = valuesWritten(a, optionDomains);
+  if (
+    target === null ||
+    !Array.isArray(writes) ||
+    (target.scope !== "globals" &&
+      target.scope !== "preset-globals" &&
+      target.scope !== "theme-default")
+  ) {
+    return;
+  }
+  const { path, endcapsAt } = fileLocation(target);
+  const reasonOf = (raw: string): string | null => {
+    const lifted = fileValueOf(target.field, raw);
+    if ("reason" in lifted) return lifted.reason;
+    const refused = fileFieldIssue(
+      ctx,
+      target.scope,
+      path,
+      target.field,
+      lifted.value,
+    );
+    if (refused !== null) return refused;
+    if (target.field === "style") {
+      return undeclaredStyleMessage(cfg, `${path}.style`, raw, endcapsAt);
+    }
+    return target.scope === "globals" && target.field === "preset"
+      ? undeclaredPresetMessage(cfg, `${path}.preset`, raw)
+      : null;
+  };
+  for (const field of new Set(writes.map((w) => w.field))) {
+    const refused = writes
+      .filter((w) => w.field === field)
+      .flatMap((w) => {
+        const reason = reasonOf(w.value);
+        return reason === null ? [] : [{ value: w.value, reason }];
+      });
+    if (refused.length === 0) continue;
+    const where = `actions.${name}.${field}`;
+    const [first] = refused;
+    const more =
+      refused.length === 1 ? "" : ` (and ${refused.length - 1} more)`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: persisting ${JSON.stringify(first!.value)} would write a file the loader refuses${more} — ${first!.reason}`,
+      line: findKeyLine(ctx.source, ["actions", name, field]),
+    });
+  }
+}
+
+// Where in the file a persist target's value lands, and where an endcaps name
+// written there belongs — the same places the loader checks a `style` at.
+function fileLocation(
+  target: Extract<
+    PersistTarget,
+    { scope: "globals" | "preset-globals" | "theme-default" }
+  >,
+): { readonly path: string; readonly endcapsAt: string } {
+  switch (target.scope) {
+    case "globals":
+      return { path: "globals", endcapsAt: "globals.endcaps" };
+    case "preset-globals":
+      return {
+        path: `presets.${target.preset}.globals`,
+        endcapsAt: `presets.${target.preset}.globals.endcaps`,
+      };
+    case "theme-default":
+      return {
+        path: `themeDefaults.${target.theme}`,
+        endcapsAt: "globals.endcaps",
+      };
+  }
+}
+
 // [LAW:no-silent-failure] A `set` on a setting's session key writes a pick the
 // render resolves only when it is a member of that setting's domain — any
 // other value derives a gate that admits it and a click that changes nothing
@@ -1146,44 +1261,14 @@ function checkHelperIssue(
 // from, and reported at the field that states it.
 // [LAW:one-source-of-truth] Admitted is the setting's own parse
 // (src/config/setting-table.ts), the one a pick is read through.
-//
-// A `persist` of the same setting writes the same values into the file, where
-// the loader would refuse one the domain does not hold, so it is checked here,
-// by the same rows. What differs is data (`write`): the verb the author
-// spelled, the key as they spelled it, what a click would do with a value
-// outside, and what the file may hold that a pick may not — a rule.
-interface SettingWrite {
-  readonly verb: "set" | "persist";
-  readonly key: string;
-  readonly consequence: string;
-  readonly admits: (row: SettingRow, value: string) => boolean;
-}
-
-const SET_WRITE = (key: string): SettingWrite => ({
-  verb: "set",
-  key,
-  consequence: "a click would write it and nothing would change",
-  admits: (row, value) => row.parse(value) !== null,
-});
-
-// [LAW:no-silent-failure] A rule is how a file chooses a selection by data, so
-// a persisted rule is a member; its result is checked when it renders.
-const PERSIST_WRITE = (key: string): SettingWrite => ({
-  verb: "persist",
-  key,
-  consequence: "a click would write it into a file the loader refuses",
-  admits: (row, value) => isExpression(value) || row.parse(value) !== null,
-});
-
 function checkSettingWrites(
   ctx: ValidateCtx,
   name: string,
-  a: SetAction | PersistWriteAction,
-  write: SettingWrite,
+  a: SetAction,
   row: SettingRow,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
 ): void {
-  const { key } = write;
+  const key = a.set;
   const { domain } = row;
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   // A stepper writes every integer between its ends, which only a range
@@ -1196,7 +1281,7 @@ function checkSettingWrites(
     });
     return;
   }
-  const writes = setWrites(a, optionDomains);
+  const writes = valuesWritten(a, optionDomains);
   if (writes === ANY_INTEGER) {
     ctx.issues.push({
       path: `actions.${name}.int`,
@@ -1205,7 +1290,7 @@ function checkSettingWrites(
     });
     return;
   }
-  const outside = writes.filter((w) => !write.admits(row, w.value));
+  const outside = writes.filter((w) => row.parse(w.value) === null);
   if (outside.length === 0) return;
   // An action drawing from the endcaps domain, or writing nothing but the
   // endcaps `style` held before the rename, under `style` is the old name for
@@ -1223,14 +1308,14 @@ function checkSettingWrites(
             message: endcapsNameMessage(
               `actions.${name}.to`,
               a.to,
-              `${write.verb}: "${endcaps}", to`,
+              `set: "${endcaps}", to`,
             ),
             line: findKeyLine(ctx.source, ["actions", name, "to"]),
           }
         : {
-            path: `actions.${name}.${write.verb}`,
-            message: `actions.${name}.${write.verb}: "${key}" here writes only endcaps shapes, not styles — endcaps were renamed from "style" to "endcaps"; write ${write.verb}: "${endcaps}"`,
-            line: findKeyLine(ctx.source, ["actions", name, write.verb]),
+            path: `actions.${name}.set`,
+            message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles — endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
+            line: findKeyLine(ctx.source, ["actions", name, "set"]),
           },
     );
     return;
@@ -1246,7 +1331,7 @@ function checkSettingWrites(
     const where = `actions.${name}.${field}`;
     ctx.issues.push({
       path: where,
-      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — ${write.consequence}; ${takes}`,
+      message: `${where}: ${shown} ${values.length === 1 ? "is" : "are"} outside the ${key} domain — a click would write it and nothing would change; ${takes}`,
       line: findKeyLine(ctx.source, ["actions", name, field]),
     });
   }
@@ -1256,39 +1341,31 @@ const REPORTED_VALUES = 3;
 
 type SetAction = Extract<ActionDecl, { readonly set: string }>;
 
-// Whether a persist writes a value (not a layout) — the arms `setWrites` reads.
-function isValueWrite(a: ActionDecl): a is PersistWriteAction {
-  return (
-    "persist" in a && ("to" in a || "from" in a || "min" in a || "cycle" in a)
-  );
-}
-
-// A `persist` that writes a value (a tree op writes a layout, which no setting
-// holds), by the same four arms a `set` writes by, bar the int cursor.
-type PersistWriteAction = Extract<
-  ActionDecl,
-  { readonly persist: string } & (
-    | { readonly to: string }
-    | { readonly from: unknown }
-    | { readonly min: number }
-    | { readonly cycle: readonly string[] }
-  )
->;
-
 // An `int` cursor writes whatever integer the template binds, so nothing
 // about its values is known at load.
 const ANY_INTEGER = Symbol("any integer");
 
-// [LAW:types-are-the-program] Every value a `set` can write, as known at load,
-// each with the field that states it: a literal its one value, a cycle its
-// members, an option domain its members, a stepper its two ends (checked only
-// against a range domain, which holds every integer between them).
-function setWrites(
-  a: SetAction | PersistWriteAction,
+// [LAW:types-are-the-program] Every value a `set` or a `persist` can write, as
+// known at load, each with the field that states it: a literal its one value,
+// a cycle its members, an option domain its members, a stepper its two ends
+// (checked only against a range domain, which holds every integer between
+// them). `null` is an action that writes no value (a tree op, a reset).
+type WrittenValues = ReadonlyArray<{
+  readonly field: string;
+  readonly value: string;
+}>;
+function valuesWritten(
+  a: SetAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
-):
-  | ReadonlyArray<{ readonly field: string; readonly value: string }>
-  | typeof ANY_INTEGER {
+): WrittenValues | typeof ANY_INTEGER;
+function valuesWritten(
+  a: ActionDecl,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): WrittenValues | typeof ANY_INTEGER | null;
+function valuesWritten(
+  a: ActionDecl,
+  optionDomains: ReadonlyMap<string, ResolvedDomain>,
+): WrittenValues | typeof ANY_INTEGER | null {
   if ("to" in a) return [{ field: "to", value: a.to }];
   if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
   if ("from" in a) {
@@ -1303,7 +1380,7 @@ function setWrites(
       { field: "max", value: String(a.max) },
     ];
   }
-  return ANY_INTEGER;
+  return "int" in a ? ANY_INTEGER : null;
 }
 
 // A predicate naming the declarations a check is about: every one for a whole
@@ -1361,6 +1438,9 @@ export function validateDeclarations(
       });
       continue;
     }
+    // An unknown `from` was refused above, so every domain a persist draws
+    // from here resolves.
+    if ("persist" in a) checkPersistedValues(ctx, cfg, name, a, optionDomains);
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -1371,7 +1451,7 @@ export function validateDeclarations(
     }
     const row = settingTable(cfg).rows.get(a.set);
     if (row !== undefined) {
-      checkSettingWrites(ctx, name, a, SET_WRITE(a.set), row, optionDomains);
+      checkSettingWrites(ctx, name, a, row, optionDomains);
     }
   }
   // [LAW:no-silent-failure] A `do` action's members resolve against the merged
@@ -1497,29 +1577,6 @@ export function validateDeclarations(
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
-    }
-    // [LAW:one-source-of-truth] A persisted value is judged by the row of the
-    // setting it lands in, the one a `set` of its pick is judged by.
-    if (
-      discriminator === "persist" &&
-      "field" in target &&
-      isControlledField(target.field) &&
-      isValueWrite(a) &&
-      // An unknown `from` was reported where the option domains are checked.
-      !(
-        "from" in a &&
-        typeof a.from === "string" &&
-        !knownDomains.includes(a.from)
-      )
-    ) {
-      checkSettingWrites(
-        ctx,
-        name,
-        a,
-        PERSIST_WRITE(key),
-        settingTable(cfg).globals[settingNameOf(target.field)],
-        optionDomains,
-      );
     }
     if (target.scope !== "segment-palette") continue;
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {

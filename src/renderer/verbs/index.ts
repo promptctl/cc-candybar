@@ -60,7 +60,7 @@ import {
   deletePreset as deletePresetFromFile,
   deleteValues,
   proveLoads,
-  readValue,
+  readDeclared,
   writePreset,
   writeDrafts,
   writeThemeDefault,
@@ -727,16 +727,27 @@ const stepConfig: VerbHandler = (args, ctx) => {
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(
+  const declared = readDeclared(
     requireLayerText(into.path, store.read(into.path)),
     landing.key,
   );
-  // [LAW:no-silent-failure] A file that declares the key holds a number or
-  // something that is no number to step: the latter is refused naming what the
-  // layer holds, never stepped over from the value the bar draws.
-  if (stored !== undefined && typeof stored !== "number") {
+  // [LAW:no-silent-failure] A layer that declares the key holds an integer in
+  // the stepper's range or a value the loader refuses (a string, a null, a
+  // list, a number outside the range): the latter is refused naming what the
+  // layer holds, never stepped over from a clamp of it or from the value the
+  // bar draws.
+  const stored = declared?.number;
+  if (
+    declared !== undefined &&
+    !(
+      stored !== undefined &&
+      Number.isInteger(stored) &&
+      stored >= params.min &&
+      stored <= params.max
+    )
+  ) {
     throw new BadVerbArgs(
-      `step-config: ${landing.key} holds ${JSON.stringify(stored)} in ${into.path}, not a number to step`,
+      `step-config: ${landing.key} holds ${declared.source} in ${into.path}, not an integer from ${params.min} to ${params.max} to step`,
     );
   }
   const current =
@@ -747,7 +758,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
           params,
           configKeySeed(landing.globals, key),
         )
-      : clampTo(params, stored);
+      : stored;
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);

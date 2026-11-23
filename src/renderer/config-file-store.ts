@@ -51,7 +51,7 @@ import type {
   SettingValue,
 } from "../config/dsl-types.js";
 import {
-  wireKindOf,
+  fileValueOf,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
 import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
@@ -70,6 +70,7 @@ import {
   rowEntriesOf,
   setPlacementSetting,
   setValue,
+  textOf,
   type Node,
 } from "../config/json5-edit.js";
 import {
@@ -85,38 +86,20 @@ import {
   type PersistTarget,
 } from "../config/loader/persist-target.js";
 
-// [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
-// value is written from — a `persist` action's gate is an ALLOW-LIST
-// whose members pass through verbatim, so a config author writing
-// `cycle: ["true", "false"]` or `to: "0"` reaches this boundary with the raw
-// member string, not a pre-canonicalized "1"/"".
-const BOOLEAN_TRUTHY = new Set(["1", "true"]);
-const BOOLEAN_FALSY = new Set(["0", "false", ""]);
-
 // [LAW:parse-dont-validate] The write gate canonicalizes to a STRING (the
 // wire currency); this is the boundary that lifts it into the JSON5 text of
-// the typed value the file declares. An out-of-range/non-numeric string for a
-// "number" field is a caller bug (the range validator already canonicalized
-// it), so it throws loudly rather than writing a wrongly-typed value.
+// the typed value the file declares (`fileValueOf`). An out-of-range/non-numeric
+// string for a "number" field is a caller bug (the range validator already
+// canonicalized it), so it throws loudly rather than writing a wrongly-typed
+// value.
 export function persistValueText(key: string, raw: string): string {
   const target = requireValueTarget(key);
-  const kind =
-    target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
-  if (kind === "string") return JSON.stringify(raw);
-  if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      throw new Error(
-        `persistValueText: "${key}" expects a number, got "${raw}"`,
-      );
-    }
-    return String(n);
+  if (target.scope === "segment-palette") return JSON.stringify(raw);
+  const lifted = fileValueOf(target.field, raw);
+  if ("reason" in lifted) {
+    throw new Error(`persistValueText: "${key}" ${lifted.reason}`);
   }
-  if (BOOLEAN_TRUTHY.has(raw)) return "true";
-  if (BOOLEAN_FALSY.has(raw)) return "false";
-  throw new Error(
-    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`,
-  );
+  return JSON.stringify(lifted.value);
 }
 
 // ─── The file ────────────────────────────────────────────────────────────────
@@ -730,15 +713,26 @@ function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
   }
 }
 
-/** The scalar the file declares at a value target, or undefined. */
-export function readValue(
+/**
+ * What the file declares at a value target: nothing (undefined), or the value
+ * as written and, when it is a number, the number. A string, a null, a list
+ * and an object are each declared, so a reader that wants a number can tell
+ * them from nothing.
+ */
+export function readDeclared(
   text: string | null,
   key: string,
-): string | number | boolean | undefined {
+):
+  | { readonly source: string; readonly number: number | undefined }
+  | undefined {
   const target = requireValueTarget(key);
   const doc = docOf(text ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
-  return node !== undefined && "value" in node ? node.value : undefined;
+  if (node === undefined) return undefined;
+  return {
+    source: textOf(text ?? "", node),
+    number: node.kind === "number" ? node.value : undefined,
+  };
 }
 
 /**

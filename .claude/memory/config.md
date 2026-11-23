@@ -54,7 +54,7 @@ Every globals field is one row of the fields table. The schema, the resolved glo
 
 A draft is derived, never flagged. It's a setting whose session value differs from what the file resolves to under the preset the save will land in. Save recomputes the drafts at click time against the config the session renders with, so it writes exactly what the button counted.
 
-A `persist` of a setting is judged at load by the same row as a `set` of its pick, because the loader refuses a file holding a value the domain doesn't, so a bad literal would otherwise fail only at the click. A rule is a member there and not for a pick, since a file chooses a selection by data and a session pick never holds one. A stepper over a file value that is no number is refused, never stepped from the value the bar draws.
+A `persist` is judged at load by what the loader would say of the file the click writes, not by the setting row a `set` of the pick uses: the file's schema for the place it lands decides what it holds (a rule is a member in some places and not in others), and only the declared styles and presets come from the merged config. A row describes a session pick, so judging a file by it admits what the file refuses. A stepper over a file value that is no in-range integer is refused, never clamped or stepped from the value the bar draws.
 
 Save's write and the picks it releases land together, so no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
 

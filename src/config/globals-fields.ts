@@ -654,6 +654,39 @@ export function wireKindOf(field: GlobalField): WireKind {
       : "string";
 }
 
+// [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
+// value is written from — a `persist` action's gate is an ALLOW-LIST whose
+// members pass through verbatim, so a config author writing
+// `cycle: ["true", "false"]` or `to: "0"` reaches the file with the raw member
+// string, not a pre-canonicalized "1"/"".
+const BOOLEAN_TRUTHY = new Set(["1", "true"]);
+const BOOLEAN_FALSY = new Set(["0", "false", ""]);
+
+// [LAW:parse-dont-validate] The typed value a field's file holds, from the
+// string a write carries — or the reason there is none, which a click throws
+// and the loader reports. The one lift from the wire's string into the file's
+// primitive, read by what writes the file and by what judges what it would
+// write.
+export type FileValue =
+  | { readonly value: string | number | boolean }
+  | { readonly reason: string };
+
+export function fileValueOf(field: GlobalField, raw: string): FileValue {
+  const kind = wireKindOf(field);
+  if (kind === "string") return { value: raw };
+  if (kind === "number") {
+    const n = Number(raw);
+    return Number.isFinite(n)
+      ? { value: n }
+      : { reason: `expects a number, got "${raw}"` };
+  }
+  if (BOOLEAN_TRUTHY.has(raw)) return { value: true };
+  if (BOOLEAN_FALSY.has(raw)) return { value: false };
+  return {
+    reason: `expects boolean-ish (1, 0, true, false), got "${raw}"`,
+  };
+}
+
 // The domain a control changing `field` from the bar ranges, as its row
 // declares it beside the field's spec — `text` for a field no control shape
 // fits.
@@ -679,10 +712,4 @@ function rangedDomain(
   return "optionDomain" in row && row.optionDomain !== undefined
     ? { from: row.optionDomain.name }
     : row.domain;
-}
-
-// [LAW:parse-dont-validate] Whether a globals field is one a session pick can
-// set, so it has a row in the setting table.
-export function isControlledField(field: string): field is ControlledField {
-  return (CONTROLLED_FIELDS as readonly string[]).includes(field);
 }

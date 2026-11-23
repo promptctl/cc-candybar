@@ -666,20 +666,32 @@ describe("persist action click → the config file", () => {
     expect(globalsInFile()).toEqual({ padding: 3 });
   });
 
-  // [LAW:no-silent-failure] A layer that holds a string where the stepper
-  // steps a number is refused, naming what it holds — the loader refuses such
-  // a file, so a step must not paper over it by writing a number from the
-  // value the bar draws.
-  test("a persist stepper over a file value that is no number refuses, and leaves the file", async () => {
-    const { render, click } = buildPersistRuntime(SRC2);
-    const url = ownUrls(render())[2]!;
-    durable.write(SRC2.replace("globals: {},", "globals: { padding: '7' },"));
-    const before = durable.text();
-    await expect(click(url)).rejects.toThrow(
-      /step-config: padding holds "7" in .*, not a number to step/,
-    );
-    expect(durable.text()).toBe(before);
-  });
+  // [LAW:no-silent-failure] A layer that holds, where the stepper steps an
+  // integer, anything the loader refuses there is refused, naming what it
+  // holds — a step must not paper over it by clamping it or by writing a number
+  // from the value the bar draws.
+  test.each([
+    ["a string", "'7'", "\"7\"|'7'"],
+    ["a number outside the range", "99", "99"],
+    ["a null", "null", "null"],
+    ["a list", "[3]", "\\[3\\]"],
+  ])(
+    "a persist stepper over a file value that is %s refuses, and leaves the file",
+    async (_what, written, shown) => {
+      const { render, click } = buildPersistRuntime(SRC2);
+      const url = ownUrls(render())[2]!;
+      durable.write(
+        SRC2.replace("globals: {},", `globals: { padding: ${written} },`),
+      );
+      const before = durable.text();
+      await expect(click(url)).rejects.toThrow(
+        new RegExp(
+          `step-config: padding holds (${shown}) in .*, not an integer from 0 to 16 to step`,
+        ),
+      );
+      expect(durable.text()).toBe(before);
+    },
+  );
 
   // brandon-settings-2ov: a preset whose fragment names a field wins over
   // top-level globals, so a durable click there lands in that preset's own

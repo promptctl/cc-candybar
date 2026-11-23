@@ -2416,10 +2416,7 @@ A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a
 `from`'s options and a stepper's ends, and refuses an `int` cursor, which
-writes whatever integer the template binds. A `persist` of the same fields
-(under `globals`, a preset's globals or a theme's default) is checked the same
-way, because the loader would refuse the file the click wrote; a rule is a
-member there, since a file may choose a selection by one:
+writes whatever integer the template binds:
 
 ```json5 check:fail
 {
@@ -2429,6 +2426,23 @@ member there, since a file may choose a selection by one:
 
 ```error
 actions.round.to: "banana" is outside the endcaps domain — a click would write it and nothing would change; endcaps takes one of
+```
+
+A `persist` of any globals field (under `globals`, a preset's globals or a
+theme's default) is judged the way the loader judges the file the click would
+write: each value it can write must be one that place accepts, so a rule is
+accepted only where the file takes one (a theme or style rule in `globals`, not
+a number or a theme's default). It is refused at the field that states the
+value, with the loader's own reason:
+
+```json5 check:fail
+{
+  actions: { wider: { persist: "padding", to: "99" } },
+}
+```
+
+```error
+actions.wider.to: persisting "99" would write a file the loader refuses — padding must be an integer between 0 and 16, got 99
 ```
 
 A `style` action that writes only endcaps shapes is using the old name for
