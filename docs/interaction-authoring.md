@@ -2618,10 +2618,11 @@ click-time surprise:
 names segment "ghost" which is not declared
 ```
 
-### A bounded stepper over a segment palette
+### A bounded stepper over a field that holds no integer
 
-A palette is a NAME, not a number — `min`/`max`/`by` has no meaning here;
-use `to`, `from`, or `cycle` like every other palette-shaped target:
+A palette is a NAME, not a number — `min`/`max`/`by` has no meaning here, nor
+over any other field that holds no integer; use `to`, `from`, or `cycle` like
+every other name-shaped target:
 
 ```json5 check:fail
 {
@@ -2631,7 +2632,7 @@ use `to`, `from`, or `cycle` like every other palette-shaped target:
 ```
 
 ```error
-is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead
+a stepper writes the integers from 0 to 5, and segments.sidebar.palette does not hold an integer — use "to", "from", or "cycle" instead
 ```
 
 ### `insertSegment` naming an undeclared segment

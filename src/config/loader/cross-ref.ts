@@ -35,12 +35,14 @@ import {
 import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
 import {
   knownOptionDomainNames,
+  perConfigDomainsFor,
   unknownOptionDomain,
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
 import { listGlobalsFieldNames, removedGlobalPointer } from "./globals.js";
+import { optionDomainOf } from "../globals-fields.js";
 import { CONFIG_ONLY_KEYS, SETTINGS } from "../setting-projections.js";
 import { describeControlDomain } from "../setting-control.js";
 import { settingTable, type SettingRow } from "../setting-table.js";
@@ -185,68 +187,55 @@ export function validateCrossReferences(
   // renders for (unplaced.ts presenceOf).
   presence: (name: string) => SegmentPresence,
 ): void {
-  // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
-  // block (a user's default may be a bundled style — same reason every cross-ref
-  // runs post-merge). Same existence-check shape as layout→segments; an unknown
-  // name is a load error, never a silent identity fallback.
+  // [LAW:locality-or-seam] A globals field whose row draws its values from a
+  // per-config block (style from `styles:`, preset from `presets:`) names a
+  // member of the MERGED block (a user's default may be a bundled style — same
+  // reason every cross-ref runs post-merge). Same existence-check shape as
+  // layout→segments; an unknown name is a load error, never a silent identity
+  // fallback. A typo'd DEFAULT is a load error even though a stale SESSION pick
+  // collapses silently to the floor: the config file is authored and
+  // re-readable, so naming a style or preset that does not exist is a mistake
+  // we can point at; a session pick is a click made against a config that has
+  // since changed, which is not [LAW:no-silent-failure].
   //
-  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no style,
-  // it names the RULE for choosing one per render, so there is nothing here to
-  // check membership of. Its result gets the same forgiveness a stale session
-  // pick does (`decideStyleName` collapses a non-member to the floor), and its
-  // own well-formedness is checked where every other template's is — parsed
-  // eagerly by registerDslConfig, so a malformed one is still a load error.
-  // `isExpression` is the ONE predicate every reader uses, so this exemption
-  // cannot be wider or narrower than what the render will actually evaluate.
+  // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no
+  // member, it names the RULE for choosing one per render, so there is nothing
+  // here to check membership of. Its result gets the same forgiveness a stale
+  // session pick does (`decideStyleName` collapses a non-member to the floor),
+  // and its own well-formedness is checked where every other template's is —
+  // parsed eagerly by registerDslConfig, so a malformed one is still a load
+  // error. `isExpression` is the ONE predicate every reader uses, so this
+  // exemption cannot be wider or narrower than what the render will actually
+  // evaluate.
   //
-  // [LAW:one-type-per-behavior] Every globals fragment a style NAME can come from
-  // is checked the same way — the config's own, each preset's, editGlobals, and
+  // [LAW:one-type-per-behavior] Every globals fragment a name can come from is
+  // checked the same way — the config's own, each preset's, editGlobals, and
   // each theme's default — because each is a rung the resolution reads, and a
   // name no rung can decide falls through to the next in silence
   // (brandon-themes-owl).
-  //
-  const styleFragments: ReadonlyArray<
-    readonly [readonly string[], string | undefined]
-  > = [
-    [["globals"], cfg.globals.style],
-    [["editGlobals"], cfg.editGlobals.style],
+  const memberDomains = perConfigDomainsFor(cfg);
+  const fragments: ReadonlyArray<readonly [readonly string[], object]> = [
+    [["globals"], cfg.globals],
+    [["editGlobals"], cfg.editGlobals],
     ...Object.entries(cfg.presets).map(
       ([name, preset]) =>
-        [["presets", name, "globals"], preset.globals?.style] as const,
+        [["presets", name, "globals"], preset.globals ?? {}] as const,
     ),
     ...Object.entries(cfg.themeDefaults).map(
-      ([theme, fragment]) =>
-        [["themeDefaults", theme], fragment.style] as const,
+      ([theme, fragment]) => [["themeDefaults", theme], fragment] as const,
     ),
   ];
-  for (const [at, name] of styleFragments) {
-    if (name === undefined) continue;
-    const message = undeclaredStyleMessage(cfg, at, name);
-    if (message === null) continue;
-    ctx.issues.push({
-      path: `${at.join(".")}.style`,
-      message,
-      line: findKeyLine(ctx.source, [...at, "style"]),
-    });
-  }
-  // [LAW:one-type-per-behavior] globals.preset is globals.style one dimension
-  // over — the same post-merge membership check against the same kind of
-  // per-config block, for the same reason (a user's default may name a
-  // bundled preset). A typo'd DEFAULT is a load error even though a stale
-  // SESSION pick collapses silently to the floor: the config file is authored
-  // and re-readable, so naming a preset that does not exist is a mistake we can
-  // point at; a session pick is a click made against a config that has since
-  // changed, which is not [LAW:no-silent-failure].
-  const undeclaredPreset =
-    cfg.globals.preset === undefined
-      ? null
-      : undeclaredPresetMessage(cfg, ["globals"], cfg.globals.preset);
-  if (undeclaredPreset !== null) {
-    ctx.issues.push({
-      path: "globals.preset",
-      message: undeclaredPreset,
-      line: findKeyLine(ctx.source, ["globals", "preset"]),
-    });
+  for (const [at, fragment] of fragments) {
+    for (const [field, value] of Object.entries(fragment)) {
+      if (typeof value !== "string") continue;
+      const message = undeclaredMemberMessage(memberDomains, at, field, value);
+      if (message === null) continue;
+      ctx.issues.push({
+        path: `${at.join(".")}.${field}`,
+        message,
+        line: findKeyLine(ctx.source, [...at, field]),
+      });
+    }
   }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
@@ -1138,47 +1127,28 @@ function endcapsHome(at: readonly string[]): string {
     : [...at, "endcaps"].join(".");
 }
 
-// [LAW:single-enforcer] The one refusal of a style name the merged config does
-// not declare, for the file's own `style` and for the value a persist would
-// write there, `at` being the record that holds it. A rule is exempt: only a
-// render can settle what it names.
-function undeclaredStyleMessage(
-  cfg: DslConfig,
+// [LAW:single-enforcer] The one refusal of a name the merged config does not
+// declare, for the file's own fields and for the value a persist would write
+// there, `at` being the record that holds `field`. What counts is the field's
+// row: one that draws its values from a per-config domain holds a member of
+// it, and any other field holds none to check. A rule is exempt: only a render
+// can settle what it names.
+function undeclaredMemberMessage(
+  domains: ReadonlyMap<string, ResolvedDomain>,
   at: readonly string[],
+  field: string,
   name: string,
 ): string | null {
-  if (isExpression(name) || Object.hasOwn(cfg.styles, name)) return null;
-  const where = `${at.join(".")}.style`;
-  return isStyleEraEndcaps(name)
+  const domain = optionDomainOf(field);
+  const members = domain === null ? undefined : domains.get(domain)?.members;
+  if (members === undefined || isExpression(name) || members.includes(name)) {
+    return null;
+  }
+  const where = `${at.join(".")}.${field}`;
+  return field === "style" && isStyleEraEndcaps(name)
     ? endcapsNameMessage(where, name, endcapsHome(at))
-    : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`;
+    : `${where} "${name}" does not match any declared ${field} (have: ${members.join(", ")})`;
 }
-
-function undeclaredPresetMessage(
-  cfg: DslConfig,
-  at: readonly string[],
-  name: string,
-): string | null {
-  // [LAW:one-source-of-truth] The floor preset is a member whether or not a
-  // config declares it (`presetNames`), as it is for a pick.
-  return presetNames(cfg.presets).includes(name)
-    ? null
-    : `${at.join(".")}.preset "${name}" does not match any declared preset (have: ${presetNames(cfg.presets).join(", ")})`;
-}
-
-// [LAW:dataflow-not-control-flow] What only the merged config decides about a
-// value a field's file schema accepts, by the field's name: the styles and
-// presets it declares. A field absent here has no such membership.
-type Membership = (
-  cfg: DslConfig,
-  at: readonly string[],
-  name: string,
-) => string | null;
-const MEMBERSHIP: ReadonlyMap<string, Membership> = new Map([
-  ["style", undeclaredStyleMessage],
-  ["preset", undeclaredPresetMessage],
-]);
-const NO_MEMBERSHIP: Membership = () => null;
 
 type PersistAction = Extract<ActionDecl, { readonly persist: string }>;
 
@@ -1191,7 +1161,6 @@ type PersistAction = Extract<ActionDecl, { readonly persist: string }>;
 // field holds writes no value: neither is judged.
 function checkPersistedValues(
   ctx: ValidateCtx,
-  cfg: DslConfig,
   name: string,
   a: PersistAction,
   optionDomains: ReadonlyMap<string, ResolvedDomain>,
@@ -1205,16 +1174,16 @@ function checkPersistedValues(
   if ("min" in a && !holdsInteger(target)) {
     ctx.issues.push({
       path: `actions.${name}.min`,
-      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${a.persist} does not hold an integer — use "to", "from", or "cycle" instead`,
       line: findKeyLine(ctx.source, ["actions", name, "min"]),
     });
     return;
   }
   const steps = persistPath(target);
   const at = steps.slice(0, -1);
-  const membership = MEMBERSHIP.get(steps[steps.length - 1]!) ?? NO_MEMBERSHIP;
   const reasonOf = (raw: string): string | null =>
-    persistedValueIssue(ctx, target, raw) ?? membership(cfg, at, raw);
+    persistedValueIssue(ctx, target, raw) ??
+    undeclaredMemberMessage(optionDomains, at, steps[steps.length - 1]!, raw);
   for (const field of new Set(writes.map((w) => w.field))) {
     const refused = writes
       .filter((w) => w.field === field)
@@ -1421,7 +1390,7 @@ export function validateDeclarations(
     }
     // An unknown `from` was refused above, so every domain a persist draws
     // from here resolves.
-    if ("persist" in a) checkPersistedValues(ctx, cfg, name, a, optionDomains);
+    if ("persist" in a) checkPersistedValues(ctx, name, a, optionDomains);
     if (!("set" in a)) continue;
     if (CONFIG_ONLY_KEYS.has(a.set)) {
       ctx.issues.push({
@@ -1564,20 +1533,6 @@ export function validateDeclarations(
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
         message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
-      });
-      continue;
-    }
-    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
-    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
-    // Globals field where nothing today enforces value/field-kind agreement
-    // either way. Rejecting it here (rather than tolerating a numeric-string
-    // palette name that only fails later at `paletteForThemeName`) keeps
-    // the failure at load time, next to the typo it actually is.
-    if ("min" in a) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
     }

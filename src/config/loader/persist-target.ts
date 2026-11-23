@@ -19,11 +19,12 @@
 
 import type { Globals } from "../dsl-types.js";
 import {
-  fileValueOf,
+  liftToFile,
   THEME_DEFAULT_FIELDS,
   wireKindOf,
   type FileValue,
   type ThemeDefaultField,
+  type WireKind,
 } from "../globals-fields.js";
 import {
   GLOBALS_SCHEMA,
@@ -32,8 +33,8 @@ import {
   PRESET_GLOBALS_SCHEMA,
   THEME_DEFAULT_SCHEMA,
 } from "./globals.js";
+import { SEGMENT_DELTA_SCHEMA } from "./segments.js";
 import {
-  paletteSpec,
   record,
   type RecordSchema,
   type ValidateCtx,
@@ -168,26 +169,27 @@ const PLACE_SCHEMAS: Readonly<
   globals: GLOBALS_SCHEMA,
   "preset-globals": PRESET_GLOBALS_SCHEMA,
   "theme-default": THEME_DEFAULT_SCHEMA,
-  "segment-palette": {
-    noun: "segment key",
-    fields: { palette: paletteSpec() },
-  },
+  "segment-palette": SEGMENT_DELTA_SCHEMA,
 };
+
+// The primitive the file holds at a target. A segment's palette is a name; it
+// is the one value target that is no globals field, so it has no row to ask.
+function wireKindOfTarget(target: ValueTarget): WireKind {
+  return target.scope === "segment-palette"
+    ? "string"
+    : wireKindOf(target.field);
+}
 
 // [LAW:parse-dont-validate] The typed value the file holds at a target, from the
 // string a write carries — or the reason there is none, which a click throws
-// and the loader reports. A segment's palette is a name.
+// and the loader reports.
 export function persistedValueOf(target: ValueTarget, raw: string): FileValue {
-  return target.scope === "segment-palette"
-    ? { value: raw }
-    : fileValueOf(target.field, raw);
+  return liftToFile(wireKindOfTarget(target), raw);
 }
 
 // Whether the file holds an integer at a target, which is all a stepper writes.
 export function holdsInteger(target: ValueTarget): boolean {
-  return (
-    target.scope !== "segment-palette" && wireKindOf(target.field) === "number"
-  );
+  return wireKindOfTarget(target) === "number";
 }
 
 // [LAW:single-enforcer] The loader's own verdict on the value a click would
@@ -202,7 +204,14 @@ export function persistedValueIssue(
   const lifted = persistedValueOf(target, raw);
   if ("reason" in lifted) return lifted.reason;
   const steps = persistPath(target);
-  const scratch: ValidateCtx = { ...ctx, source: "", issues: [] };
+  const scratch: ValidateCtx = {
+    ...ctx,
+    source: "",
+    issues: [],
+    groups: [],
+    unplaced: [],
+    inherited: [],
+  };
   record(scratch, PLACE_SCHEMAS[target.scope], steps.slice(0, -1).join("."), {
     [steps[steps.length - 1]!]: lifted.value,
   });

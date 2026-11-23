@@ -654,6 +654,20 @@ export function wireKindOf(field: GlobalField): WireKind {
       : "string";
 }
 
+// The named option domain a field's row draws its values from (`styles`,
+// `presets`), for a key that is a field at all; null when its row names none.
+export function optionDomainOf(key: string): string | null {
+  if (!Object.hasOwn(GLOBAL_FIELDS, key)) return null;
+  const row: FieldRow = GLOBAL_FIELDS[key as GlobalField];
+  if (row.kind === "text") return null;
+  const { domain } = row;
+  return typeof domain === "object" &&
+    "from" in domain &&
+    typeof domain.from === "string"
+    ? domain.from
+    : null;
+}
+
 // [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
 // value is written from — a `persist` action's gate is an ALLOW-LIST whose
 // members pass through verbatim, so a config author writing
@@ -671,8 +685,7 @@ export type FileValue =
   | { readonly value: string | number | boolean }
   | { readonly reason: string };
 
-export function fileValueOf(field: GlobalField, raw: string): FileValue {
-  const kind = wireKindOf(field);
+export function liftToFile(kind: WireKind, raw: string): FileValue {
   if (kind === "string") return { value: raw };
   if (kind === "number") {
     // Every number field is an integer range, and the file holds the integer
