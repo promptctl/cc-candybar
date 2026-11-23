@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "9b161b0a3123064752b90d778c33e73d8089d89f",
-      "timestamp": "2026-11-23T10:47:23.593Z",
+      "sha": "9981658049e4a64f1743182196945f5de277f53e",
+      "timestamp": "2026-11-23T10:57:51.382Z",
       "commits": [
         {
-          "sha": "9b161b0a3123064752b90d778c33e73d8089d89f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-23T03:46:14-07:00",
-          "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit (#886)\n\n* fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n\n* fix(config): decide edit-or-store once per click and check authored keys wherever they load\n\nA click outside an edit holds edit mode's keys aside: they open the edit\nit starts, or are dropped and logged at warn. Every reader takes the\nedit's view, the main undo never records an edit key, and drafts are\nneither main-undo nor navigation state. A closed edit's steps are never\nBack destinations because its state never reaches the store.\n\nThe authored-key check runs for plugins too, refuses raw keys by\nnamespace and accordion keys only where they meet the bar's own. The\nclick error lives under the settings namespace. Hover text decodes menu\nkeys. Minted placement ids retry a bounded number of times and throw.\n\n* fix(config): one key classifier, one write router, and Back steps that end with their edit\n\nWhat a session key is (edit mode's own, a setting, a confirm, the\nviewer, a menu, an author's) is decided by one function, and every\nreader and writer switches on it. Every session write passes one\nrouter: an open edit holds it, and with none open edit mode's keys are\nset aside for the edit a click opens, or dropped and logged. An edit\nholds the Back steps taken in it, and the click that ends it lands its\nown step outside, without edit mode's keys. Whether an edit has work is\nthe files it changed and the drafts a save writes, one count for the\nsave cell, cancel and the idle close. The duplicate-id hint is fixed\ntext, the click error reads only records this build writes, and a\nsession left empty by the load takes no slot.\n\n* fix(config): a placement's menus and drafts are filed under its preset, id and segment\n\nA placement's state key named too little of it. An id is unique only in one\npreset's tree, so two presets' placements of one id shared a menu, and a kept\nid that came to name another segment inherited the old segment's open menus\nand unsaved settings. The menu key and the draft key now carry the preset, the\nid and the segment together, spelled in one place and read the same way by the\nloader, edit chrome, the disclosure nest and the render walk, which compiles\neach preset's tree knowing its preset. Each part leads with a letter, since a\ntemplate reads a state key as a field path and a field name cannot lead with a\ndigit.\n\n* fix(config): one identity builder, one load filter for retired keys, and a failed click's record outside the edit\n\n* fix(config): derive edit mode from the open edit, fail a stale click loudly, and keep a batch's order\n\n* fix(config): a save writes the drafts of every preset, and the edit namespace test no longer ties menu keys to the classifier\n\n* fix(config): a save refuses two presets' differing drafts for one shared placement, and memory names the placement's identity"
+          "sha": "9981658049e4a64f1743182196945f5de277f53e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-23T10:56:43Z",
+          "message": "chore(release): set `package.json` to 1.236.7\n\n## [1.236.7](https://github.com/promptctl/cc-candybar/compare/v1.236.6...v1.236.7) (2026-11-23)\n\n### Bug Fixes\n\n* **config:** give re-added placements a fresh id and keep edit-mode state in the edit ([#886](https://github.com/promptctl/cc-candybar/issues/886)) ([9b161b0](https://github.com/promptctl/cc-candybar/commit/9b161b0a3123064752b90d778c33e73d8089d89f))\n"
         }
       ]
     },
