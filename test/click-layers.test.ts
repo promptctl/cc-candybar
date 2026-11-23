@@ -95,12 +95,7 @@ function session(): {
   expect(cache.getOrCreate(origin).lastError).toBeNull();
   durable.seedOrigin(sessionState, S1);
   const ctx = verbContextWith(
-    testVerbContext(
-      sessionState,
-      durable.historyFor(sessionState),
-      undefined,
-      durable.host,
-    ),
+    testVerbContext(sessionState, durable.historyFor, undefined, durable.host),
     {
       configFor: (o) => cache.getOrCreate(o).state.config,
       snapshotFor: (o) => cache.snapshotFor(o),

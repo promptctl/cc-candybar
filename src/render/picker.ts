@@ -591,7 +591,7 @@ export function pickerFuncs(
         const active = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active.bg === undefined) {
           throw new Error(
-            `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a picker is drawn on that background`,
+            `{{ picker }} is not available while segments.${active.placement.segment}'s own "bg:" is being evaluated — a picker is drawn on that background`,
           );
         }
         // [LAW:types-are-the-program] `{{ picker }}` emits one value, so a

@@ -234,8 +234,8 @@ const REDO_ACTION = `${SETTINGS_NS}redo`;
 // one key holds one open member, so opening a theme picker closes the style
 // picker. The settings menu is a narrow panel — two open drop-downs would
 // overflow it — and this is the same shared-key mechanism group sugar uses,
-// selected by a value, not a mode. Spelled as a shared `{{ menu }}` key, so a
-// `{{ menu }}` an author gives the same shared key joins this accordion.
+// selected by a value, not a mode. Spelled as a shared `{{ menu }}` key; the
+// load refuses an author's `{{ menu }}` the same key (SETTINGS_ACCORDIONS).
 const PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 
 // ─── Submenus (brandon-theme-swatch-8v9r, brandon-menus-sjhy.5zy) ─────────
@@ -253,6 +253,11 @@ const accordionOf = (place: Place): string =>
   isSubmenu(place)
     ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`)
     : PICKER_KEY;
+// [LAW:one-source-of-truth] Every accordion the menu keys, which no author's
+// `{{ menu }}` may join (loader/authored-keys.ts): the one each place joins.
+export const SETTINGS_ACCORDIONS: ReadonlySet<string> = new Set(
+  Object.values(PLACE).map(accordionOf),
+);
 // A submenu is a member of the accordion the control it is laid beside sits on.
 const submenuRef = (name: SubmenuName): DisclosureRef => {
   const key = accordionOf(PLACE[SUBMENUS[name].beside]);

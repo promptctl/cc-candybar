@@ -4,7 +4,7 @@ import { GLOBAL_FIELDS } from "../config/globals-fields.js";
 import { entryOf, parseDocument } from "../config/json5-edit.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
 import { SUBMENU_NAMES, TABS } from "../config/menu-places.js";
-import { isReservedName } from "../config/reserved-names.js";
+import { sessionKeyKind } from "../config/session-key.js";
 import {
   SESSION_KEY_TO_SETTING,
   SETTINGS,
@@ -201,8 +201,13 @@ export function recordingOutputProblem(output: RendererOutput): string | null {
 // vocabulary, whose fields cannot disclose arbitrary historical text.
 // [LAW:one-source-of-truth] Use the menu members and each builtin setting's
 // own parser or closed domain instead of spelling their values again.
+// [LAW:single-enforcer] What a key is comes from the one classifier: a setting
+// reads by its field, an authored key by nothing, and every key the bar mints
+// by the disclosure vocabulary.
 function knownPick(key: string, value: string): boolean {
-  if (isReservedName(key)) {
+  const kind = sessionKeyKind(key).kind;
+  if (kind === "plain") return false;
+  if (kind !== "setting") {
     return (
       value === DISCLOSURE_CLOSED ||
       value === DISCLOSURE_OPEN ||
@@ -210,9 +215,8 @@ function knownPick(key: string, value: string): boolean {
       SUBMENU_NAMES.some((member) => member === value)
     );
   }
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting === undefined) return false;
-  const field = GLOBAL_FIELDS[SETTINGS[setting].configKey];
+  const field =
+    GLOBAL_FIELDS[SETTINGS[SESSION_KEY_TO_SETTING.get(key)!].configKey];
   if (field.kind === "session") return field.parse(value) !== null;
   const { domain } = field;
   if (typeof domain !== "object") return false;

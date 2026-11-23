@@ -256,7 +256,11 @@ describe("a placement's effect setting", () => {
       DEFAULT_DSL_CONFIG,
     );
     const open = renderer(config, {
-      [menuStateKey("picker", "applyTheme", undefined)]: "applyTheme",
+      [menuStateKey(
+        { preset: "default", id: "picker", segment: "picker" },
+        "applyTheme",
+        undefined,
+      )]: "applyTheme",
     });
     try {
       const effects = new SessionEffects<RenderedLine>("s");

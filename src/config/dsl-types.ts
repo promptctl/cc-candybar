@@ -14,6 +14,7 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl, ResolvedActionDecl } from "./action.js";
+import type { PlacementIdentity } from "./placement-identity.js";
 // [LAW:one-source-of-truth] A style IS a rich-js ThemeKey (four numeric axes:
 // hueShift / chromaScale / lightnessScale / lightnessShift) — the config type
 // references the vocabulary owner's type verbatim, so a rich-js axis rename is
@@ -185,23 +186,21 @@ export function placementId(node: SegmentNode): string {
   return node.id ?? node.name;
 }
 
+// [LAW:one-source-of-truth] THE identity of a placement as session state is
+// filed under it: the preset whose tree holds it, its id and its segment.
+// Every site that files state for a placement builds it here.
+export function placementIdentityOf(
+  preset: string,
+  node: SegmentNode,
+): PlacementIdentity {
+  return { preset, id: placementId(node), segment: node.name };
+}
+
 // The id of every placement in a tree, in walk order.
 export function placementIds(tree: LayoutNode): string[] {
   return [...walkNodes(tree)].flatMap((n) =>
     n.kind === "segment" ? [placementId(n)] : [],
   );
-}
-
-// The id a new placement of `segment` takes beside the ids `taken`: the
-// segment's name while it is free, else the first free `<name>-<n>`, n from 2.
-export function freePlacementId(
-  segment: string,
-  taken: ReadonlySet<string>,
-): string {
-  if (!taken.has(segment)) return segment;
-  let n = 2;
-  while (taken.has(`${segment}-${n}`)) n++;
-  return `${segment}-${n}`;
 }
 
 // Where an open body's rows go: `drop` hangs them below the trigger's row;

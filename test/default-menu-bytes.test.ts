@@ -29,7 +29,7 @@ import { createEngine } from "@promptctl/go-template-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { ADD_GLYPH } from "../src/config/edit-glyphs";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
 import {
@@ -42,6 +42,7 @@ import { buildRig } from "./helpers/rig";
 import { VERB_SET_STATE } from "../src/click/wire";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { arrange } from "./helpers/configure";
 
 const SID = sessionIdOf("s1");
 
@@ -86,7 +87,8 @@ function menuOpeners(rendered: Frame): Opener[] {
       .filter(
         (e) =>
           e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
+          menuOfKey(e.args[1] ?? "")?.page === false &&
+          e.args[3] === menuPageKey(e.args[1]!) &&
           e.args[2] !== DISCLOSURE_CLOSED,
       )
       .map((e) => ({ url, text, member: e.args[2]! })),
@@ -115,7 +117,7 @@ function menuBar(root: string) {
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
     await click(link.url);
   };
-  return { config, sessionState, render, click, clickLabel };
+  return { config, sessionState, render, click, clickLabel, ctx: rig.ctx };
 }
 
 // [LAW:single-enforcer] "Hosts a menu" is decided by the same authority the
@@ -191,7 +193,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
       const rig = menuBar(`{ h: ['directory', 'model'] }`);
-      rig.sessionState.set(SID, EDIT_MODE_KEY, "arrange");
+      arrange(rig.ctx, SID);
       return rig;
     };
 

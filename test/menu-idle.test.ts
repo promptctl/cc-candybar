@@ -38,6 +38,7 @@ import {
 import { MenuIdle } from "../src/renderer/menu-idle";
 import { selectionFor } from "./helpers/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 
 const at = (s: number): Instant => s as Instant;
 const S = sessionIdOf("s");
@@ -161,7 +162,7 @@ describe("the idle period: a close is due a timeout after it began, while a menu
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
+const PICKERS = sharedMenuStateKey("candybar.pickers");
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -269,7 +270,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     );
   });
 
-  test("a toggle that hangs no menu is a view preference, and is left as it is", async () => {
+  test("a toggle that hangs no menu is no idle root; it ends with the edit the door's close leaves", async () => {
     const rt = idleBar(BUNDLED);
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
@@ -282,7 +283,11 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       rt.ctx.effects,
     );
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
+    expect(rt.logged).toContain(
+      `menu-idle: closed=${SETTINGS_ANCHOR} idle=30.0s timeout=30s (session=${SID})`,
+    );
+    // Edit mode's own state lives only in the edit it belongs to.
+    expect(rt.held(EDIT_LIVE_KEY)).toBe(DISCLOSURE_CLOSED);
   });
 
   test("a group open by default is closed, and stays closed", async () => {

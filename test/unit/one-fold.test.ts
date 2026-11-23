@@ -7,6 +7,7 @@
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { unauthored } from "../../src/config/dsl-loader";
 import { declaredVariables } from "../../src/config/loader/refs";
+import { menuStateKey } from "../../src/config/menu-keys";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
@@ -35,6 +36,15 @@ const overDefault = (src: string): DslConfig =>
 
 const MENU = `{{ menu "applyTheme" "theme ▸" "theme ▾" }}`;
 
+// The key of the menu a bare placement of `segment` hosts in the default
+// preset's tree.
+const applyThemeOf = (segment: string): string =>
+  menuStateKey(
+    { preset: "default", id: segment, segment },
+    "applyTheme",
+    undefined,
+  );
+
 describe("no declared name sits under another", () => {
   test("in the built bundled config, settings menu and edit chrome included", () => {
     const built = validateConfig(unauthored(DEFAULT_DSL_CONFIG));
@@ -54,16 +64,15 @@ describe("no declared name sits under another", () => {
         { kind: "group", name: "details", label: "details", children: [{ kind: "segment", name: "body" }] },
       ] },
     }`);
-    expect(Object.keys(built.variables)).toContain(
-      "menus.themeMenu.applyTheme",
-    );
+    expect(Object.keys(built.variables)).toContain(applyThemeOf("themeMenu"));
     expect(Object.keys(built.variables)).toContain("groups.details");
     expect(nested(built)).toEqual([]);
   });
 
-  test("an accordion key that collapses to a placement id is refused, naming both", () => {
-    expect(() =>
-      overDefault(`{
+  // Menu and accordion keys are spelled prefix-free, so a shared key and a
+  // placement's own menus never nest, whatever the names.
+  test("an accordion key spelled like a placement id loads beside that placement's own menu", () => {
+    const config = overDefault(`{
         actions: {
           applyTheme: { set: "theme", from: "themes" },
           applyStyle: { set: "style", from: "styles" },
@@ -73,22 +82,20 @@ describe("no declared name sits under another", () => {
           other: { template: '{{ menu "applyStyle" "style" (dict "key" "themeMenu") }}' },
         },
         root: { h: ["themeMenu", "other"] },
-      }`),
-    ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus\.themeMenu"/,
-    );
+      }`);
+    expect(config.variables[applyThemeOf("themeMenu")]).toBeDefined();
+    expect(config.variables["menus._themeMenu"]).toBeDefined();
   });
 
-  test("a user segment named like a settings accordion key, holding a menu, is refused", () => {
-    expect(() =>
-      overDefault(`{
+  test("a user segment named like a settings accordion key, holding a menu, loads", () => {
+    const config = overDefault(`{
         actions: { applyTheme: { set: "theme", from: "themes" } },
         segments: { candybar_gearPickers: { template: '${MENU}' } },
         root: { h: ["candybar_gearPickers"] },
-      }`),
-    ).toThrow(
-      /"menus\.candybar_gearPickers\.applyTheme" is declared under the variable "menus\.candybar_gearPickers"/,
-    );
+      }`);
+    expect(
+      config.variables[applyThemeOf("candybar_gearPickers")],
+    ).toBeDefined();
   });
 
   test("a user variable `menus` beside a placed menu is refused", () => {
@@ -100,7 +107,7 @@ describe("no declared name sits under another", () => {
         root: { h: ["themeMenu"] },
       }`),
     ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus"/,
+      `"${applyThemeOf("themeMenu")}" is declared under the variable "menus"`,
     );
   });
 

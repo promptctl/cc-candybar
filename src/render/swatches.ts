@@ -160,7 +160,7 @@ export function swatchesFuncs(
         const active = requireActiveSegment(activeSegment, "{{ swatches }}");
         if (active.bg === undefined) {
           throw new Error(
-            `{{ swatches }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a swatch row is drawn on that background`,
+            `{{ swatches }} is not available while segments.${active.placement.segment}'s own "bg:" is being evaluated — a swatch row is drawn on that background`,
           );
         }
         const drawnAt = activeSegment.drawnAt();

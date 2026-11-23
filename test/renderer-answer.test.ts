@@ -2211,7 +2211,7 @@ describe("a click", () => {
 
     const origin = context.requested;
     const config = t.rig.cache.snapshotFor(origin);
-    t.parts.edits.open(SESSION, origin, config);
+    t.parts.edits.open(SESSION, origin, config, new Map());
     t.rig.cache.refreshEditedView(SESSION);
     // The host found the file edited, and a notice beside it. The draft pins
     // the file's text and takes the rest of what the host found.

@@ -23,15 +23,15 @@ import type {
   RichText,
 } from "@promptctl/rich-js";
 import type { Disclosure } from "../themes/decor.js";
+import type { PlacementIdentity } from "../config/placement-identity.js";
 
 export interface ActiveSegment {
-  /** The segment's declared name, for messages that point at its fields. */
-  readonly segName: string;
   /**
-   * The placement's id — `{{ menu }}` derives its identity from it, so two
-   * placements of one segment open their menus independently.
+   * The placement's identity: `{{ menu }}` files its state under it, so two
+   * placements of one segment open their menus independently. Its segment is
+   * the declared name messages point at.
    */
-  readonly placementId: string;
+  readonly placement: PlacementIdentity;
   /**
    * The disclosure this segment would open: the vocabulary hue its address
    * was dealt, at its band depth. A `{{ menu }}`'s body colours its option
@@ -114,16 +114,14 @@ export function createActiveSegmentRef(
  */
 export function openSegment(
   ref: ActiveSegmentRef,
-  segName: string,
-  placementId: string,
+  placement: PlacementIdentity,
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
   text: ColorRgba,
 ): ActiveSegment {
   const active: ActiveSegment = {
-    segName,
-    placementId,
+    placement,
     palette,
     disclosure,
     tint,
@@ -155,8 +153,7 @@ export function inSegment<T>(
     run(
       openSegment(
         ref,
-        place.segName,
-        place.placementId,
+        place.placement,
         place.palette,
         place.disclosure,
         place.tint,

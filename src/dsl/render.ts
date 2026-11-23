@@ -871,27 +871,34 @@ export function compileDslConfig({
     // the record to what it provably holds.
     return Object.freeze(out) as PlacementSettings;
   };
-  const compileNode = <N extends LayoutNode>(
-    node: N,
-    path: string,
-    at: AddressStep | undefined,
-  ): Compiled<N> => {
-    const cctx: NodeCompileCtx = {
-      path,
-      at,
-      when:
-        node.when === undefined
-          ? undefined
-          : parseNodeField(node.when, path, "when"),
-      parse: (src, field) => parseNodeField(src, path, field),
-      compileChild: compileNode,
-      placementSettings: resolvedSettings,
+  // [LAW:one-source-of-truth] A tree is compiled for the preset that renders
+  // it, so every placement in it carries that preset: state filed under a
+  // placement is its preset's, never a sibling preset's that reuses its id.
+  const compilerFor = (preset: string) => {
+    const compileNode = <N extends LayoutNode>(
+      node: N,
+      path: string,
+      at: AddressStep | undefined,
+    ): Compiled<N> => {
+      const cctx: NodeCompileCtx = {
+        path,
+        at,
+        preset,
+        when:
+          node.when === undefined
+            ? undefined
+            : parseNodeField(node.when, path, "when"),
+        parse: (src, field) => parseNodeField(src, path, field),
+        compileChild: compileNode,
+        placementSettings: resolvedSettings,
+      };
+      // [LAW:types-are-the-program] The registry pairs each kind with the
+      // compile that returns that kind's own compiled arm (nodeType's
+      // documented cast); this restates the pairing at the call site so a
+      // container hands back a compiled container, not the union.
+      return nodeType(node.kind).compile(node, cctx) as Compiled<N>;
     };
-    // [LAW:types-are-the-program] The registry pairs each kind with the
-    // compile that returns that kind's own compiled arm (nodeType's documented
-    // cast); this restates the pairing at the call site so a container hands
-    // back a compiled container, not the union.
-    return nodeType(node.kind).compile(node, cctx) as Compiled<N>;
+    return compileNode;
   };
 
   // [LAW:one-source-of-truth] One compiled tree per declared preset, built
@@ -906,7 +913,7 @@ export function compileDslConfig({
     // The path travels WITH the tree, so a preset that stages the config's own
     // root diagnoses under `root` — the place its author actually wrote it.
     const { node, path } = presetRoot(config, name);
-    roots.set(name, compileNode(node, path, undefined));
+    roots.set(name, compilerFor(name)(node, path, undefined));
   }
 
   // [LAW:no-silent-failure] Parsed eagerly so a malformed rule is a load error
@@ -1127,7 +1134,7 @@ function ruleName(
 function placementsUnder(node: CompiledNode): string[] {
   return segmentsUnder(node)
     .filter((segment) => !segment.name.startsWith(EDIT_NS))
-    .map((segment) => segment.id);
+    .map((segment) => segment.placement.id);
 }
 
 // Every segment node a layout node holds, its open bodies' included, in order.

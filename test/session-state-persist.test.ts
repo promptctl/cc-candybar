@@ -48,10 +48,13 @@ describe("the session state's file", () => {
     session: SessionFileStorage<SessionPicks>,
     maxSessions?: number,
   ) => {
-    const stores = new HeldStores({
-      session,
-      history: EPHEMERAL_HISTORY_STORAGE,
-    });
+    const stores = new HeldStores(
+      {
+        session,
+        history: EPHEMERAL_HISTORY_STORAGE,
+      },
+      () => {},
+    );
     stores.load();
     const state = new SessionState(stores.current().sessions, maxSessions);
     const turn = (write: (state: SessionState) => void): void => {

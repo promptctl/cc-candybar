@@ -31,14 +31,11 @@
 import { URLSearchParams } from "node:url";
 
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
-import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { DIAGNOSTICS_CLOSED } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
-import {
-  isReservedName,
-  MENU_NS,
-  MENU_PAGE_NS,
-} from "../config/reserved-names.js";
+import { sessionKeyKind } from "../config/session-key.js";
+import { menuOfKey } from "../config/menu-keys.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -128,7 +125,7 @@ export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // VERB_RESET_CONFIG's coarse "back to the bundled default". Args: `[sessionId]` — there is
 // no key: the history is one stack of clicks per session, not a per-key log.
 // An empty stack, or a target changed since the step, is a loud BAD_REQUEST
-// surfaced through click.error like any other verb failure, never a silent
+// surfaced through candybar.clickError like any other verb failure, never a silent
 // no-op.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
@@ -254,25 +251,24 @@ export function configWriteEffect(
 const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 
-const withoutNs = (key: string, ns: string): string =>
-  key.startsWith(ns) ? key.slice(ns.length) : key;
-
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
 // numbers from 1; the rest read as the key they set. Disclosures are synthesized,
 // so an authored key's `closed` is its own data. The viewer's key holds a
 // message's identity, which no reader can use, so its write says what it does.
 function sayWrite(key: string, value: string): string {
-  if (key === DIAGNOSTICS_VIEWING)
+  const { kind } = sessionKeyKind(key);
+  if (kind === "viewer")
     return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
   const set = `set ${key} to ${value}`;
-  if (!isReservedName(key)) return set;
-  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
-  if (key.startsWith(MENU_PAGE_NS))
-    return `turn ${menu} to page ${Number(value) + 1}`;
-  if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
-  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
-  return key.startsWith(MENU_NS) ? `open ${value}` : set;
+  if (kind !== "menu" && kind !== "edit") return set;
+  const menu = menuOfKey(key);
+  if (menu?.page === true)
+    return `turn ${menu.menu} to page ${Number(value) + 1}`;
+  const name = menu?.menu ?? key;
+  if (value === DISCLOSURE_CLOSED) return `close ${name}`;
+  if (value === DISCLOSURE_OPEN) return `open ${name}`;
+  return menu !== undefined ? `open ${value}` : set;
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Only a

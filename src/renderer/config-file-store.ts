@@ -808,15 +808,29 @@ function withPlacements(
   placements: readonly PlacementValue[],
   own: (text: string, under: DslConfig, preset: string, id: string) => string,
 ): string {
+  // [LAW:no-silent-failure] Presets that restage nothing render one shared
+  // row, so drafts filed under two presets can address the same setting of the
+  // same placement in the file, which holds one value. Two that differ are
+  // refused naming both presets, never resolved by whichever is written last.
+  const landed = new Map<string, { preset: string; value: string }>();
   return placements.reduce((prior, { preset, id, setting, value }) => {
     const acc = own(prior, under, preset, id);
     const placement = layoutPlacementOf(docOf(acc), under, preset, id);
+    const spelled = json5Text(value);
+    const slot = `${placement.path.join(".")}\u0000${id}\u0000${setting}`;
+    const rival = landed.get(slot);
+    if (rival !== undefined && rival.value !== spelled) {
+      throw new BadVerbArgs(
+        `presets "${rival.preset}" and "${preset}" both render ${placement.path.join(".")} in ${file} and hold different values for ${id}.${setting}: reset one of the drafts`,
+      );
+    }
+    landed.set(slot, { preset, value: spelled });
     const set = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
       id,
       setting,
-      json5Text(value),
+      spelled,
     );
     if (set === null) {
       throw new BadVerbArgs(
@@ -1079,7 +1093,8 @@ export function applyLayoutOp(
   layer: WriteLayer,
   key: string,
   op: LayoutOp,
-): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+  suffix: () => string,
+): NewPlacement | null {
   const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -1092,37 +1107,45 @@ export function applyLayoutOp(
     layoutPlacementOf(docOf(before ?? ""), under, target.preset, subject),
   );
   const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed } = spliceOp(authored, placement.path, op, () => {
-    // [LAW:no-ambient-temporal-coupling] Minted over the text this click
-    // splices, never a cached render of it: a hand edit, or a click an
-    // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(into, authored).config;
-    return presetNames(config.presets).map(
-      (preset) => presetRoot(config, preset).node,
-    );
-  });
+  const { after, placed } = spliceOp(
+    authored,
+    placement.path,
+    op,
+    suffix,
+    () => {
+      // [LAW:no-ambient-temporal-coupling] Minted over the text this click
+      // splices, never a cached render of it: a hand edit, or a click an
+      // instant earlier, is in the text before any watcher reloads it.
+      const config = loadOrRefuse(into, authored).config;
+      return presetNames(config.presets).map(
+        (preset) => presetRoot(config, preset).node,
+      );
+    },
+  );
   if (after === null) {
     throw new BadVerbArgs(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, into, before, after, refuseHidden) };
+  commit(store, into, before, after, refuseHidden);
+  return placed;
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
-// a removal places nothing; an insertion places the segment under the id
-// `mintPlacement` finds free in every tree it reaches.
+// a removal places nothing; an insertion places the segment under the fresh
+// id `mintPlacement` mints, free in every tree it reaches.
 function spliceOp(
   text: string,
   path: ConfigPath,
   op: LayoutOp,
+  suffix: () => string,
   rendered: () => readonly LayoutNode[],
 ): { readonly after: string | null; readonly placed: NewPlacement | null } {
   switch (op.op) {
     case "remove":
       return { after: removeSegmentRef(text, path, op.target), placed: null };
     case "insert": {
-      const placed = mintPlacement(op.segment, op.anchor, rendered());
+      const placed = mintPlacement(op.segment, op.anchor, rendered(), suffix);
       return {
         after: insertSegmentRef(text, path, placed, op.anchor, op.relation),
         placed,

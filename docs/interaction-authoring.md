@@ -888,7 +888,7 @@ own clicks, and neither can overwrite the other's.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
 loud, transient message in the bar (`undo: nothing to undo`
-/ `redo: nothing to redo`, on the same `click.error` channel any failed click
+/ `redo: nothing to redo`, on the same `candybar.clickError` channel any failed click
 surfaces through), never a silent no-op. A fresh settings change after an
 `undo` abandons whatever was undone (the classic redo-stack branch: `redo`
 truncates rather than staying reachable past a new edit).
@@ -2285,9 +2285,9 @@ Menu identity is gated at load; every option value must be a literal:
 whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)
 ```
 
-### A `{{ menu }}` accordion key in a reserved namespace
+### A session key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
+The bar mints its own session keys under its reserved namespaces (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`): edit mode keeps its panels and lists under `edit.`, and a click's error is `candybar.clickError`. A key you author as a `state` variable's key, a `set` target or a group's key IS the session key, so one in a reserved namespace could read or overwrite one of the bar's, and is refused. A `{{ menu }}` accordion key is spelled into a menu key of its own, so it is refused only where it meets the bar's: an accordion in `edit.`, whose state would end with every edit, and the settings menu's own accordions, such as `candybar.pickers`. Any other key is your own:
 
 ```json5 check:fail
 {
@@ -2296,7 +2296,7 @@ The bundled settings menu's four config pickers share the accordion key `candyba
   },
   segments: {
     themePicker: {
-      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar-pickers") }}',
+      template: '🎨 {{ menu "applyTheme" "▸" "▾" (dict "key" "candybar.pickers") }}',
     },
   },
   root: { rows: { identity: { h: ["directory", "themePicker"] } } },
@@ -2304,7 +2304,7 @@ The bundled settings menu's four config pickers share the accordion key `candyba
 ```
 
 ```error
-segment "themePicker" has a {{ menu }} whose accordion key "candybar-pickers" lands in the reserved "candybar." namespace — a key is collapsed to an identifier ("candybar-pickers" becomes "menus.candybar_pickers"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix.
+session key "candybar.pickers" names the settings menu's own accordion, in the "candybar." namespace — rename it
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit

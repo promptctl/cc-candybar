@@ -58,8 +58,8 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `doctor-mark` | as above | `doctor-marks.json`, `session-state.json`, possibly `doctor-clicked-terminals.json` | same | P, per-user store | picks (nearest) | Own store and report; probes go to Facts |
 | `doctor-probe` | `probes`, `arrival`, `dlog` | none | none | In-memory list only; read through daemon-stats | no class fits; picks is nearest | Probably Facts' job, since `cc-candybar doctor` reads it from the daemon it asked |
 | `slash` | `configFor`, `claudeInput`, `dlog` | none | `tmux display`, `capture-pane`, `load-buffer`, `send-keys C-s`, `paste-buffer`, `send-keys Enter` | CC, TM | claude-code | Refused visibly |
-| `run` | `configFor`, `links`, `sourcesFor`, `runs` | Unknown: whatever the program writes | The argv the link carries, under the session's env, 10 s limit | SS (`supersede`, then resume); P on failure (`click.error` on the raw store); effects otherwise unknown | no class fits; machine is nearest | Refused visibly. Facts must refuse it too: verifying a dev key proves nothing to the live side |
-| `dispatch` | Union of its effects | Union | Union | Union; P for `click.error` on failure | Per effect | Classify each effect, never the whole click. It reaches only `LEAF_VERBS`, so no nesting |
+| `run` | `configFor`, `links`, `sourcesFor`, `runs` | Unknown: whatever the program writes | The argv the link carries, under the session's env, 10 s limit | SS (`supersede`, then resume); P on failure (`candybar.clickError` on the raw store); effects otherwise unknown | no class fits; machine is nearest | Refused visibly. Facts must refuse it too: verifying a dev key proves nothing to the live side |
+| `dispatch` | Union of its effects | Union | Union | Union; P for `candybar.clickError` on failure | Per effect | Classify each effect, never the whole click. It reaches only `LEAF_VERBS`, so no nesting |
 | `tmux-status-click` (not in `VERBS`) | Not a `DaemonContext` user; `tmuxStatusLines.linkAt`, then `handleClick` | Those of the inner verb | Inner verb's, or `/usr/bin/open` or `xdg-open <url>` for a non-candybar link | TM read; otherwise as the inner verb | Inner verb's; host for a plain URL | Needs a message: Facts receives the click, and only the Draw that drew the frame can run it. Dev frames should stay out of the status line |
 
 ## (1) Click-triggered side effects outside verb handlers
@@ -74,7 +74,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `tmuxStatus` | `tmuxStatusLines.observe`, which holds or releases the status line and then rewrites session options and the click binding |
 
 - **Owed setups:** a click with no known request leaves the setup owed. It then runs at a later click or request (`arrived`), not during the click.
-- **Failures:** setup failures land in `click.error` later.
+- **Failures:** setup failures land in `candybar.clickError` later.
 - **Which verbs move a switch:** directly, anything that changes the effective `experimentalBand`, `experimentalStatusline`, `experimentalPane` or `renderer`.
 - **Reloads count too:** `doctor-run` reloads inside the measured window, so an unseen hand edit gets attributed to that click and can trigger a setup.
 - **Other sessions:** they get no lane setups from your click, but `arrived` re-evaluates their tmux status line on their next request.
@@ -90,7 +90,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 - **State reaction:** `sessionState.revision` wakes the session's frame feed, and writes persist `session-state.json` asynchronously.
 - **Click errors:** `dispatch` calls `holdClickError`, and `answeredClickError` later marks it at the request boundary.
 - **After an update:** success triggers `binaryWatch.checkNow`, then `shutdown(0)`, which restores tmux and aborts runs.
-- **After a run:** sources resume, and a failure lands in `click.error`.
+- **After a run:** sources resume, and a failure lands in `candybar.clickError`.
 - **Client timeout:** the click's effects still land after the client was told TIMEOUT.
 
 ## (2) Module-level mutable state in `server.ts`

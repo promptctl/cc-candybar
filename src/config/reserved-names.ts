@@ -1,6 +1,5 @@
-// [LAW:one-way-deps] A leaf with no imports, so the click codec
-// (src/click/wire.ts) reads these names without loading the config loader. The
-// collision checks over them are the loader's,
+// [LAW:one-way-deps] A leaf with no imports: every layer reads these names and
+// nothing here reaches up. The collision checks over them are the loader's,
 // src/config/loader/reserved-namespace.ts.
 
 // [LAW:one-source-of-truth] The reserved namespaces, spelled once. Each is the
@@ -22,6 +21,17 @@ export const EDIT_NS = "edit.";
 // live under that name.
 export const SETTINGS_NS = "candybar.";
 
+// [LAW:one-source-of-truth] The bar's record of a click that failed
+// (src/daemon/foundations/click-error.ts): about the click, not state any edit
+// shapes, so no edit holds it.
+export const CLICK_ERROR_KEY = `${SETTINGS_NS}clickError`;
+
+// Whether edit mode is open, and the namespace every placement's unsaved
+// setting value lives under (edit-mode.ts). No scalar is declared at
+// `edit.draft`, so nothing under it can be shadowed by one.
+export const EDIT_MODE_KEY = `${EDIT_NS}mode`;
+export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+
 export const RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
@@ -30,11 +40,30 @@ export const RESERVED_NAMESPACES = [
   SETTINGS_NS,
 ] as const;
 
-// A name a user can never author: every synthesized artifact lives under one
-// of the prefixes above, so membership alone proves "synthesized, not
-// declared" — the fact edit chrome (structural, not removable content), the
-// delta-able segment set (a delta targets an authorable name), and the test
-// helpers all read from here rather than re-spelling the prefix list.
+// The namespace a name sits in, spelled as written: every artifact a
+// synthesis pass names lives under one of the prefixes above, so membership
+// proves a segment, variable or action "synthesized, not declared" — the fact
+// edit chrome (structural, not removable content), the delta-able segment set
+// (a delta targets an authorable name) and the test helpers read from here
+// rather than re-spelling the prefix list. What a session key is, the session
+// state's readers ask of session-key.ts.
+export function reservedNamespaceOf(name: string): string | undefined {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+}
+
+// [LAW:one-source-of-truth] Whether a name sits in edit mode's own namespace:
+// the key classifier and a menu's key scope both ask it, so neither imports
+// the other.
+export function isEditNamespaced(name: string): boolean {
+  return name.startsWith(EDIT_NS);
+}
+
+// [LAW:one-source-of-truth] Whether a key sits in the namespaces the menu pass
+// mints under: a menu's state and its page cursor.
+export function isMenuStateKey(key: string): boolean {
+  return key.startsWith(MENU_NS) || key.startsWith(MENU_PAGE_NS);
+}
+
 export function isReservedName(name: string): boolean {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return reservedNamespaceOf(name) !== undefined;
 }

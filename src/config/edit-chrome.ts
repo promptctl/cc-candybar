@@ -25,6 +25,7 @@ import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
   placementId,
+  placementIdentityOf,
   settingSpelling,
   settingsOf,
   IMPLIED_SETTINGS,
@@ -46,6 +47,10 @@ import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
 import { escapedIdent } from "./ident.js";
+import {
+  placementKeyScope,
+  type PlacementIdentity,
+} from "./placement-identity.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -96,7 +101,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 // `↩ cancel` discards the draft and leaves edit mode.
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-// How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
+// How many files differ from when edit mode opened (HistoryDepth.sinceEdit)
 // — the daemon's own count, read by the cells' labels and gates; a ref, never
 // a second counter. How many settings are unsaved is the settings menu's own
 // `unsaved` variable.
@@ -319,16 +324,16 @@ function configureRefsIn(nodes: readonly LayoutNode[]): DisclosureRef[] {
 }
 
 // [LAW:one-source-of-truth] THE session key an unsaved value of one
-// placement's setting lives at: the preset (a placement's id is unique only in
-// the tree one preset renders), the id, and the setting. A setting name is an
-// identifier and a preset's ident holds no `.`, so the last segment is always
-// the setting and the second the preset — the key names one value.
+// placement's setting lives at: the placement's identity (its preset, id and
+// segment, so a placement whose segment changed under a kept id starts with
+// none of the old segment's drafts) and the setting. A setting name is an
+// identifier and the identity's parts hold no `.`, so the last segment is
+// always the setting — the key names one value.
 export function placementDraftKey(
-  presetIdent: string,
-  id: string,
+  placement: PlacementIdentity,
   setting: string,
 ): string {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
+  return `${PLACEMENT_DRAFT_NS}${placementKeyScope(placement)}.${setting}`;
 }
 
 // What configure mode adds to one placement: the `🔧` that
@@ -352,17 +357,18 @@ function configureParts(
   decls: Readonly<Record<string, SettingDecl>>,
 ): ConfigureParts {
   const id = placementId(node);
+  const identity = placementIdentityOf(ctx.preset, node);
   const placement = escapedIdent(id);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.preset, id);
+  const member = configureMember(identity);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
+  // A shared `{{ menu }}` key's spelling, in edit mode's own namespace since
+  // `enter` is. Entering configure folds it, so each visit starts with every
+  // list closed.
   // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
+  // (disclosure-nest.ts), but a placement a layout edit removed nests
+  // nothing on the reloaded config.
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
@@ -375,12 +381,11 @@ function configureParts(
   };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id, name);
-    // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
-    // preset or placement may lead with a digit, which a field name may not —
-    // hence `p` and `d`. The key, not the name, is what a session
-    // holds across reloads.
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
+    const key = placementDraftKey(identity, name);
+    // [LAW:one-source-of-truth] The variable is named by its key, as every
+    // state variable is: a template field path, which the identity's lettered
+    // parts keep legal (placement-identity.ts).
+    const variable = key;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
@@ -680,7 +685,15 @@ export function insertGap(
   const gap = `${relation}.${escapedIdent(anchor)}`;
   const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
+  return {
+    apply,
+    host,
+    stateKey: menuStateKey(
+      { preset, id: host, segment: host },
+      apply,
+      undefined,
+    ),
+  };
 }
 
 // One splice's context, threaded unchanged through the recursion.
@@ -941,8 +954,8 @@ function spliceEditChromeForPreset(
 // back to it only when a preset declares no root of its own, and every name
 // now does). The synthesized variables/actions/segments merge additively —
 // nothing here can collide with user data, since every name it mints lives
-// under the `edit.`/`menus.` namespaces `synthesizeEditModeToggle` and
-// `checkMenuDecls` already reserve unconditionally at parse time.
+// under the `edit.` namespace `synthesizeEditModeToggle` reserves
+// unconditionally at parse time.
 //
 // Unconditional: the settings menu, synthesized into every config just before
 // this pass, ensures `edit.toggle` and puts `✎ arrange` in its body, so every bar
@@ -1001,10 +1014,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   };
   artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
-  // nothing changed there is nothing to discard.
+  // nothing to keep there is nothing to discard.
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "↩ cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${TO_KEEP} }}`,
   };
   const lead: LayoutNode[] = [
     { kind: "segment", name: EDIT_DONE_SEG },

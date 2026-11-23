@@ -22,7 +22,10 @@
 // config (settings-menu.ts), ensures this same toggle, and puts `✎ arrange` in its
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
-import { escapedIdent } from "../ident.js";
+import {
+  placementKeyScope,
+  type PlacementIdentity,
+} from "../placement-identity.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type {
@@ -38,7 +41,11 @@ import {
   disclosureStateVar,
 } from "../disclosure.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
-import { EDIT_NS } from "../reserved-names.js";
+import {
+  EDIT_MODE_KEY,
+  EDIT_NS,
+  PLACEMENT_DRAFT_NS,
+} from "../reserved-names.js";
 import { SETTINGS_REF } from "../door.js";
 
 // [LAW:single-enforcer] The SessionState key edit mode's state lives at, and
@@ -52,26 +59,19 @@ import { SETTINGS_REF } from "../door.js";
 // one placement whose settings hang open — configuring two at once is a second
 // value that key would have to hold, unrepresentable, and closing the settings
 // leaves arranging exactly as it was.
-export const EDIT_MODE_KEY = "edit.mode";
+export { EDIT_MODE_KEY, PLACEMENT_DRAFT_NS };
 export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 // Closes whichever placement's settings hang open.
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 export const EDIT_MODE_ARRANGE = "arrange";
 
-// The namespace every placement's unsaved setting value lives under, as a
-// session key and as a variable. No scalar is declared at `edit.draft`, so
-// nothing under it can be shadowed by one — as a preset named `mode` would
-// shadow `edit.mode.…` beside edit mode's own state.
-export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-
-// The member that configures the placement `id` in the layout of `preset` —
-// an id is unique only within one preset's tree, so switching presets never
-// carries configure mode onto a different placement that shares the id. The
-// preset is escaped (letters and digits alone) and the loader refuses a `:`
-// in an id, so the member names exactly one placement.
-export function configureMember(preset: string, id: string): string {
-  return `${escapedIdent(preset)}:${id}`;
+// [LAW:one-source-of-truth] The member that configures one placement: its
+// scope, as every other key it owns is filed (placement-identity.ts), so
+// switching presets, or a hand edit that gives a kept id another segment,
+// never carries configure mode onto a different placement.
+export function configureMember(placement: PlacementIdentity): string {
+  return placementKeyScope(placement);
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has

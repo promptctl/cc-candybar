@@ -17,7 +17,8 @@
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { configurePlacement } from "./helpers/configure";
+import { arrange, configurePlacement } from "./helpers/configure";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -55,12 +56,15 @@ import {
 import { presetRoot } from "../src/config/presets";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import { presetRootKey } from "../src/config/loader/persist-target";
-import { placementDrafts } from "../src/renderer/setting-drafts";
+import {
+  placementDrafts,
+  presetSnapshot,
+} from "../src/renderer/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { picked, selectionFor } from "./helpers/selection";
-import { MENU_PAGE_NS } from "../src/config/reserved-names";
+import { EDIT_NS, MENU_PAGE_NS } from "../src/config/reserved-names";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
 
@@ -110,7 +114,7 @@ function configureBar(src: string, preset?: string) {
     source: src,
     sessionId: SID,
     sessionState,
-    history: durable.historyFor(sessionState),
+    history: durable.historyFor,
     host: durable.host,
   });
   const { config } = rig;
@@ -156,8 +160,12 @@ function configureBar(src: string, preset?: string) {
   return { config, sessionState, render, click, urlWriting, enter, ctx };
 }
 
+// A placement's segment: `vcs2` is the second placement of `vcs`.
+const segmentOf = (id: string): string => (id === "vcs2" ? "vcs" : id);
+const memberOf = (id: string): string =>
+  configureMember({ preset: "default", id, segment: segmentOf(id) });
 const draftKey = (id: string, setting: string): string =>
-  placementDraftKey("default", id, setting);
+  placementDraftKey({ preset: "default", id, segment: segmentOf(id) }, setting);
 
 // The configure links: each writes the configure key to a placement.
 const configureUrls = (out: Frame): string[] =>
@@ -182,7 +190,7 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
     expect(configureUrls(rt.render())).toEqual([]);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const urls = configureUrls(rt.render());
     // Two placements of `vcs`, and `plain`, which declares nothing but still
     // has `theme` (brandon-settings-menu-6c5). Each ⚙ is drawn in
@@ -196,11 +204,7 @@ describe("configure mode: one placement's settings at a time", () => {
       ),
     );
     expect(members).toEqual(
-      new Set([
-        configureMember("default", "vcs"),
-        configureMember("default", "vcs2"),
-        configureMember("default", "plain"),
-      ]),
+      new Set([memberOf("vcs"), memberOf("vcs2"), memberOf("plain")]),
     );
     expect(textOf(rt.render())).toContain(CONFIGURE_GLYPH);
   });
@@ -208,13 +212,11 @@ describe("configure mode: one placement's settings at a time", () => {
   test("a configure visit opens with every list closed, whatever the last one left open", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const enter = async (): Promise<void> =>
       await rt.click(
         configureUrls(rt.render()).find((u) =>
-          effectsOf(u).some(
-            (e) => e.args[2] === configureMember("default", "vcs"),
-          ),
+          effectsOf(u).some((e) => e.args[2] === memberOf("vcs")),
         )!,
       );
     // The theme picker's options: each a link writing the placement's draft.
@@ -229,13 +231,13 @@ describe("configure mode: one placement's settings at a time", () => {
     const opener = linkUrls(rt.render()).find((u) => {
       const keys = effectsOf(u).flatMap((e) => e.args.slice(1));
       return (
-        keys.some((k) => k.startsWith(MENU_PAGE_NS)) &&
+        keys.some((k) => k.startsWith(`${EDIT_NS}${MENU_PAGE_NS}`)) &&
         keys.some((k) => /\.setting\.\w+\.theme$/.test(k))
       );
     });
     await rt.click(opener!);
     expect(themeOptions()).toBeGreaterThan(closed);
-    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
     await enter();
     expect(themeOptions()).toBe(closed);
   });
@@ -243,17 +245,15 @@ describe("configure mode: one placement's settings at a time", () => {
   test("configuring keeps arrange's chrome, shows the live bar, and hangs only that placement's controls", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const arranged = rt.render();
     const [first] = configureUrls(arranged).filter((u) =>
-      effectsOf(u).some(
-        (e) => e.args[2] === configureMember("default", "vcs2"),
-      ),
+      effectsOf(u).some((e) => e.args[2] === memberOf("vcs2")),
     );
     await rt.click(first!);
-    expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBe(
-      configureMember("default", "vcs2"),
+    expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
+    expect(rt.ctx.edits.view.get(SID, EDIT_CONFIGURE_KEY)).toBe(
+      memberOf("vcs2"),
     );
     const configuring = rt.render();
     const text = textOf(configuring);
@@ -273,7 +273,7 @@ describe("configure mode: one placement's settings at a time", () => {
     // Configuring the other placement — through the ⚙ still on the bar —
     // REPLACES this one: one key, one value.
     const [other] = configureUrls(configuring).filter((u) =>
-      effectsOf(u).some((e) => e.args[2] === configureMember("default", "vcs")),
+      effectsOf(u).some((e) => e.args[2] === memberOf("vcs")),
     );
     await rt.click(other!);
     const again = textOf(rt.render());
@@ -288,7 +288,7 @@ describe("configure mode: one placement's settings at a time", () => {
   test("each generated control writes its setting's draft, and only its placement changes", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     // The flag toggles, the word picker's arrow picks, the stepper steps and wraps.
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
@@ -324,20 +324,17 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(gate.validate(draftKey("vcs2", "detail"), "yes").ok).toBe(false);
     // The configure key admits closed and one member per placement — never
     // one naming no placement of this preset.
-    expect(
-      gate.validate(EDIT_CONFIGURE_KEY, configureMember("default", "plain")).ok,
-    ).toBe(true);
+    expect(gate.validate(EDIT_CONFIGURE_KEY, memberOf("plain")).ok).toBe(true);
     expect(gate.validate(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED).ok).toBe(true);
-    expect(
-      gate.validate(EDIT_CONFIGURE_KEY, configureMember("default", "absent"))
-        .ok,
-    ).toBe(false);
+    expect(gate.validate(EDIT_CONFIGURE_KEY, memberOf("absent")).ok).toBe(
+      false,
+    );
   });
 
   test("the body's ✕ returns to arranging", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
+    configurePlacement(rt.ctx, SID, "default", "vcs");
     // One control per row — detail, form, depth, theme — and the body leads
     // with one ✕. It writes the configure key alone; `✎ done` closes it too,
     // as part of leaving edit mode.
@@ -351,10 +348,10 @@ describe("configure mode: one placement's settings at a time", () => {
     });
     expect(closes).toHaveLength(1);
     await rt.click(closes[0]!);
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBe(
+    expect(rt.ctx.edits.view.get(SID, EDIT_CONFIGURE_KEY)).toBe(
       DISCLOSURE_CLOSED,
     );
-    expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
+    expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     const after = textOf(rt.render());
     expect(after).not.toContain("◀ form ▶");
     expect(after).toContain(CONFIGURE_GLYPH);
@@ -364,7 +361,7 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
     await rt.enter();
-    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs"));
+    rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, memberOf("vcs"));
     const edit = rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1");
     await rt.click(edit);
     const drafted = rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"));
@@ -381,7 +378,7 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(save).toBeDefined();
     await rt.click(save!);
     expect(durable.text()).toContain(`{ seg: "vcs", settings: { depth: 3 } }`);
-    expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"))).toBeNull();
     expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
   });
 
@@ -389,13 +386,13 @@ describe("configure mode: one placement's settings at a time", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
     await rt.enter();
-    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs"));
+    rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, memberOf("vcs"));
     const done = linkUrls(rt.render()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_SAVE),
     );
     await rt.click(done!);
     expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
     await rt.enter();
     expect(textOf(rt.render())).not.toContain("◀ form ▶");
   });
@@ -403,11 +400,13 @@ describe("configure mode: one placement's settings at a time", () => {
   test("a pick the declaration does not admit reads as no pick", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    rt.sessionState.set(SID, draftKey("vcs2", "depth"), "9");
-    rt.sessionState.set(SID, draftKey("vcs2", "form"), "medium");
+    arrange(rt.ctx, SID);
+    rt.ctx.sessionState.set(SID, EDIT_LIVE_KEY, "open");
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "depth"), "9");
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "form"), "medium");
     expect(textOf(rt.render())).toContain("d-long-2");
     expect(
-      placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k)),
+      placementDrafts(rt.config, (k) => rt.ctx.edits.view.get(SID, k)),
     ).toEqual([]);
   });
 });
@@ -417,8 +416,8 @@ describe("configure mode's drafts are saved into the placement", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
     const drafts = () =>
-      placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k));
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+      placementDrafts(rt.config, (k) => rt.ctx.edits.view.get(SID, k));
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
     );
@@ -429,7 +428,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "long"),
     );
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
+    configurePlacement(rt.ctx, SID, "default", "vcs");
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1"));
     expect(drafts()).toEqual([
       {
@@ -454,13 +453,14 @@ describe("configure mode's drafts are saved into the placement", () => {
       log: (_level, message) => logged.push(message),
     });
     // The save's one event names every placement value it wrote.
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toContain("default/vcs.settings.depth=3");
-    expect(logged[0]).toContain("default/vcs2.settings.detail=true");
+    const saves = logged.filter((l) => l.startsWith("save:"));
+    expect(saves).toHaveLength(1);
+    expect(saves[0]).toContain("default/vcs.settings.depth=3");
+    expect(saves[0]).toContain("default/vcs2.settings.detail=true");
 
     // Released: the session holds no pick, and follows the file again.
-    expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
-    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"))).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "detail"))).toBeNull();
     // The file holds each value in its own placement; the bare ref took the
     // spelling that carries values, and everything else is byte-for-byte.
     const saved = durable.text()!;
@@ -498,7 +498,7 @@ describe("configure mode survives what a placement's settings do to it", () => {
   test("the placement being configured shows its controls whatever its own when says", async () => {
     durable.write(HIDING);
     const rt = configureBar(HIDING);
-    configurePlacement(rt.sessionState, SID, "default", "tag");
+    configurePlacement(rt.ctx, SID, "default", "tag");
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("tag", "show"), "false"),
     );
@@ -507,8 +507,8 @@ describe("configure mode survives what a placement's settings do to it", () => {
     await rt.click(rt.urlWriting(rt.render(), draftKey("tag", "show"), "true"));
     expect(textOf(rt.render())).toContain("☑ show");
     // Out of configure mode, the placement's own gate decides again.
-    rt.sessionState.set(SID, draftKey("tag", "show"), "false");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+    rt.ctx.sessionState.set(SID, draftKey("tag", "show"), "false");
+    rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
     expect(textOf(rt.render())).not.toContain("TAG");
   });
 
@@ -516,7 +516,7 @@ describe("configure mode survives what a placement's settings do to it", () => {
     const src = SRC.replace(`label: 'depth'`, `label: 'max "items" {{ x }}'`);
     durable.write(src);
     const rt = configureBar(src);
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     expect(textOf(rt.render())).toContain(`◀ max "items" {{ x }} 2 ▶`);
   });
 
@@ -527,7 +527,7 @@ describe("configure mode survives what a placement's settings do to it", () => {
     );
     durable.write(src);
     const rt = configureBar(src, "mode");
-    configurePlacement(rt.sessionState, SID, "mode", "vcs2");
+    configurePlacement(rt.ctx, SID, "mode", "vcs2", "vcs");
     const text = textOf(rt.render());
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text).not.toContain("⚠");
@@ -535,24 +535,25 @@ describe("configure mode survives what a placement's settings do to it", () => {
 });
 
 describe("placement drafts are settings, to undo and to save as a preset", () => {
-  test("a configure pick is one undo step, and an undone save brings the draft back", async () => {
+  test("a configure pick is one undo step, and an undone save restores the file", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
     );
     await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
-    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "detail"))).toBeNull();
 
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
     );
     await CLICK_VERBS.get(VERB_SAVE)!(`${SID}/user`, rt.ctx);
-    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "detail"))).toBeNull();
     await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
-    expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBe("true");
+    // A draft is edit mode's own state: it ended with the edit its save closed.
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "detail"))).toBeNull();
   });
 
   test("save as preset writes the placement's draft into the new preset and releases it", async () => {
@@ -564,11 +565,16 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     );
     durable.write(src);
     const rt = configureBar(src, "p");
-    const key = placementDraftKey("p", "vcs2", "detail");
-    configurePlacement(rt.sessionState, SID, "p", "vcs2");
+    const key = placementDraftKey(
+      { preset: "p", id: "vcs2", segment: "vcs" },
+      "detail",
+    );
+    configurePlacement(rt.ctx, SID, "p", "vcs2", "vcs");
     await rt.click(rt.urlWriting(rt.render(), key, "true"));
     await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
-    expect(rt.sessionState.get(SID, key)).toBeNull();
+    expect(rt.ctx.edits.view.get(SID, key)).toBeNull();
+    // The edit holds the preset until its save lands it.
+    await CLICK_VERBS.get(VERB_SAVE)!(`${SID}/user`, rt.ctx);
     const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
     const settingsIn = (preset: string) =>
       [...walkNodes(presetRoot(saved, preset).node)].find(
@@ -596,11 +602,12 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     async (_label, src) => {
       durable.write(src);
       const rt = configureBar(src);
-      configurePlacement(rt.sessionState, SID, "default", "vcs2");
+      configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
       await rt.click(
         rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
       );
       await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
+      await CLICK_VERBS.get(VERB_SAVE)!(`${SID}/user`, rt.ctx);
       const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
       const settingsIn = (preset: string) =>
         [...walkNodes(presetRoot(saved, preset).node)].find(
@@ -612,28 +619,26 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     },
   );
 
-  test("removing a placement releases its unsaved values", async () => {
+  test("a removed placement's draft stays with its id, which nothing else takes", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
+    configurePlacement(rt.ctx, SID, "default", "vcs");
     await rt.click(
       rt.urlWriting(rt.render(), draftKey("vcs", "detail"), "true"),
     );
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const remove = rt.urlWriting(
       rt.render(),
       presetRootKey("default"),
       encodeLayoutOp({ op: "remove", target: "vcs" }),
     );
     await rt.click(remove);
-    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBeNull();
-    // The configure key named it, so it ends with it: a later placement that
-    // takes the id opens with nothing configured.
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
-    // One click, one step: its undo brings the placement and its draft back.
+    // An inserted placement takes a fresh id, so no later placement reads it.
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "detail"))).toBe("true");
+    // One click, one step: its undo brings the placement back, its draft on it.
     await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
-    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "detail"))).toBe("true");
   });
 
   test.each([
@@ -644,7 +649,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     (_label, preset, id) => {
       durable.write(SRC);
       const rt = configureBar(SRC);
-      configurePlacement(rt.sessionState, SID, preset, id);
+      configurePlacement(rt.ctx, SID, preset, id);
       const text = textOf(rt.render());
       expect(text).toContain("vcs2");
       expect(text).not.toContain("d-short-2");
@@ -660,10 +665,12 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
         e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
     ]) {
       await rt.enter();
-      rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs2"));
-      const leaving = linkUrls(rt.render()).find((u) => effectsOf(u).some(leaves));
+      rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, memberOf("vcs2"));
+      const leaving = linkUrls(rt.render()).find((u) =>
+        effectsOf(u).some(leaves),
+      );
       await rt.click(leaving!);
-      expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
+      expect(rt.ctx.edits.view.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
       expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
     }
   });
@@ -677,7 +684,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     durable.write(src);
     const rt = configureBar(src);
     expect(textOf(rt.render())).not.toContain("d-long-2");
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     expect(textOf(rt.render())).toContain("◀ form ▶");
   });
 
@@ -688,44 +695,62 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     );
     durable.write(src);
     const rt = configureBar(src, "2col");
-    configurePlacement(rt.sessionState, SID, "2col", "vcs2");
+    configurePlacement(rt.ctx, SID, "2col", "vcs2", "vcs");
     const text = textOf(rt.render());
     expect(text).toMatch(/◀ depth 2 ▶/);
     expect(text).not.toContain("⚠");
+  });
+
+  test("a draft in a preset the session switched away from is still a draft a save writes", () => {
+    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
+    durable.write(src);
+    const rt = configureBar(src, "b");
+    const pick = (k: string) => rt.ctx.edits.view.get(SID, k);
+    arrange(rt.ctx, SID);
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "depth"), "3");
+    rt.ctx.sessionState.set(
+      SID,
+      placementDraftKey({ preset: "b", id: "vcs2", segment: "vcs" }, "depth"),
+      "1",
+    );
+    expect(placementDrafts(rt.config, pick).map((d) => d.preset)).toEqual([
+      "default",
+      "b",
+    ]);
+    expect(
+      presetSnapshot(rt.config, pick).placements.map((d) => d.preset),
+    ).toEqual(["default"]);
+  });
+
+  test("two presets that render one row, holding different drafts for it, refuse the save and keep both", async () => {
+    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
+    durable.write(src);
+    const rt = configureBar(src);
+    arrange(rt.ctx, SID);
+    const keyB = placementDraftKey(
+      { preset: "b", id: "vcs2", segment: "vcs" },
+      "depth",
+    );
+    rt.ctx.sessionState.set(SID, draftKey("vcs2", "depth"), "3");
+    rt.ctx.sessionState.set(SID, keyB, "1");
+    const save = linkUrls(rt.render()).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_SAVE),
+    );
+    await expect(rt.click(save!)).rejects.toThrow(
+      /presets "default" and "b" both render root .* different values for vcs2\.depth/,
+    );
+    expect(durable.text()).toBe(src);
+    expect(rt.ctx.edits.view.get(SID, keyB)).toBe("1");
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs2", "depth"))).toBe("3");
   });
 
   test("configure mode names its preset: another preset's placement of the id stays closed", () => {
     const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
     durable.write(src);
     const rt = configureBar(src, "b");
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    configurePlacement(rt.ctx, SID, "default", "vcs2", "vcs");
     expect(textOf(rt.render())).not.toContain("form:");
-    configurePlacement(rt.sessionState, SID, "b", "vcs2");
+    configurePlacement(rt.ctx, SID, "b", "vcs2", "vcs");
     expect(textOf(rt.render())).toContain("◀ form ▶");
-  });
-
-  test("a removal from a row two presets share ends both presets' drafts, and says so", async () => {
-    // `b` stages the config's own root, so it renders the row `default` does.
-    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
-    durable.write(src);
-    const rt = configureBar(src);
-    const inB = placementDraftKey("b", "vcs", "detail");
-    rt.sessionState.set(SID, inB, "true");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const remove = rt.urlWriting(
-      rt.render(),
-      presetRootKey("default"),
-      encodeLayoutOp({ op: "remove", target: "vcs" }),
-    );
-    const logged: string[] = [];
-    const { verb, value } = linkClick(remove);
-    const [effect] =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    await CLICK_VERBS.get(effect!.verb)!(effect!.value, {
-      ...rt.ctx,
-      log: (_level, message) => logged.push(message),
-    });
-    expect(rt.sessionState.get(SID, inB)).toBeNull();
-    expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);
   });
 });

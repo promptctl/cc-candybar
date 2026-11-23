@@ -13,7 +13,7 @@
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, linkUrls } from "./helpers/frame";
 import { picked, selectionFor } from "./helpers/selection";
-import { configurePlacement } from "./helpers/configure";
+import { arrange, configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
@@ -34,6 +34,9 @@ const SID = sessionIdOf("s1");
 // this test reads as "past the threshold".
 const THEME = "nord";
 const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
+
+// Every placement here is a segment placed bare, so its id is its segment's.
+const bare = (id: string) => ({ preset: "default", id, segment: id });
 
 const withRoot = (root: string): string => `{ root: ${root} }`;
 const BLOCK_ONLY = withRoot("{ v: [ { h: ['block'] } ] }");
@@ -60,7 +63,7 @@ function thresholdBar(src: string, utilization: number) {
     palettes: ALLOWED,
     sessionId: SID,
     sessionState,
-    history: durable.historyFor(sessionState),
+    history: durable.historyFor,
     host: durable.host,
   });
   const { config } = rig;
@@ -76,7 +79,7 @@ function thresholdBar(src: string, utilization: number) {
     }).frame;
   // The one stepper link that steps `setting` of `id` by `by`.
   const stepper = (id: string, setting: string, by: number): string => {
-    const key = placementDraftKey("default", id, setting);
+    const key = placementDraftKey(bare(id), setting);
     const hits = linkUrls(render()).filter((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === String(by)),
     );
@@ -84,9 +87,9 @@ function thresholdBar(src: string, utilization: number) {
     return hits[0]!;
   };
   const pick = (id: string, setting: string): string | null =>
-    sessionState.get(SID, placementDraftKey("default", id, setting));
+    rig.ctx.edits.view.get(SID, placementDraftKey(bare(id), setting));
   // `rig.click` goes through the verb the URL names — `dispatch` included,
-  // which is what turns a refused effect into the bar's transient `click.error`.
+  // which is what turns a refused effect into the bar's transient `candybar.clickError`.
   return { ...rig, render, stepper, pick };
 }
 
@@ -96,7 +99,7 @@ const roleBg = (role: string): string => getThemePalette(THEME)!.get(role)!.hex;
 describe("block's thresholds are settings configure mode steps", () => {
   test("lowering the warning threshold from the bar recolours the cell on the next render", async () => {
     const rt = thresholdBar(BLOCK_ONLY, 45);
-    configurePlacement(rt.sessionState, SID, "default", "block");
+    configurePlacement(rt.ctx, SID, "default", "block");
     // 45% sits under the bundled warnAt of 50: calm.
     expect(backgroundsOf(rt.render())).not.toContain(roleBg("warning"));
     // The stepper strides by the declared step, 5: one click lands on 45.
@@ -107,7 +110,7 @@ describe("block's thresholds are settings configure mode steps", () => {
 
   test("a step that would drop errorAt below warnAt is refused, naming both", async () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
-    configurePlacement(rt.sessionState, SID, "default", "block");
+    configurePlacement(rt.ctx, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
     for (let i = 0; i < 6; i++)
       await rt.click(rt.stepper("block", "errorAt", -5));
@@ -118,7 +121,9 @@ describe("block's thresholds are settings configure mode steps", () => {
     await expect(rt.click(down)).rejects.toThrow(reason);
     expect(rt.pick("block", "errorAt")).toBe("50");
     // The reason is what the next render's strip shows.
-    expect(lastClickError(rt.sessionState, SID)?.text ?? null).toMatch(reason);
+    expect(lastClickError(rt.ctx.edits.view, SID)?.text ?? null).toMatch(
+      reason,
+    );
     // The other way round is the same relation: warnAt may not climb past it.
     const up = rt.stepper("block", "warnAt", 5);
     await expect(rt.click(up)).rejects.toThrow(
@@ -129,8 +134,10 @@ describe("block's thresholds are settings configure mode steps", () => {
 
   test("a set-state batch holding a descending pair is refused whole", async () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
-    const warn = placementDraftKey("default", "block", "warnAt");
-    const error = placementDraftKey("default", "block", "errorAt");
+    // A placement's draft is written inside an edit.
+    arrange(rt.ctx, SID);
+    const warn = placementDraftKey(bare("block"), "warnAt");
+    const error = placementDraftKey(bare("block"), "errorAt");
     const setState = CLICK_VERBS.get("set-state")!;
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
     expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx)).toThrow(
@@ -147,14 +154,14 @@ describe("block's thresholds are settings configure mode steps", () => {
 describe("a stride wider than 1 reaches both ends", () => {
   test("a step past a bound stops on it; only a step from the bound wraps", async () => {
     const rt = thresholdBar(withRoot("{ v: [ { h: ['session'] } ] }"), 0);
-    configurePlacement(rt.sessionState, SID, "default", "session");
-    const budget = placementDraftKey("default", "session", "budget");
-    rt.sessionState.set(SID, budget, "9998");
+    configurePlacement(rt.ctx, SID, "default", "session");
+    const budget = placementDraftKey(bare("session"), "budget");
+    rt.ctx.sessionState.set(SID, budget, "9998");
     await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("10000");
     await rt.click(rt.stepper("session", "budget", 5));
     expect(rt.pick("session", "budget")).toBe("0");
-    rt.sessionState.set(SID, budget, "3");
+    rt.ctx.sessionState.set(SID, budget, "3");
     await rt.click(rt.stepper("session", "budget", -5));
     expect(rt.pick("session", "budget")).toBe("0");
     await rt.click(rt.stepper("session", "budget", -5));

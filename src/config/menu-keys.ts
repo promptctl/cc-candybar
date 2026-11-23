@@ -3,8 +3,8 @@
 // and the renderer (which READS openness + emits the toggle) agree on "which key
 // holds which open menu". A `{{ menu }}` helper is context-free about its NAME
 // (it cannot see the placement it sits in), so the loader and the render walk
-// both derive identity from the same two facts — the host placement's id
-// (`placementId`) and the menu's own apply-action name — and MUST produce
+// both derive identity from the same two facts — the host placement
+// (`PlacementIdentity`) and the menu's own apply-action name — and MUST produce
 // identical strings or a click would
 // write a key the render never reads. Keeping the rule in one module makes that
 // agreement structural rather than a coincidence of two copies.
@@ -13,19 +13,29 @@
 //   • member  = the menu's apply-action name — unique per menu within a segment,
 //               so two menus in ONE segment are distinct.
 //   • stateKey = the SessionState key whose value names the open member. By
-//               DEFAULT each menu owns a UNIQUE key (`menus.<seg>.<apply>`), so
+//               DEFAULT each menu owns a UNIQUE key (`menus.<preset>.<id>.<segment>.<apply>`), so
 //               it toggles only itself — menus are INDEPENDENT, and two
 //               placements of one segment are two menus. Passing an
 //               explicit shared key makes sibling menus share one key
-//               (`menus.<key>`); one key holds one open member, so they become
+//               (`menus._<key>`); one key holds one open member, so they become
 //               mutually exclusive (an accordion) — exactly group sugar's shared-
 //               key mechanism, selected by a VALUE not a mode
 //               [LAW:dataflow-not-control-flow]. There is no implicit "the row is
 //               the key" position magic: identity depends only on names a reader
 //               can see in the template, never on tree position.
 
-import { ident } from "./ident.js";
-import { MENU_NS, MENU_PAGE_NS } from "./reserved-names.js";
+import { escapedIdent, unescapedIdent } from "./ident.js";
+import {
+  placementOfKeyScope,
+  placementKeyScope,
+  type PlacementIdentity,
+} from "./placement-identity.js";
+import {
+  EDIT_NS,
+  MENU_NS,
+  MENU_PAGE_NS,
+  isEditNamespaced,
+} from "./reserved-names.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -51,38 +61,78 @@ export function menuMember(applyName: string): string {
   return applyName;
 }
 
+// [LAW:one-source-of-truth] A menu's state lives in its host's namespace: a
+// menu edit chrome hosts (its `✚` libraries, a configured placement's lists)
+// is edit mode's own, so it is minted under `edit.` and leaves with the edit.
+// No authored placement id sits there and the loader refuses an authored
+// shared key that would, so the scope is a fact of the host's name, read once
+// per key and carried in it: a page cursor sits in its menu's scope.
+type MenuScope = typeof EDIT_NS | "";
+function menuScope(host: string): MenuScope {
+  return isEditNamespaced(host) ? EDIT_NS : "";
+}
+
 // [LAW:single-enforcer] THE state key for a menu. Independent (no shared key):
-// unique per (placement, apply) so the menu toggles only itself. Shared key:
+// unique per (placement, apply) so the menu toggles only itself, a placement
+// being its preset, id and segment (placement-identity.ts). Shared key:
 // the key all siblings passing the same string agree on, so one open member
 // wins (accordion). The shared form ignores the placement on purpose — that is
 // how menus in DIFFERENT placements become mutually exclusive.
+//
+// [LAW:types-are-the-program] Spelled injectively and prefix-free: every
+// authored part is `escapedIdent`, which emits no `.` and no `_`, so an
+// independent key is exactly four parts under the namespace (the placement's
+// three and the apply action) and a shared one
+// exactly one part led by `_`. No key is another's dot-path prefix, so a
+// shared key `s` and the menus of a placement `s` are two states, and no
+// two spellings of a name meet in one key.
 export function menuStateKey(
-  placementId: string,
+  host: PlacementIdentity,
   applyName: string,
   sharedKey: string | undefined,
 ): string {
   return sharedKey !== undefined
     ? sharedMenuStateKey(sharedKey)
-    : MENU_NS + ident(placementId) + "." + ident(applyName);
+    : `${menuScope(host.id)}${MENU_NS}${placementKeyScope(host)}.${escapedIdent(applyName)}`;
 }
 
-// [LAW:decomposition] The shared arm of that derivation, named so the loader's
-// reserved-key error can quote the key an authored group WOULD derive without
-// inventing a segment and apply name to ask for it (brandon-menus-du8). It is the
-// arm `menuStateKey` itself takes, so there is no second spelling to drift: the
-// `ident()` collapse here is exactly the one the gate reasons about, and the two
-// ranges are disjoint by construction — a shared key holds no dot after the
-// namespace, an independent one holds exactly one.
+// [LAW:decomposition] The shared arm of that derivation, named so the settings
+// menu and edit chrome can key an accordion of their own lists the way a
+// `{{ menu "x" (dict "key" …) }}` does.
 export function sharedMenuStateKey(sharedKey: string): string {
-  return MENU_NS + ident(sharedKey);
+  return `${menuScope(sharedKey)}${MENU_NS}_${escapedIdent(sharedKey)}`;
+}
+
+// [LAW:one-source-of-truth] A menu's state or page key in words: the shared
+// key an accordion was named by, or the apply action and the placement a menu
+// sits on. Undefined for a key no menu derivation spells.
+export function menuOfKey(
+  key: string,
+): { readonly menu: string; readonly page: boolean } | undefined {
+  const scoped = key.slice(menuScope(key).length);
+  const page = scoped.startsWith(MENU_PAGE_NS);
+  const ns = page ? `${MENU_PAGE_NS}${MENU_NS}` : MENU_NS;
+  if (!scoped.startsWith(ns)) return undefined;
+  const rest = scoped.slice(ns.length);
+  if (rest.startsWith("_")) {
+    const shared = unescapedIdent(rest.slice(1));
+    return shared === undefined ? undefined : { menu: shared, page };
+  }
+  const parts = rest.split(".");
+  const host = placementOfKeyScope(parts.slice(0, 3).join("."));
+  const apply = unescapedIdent(parts[3] ?? "");
+  return host === undefined || apply === undefined || parts.length !== 4
+    ? undefined
+    : { menu: `${apply} on ${host.id}`, page };
 }
 
 // The synthesized cycle action a menu's disclosure toggle realizes: writing its
 // state key between MENU_CLOSED and its member. Named per (stateKey, member) so
 // menus sharing a key contribute distinct cycles on it — the existing same-key
-// validator merge unions their members into one gate.
+// validator merge unions their members into one gate. The member is escaped
+// as the key's parts are, so two members never nest.
 export function menuActionName(stateKey: string, member: string): string {
-  return stateKey + "." + member;
+  return `${stateKey}.${escapedIdent(member)}`;
 }
 
 // [LAW:single-enforcer] THE page-cursor key a menu's picker body paginates by —
@@ -95,11 +145,12 @@ export function menuActionName(stateKey: string, member: string): string {
 // every open. [LAW:one-source-of-truth] The synthesized state VARIABLE is
 // named by this same string (the disclosure-var convention), so the renderer
 // reads the live page via this one name. It sits in its own reserved
-// namespace, beside the state key rather than under it: no declared name may
-// nest under another (loader/nesting.ts), and under `menus.` it would nest
-// under a shared key such as `menus.page`.
+// namespace, beside the state key rather than under it, since no declared name
+// may nest under another (loader/nesting.ts), and in its menu's scope, so an
+// edit-mode list's page leaves with the edit.
 export function menuPageKey(stateKey: string): string {
-  return MENU_PAGE_NS + stateKey;
+  const scope = menuScope(stateKey);
+  return `${scope}${MENU_PAGE_NS}${stateKey.slice(scope.length)}`;
 }
 
 // [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE

@@ -56,11 +56,8 @@ import type {
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
-import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
-import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
-import { disclosureNest } from "../config/disclosure-nest.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
@@ -765,13 +762,13 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   const time = new TurnTime();
   const now = () => time.at;
   const log = turnLog.add;
-  const sessionState = new SessionState(inputs.stored.sessions);
-  // A legacy edit-mode flag has no draft after a restart.
-  for (const sid of Object.keys(inputs.stored.sessions))
-    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
-  const edits = new EditTransactions(sessionState, log);
+  const store = new SessionState(inputs.stored.sessions);
+  const edits = new EditTransactions(store, log);
+  // [LAW:one-source-of-truth] Every reader takes the session as its open
+  // edit shows it.
+  const sessionState = edits.view;
   const settingsHistory = new SettingsHistory(
-    sessionState,
+    store,
     log,
     inputs.stored.history,
   );
@@ -805,11 +802,13 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, {
-            gate: gates.state.gateFor(config),
-            nest: () => disclosureNest(config),
-            edit: edits.draft(sessionId)?.navigationScope ?? null,
-          }),
+          (edits.draft(sessionId)?.navigation ?? navigationHistory).depth(
+            sessionId,
+            sessionState,
+            {
+              gate: gates.state.gateFor(config),
+            },
+          ),
       }),
     },
     {
@@ -910,10 +909,10 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       mint,
       acts,
       configWrites,
-      sessionStats: () => sessionState.stats(),
+      sessionStats: () => store.stats(),
     },
     {
-      "session-state": () => sessionState.drain(),
+      "session-state": () => store.drain(),
       "settings-history": () => settingsHistory.drain(),
     },
   );

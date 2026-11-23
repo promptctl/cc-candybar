@@ -264,15 +264,14 @@ export interface PlacementDraft {
 }
 
 // Every placement setting the session holds a pick for that differs from the
-// value the file gives that placement, in the preset the session renders — a
-// pick in another preset is one the render ignores, so it is no draft. A pick
-// the declaration no longer admits parses to nothing, and is no draft either:
-// the render shows the file's value for it.
-export function placementDrafts(
+// value the file gives that placement, in one preset's layout. A pick the
+// declaration no longer admits parses to nothing, and is no draft: the render
+// shows the file's value for it.
+export function placementDraftsIn(
   config: DslConfig,
+  preset: string,
   sessionPick: (key: string) => string | null,
 ): readonly PlacementDraft[] {
-  const { preset } = sessionGlobals(config, sessionPick);
   return slotsOf(config, preset).flatMap(
     ({ id, setting, key, decl, saved }) => {
       const pick = sessionPick(key);
@@ -283,6 +282,19 @@ export function placementDrafts(
         ? []
         : [{ preset, id, setting, key, value }];
     },
+  );
+}
+
+// [LAW:no-silent-failure] A save writes every placement draft the edit holds,
+// whichever preset's layout it is filed under: a draft's key names its preset,
+// so a preset switched away from mid-edit still has its drafts, and an ended
+// edit drops what a save did not write.
+export function placementDrafts(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): readonly PlacementDraft[] {
+  return presetNames(config.presets).flatMap((preset) =>
+    placementDraftsIn(config, preset, sessionPick),
   );
 }
 
@@ -389,7 +401,9 @@ export function presetSnapshot(
       baseOf(config, sessionPick),
       (row) => row.configKey,
     ),
-    placements: placementDrafts(config, sessionPick),
+    // The copy is of the preset the session is in, so a draft filed under
+    // another preset is not part of it.
+    placements: placementDraftsIn(config, session.preset, sessionPick),
   };
 }
 
@@ -512,6 +526,18 @@ export function fileHeldSettings(raw: RawDslConfig): ReadonlySet<string> {
   );
 }
 
+// [LAW:one-source-of-truth] How many drafts a save writes, settings and
+// placements alike: what the save cell counts, and what an edit has to keep.
+export function unsavedCount(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): number {
+  return (
+    settingDrafts(config, sessionPick).length +
+    placementDrafts(config, sessionPick).length
+  );
+}
+
 // [LAW:one-source-of-truth] What the menu's save cell counts and its controls
 // mark: every draft a save writes, settings and placements alike, and, per
 // setting, whether its reset would change anything — the session holds a
@@ -533,7 +559,7 @@ export function settingCounts(
   );
   const themeDefault = themeDefaultSave(config, sessionPick);
   return {
-    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    unsaved: unsavedCount(config, sessionPick),
     resettable,
     themeDefault:
       themeDefault.kind === "look" && themeDefault.differs

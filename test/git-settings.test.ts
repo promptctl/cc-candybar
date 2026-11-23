@@ -129,7 +129,10 @@ describe("gitaculous settings", () => {
   // or the fact would stay after the user unticks it on the bar.
   test("a configure-mode draft turns a fact off in its copy only", () => {
     const { full, lean } = renderPair({}, "expanded", {
-      [placementDraftKey("default", "lean", "sha")]: "false",
+      [placementDraftKey(
+        { preset: "default", id: "lean", segment: "gitaculous" },
+        "sha",
+      )]: "false",
     });
     expect(full).toContain(" abc1234");
     expect(lean).toBe(full.replace(" abc1234", ""));

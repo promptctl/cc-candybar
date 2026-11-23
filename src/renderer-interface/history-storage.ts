@@ -2,8 +2,6 @@
 // renderer's history writes them, and the host's file stores them
 // (src/daemon/history-file.ts).
 
-import { SETTING_PROJECTIONS } from "../config/setting-projections";
-import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
 import { type SessionId } from "../daemon/foundations/session-id";
 import { layerRoleOf, type LayerRole } from "../config/layer-role";
 import { isPlainObject } from "../config/loader/validate-core";
@@ -94,15 +92,3 @@ export interface HistoryStorage {
   // that order.
   save(state: ReadonlyMap<SessionId, SessionHistory>): void;
 }
-
-// [LAW:one-source-of-truth] The session keys a settings control writes: a
-// display setting's, and every placement setting's unsaved value, which
-// configure mode mints under one namespace. Every other session key — an open
-// menu, a page cursor, the edit-mode toggle — is the menu's own state, and
-// undoing it would be undoing navigation.
-const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey),
-);
-
-export const isSettingKey = (key: string): boolean =>
-  SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
