@@ -4,15 +4,22 @@
     {
       "version": "pr-949",
       "ref": "refs/pull/949/merge",
-      "sha": "eaea0091c581b8193aec0de0393630c8b6b5568d",
-      "timestamp": "2026-11-24T13:55:28.028Z",
+      "sha": "2d4330711db1c50c0c31b7e260c040c3c493eedb",
+      "timestamp": "2026-11-24T14:15:25.939Z",
       "commits": [
         {
-          "sha": "eaea0091c581b8193aec0de0393630c8b6b5568d",
+          "sha": "2d4330711db1c50c0c31b7e260c040c3c493eedb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T06:54:30-07:00",
-          "message": "Merge 1f41cd4026be4f8be26107bfb378be6ed7d1166f into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+          "timestamp": "2026-11-24T14:14:18Z",
+          "message": "Merge 86f92c593b3057ff8dce760efc74ba7f21eee735 into f67f4c450a05e758242afad8216ea01f3ed1d0f9\n"
+        },
+        {
+          "sha": "86f92c593b3057ff8dce760efc74ba7f21eee735",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T07:14:01-07:00",
+          "message": "fix(tools): a path no zone names is refused, and the shared daemon start reports every failure (candybar-later-fixes-nwu9.1d4)\n\nLaw review pass 2 on PR 949:\n\n- The zone table places every root. audits/, which runs under Jest, sits\n  with the suite. A path no row names is in no zone and nothing may\n  import it, so a tool can no longer reach the suite through an unlisted\n  root.\n- The package root comes from scripts/lib/repo.cjs's own location, not\n  the working directory.\n- The shell a tool takes is a closed type. The worker env is merged\n  where an in-worker daemon starts.\n- A cleanup after a failure reports its own error beside the failure\n  (failAfter), never in its place.\n- The readiness probe returns a tagged outcome. The bar uses the wire's\n  reply budget.\n- The spawner headers name the callers they serve: the tests and the\n  bar tools.\n"
         },
         {
           "sha": "1f41cd4026be4f8be26107bfb378be6ed7d1166f",
