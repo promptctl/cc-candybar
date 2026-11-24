@@ -10,6 +10,7 @@ import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
 import type { DaemonEvent } from "../utils/event-hold";
+import type { StoreUnsavedWarning } from "../daemon/foundations/stored-file";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -76,6 +77,7 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: LifelineWarning | null;
+  readonly unsaved: readonly StoreUnsavedWarning[];
   readonly held: readonly DaemonEvent[];
 }
 

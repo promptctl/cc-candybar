@@ -397,6 +397,7 @@ export function actingWorld(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    reported: () => {},
     unheard,
   };
 }

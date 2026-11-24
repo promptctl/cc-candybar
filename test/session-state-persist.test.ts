@@ -12,13 +12,16 @@ import { SessionState } from "../src/renderer/session-state";
 import {
   SESSION_STATE_FILE,
   SessionFile,
+  ephemeralSessionFile,
+  type Loaded,
   type SessionFileStorage,
   type SessionPicks,
 } from "../src/daemon/session-state-file";
-import {
-  EPHEMERAL_HISTORY_STORAGE,
-  HeldStores,
-} from "../src/daemon/held-stores";
+import { HeldStores } from "../src/daemon/held-stores";
+import { ORDER_PERIOD_MS } from "../src/daemon/held-file";
+import { reportText } from "../src/daemon/foundations/stored-file";
+import type { Timekeeper } from "../src/time";
+import { heldClock } from "./helpers/held-clock";
 import { throughout, until } from "../scripts/lib/until";
 import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -47,21 +50,27 @@ describe("the session state's file", () => {
   const daemonOver = (
     session: SessionFileStorage<SessionPicks>,
     maxSessions?: number,
+    clock: Pick<Timekeeper, "after"> = systemTimekeeper,
   ) => {
     const stores = new HeldStores(
-      {
-        session,
-        history: EPHEMERAL_HISTORY_STORAGE,
-      },
-      () => {},
+      { session, history: ephemeralSessionFile() },
+      clock,
     );
-    stores.load();
+    const [load] = stores.load();
     const state = new SessionState(stores.current().sessions, maxSessions);
     const turn = (write: (state: SessionState) => void): void => {
       write(state);
       stores.take(state.drain());
     };
-    return { state, turn, stores };
+    return { state, turn, stores, said: reportText(load!) };
+  };
+  // What the file reads as, as a load finds it.
+  const readOf = (
+    session: SessionFileStorage<SessionPicks>,
+  ): Loaded<SessionPicks> => {
+    const { result } = session.observe();
+    if (result.kind === "failed") throw new Error(result.reason);
+    return result.value;
   };
   const storage = (log?: (level: string, line: string) => void) =>
     new SessionFile(SESSION_STATE_FILE, file, systemTimekeeper, 0, log);
@@ -115,14 +124,15 @@ describe("the session state's file", () => {
       file,
       JSON.stringify({ "a/b": { theme: "nord" }, [S1]: { theme: "dracula" } }),
     );
-    const logged: string[] = [];
-    const loaded = storage((_level, line) => logged.push(line)).load();
-    expect([...loaded]).toEqual([[S1, { theme: "dracula" }]]);
-    expect(logged).toContainEqual(
-      expect.stringMatching(
-        /^session-state load: dropped session key "a\/b": session id contains a path separator/,
-      ),
-    );
+    const { sessions, dropped } = readOf(storage());
+    expect([...sessions]).toEqual([[S1, { theme: "dracula" }]]);
+    expect(dropped).toEqual([
+      {
+        session: "a/b",
+        part: null,
+        why: expect.stringMatching(/^session id contains a path separator/),
+      },
+    ]);
   });
 
   // The write syncs to the real disk, and a datasync on a busy CI runner has
@@ -403,6 +413,44 @@ describe("the session state's file", () => {
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
+  // A restart keeps the sessions in use: one heard since the last write with
+  // nothing moved keeps its place by the order the store wrote at its close.
+  it("a restart at the bound keeps a session heard since the last write", async () => {
+    const first = daemonOver(storage(), 2);
+    first.turn((s) => s.set(A_2, "t", "1"));
+    first.turn((s) => s.set(B, "t", "2"));
+    first.turn((s) => s.heard(A_2));
+    await first.stores.close();
+    expect(Object.keys(onDisk())).toEqual(["b", "a"]);
+
+    const reborn = await restarted(2);
+    reborn.set(C, "t", "3");
+    expect(reborn.get(A_2, "t")).toBe("1");
+    expect(reborn.get(B, "t")).toBeNull();
+  });
+
+  // Killed with no close, the file holds the order the period last wrote.
+  it("a restart after a kill inside the order period keeps the order the period wrote", async () => {
+    const clock = heldClock(new Date(1_000_000));
+    const session = storage();
+    const first = daemonOver(session, 3, clock);
+    first.turn((s) => s.set(A_2, "t", "1"));
+    first.turn((s) => s.set(B, "t", "2"));
+    first.turn((s) => s.set(C, "t", "3"));
+    await session.flush();
+    first.turn((s) => s.heard(A_2));
+    clock.advance(ORDER_PERIOD_MS);
+    // What a kill loses: a hearing after the period's write.
+    first.turn((s) => s.heard(B));
+    await session.flush();
+    expect(Object.keys(onDisk())).toEqual(["b", "c", "a"]);
+
+    const reborn = await restarted(3);
+    reborn.set(sessionIdOf("d"), "t", "4");
+    expect(reborn.get(B, "t")).toBeNull();
+    expect(reborn.get(A_2, "t")).toBe("1");
+  });
+
   it("wrong-shape file hydrates to empty state", async () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: 42 } }));
     const ss = await restarted();
@@ -452,10 +500,8 @@ describe("the session state's file", () => {
 
   it("clear() of the last key removes the session entirely (no empty husk)", async () => {
     const { turn, stores } = daemonOver(storage());
-    turn((s) => {
-      s.set(S1, "endcaps", "plain");
-      s.clear(S1, "endcaps");
-    });
+    turn((s) => s.set(S1, "endcaps", "plain"));
+    turn((s) => s.clear(S1, "endcaps"));
     await stores.close();
     expect(onDisk()).toEqual({});
   });
@@ -507,32 +553,129 @@ describe("the session state's file", () => {
       file,
       '{"__proto__": {"theme": "evil"}, "s1": {"theme": "nord"}}',
     );
-    const logged: string[] = [];
-    const loaded = storage((_level, line) => logged.push(line)).load();
-    expect([...loaded]).toEqual([[S1, { theme: "nord" }]]);
+    const { sessions, dropped } = readOf(storage());
+    expect([...sessions]).toEqual([[S1, { theme: "nord" }]]);
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
-    expect(logged).toContainEqual(
-      'session-state load: dropped session key "__proto__": session id is "__proto__", which is never a session id',
-    );
-  });
-
-  // [LAW:nothing-unseen] Every load says what it found, so a missing file
-  // and a full one are told apart.
-  it("each load says whether there was a file, and what it loaded and dropped", () => {
-    const logged: string[] = [];
-    const log = (_level: string, line: string): void => void logged.push(line);
-    storage(log).load();
-    writeFileSync(
-      file,
-      JSON.stringify({ s1: { theme: "nord" }, s2: { theme: 42 } }),
-    );
-    storage(log).load();
-    expect(logged).toEqual([
-      "session-state load: no file, starting empty",
-      'session-state load: dropped session "s2": its value has a "theme" that is not a string',
-      "session-state loaded sessions=1 dropped=1",
+    expect(dropped).toEqual([
+      {
+        session: "__proto__",
+        part: null,
+        why: 'session id is "__proto__", which is never a session id',
+      },
     ]);
   });
+
+  // [LAW:nothing-unseen] A load says what it dropped, and a missing file has
+  // nothing to say.
+  it("a load says what it dropped, and a missing file says nothing", async () => {
+    const missing = daemonOver(storage());
+    expect(missing.said).toBeNull();
+    await missing.stores.close();
+    writeFileSync(
+      file,
+      JSON.stringify({
+        s1: { theme: "nord", "menus.edit_default_insertSeg": "x" },
+        s2: { theme: 42 },
+        s3: {},
+      }),
+    );
+    const { state, said, stores } = daemonOver(storage());
+    expect(state.get(S1, "theme")).toBe("nord");
+    expect(said).toBe(
+      `Session picks (${file}): the load dropped what this build does not read: menus.edit_default_insertSeg (no menu is keyed that way in this build) in "s1"; a session (its value has a "theme" that is not a string) in "s2"; a session (its value holds no picks) in "s3"`,
+    );
+    await stores.close();
+  });
+
+  // [LAW:no-silent-failure] Nothing is written over bytes the store could not
+  // read: they are set aside beside the file, and the store saves on from
+  // empty.
+  it.each([
+    ["a stray byte", '{"s1":{"theme":"nord"}}x', /is not JSON/],
+    [
+      "a top level that is no object of sessions",
+      '["s1"]',
+      /is not an object keyed by session/,
+    ],
+  ])(
+    "a file holding %s is kept beside itself, and the store saves on",
+    async (_name, bytes, reason) => {
+      writeFileSync(file, bytes);
+      const { turn, said, stores } = daemonOver(storage());
+      turn((s) => s.set(S2, "theme", "dracula"));
+      await stores.close();
+      const [aside] = fs.readdirSync(dir).filter((f) => f.includes(".unread-"));
+      expect(readFileSync(join(dir, aside!), "utf8")).toBe(bytes);
+      expect(onDisk()).toEqual({ s2: { theme: "dracula" } });
+      expect(said).toMatch(reason);
+      expect(said).toContain(
+        `it is kept as ${join(dir, aside!)}, and the store started again from empty`,
+      );
+    },
+  );
+
+  // [LAW:single-enforcer] A link is set aside and saved where it points, so
+  // it stays a link and the unread bytes are never written over.
+  test("a symlinked file that does not read is kept beside its target, and the link stays a link", async () => {
+    const target = join(dir, "dotfiles", "session-state.json");
+    fs.mkdirSync(join(dir, "dotfiles"));
+    writeFileSync(target, "{ not json");
+    fs.symlinkSync(target, file);
+    const { turn, said, stores } = daemonOver(storage());
+    turn((s) => s.set(S2, "theme", "dracula"));
+    await stores.close();
+    const [aside] = fs
+      .readdirSync(join(dir, "dotfiles"))
+      .filter((f) => f.includes(".unread-"));
+    expect(readFileSync(join(dir, "dotfiles", aside!), "utf8")).toBe(
+      "{ not json",
+    );
+    expect(fs.lstatSync(file).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(readFileSync(target, "utf8"))).toEqual({
+      s2: { theme: "dracula" },
+    });
+    expect(said).toContain(`it is kept as ${join(dir, "dotfiles", aside!)}`);
+  });
+
+  const asRoot = process.getuid?.() === 0;
+  (asRoot ? it.skip : it)(
+    "a file the daemon may not read is kept beside itself, and the store saves on",
+    async () => {
+      writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }), {
+        mode: 0o000,
+      });
+      const { turn, said, stores } = daemonOver(storage());
+      turn((s) => s.set(S2, "theme", "dracula"));
+      await stores.close();
+      const [aside] = fs.readdirSync(dir).filter((f) => f.includes(".unread-"));
+      fs.chmodSync(join(dir, aside!), 0o600);
+      expect(JSON.parse(readFileSync(join(dir, aside!), "utf8"))).toEqual({
+        s1: { theme: "nord" },
+      });
+      expect(onDisk()).toEqual({ s2: { theme: "dracula" } });
+      expect(said).toMatch(/EACCES/);
+    },
+  );
+
+  // [LAW:no-silent-failure] A file that can be neither read nor set aside is
+  // never saved to, and the bar says so for as long as the daemon runs.
+  (asRoot ? it.skip : it)(
+    "a file that can be neither read nor set aside is left as it was",
+    async () => {
+      writeFileSync(file, "{ not json");
+      fs.chmodSync(dir, 0o500);
+      try {
+        const { turn, said, stores } = daemonOver(storage());
+        turn((s) => s.set(S2, "theme", "dracula"));
+        await stores.close();
+        expect(readFileSync(file, "utf8")).toBe("{ not json");
+        expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
+        expect(said).toMatch(/setting it aside failed \(EACCES/);
+      } finally {
+        fs.chmodSync(dir, 0o700);
+      }
+    },
+  );
 
   // [LAW:no-silent-failure] Only the file's JSON is read as corrupt: a throw
   // past it is a bug, and reaches the caller.
@@ -551,7 +694,7 @@ describe("the session state's file", () => {
       0,
       (_level, line) => logged.push(line),
     );
-    expect(() => throwing.load()).toThrow("a bug in the parse");
+    expect(() => throwing.observe()).toThrow("a bug in the parse");
     expect(logged.join("\n")).not.toMatch(/corrupt JSON/);
   });
 });

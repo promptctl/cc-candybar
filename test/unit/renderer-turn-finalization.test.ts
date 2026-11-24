@@ -88,13 +88,19 @@ function rig(
       configWrites: { close: () => fault.closeJournal?.(say) },
     },
     {
-      "session-state": () => {
-        fault.state?.();
-        return state.drain();
+      "session-state": {
+        heard: (session) => state.heard(session),
+        drain: () => {
+          fault.state?.();
+          return state.drain();
+        },
       },
-      "settings-history": () => {
-        fault.history?.(say);
-        return history.drain();
+      "settings-history": {
+        heard: (session) => history.heard(session),
+        drain: () => {
+          fault.history?.(say);
+          return history.drain();
+        },
       },
     },
   );
@@ -200,8 +206,8 @@ test("a failed body keeps its classification and the writes already drained", as
   historyFailed = false;
   expect(await fixture.due()).toMatchObject({ kind: "answered" });
   expect(fixture.stored).toEqual([
-    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
-    [{ store: "session-state", key: SESSION, value: { theme: "dracula" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "dracula" } }],
     [],
   ]);
 });
@@ -220,7 +226,7 @@ test("a failed end-clock read logs a transport warning and leaves semantic diagn
   });
   expect(result).toMatchObject({ kind: "answered", turnMs: null });
   expect(fixture.stored).toEqual([
-    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
   ]);
   const line = fixture.lines[0];
   expect(line?.kind === "output" && line.output.diagnostics).toEqual([
@@ -341,7 +347,7 @@ test("the first failure in collection still lands history, holds subscriptions, 
   });
   expect(fixture.stored[1]).toEqual([
     {
-      store: "settings-history",
+      kind: "put", store: "settings-history",
       key: SESSION,
       value: {
         past: [
@@ -363,7 +369,7 @@ test("the first failure in collection still lands history, holds subscriptions, 
   // from the successful part of the failed turn.
   await fixture.host.command({ kind: "close-journal" });
   expect(fixture.stored.slice(2)).toEqual([
-    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
     [],
   ]);
   fixture.host.closeWake();
@@ -413,7 +419,7 @@ test("a failed command lands writes and carries both failures without runtime fr
   );
   expect(failureOf(primary).detail).toContain("\n    at ");
   expect(fixture.stored).toEqual([
-    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
   ]);
 });
 
@@ -490,7 +496,7 @@ test("a successful command reports its first finalizer failure and lands its suc
     kind: "close-journal",
   });
   expect(fixture.stored).toEqual([
-    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [{ kind: "put", store: "session-state", key: SESSION, value: { theme: "nord" } }],
     [],
   ]);
 });

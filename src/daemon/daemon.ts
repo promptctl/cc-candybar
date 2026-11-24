@@ -68,6 +68,12 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
+  reportLine,
+  reportText,
+  type StoreReport,
+  type StoreUnsavedWarning,
+} from "./foundations/stored-file.js";
+import {
   environmentOutput,
   isEnvironmentOutput,
 } from "./environment-output.js";
@@ -297,7 +303,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: null, held: [] },
+    { fileEvents: [], launcher: null, unsaved: [], held: [] },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] The daemon's own events, each held until no bar
@@ -319,6 +325,34 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     (text, more, at) => joinedEvent(null, `${text}${recurrence(more)}`, at),
     restateOnceBuilt,
   );
+  // [LAW:nothing-unseen] What a store found of its file that it does not
+  // hold: a file kept aside, what this build dropped. An event, since once the
+  // store saves, those bytes are no longer what the file holds.
+  const storeLoads = new RecurringEvents<{ file: string; text: string }>(
+    clock,
+    "store-load",
+    ({ file }) => file,
+    ({ text }, more, at) => joinedEvent(null, `${text}${recurrence(more)}`, at),
+    restateOnceBuilt,
+  );
+  // A file nothing is saved to stands for as long as this daemon runs.
+  const unsaved = new Map<string, StoreUnsavedWarning>();
+  // [LAW:single-enforcer] Every store's report reaches the log and the bar
+  // here, whichever store made it and whenever.
+  const storeReported = (reports: readonly StoreReport[]): void => {
+    for (const report of reports) {
+      const { file, found } = report;
+      const text = reportText(report);
+      log(text === null ? "info" : "warn", reportLine(report));
+      if (text === null) continue;
+      // [LAW:single-enforcer] An occurrence restates through its family, which
+      // holds a recurrence back; a standing row restates here.
+      if (found.kind === "refused") {
+        unsaved.set(file, { kind: "store-unsaved", file, message: text });
+        restateOnceBuilt();
+      } else storeLoads.occur({ file, text });
+    }
+  };
   const rendererEnded = new HeldSlot(clock, "renderer end hold", restateFaults);
   const actFailed = new HeldSlot(clock, "act failure hold", restateFaults);
   // [LAW:one-source-of-truth] Each task's error is the one event its subject
@@ -349,11 +383,13 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
+        unsaved: [...unsaved.values()],
         held: [
           ...launchPipes.held(),
           ...heldBy("renderer-ended", rendererEnded),
           ...heldBy("act-failed", actFailed),
           ...taskThrows.held(),
+          ...storeLoads.held(),
         ],
       }),
     );
@@ -404,6 +440,10 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           if (taskThrows.answer(shownEvent.about, shownEvent.event))
             changed = true;
           break;
+        case "store-load":
+          if (storeLoads.answer(shownEvent.about, shownEvent.event))
+            changed = true;
+          break;
         default:
           shownEvent satisfies never;
       }
@@ -437,7 +477,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
-  const sessionBook = new SessionBook(inputs.sessionBook(log));
+  const sessionBook = new SessionBook(inputs.sessionBook(log), clock);
   // [LAW:no-ambient-temporal-coupling] Prepare the primary before any host
   // provider installs a timer. A failing profile or renderer factory leaves
   // the daemon unbuilt and nothing to close.
@@ -733,7 +773,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log), log);
+    const stores = new HeldStores(inputs.profile(name, log), clock);
     // [LAW:one-source-of-truth] Each start reads the latest held profile.
     const boot = (): RendererBoot => ({
       stored: stores.current(),
@@ -839,6 +879,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
+        reported: storeReported,
         unheard: (text, fromEnvironment) => {
           // The unacknowledged text is included in the next warning.
           const prior = actFailed.event();
@@ -916,7 +957,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       target = connectRenderer(
         prepareRenderer(name, binding, canonicalEntry(name, binding)),
       );
-      target.stores.load();
+      storeReported(target.stores.load());
       target.link.serve();
       renderers.set(name, target);
       if (phase.kind === "armed") target.link.arm();
@@ -1082,8 +1123,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const starting: DaemonPhase = { kind: "starting" };
     phase = starting;
     try {
-      primary.stores.load();
-      sessionBook.load();
+      storeReported([...primary.stores.load(), sessionBook.load()]);
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
@@ -1198,6 +1238,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
             rendererEnded,
             actFailed,
             taskThrows,
+            storeLoads,
           ])
             slot.dispose();
         },

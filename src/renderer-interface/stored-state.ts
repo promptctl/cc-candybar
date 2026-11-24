@@ -7,7 +7,7 @@ import { sessionIdOf, type SessionId } from "../daemon/foundations/session-id";
 import { isPlainObject } from "../config/loader/validate-core";
 import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
-import type { DaemonLogger } from "../utils/logger";
+import { kept, type Kept } from "../daemon/foundations/stored-file";
 import { isEditModeKey } from "../config/session-key";
 import { menuOfKey } from "../config/menu-keys";
 import { CLICK_ERROR_KEY, isMenuStateKey } from "../config/reserved-names";
@@ -27,10 +27,14 @@ export interface StoredState {
 
 export type SessionPicks = Readonly<Record<string, string>>;
 
+// [LAW:types-are-the-program] A session's picks hold at least one: a session
+// holding none is no state, and takes no slot under a bound.
 export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
   if (!isPlainObject(value))
     return { kind: "failed", reason: "is not an object" };
-  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
+  const keys = Object.keys(value);
+  if (keys.length === 0) return { kind: "failed", reason: "holds no picks" };
+  const bad = keys.find((key) => typeof value[key] !== "string");
   return bad === undefined
     ? { kind: "ok", value: value as SessionPicks }
     : {
@@ -39,47 +43,42 @@ export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
       };
 }
 
-// Why a stored pick reads nothing now, or undefined for one a render can read.
-// A key no current spelling mints is never read again and never cleared, so it
-// would sit in the profile for good; a click error that does not parse would
-// throw in every render of its session.
+// Why this build reads nothing of a stored pick, or undefined for one a
+// render can read. A key no current spelling mints is never read again and
+// never cleared, so it would sit in the profile for good; a click error that
+// does not parse would throw in every render of its session.
 function retiredBecause(key: string, value: string): string | undefined {
   if (isEditModeKey(key)) return "no edit outlives the renderer";
   if (isMenuStateKey(key) && menuOfKey(key) === undefined)
-    return "no menu is keyed that way now";
+    return "no menu is keyed that way in this build";
   if (key === CLICK_ERROR_KEY && !isClickErrorRecord(value))
-    return "not a record of a failed click";
+    return "not a record of a failed click this build reads";
   return undefined;
 }
 
-// [LAW:no-silent-failure] A profile loads without the picks it holds that
-// nothing reads (edit mode's own, which would reopen a panel or a library on a
-// bar with no edit, the spellings an older build minted, and a click error no
-// build wrote), and says which it dropped and why. A session left holding
-// nothing takes no slot.
+// [LAW:no-silent-failure] A session's picks load without the ones nothing in
+// this build reads (edit mode's own, which would reopen a panel or a library
+// on a bar with no edit, a menu key this build does not mint, a click error
+// it cannot read), each named in what the load dropped. A session left
+// holding nothing is refused, so it takes no slot.
 export function withoutRetiredKeys(
-  sessions: ReadonlyMap<SessionId, SessionPicks>,
-  log: DaemonLogger,
-): Map<SessionId, SessionPicks> {
-  return new Map(
-    [...sessions].flatMap(([session, picks]) => {
-      const judged = Object.entries(picks).map(
-        ([key, value]) => [key, value, retiredBecause(key, value)] as const,
-      );
-      const dropped = judged.filter(([, , why]) => why !== undefined);
-      if (dropped.length === 0) return [[session, picks] as const];
-      log(
-        "info",
-        `session-state load: dropped ${dropped.map(([key, , why]) => `${key} (${why})`).join(", ")} (session=${session})`,
-      );
-      const kept = judged.flatMap(([key, value, why]) =>
-        why === undefined ? [[key, value] as const] : [],
-      );
-      return kept.length === 0
-        ? []
-        : [[session, Object.fromEntries(kept)] as const];
-    }),
+  picks: SessionPicks,
+): Asked<Kept<SessionPicks>> {
+  const judged = Object.entries(picks).map(
+    ([key, value]) => [key, value, retiredBecause(key, value)] as const,
   );
+  const dropped = judged.flatMap(([key, , why]) =>
+    why === undefined ? [] : [{ part: key, why }],
+  );
+  const held = judged.flatMap(([key, value, why]) =>
+    why === undefined ? [[key, value] as const] : [],
+  );
+  return held.length === 0
+    ? {
+        kind: "failed",
+        reason: `holds only picks this build reads nothing of: ${dropped.map(({ part, why }) => `${part} (${why})`).join(", ")}`,
+      }
+    : kept(Object.fromEntries(held), dropped);
 }
 
 // [LAW:parse-dont-validate] A replacement can run a different build. A boot
@@ -119,19 +118,27 @@ export const EMPTY_STORED_STATE: StoredState = {
 };
 
 // [LAW:types-are-the-program] One entry of one store as a turn left it: a
-// session's picks or history, which null drops.
-// A write of an entry already held moves it to the end of its store's
-// recency order, as the renderer's own store moved it.
+// session's picks or history written, which null drops, or the session heard
+// by a render, which moves it without changing what it holds. Either moves
+// the entry to the end of its store's recency order, as the renderer's own
+// store moved it.
 export type StoreWrite =
   | {
+      readonly kind: "put";
       readonly store: "session-state";
       readonly key: SessionId;
       readonly value: SessionPicks | null;
     }
   | {
+      readonly kind: "put";
       readonly store: "settings-history";
       readonly key: SessionId;
       readonly value: SessionHistory | null;
+    }
+  | {
+      readonly kind: "heard";
+      readonly store: "session-state" | "settings-history";
+      readonly key: SessionId;
     };
 
 // [LAW:types-are-the-program] Plain data, so a boot and a turn's output carry

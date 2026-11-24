@@ -6,8 +6,12 @@ import { ok, type Asked } from "../../src/utils/outcome";
 
 export function writeStatePlan<T>(planned: Asked<Planned<T>>): Asked<T> {
   if (planned.kind === "failed") return planned;
-  const { rewrite, retire, value } = planned.value;
-  const written = writeRevisions(rewrite === null ? [] : [rewrite], retire);
+  const { setAside, rewrite, retire, value } = planned.value;
+  const written = writeRevisions({
+    setAside,
+    rewrites: rewrite === null ? [] : [rewrite],
+    retire,
+  });
   if (written.kind !== "ok") throw written.error;
   return ok(value);
 }

@@ -2,6 +2,7 @@
 
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LifelineWarning } from "../proc/launcher";
+import type { StoreUnsavedWarning } from "../daemon/foundations/stored-file";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
@@ -559,6 +560,12 @@ export function drawRender(
   const standing: readonly Standing[] = [
     ...daemon.fileEvents.map(alone),
     ...(daemon.launcher === null ? [] : [alone(daemon.launcher)]),
+    ...daemon.unsaved.map(
+      (warning): Standing => ({
+        warning,
+        about: aboutSubject(warning.kind, warning.file),
+      }),
+    ),
     ...daemonWarnings,
     ...(configWatch === null
       ? []
@@ -965,6 +972,7 @@ interface DaemonEventWarning {
 type StandingWarning =
   | FileEventsWarning
   | LifelineWarning
+  | StoreUnsavedWarning
   | DaemonEventWarning
   | ConfigWatchWarning
   | LoadWarning

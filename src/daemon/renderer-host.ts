@@ -50,6 +50,7 @@ import {
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { DaemonEvent } from "../utils/event-hold.js";
+import type { StoreReport } from "./foundations/stored-file.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
@@ -145,6 +146,8 @@ export interface HostWorld {
   readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
   readonly acknowledgeDisplayed: (events: readonly DaemonEvent[]) => void;
+  // What a store found of its file, said as every store's is.
+  readonly reported: (reports: readonly StoreReport[]) => void;
   readonly unheard: (text: string, fromEnvironment?: true) => void;
 }
 
@@ -517,6 +520,8 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
+    if (landed.kind === "ok")
+      recordTaken("landed config report", () => world.reported(landed.reports));
     const configOutcome = configEffectOutcome(landed);
     const requested = event.kind === "context" ? event.context.requested : null;
     const requestedKey = requested === null ? null : originKey(requested);
@@ -632,7 +637,7 @@ export function rendererHost(
       if (world.closing())
         return { kind: "closing", reason: "the daemon is closing" };
       if (changes.length + answers.length === 0)
-        return { kind: "ok", files: [] };
+        return { kind: "ok", files: [], reports: [] };
       return performChanges(
         changes,
         {

@@ -119,14 +119,18 @@ type CommandByKind = {
 };
 type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
 
-type StoreDrains = Readonly<
-  Record<StoreWrite["store"], () => readonly StoreWrite[]>
->;
+// [LAW:one-type-per-behavior] Each store the profile holds, as a turn reaches
+// it: a request moves its session to the newest end, and the turn's writes
+// are what moved since the last drain.
+interface HeldStore {
+  heard(session: SessionId): void;
+  drain(): readonly StoreWrite[];
+}
+type Stores = Readonly<Record<StoreWrite["store"], HeldStore>>;
 
 export function mainRenderer(
   parts: MainRendererParts,
-  // What each store moved since its last successful drain.
-  drains: StoreDrains,
+  stores: Stores,
 ): Renderer {
   const { time, turnLog, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -338,6 +342,9 @@ export function mainRenderer(
         const origin = context.requested;
         contextFacts(context, record);
         noteFacts(record, { encoding: context.encoding });
+        // [LAW:one-source-of-truth] Recency is the session's last request or
+        // write, so the bound drops the one idle longest.
+        for (const store of Object.values(stores)) store.heard(session);
         // [LAW:one-source-of-truth] A view cannot observe a new context
         // while it is still bound to the previous origin's config.
         runInAction(() => {
@@ -623,7 +630,7 @@ export function mainRenderer(
 
   // [LAW:one-source-of-truth] The exhaustive drain record supplies both
   // the store order and the name of each drain's diagnostic.
-  const storeOrder = Object.keys(drains) as Array<keyof StoreDrains>;
+  const storeOrder = Object.keys(stores) as Array<keyof Stores>;
 
   // [LAW:single-enforcer] Every turn ends here:
   // each successful store drain belongs to this answer even if another
@@ -658,7 +665,7 @@ export function mainRenderer(
     };
 
     for (const store of storeOrder)
-      collect(store, () => stored.push(...drains[store]()));
+      collect(store, () => stored.push(...stores[store].drain()));
     collect("subscriptions", () => declare(event.kind === "config"));
     // [LAW:one-source-of-truth] The wake has its own collector. A failed
     // subscription declaration leaves the last one standing and the next
@@ -913,10 +920,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       configWrites,
       sessionStats: () => store.stats(),
     },
-    {
-      "session-state": () => store.drain(),
-      "settings-history": () => settingsHistory.drain(),
-    },
+    { "session-state": store, "settings-history": settingsHistory },
   );
 }
 

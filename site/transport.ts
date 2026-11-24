@@ -22,7 +22,6 @@ import { memoryLimitBytes } from "../src/daemon/limits";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
-import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../src/daemon/session-state-file";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
@@ -130,7 +129,7 @@ const pageDaemon = createDaemon({
   profile: (name, log) => ({
     ...adapters.profile(name, log),
     session: ephemeralSessionFile(),
-    history: EPHEMERAL_HISTORY_STORAGE,
+    history: ephemeralSessionFile(),
   }),
   // Its sessions are the page's own, for as long as it is open.
   sessionBook: () => ephemeralSessionFile(),

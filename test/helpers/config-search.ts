@@ -4,9 +4,15 @@
 import { searchConfig } from "../../src/daemon/config-discovery/config-search";
 import { configQuery, type ConfigResolution, type Locations } from "../../src/config/loader/chain-places";
 
-import type { RepoAnswers } from "../../src/config/loader/repo-gate";
+import type { RepoAnswers, RepoConfigBook } from "../../src/config/loader/repo-gate";
+import type { StateObservation } from "../../src/daemon/state-file";
 
-export const observedAnswers = (result: RepoAnswers) => ({ result, paths: [], source: null });
+// A failed book names the file that did not read, as a real observation does.
+export const observedAnswers = (result: RepoAnswers): StateObservation<RepoConfigBook> => ({
+  result: result.kind === "ok" ? result : { ...result, file: "repo-configs.json" },
+  paths: [],
+  source: null,
+});
 
 export const resolutionOf = (
   locs: Locations,

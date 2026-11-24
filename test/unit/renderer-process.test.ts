@@ -656,7 +656,12 @@ test("the in-process link logs construction diagnostics once before its first an
   const answered = await link.renderer.answer(pin);
   expect(answered).not.toHaveProperty("diagnostics");
   expect(answered.stored).toEqual([
-    { store: "settings-history", key: oversizedSession, value: null },
+    {
+      kind: "put",
+      store: "settings-history",
+      key: oversizedSession,
+      value: null,
+    },
   ]);
 });
 

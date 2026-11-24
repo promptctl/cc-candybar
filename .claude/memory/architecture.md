@@ -74,6 +74,8 @@ Each source logs what its failures say, once per refresh, and the payload repeat
 
 The log never writes on the event loop. A synchronous write held every waiting client past its budget whenever the disk was slow, and each client that gave up was one more line. Lines still waiting when the process exits are written synchronously, so the death line lands. Anything reading the log, tests included, waits for the lines it expects rather than reading once.
 
+A state file that does not read is never written over: the write planned from that read first renames the file its bytes sit in beside itself and starts from empty. For a symlinked file that is the link's target, because a write through the link would replace the target, not the link. So its bytes are kept for whoever wants them and saving resumes with nobody acting. Only a file that can be neither read nor renamed stops its store's saving, and the bar says so for as long as the daemon runs.
+
 Nothing watches the state directory itself, because the log writes there on every request and on macOS every write to a watched directory is a file event the OS has to deliver. A file the daemon must see edited (the repository answers, which a user may edit by hand) is polled at its path, which opens no watch on the folder.
 
 ## Packaging and install

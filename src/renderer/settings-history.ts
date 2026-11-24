@@ -40,6 +40,7 @@ import {
   type Step,
   type SessionHistory,
   holdsNothing,
+  withoutRetiredChanges,
 } from "../renderer-interface/history-storage";
 import { isUndoStepKey } from "../config/session-key";
 import {
@@ -54,6 +55,8 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
+import { putNewest, toNewest } from "../utils/recency.js";
+import { StoredMoves } from "./stored-moves.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
 export interface HistoryDepth {
@@ -150,9 +153,7 @@ export class SettingsHistory {
     runInAction(() => this.held.replace(next));
   }
 
-  // [LAW:one-source-of-truth] The sessions whose history moved since the
-  // host was last told, in the order they last moved (`drain`).
-  private readonly moved = new Set<SessionId>();
+  private readonly moved = new StoredMoves();
 
   // `loaded` is what the profile holds, oldest first, as the host handed it
   // in: held to the same bounds as every step that lands.
@@ -166,18 +167,41 @@ export class SettingsHistory {
     );
   }
 
+  // A request from the session: it moves to the newest end, so the bounds
+  // drop the session idle longest. [LAW:carrying-cost] It runs on every
+  // request, so the order alone changes: a replace keeps each entry's
+  // observable, so no session's readers hear of it, only the order's.
+  heard(sessionId: SessionId): void {
+    const order = new Map(this.held);
+    if (!toNewest(order, sessionId)) return;
+    runInAction(() => this.held.replace(order));
+    this.moved.heard(sessionId);
+  }
+
   // What the host has not yet been told: each session whose history moved, as
-  // it now stands, null for one gone, in the order they last moved.
+  // it now stands (null for one gone) or only its place, in the order they
+  // last moved.
   drain(): StoreWrite[] {
-    const writes = [...this.moved].map(
-      (key): StoreWrite => ({
-        store: "settings-history",
-        key,
-        value: this.state.get(key) ?? null,
-      }),
+    return this.moved.drain(
+      (key, moved): StoreWrite =>
+        moved === "heard"
+          ? { kind: "heard", store: "settings-history", key }
+          : {
+              kind: "put",
+              store: "settings-history",
+              key,
+              value: this.outliving(key),
+            },
     );
-    this.moved.clear();
-    return writes;
+  }
+
+  // [LAW:single-enforcer] What the host keeps of a session's history is what
+  // a load of its file keeps, so the file never holds a draft's step.
+  private outliving(sessionId: SessionId): SessionHistory | null {
+    const history = this.state.get(sessionId);
+    if (history === undefined) return null;
+    const outlives = withoutRetiredChanges(history);
+    return outlives.kind === "ok" ? outlives.value.value : null;
   }
 
   depth(sessionId: SessionId): HistoryDepth {
@@ -355,12 +379,10 @@ export class SettingsHistory {
   // session that changed least recently.
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
-    next.delete(sessionId);
-    if (!holdsNothing(history)) next.set(sessionId, history);
+    putNewest(next, sessionId, holdsNothing(history) ? null : history);
     // A history that moved to the end is told even when it holds what it
     // held, so the host's order is this one's.
-    this.moved.delete(sessionId);
-    this.moved.add(sessionId);
+    this.moved.put(sessionId);
     this.adopt(next);
   }
 
@@ -371,10 +393,7 @@ export class SettingsHistory {
     const before = new Map(next);
     this.bound(next);
     for (const [sessionId, history] of before)
-      if (next.get(sessionId) !== history) {
-        this.moved.delete(sessionId);
-        this.moved.add(sessionId);
-      }
+      if (next.get(sessionId) !== history) this.moved.put(sessionId);
     this.state = next;
   }
 

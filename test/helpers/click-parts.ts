@@ -50,6 +50,7 @@ export function clickParts(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    reported: () => {},
     unheard: () => {},
   },
   clock: Timekeeper = systemTimekeeper,

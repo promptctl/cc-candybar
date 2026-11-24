@@ -30,6 +30,8 @@ import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
 import { asError, resolvedTarget } from "../utils/atomic-write.js";
 import { directoryEntries } from "../utils/directory-entry.js";
+import type { Unread } from "./state-file.js";
+import type { StoreReport } from "./foundations/stored-file.js";
 
 const said = (read: Read | "object"): string =>
   read === "object"
@@ -59,7 +61,13 @@ export type ConfigWriteFiles = Pick<
 >;
 
 export type ConfigLanding =
-  | { readonly kind: "ok"; readonly files: readonly string[] }
+  | {
+      readonly kind: "ok";
+      readonly files: readonly string[];
+      // What the landing found of a stored file, said as every store's is: an
+      // answers book that did not read, set aside.
+      readonly reports: readonly StoreReport[];
+    }
   | {
       readonly kind: "incomplete";
       readonly files: readonly string[];
@@ -118,6 +126,7 @@ export function performChanges(
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
   let retire: FileRetirement | null = null;
+  let setAside: Unread | null = null;
   let answered: readonly string[] = [];
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
@@ -183,6 +192,7 @@ export function performChanges(
         };
       const { rewrite } = planned.value;
       retire = planned.value.retire;
+      setAside = planned.value.setAside;
       answered = planned.value.said;
       if (rewrite !== null) {
         const file = resolvedTarget(rewrite.file);
@@ -195,7 +205,10 @@ export function performChanges(
       reason: `config read failed: ${asError(e).message}`,
     };
   }
-  const landed = writeRevisions(rewrites.values(), retire, write);
+  const landed = writeRevisions(
+    { setAside, rewrites: rewrites.values(), retire },
+    write,
+  );
   if (landed.kind === "failed") {
     return {
       kind: "failed",
@@ -215,7 +228,20 @@ export function performChanges(
     };
   }
   for (const line of answered) book?.said(line);
-  return landed;
+  // [LAW:no-silent-failure] Once the answer has landed the book reads again,
+  // so its unread notice is gone: the report says where the old one went.
+  const reports = [landed.setAside].flatMap((aside): StoreReport[] =>
+    aside === null
+      ? []
+      : [
+          {
+            store: "Repository config answers",
+            file: aside.file,
+            found: { kind: "set-aside", reason: aside.reason, to: aside.to },
+          },
+        ],
+  );
+  return { kind: "ok", files: landed.files, reports };
 }
 
 // The rewrite of the exclude file of `file`'s repository that names it, or

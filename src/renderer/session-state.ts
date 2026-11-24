@@ -25,6 +25,9 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state";
+import { putNewest, toNewest } from "../utils/recency";
+import { StoredMoves } from "./stored-moves";
+import { withoutRetiredKeys } from "../renderer-interface/stored-state";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
 // landed, each key it touched that `records` admits — its value before the
@@ -85,14 +88,12 @@ const DEFAULT_MAX_SESSIONS = 256;
 
 export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:types-are-the-program] Insertion order is recency order, the order
-  // of writes: the store cannot hold more than maxSessions, so the bound is
-  // structural, not dependent on an external prune caller. A read moves
-  // nothing, so the host's copy, which hears only writes, keeps the same order.
+  // each session was last written or heard by a request: the store cannot
+  // hold more than maxSessions, so the bound is structural, not dependent on
+  // an external prune caller, and drops the session idle longest. A read
+  // moves nothing, so the host's copy, told of every move, keeps the order.
   private readonly sessions: Map<SessionId, Session>;
-  // [LAW:one-source-of-truth] The sessions whose state moved since the host
-  // was last told, in the order they last moved: what the turn's stored
-  // writes carry (`drain`).
-  private readonly moved = new Set<SessionId>();
+  private readonly moved = new StoredMoves();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   private head = 0;
@@ -207,44 +208,56 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     });
   }
 
-  // What the host has not yet been told: each session that moved, as it now
-  // stands, null for one dropped, in the order they last moved, so the host's
-  // copy keeps this store's recency order.
-  drain(): StoreWrite[] {
-    const writes = [...this.moved].map(
-      (key): StoreWrite => ({
-        store: "session-state",
-        key,
-        value: this.valuesOf(key),
-      }),
-    );
-    this.moved.clear();
-    return writes;
+  // A request from the session: it moves to the newest end, so the bound
+  // drops the session idle longest. What it holds is unchanged, so no reader
+  // is told, and the host hears only its place.
+  heard(sessionId: SessionId): void {
+    if (toNewest(this.sessions, sessionId)) this.moved.heard(sessionId);
   }
 
+  // What the host has not yet been told: each session that moved, as it now
+  // stands (null for one dropped) or only its place, in the order they last
+  // moved.
+  drain(): StoreWrite[] {
+    return this.moved.drain(
+      (key, moved): StoreWrite =>
+        moved === "heard"
+          ? { kind: "heard", store: "session-state", key }
+          : {
+              kind: "put",
+              store: "session-state",
+              key,
+              value: this.valuesOf(key),
+            },
+    );
+  }
+
+  // [LAW:single-enforcer] What the host keeps of a session is what a load of
+  // its file keeps, so the file never holds a pick only this renderer reads
+  // (edit mode's own), and a load that drops one is reading an older build's.
   private valuesOf(sessionId: SessionId): Record<string, string> | null {
     const session = this.sessions.get(sessionId);
-    return session === undefined ? null : Object.fromEntries(session.values);
+    if (session === undefined) return null;
+    const outlives = withoutRetiredKeys(Object.fromEntries(session.values));
+    return outlives.kind === "ok" ? outlives.value.value : null;
   }
 
   // Move-to-end: re-inserting at the tail makes this the most recently
   // written, here and in what the host is told.
   private changed(sessionId: SessionId, session: Session): void {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, session);
+    putNewest(this.sessions, sessionId, session);
     this.told(sessionId);
   }
 
   private dropped(sessionId: SessionId): void {
     this.head++;
-    this.sessions.delete(sessionId);
+    putNewest(this.sessions, sessionId, null);
     this.told(sessionId);
   }
 
   private told(sessionId: SessionId): void {
-    this.moved.delete(sessionId);
-    this.moved.add(sessionId);
+    this.moved.put(sessionId);
   }
 
   private evictOldest(): void {

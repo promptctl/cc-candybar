@@ -42,9 +42,9 @@ export function eventRenderer(
   return { answer };
 }
 
-// The stored writes of a rig whose host holds no store: its renderer's turns
-// tell it none.
-const noneStored = (): readonly [] => [];
+// The stores of a rig whose host holds none: its renderer's turns tell it
+// nothing.
+const noneStored = { heard: (): void => {}, drain: (): readonly [] => [] };
 export const NOTHING_STORED = {
   "session-state": noneStored,
   "settings-history": noneStored,
@@ -84,6 +84,7 @@ export const NO_ACTS: HostWorld = {
   configs: NO_CONFIGS,
   closing: () => false,
   acknowledgeDisplayed: () => {},
+  reported: () => {},
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },

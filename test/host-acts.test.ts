@@ -126,6 +126,7 @@ function hostOver(
     },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    reported: () => {},
     unheard: (text) => void unheard.push(text),
     ...over,
   };
