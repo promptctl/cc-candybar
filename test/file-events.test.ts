@@ -15,6 +15,7 @@ import { DEBOUNCE_MS, WatcherRegistry } from "../src/daemon/cache/watchers";
 import { statIdentity, type IdentityRead } from "../src/utils/folder-identity";
 import {
   WARNING_SEVERITY,
+  aboutKind,
   collectDiagnostics,
 } from "../src/render/diagnostics";
 import { fakeWatches } from "./helpers/fake-watches";
@@ -533,7 +534,11 @@ describe("the bar's row and daemon-stats' line", () => {
       "request",
       [],
       [],
-      warned.map((w) => ({ about: w.kind, text: w.message, copy: w.message })),
+      warned.map((w) => ({
+        about: aboutKind(w.kind),
+        text: w.message,
+        copy: w.message,
+      })),
     );
     expect(diagnostics).toEqual([
       expect.objectContaining({

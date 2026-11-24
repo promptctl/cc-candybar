@@ -11,6 +11,7 @@ import {
   diagnosticsProjection,
   handoffRows,
   HANDOFF_SEVERITY,
+  aboutText,
   viewedIndex,
   type DiagnosticMessage,
   type DiagnosticSeverity,
@@ -22,13 +23,17 @@ import {
 } from "../../src/render/diagnostic-style";
 
 const SID = "sid-1";
-const sourced = (text: string) => ({ about: text, text, copy: text });
+const sourced = (text: string) => ({
+  about: aboutText("test", text),
+  text,
+  copy: text,
+});
 const shaped = (
   severity: DiagnosticSeverity,
   text: string,
 ): DiagnosticMessage => ({
   severity,
-  about: text,
+  about: aboutText("test", text),
   message: text,
   copy: text,
   lines: [[diagnosticSpan(text, null)]],

@@ -115,23 +115,44 @@ export function diagnosticSpan(
 }
 export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
 
-// [LAW:single-enforcer] What a message is about, as its producer names it: its
-// kind, and for a kind with several (a task that threw, a file a load
-// dropped, a repository asked about) its subject too, so one never stands for
-// another.
-export const aboutOf = (kind: string, subject?: string): string =>
-  subject === undefined ? kind : `${kind}\0${subject}`;
+// [LAW:types-are-the-program] What a message is about, and the rule that says
+// when two messages are one. The rule is part of the value, so a producer
+// picks it by the constructor it calls, never by how it spells a string, and
+// `identityOf` hashes each rule its own way, so no text can pass for a kind.
+// A rule that needs a subject cannot be built without one.
+export type About<Kind extends string = string> = {
+  readonly kind: Kind;
+} & (
+  | { readonly rule: "kind" }
+  | { readonly rule: "subject"; readonly subject: string }
+  | { readonly rule: "text"; readonly text: string }
+);
+
+// One message of its kind, whatever its words become.
+export const aboutKind = <Kind extends string>(kind: Kind): About<Kind> => ({
+  kind,
+  rule: "kind",
+});
+
+// One message of its kind for the subject, whatever its words become.
+export const aboutSubject = <Kind extends string>(
+  kind: Kind,
+  subject: string,
+): About<Kind> => ({ kind, rule: "subject", subject });
+
+// Its words are what it is: other words, another message.
+export const aboutText = <Kind extends string>(
+  kind: Kind,
+  text: string,
+): About<Kind> => ({ kind, rule: "text", text });
 
 // One message: its severity, what it is about, its verbatim text, what ⧉
 // copies (the text, or a prompt that fixes what the text reports), and the
 // lines the viewer shows. Non-empty by construction — a
-// message with no visible line is no message. `about` is named by the message's
-// producer — its source, and the file or repository it concerns — and stays
-// put while the text changes (an issue fixed, a count moved). A refused
-// request, its hints and a click error are about exactly their text.
+// message with no visible line is no message.
 export interface DiagnosticMessage {
   readonly severity: DiagnosticSeverity;
-  readonly about: string;
+  readonly about: About;
   readonly message: string;
   readonly copy: string;
   readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
@@ -153,7 +174,7 @@ export type DiagnosticList = readonly ListedMessage[] & {
 
 // A message's text and what it is about (see DiagnosticMessage).
 export interface SourcedText {
-  readonly about: string;
+  readonly about: About;
   readonly text: string;
   readonly copy: string;
 }
@@ -275,19 +296,32 @@ export function worstLevel(list: DiagnosticList): DiagnosticLevel | null {
 // message's identity, never as a position: a list that shifts under an open
 // viewer would otherwise show another message under the same position, and
 // one that shrank and grew again would reopen it. The identity is the
-// severity and what the message is about, digested — not its text, which
-// moves while a message stays the same one (an issue count) unless the
-// producer names its text as what it is about — and which of
+// severity and what the message is about, digested by that rule, and which of
 // the list's messages of that identity it is, so two alike are two stops. The
 // page of the message shown rides in the same key, so a message has at most
 // PAGES pages: the viewer never draws a page its key cannot name.
 const IDENTITY_BITS = 32;
 const OCCURRENCES = 256;
 export const PAGES = 4096;
+const identifiedBy = (about: About): readonly string[] => {
+  switch (about.rule) {
+    case "kind":
+      return [about.kind];
+    case "subject":
+      return [about.kind, about.subject];
+    case "text":
+      return [about.kind, about.text];
+  }
+};
 function identityOf(message: DiagnosticMessage): number {
   const digest = createHash("sha256")
     .update(
-      `${message.severity.level}\0${message.severity.glyph}\0${message.about}`,
+      JSON.stringify([
+        message.severity.level,
+        message.severity.glyph,
+        message.about.rule,
+        ...identifiedBy(message.about),
+      ]),
     )
     .digest("hex");
   return (

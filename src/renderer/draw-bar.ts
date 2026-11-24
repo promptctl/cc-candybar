@@ -81,7 +81,10 @@ import {
 } from "../daemon/foundations/click-error.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
-  aboutOf,
+  aboutKind,
+  aboutSubject,
+  aboutText,
+  type About,
   collectDiagnostics,
   diagnosticCopies,
   type SourcedText,
@@ -490,12 +493,11 @@ export function drawRender(
   // refusal, its hints' and a click's are about exactly what their text says.
   // Each copies its own text, but a drop copies the prompt that fixes it.
   const sourced = (
-    kind: DrawError["kind"],
-    about: string,
+    about: About<DrawErrorKind>,
     text: string | null | undefined,
-  ): MaybeError => ({ kind, about, text, copy: text });
-  const said = (kind: DrawError["kind"], text: string | null | undefined) =>
-    sourced(kind, text ?? "", text);
+  ): MaybeError => ({ about, text, copy: text });
+  const said = (kind: DrawErrorKind, text: string | null | undefined) =>
+    sourced(aboutText(kind, text ?? ""), text);
   const { daemon } = document;
   // [LAW:no-ambient-temporal-coupling] The daemon's events at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
@@ -505,15 +507,12 @@ export function drawRender(
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
     sourced(
-      "load",
-      "load",
+      aboutKind("load"),
       configAccess.kind === "unavailable" ? configAccess.error : null,
     ),
     ...state.dropped.map(
       (e): MaybeError => ({
-        kind: "dropped",
-        subject: e.file,
-        about: aboutOf("dropped", e.file),
+        about: aboutSubject("dropped", e.file),
         text: e.message,
         copy: e.prompt,
       }),
@@ -524,15 +523,13 @@ export function drawRender(
     // however often it threw.
     ...threw.map(
       ({ shown }): MaybeError => ({
-        kind: "task-threw",
-        subject: shown.about,
-        about: aboutOf("task-threw", shown.about),
+        about: aboutSubject("task-threw", shown.about),
         text: shown.event.text,
         copy: shown.event.text,
       }),
     ),
-  ].flatMap(({ about, text, copy, ...named }) =>
-    text != null && copy != null ? [{ ...named, about, text, copy }] : [],
+  ].flatMap(({ about, text, copy }) =>
+    text != null && copy != null ? [{ about, text, copy }] : [],
   );
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
@@ -547,12 +544,12 @@ export function drawRender(
   const eventsShown: readonly DaemonEvent[] = daemonEvents
     .map(({ shown }) => shown)
     .filter(({ event }) => !event.answered);
-  const daemonWarnings = daemonEvents.filter(isWarned).map(
-    ({ shown, hold }): Standing<DaemonEventWarning> => ({
-      warning: { kind: shown.kind, message: shown.event.text, hold },
-      subject: shown.about,
-    }),
-  );
+  const daemonWarnings = daemonEvents
+    .filter(isWarned)
+    .map(({ shown, hold }): Standing<DaemonEventWarning> => {
+      const warning = { kind: shown.kind, message: shown.event.text, hold };
+      return { warning, about: aboutSubject(warning.kind, shown.about) };
+    });
   const standing: readonly Standing[] = [
     ...daemon.fileEvents.map(alone),
     ...(daemon.launcher === null ? [] : [alone(daemon.launcher)]),
@@ -560,7 +557,15 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [alone({ kind: "config-watch", message: configWatch })]),
-    ...entry.lastWarnings.map((message) => alone({ kind: "load", message })),
+    // [LAW:one-source-of-truth] The loader hands a load's warnings over as
+    // their words alone, so the words are all a load warning is: two with other
+    // words are two messages, and fixing one leaves the other's identity put.
+    ...entry.lastWarnings.map(
+      (message): Standing => ({
+        warning: { kind: "load", message },
+        about: aboutText("load", message),
+      }),
+    ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...(failure === null
@@ -585,19 +590,17 @@ export function drawRender(
     errors,
     questions,
     [
-      // A standing warning is one per kind, or per subject of a kind that
-      // recurs, whose words change as it does (a pipe event's count), so
-      // that is what it is about: a viewer open on it stays open. A render
-      // warning is about its words.
-      ...standing.map(({ warning, subject }) => ({
-        about: aboutOf(warning.kind, subject),
+      // A standing warning names the rule that makes it one message; a
+      // render warning is about its whole description.
+      ...standing.map(({ warning, about }) => ({
+        about,
         text: warning.message,
         copy: warning.message,
       })),
       ...presentations
         .warnings(sessionId, drawing.by, config)
         .map(({ key, warning }) => ({
-          about: key,
+          about: aboutText(warning.kind, key),
           text: warning.message,
           copy: warning.message,
         })),
@@ -751,9 +754,9 @@ export function drawRender(
   // learns what the frame could not honour without its viewer, and `kept`
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
-    ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
-    ...standing.map(({ warning, subject }) =>
-      faultOf("warning", warning.kind, warning.message, subject),
+    ...errors.map(({ about, text }) => faultAbout("error", about, text)),
+    ...standing.map(({ warning, about }) =>
+      faultAbout("warning", about, warning.message),
     ),
     ...warnings.map(({ warning, subject }) =>
       faultOf("warning", warning.kind, warning.message, subject),
@@ -852,19 +855,19 @@ export function drawRender(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and what it is about: the file a dropped
 // write names, or the task that threw.
+type DrawErrorKind =
+  | "refused-args"
+  | "hints"
+  | "load"
+  | "dropped"
+  | "click"
+  | "task-threw";
 interface DrawError extends SourcedText {
-  readonly kind:
-    | "refused-args"
-    | "hints"
-    | "load"
-    | "dropped"
-    | "click"
-    | "task-threw";
-  readonly subject?: string;
+  readonly about: About<DrawErrorKind>;
 }
 
 // An error as its producer hands it, before an absent report is removed.
-type MaybeError = Omit<DrawError, "text" | "copy"> & {
+type MaybeError = Pick<DrawError, "about"> & {
   readonly text: string | null | undefined;
   readonly copy: string | null | undefined;
 };
@@ -873,7 +876,7 @@ type MaybeError = Omit<DrawError, "text" | "copy"> & {
 // producers' own unions, so a new kind of warning or error is a fault's kind
 // with no list here to extend.
 type FaultKind =
-  | DrawError["kind"]
+  | DrawErrorKind
   | StandingWarning["kind"]
   | RenderWarning["kind"];
 
@@ -883,6 +886,20 @@ const faultOf = (
   message: string,
   subject?: string,
 ): Fault<FaultKind> => ({ level, kind, subject, message });
+
+// [LAW:one-source-of-truth] A fault's kind and subject are its message's
+// about: the viewer's identity and the fault note cannot name different ones.
+const faultAbout = (
+  level: Fault["level"],
+  about: About<FaultKind>,
+  message: string,
+): Fault<FaultKind> =>
+  faultOf(
+    level,
+    about.kind,
+    message,
+    about.rule === "subject" ? about.subject : undefined,
+  );
 
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {
@@ -954,16 +971,16 @@ type StandingWarning =
   | LoadWarning
   | FactsWarning;
 
-// A standing warning and what it is about beyond its kind, for a kind that
-// recurs.
+// A standing warning and what it is about: its kind, the subject of a kind
+// that recurs, or its words.
 interface Standing<Warning extends StandingWarning = StandingWarning> {
   readonly warning: Warning;
-  readonly subject: string | undefined;
+  readonly about: About<Warning["kind"]>;
 }
 
 const alone = (warning: StandingWarning): Standing => ({
   warning,
-  subject: undefined,
+  about: aboutKind(warning.kind),
 });
 
 // What one render drew: the body — the bar, or the viewer in its place — and
