@@ -4,15 +4,22 @@
     {
       "version": "pr-953",
       "ref": "refs/pull/953/merge",
-      "sha": "d8ea5b022f1405524a1551dacb084e4cfe749a76",
-      "timestamp": "2026-11-24T19:07:48.973Z",
+      "sha": "a8759befeb5c008eeb88ad3faac45064e1073d47",
+      "timestamp": "2026-11-24T19:19:47.787Z",
       "commits": [
         {
-          "sha": "d8ea5b022f1405524a1551dacb084e4cfe749a76",
+          "sha": "a8759befeb5c008eeb88ad3faac45064e1073d47",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T19:05:57Z",
-          "message": "Merge 9c16ed3e1e91f7c08073947c95e147adecedcb05 into 883339212b09112b044d4287f5e9b331d9697e1c\n"
+          "timestamp": "2026-11-24T19:18:43Z",
+          "message": "Merge f937c01f181b2c720b40a6b66d02aaf849dfc958 into 883339212b09112b044d4287f5e9b331d9697e1c\n"
+        },
+        {
+          "sha": "f937c01f181b2c720b40a6b66d02aaf849dfc958",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:18:27-07:00",
+          "message": "fix(diagnostics): an advisory keeps its typed subject until the draw names it, one insert cell is one advisory per kind of cause, and the renderer wire version moves with the snapshot (candybar-law-review-ibyq.aa1)\n\nConfigSnapshot.notices changed shape, so RENDERER_WIRE_VERSION is 17 and an old recording is refused at the version check. Advisory carries a LoadSubject, derived into an About once by loadAbout, so the kind and text forms are unrepresentable for a load warning. An insert cell's misses group by kind of cause, naming each tree, matching what the identity names.\n"
         },
         {
           "sha": "9c16ed3e1e91f7c08073947c95e147adecedcb05",

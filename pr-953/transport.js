@@ -29171,9 +29171,10 @@ function parseJson5Syntax(source) {
   }
 }
 var advisory = (subject, message) => ({
-  about: aboutSubject("load", JSON.stringify(subject)),
+  subject,
   message
 });
+var loadAbout = (subject) => aboutSubject("load", JSON.stringify(subject));
 var ConfigError = class extends Error {
   file;
   issues;
@@ -49547,13 +49548,13 @@ function placeInserts(config, cells, authored) {
   }));
   const missed = /* @__PURE__ */ new Map();
   const miss = (tree) => ({ cell: cell3, cause }) => {
-    const causes = missed.get(cell3) ?? /* @__PURE__ */ new Map();
-    const key = JSON.stringify(cause);
-    causes.set(key, {
-      cause,
-      trees: [...causes.get(key)?.trees ?? [], tree]
-    });
-    missed.set(cell3, causes);
+    const kinds = missed.get(cell3) ?? /* @__PURE__ */ new Map();
+    const soFar = kinds.get(cause.kind);
+    kinds.set(
+      cause.kind,
+      soFar === void 0 ? [{ cause, tree }] : [...soFar, { cause, tree }]
+    );
+    missed.set(cell3, kinds);
   };
   (authored.root ? own2.unplaced : []).forEach(miss("the root"));
   for (const { name, unplaced } of restaged.filter(
@@ -49575,25 +49576,34 @@ function placeInserts(config, cells, authored) {
       }
     },
     notices: [...missed].flatMap(
-      ([cell3, causes]) => [...causes.values()].map(
-        ({ cause, trees }) => insertNotice(cell3, cause, trees)
-      )
+      ([cell3, kinds]) => [...kinds.values()].map((misses) => insertNotice(cell3, misses))
     )
   };
 }
-function insertNotice(cell3, refusal2, trees) {
+function insertNotice(cell3, misses) {
   const place = `${cell3.relation} "${cell3.anchor}"`;
   const id2 = cell3.id ?? cell3.seg;
-  const words2 = (() => {
-    switch (refusal2.kind) {
+  const wordsOf = (cause) => {
+    switch (cause.kind) {
       case "id-held":
-        return `as "${id2}", but placement "${id2}" is already segment "${refusal2.held}" \u2014 give the cell its own id`;
+        return `as "${id2}", but placement "${id2}" is already segment "${cause.held}" \u2014 give the cell its own id`;
       case "no-anchor":
         return `${place}, but there is no placement "${cell3.anchor}"`;
       case "refused":
-        return `${place}, but the bar refuses it there: ${refusal2.why}`;
+        return `${place}, but the bar refuses it there: ${cause.why}`;
     }
-  })();
+  };
+  const trees = /* @__PURE__ */ new Map();
+  for (const { cause, tree } of misses) {
+    const words2 = wordsOf(cause);
+    trees.set(words2, [
+      ...trees.get(words2) ?? [],
+      ...tree === null ? [] : [tree]
+    ]);
+  }
+  const sentences = [...trees].map(
+    ([words2, from]) => `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${words2}${from.length === 0 ? "" : ` (in ${from.join(", ")})`}`
+  );
   return advisory(
     [
       "insert",
@@ -49602,9 +49612,9 @@ function insertNotice(cell3, refusal2, trees) {
       cell3.id ?? null,
       cell3.relation,
       cell3.anchor,
-      refusal2.kind
+      misses[0].cause.kind
     ],
-    `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${words2}${trees.length === 0 ? "" : ` (in ${trees.join(", ")})`}`
+    sentences.join("\n")
   );
 }
 function presetGlobals(config, name) {
@@ -63101,7 +63111,9 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
             ...acc,
             refused: [
               ...acc.refused,
-              insertNotice(cell3, { kind: "refused", why }, [])
+              insertNotice(cell3, [
+                { cause: { kind: "refused", why }, tree: null }
+              ])
             ]
           };
         }
@@ -73694,9 +73706,9 @@ function drawRender(parts, setup, drawing2, feeds, pointer) {
     // producer knew, so fixing one leaves another's identity put whatever
     // its words (a line number) become.
     ...entry.lastWarnings.map(
-      ({ about, message }) => ({
+      ({ subject, message }) => ({
         warning: { kind: "load", message },
-        about
+        about: loadAbout(subject)
       })
     ),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -92624,7 +92636,7 @@ var RECORDING_VERSION = 1;
 
 // src/renderer-interface/wire.ts
 init_globals();
-var RENDERER_WIRE_VERSION = 16;
+var RENDERER_WIRE_VERSION = 17;
 
 // src/daemon/recording-privacy.ts
 init_globals();
