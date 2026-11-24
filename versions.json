@@ -4,15 +4,22 @@
     {
       "version": "pr-946",
       "ref": "refs/pull/946/merge",
-      "sha": "dc60ff488ff52e35db0efd4d82927ffafb397cf3",
-      "timestamp": "2026-11-24T10:28:23.522Z",
+      "sha": "7168671caa157ccd5ca4e8c1be694d3a89c1b359",
+      "timestamp": "2026-11-24T10:49:54.095Z",
       "commits": [
         {
-          "sha": "dc60ff488ff52e35db0efd4d82927ffafb397cf3",
+          "sha": "7168671caa157ccd5ca4e8c1be694d3a89c1b359",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T10:26:50Z",
-          "message": "Merge 5c8903055527f80a62235a6fa05c5ec19a4f2f38 into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
+          "timestamp": "2026-11-24T10:48:51Z",
+          "message": "Merge 5ca321375fcc113c8def5ee339bd45457f04638d into 0a4c9e344d200164eb36b2069e8585ab5bfb1beb\n"
+        },
+        {
+          "sha": "5ca321375fcc113c8def5ee339bd45457f04638d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T03:48:38-07:00",
+          "message": "docs(design): R-19 says what was decided: Claude Code launches the statusline and launchd does not own the host\n"
         },
         {
           "sha": "5c8903055527f80a62235a6fa05c5ec19a4f2f38",
