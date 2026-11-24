@@ -6,10 +6,10 @@ import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { runTeardown } from "../src/utils/teardown";
-import { HOST } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { HOST } from "../scripts/lib/host";
+import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 
 function providers() {
   const log = () => {};

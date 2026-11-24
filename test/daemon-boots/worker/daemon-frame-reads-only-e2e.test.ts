@@ -14,7 +14,7 @@ import { exits, shell } from "../../../src/proc/spawner-fake";
 import { textOf } from "../../../src/render/frame";
 import { FEED_PERIODS } from "../../../src/renderer/feeds";
 import { frameRequest, renderBody } from "../../helpers/daemon-e2e";
-import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
+import { fakeLauncher, type FakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
@@ -22,7 +22,7 @@ import {
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 const TTL_MS = 5_000;
 const COMMAND = "printf sample";

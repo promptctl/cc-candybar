@@ -10,7 +10,7 @@ names its themes.
 
 Rebuild from the repo root:
 
-    node --require ./scripts/version-stamp.cjs --import tsx proto-looks/render.ts
+    node --require ./scripts/lib/version-stamp.cjs --import tsx proto-looks/render.ts
     node proto-looks/build.mjs
 
 `out/` and the HTML are generated and not committed. `fonts.json` is a

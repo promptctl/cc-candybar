@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { tmuxStub } from "./helpers/tmux-stub";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 
 describe("the tmux stub's wait is its gate's", () => {
   // [LAW:no-ambient-temporal-coupling] Started here, leading its own process

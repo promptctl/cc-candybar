@@ -19,7 +19,7 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { arrange, configurePlacement } from "./helpers/configure";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
@@ -63,7 +63,7 @@ import {
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { EDIT_NS, MENU_PAGE_NS } from "../src/config/reserved-names";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";

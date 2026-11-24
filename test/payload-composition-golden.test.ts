@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { samplePayload } from "./helpers/sample-payload";
+import { samplePayload } from "../scripts/lib/draw-fixtures/sample-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -21,7 +21,7 @@ import { renderOptionsOf, todayOf } from "../src/renderer/render-payload";
 import { drawDsl } from "../src/dsl/render";
 import { ansiOf } from "../src/render/frame";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { AT, openSettled, sessionRig } from "./helpers/session-rig";
 
 const COLS = 120;

@@ -59,7 +59,7 @@ import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, readingsAt, type Tick } from "../../src/utils/instant";
 import type { LogLine } from "../../src/utils/logger";
 import { ABSENT } from "../../src/utils/outcome";
-import { daemonFactsOf } from "../helpers/daemon-facts";
+import { daemonFactsOf } from "../../scripts/lib/draw-fixtures/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { heldClock } from "../helpers/held-clock";
 import { unexpectedTimingProblem } from "../helpers/renderers";
@@ -67,7 +67,7 @@ import {
   oversizedRendererHistory,
   oversizedSession,
 } from "../helpers/oversized-renderer-history";
-import { viewFacts } from "../helpers/view-facts";
+import { viewFacts } from "../../scripts/lib/draw-fixtures/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
 const READ = { at: AT, tick: 0 as Tick };

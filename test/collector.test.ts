@@ -9,10 +9,10 @@
 // whose entries a test lands by hand, and reads what it handed in and what
 // the owners hold; no renderer is built.
 
-import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { observable, runInAction } from "mobx";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -46,14 +46,14 @@ import {
   type Outcome,
 } from "../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../src/utils/reading";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   absentOwners,
   fakeCacheExpiry,
   fakeMetrics,
   withTranscriptLanes,
   type FixtureOwners,
-} from "./helpers/payload-owners";
+} from "../scripts/lib/draw-fixtures/payload-owners";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
@@ -88,7 +88,7 @@ function handLanded() {
     });
     return { current: () => (values.get(key) ?? ABSENT) as Current<T> };
   };
-  const base = absentOwners();
+  const base = absentOwners(TEST_ENVIRONMENT);
   const owners = {
     ...base,
     gitProvider: {
@@ -734,7 +734,7 @@ describe("over the real repository owner", () => {
     });
     cleanups.push(() => git.close());
     const owners = {
-      ...absentOwners(),
+      ...absentOwners(TEST_ENVIRONMENT),
       gitProvider: git,
       tmuxService: { declare: () => settledLane(ABSENT) },
       hostService: {
@@ -742,7 +742,7 @@ describe("over the real repository owner", () => {
         declareUser: () => settledLane(ABSENT),
       },
       usageStore: {
-        ...absentOwners().usageStore,
+        ...absentOwners(TEST_ENVIRONMENT).usageStore,
         declareToday: () => settledLane(ABSENT),
       },
       log: () => {},
@@ -779,7 +779,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     return settledLane(ABSENT);
   };
   const owners = {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: {
       declare: () => {
         throw new Error("resolver bug");
@@ -844,7 +844,7 @@ test("a run whose declaration throws answers its failure, and every other run an
     });
   const broken = runAt("broken");
   const fine = runAt("fine");
-  const laned = withTranscriptLanes(absentOwners());
+  const laned = withTranscriptLanes(absentOwners(TEST_ENVIRONMENT));
   cleanups.push(() => {
     holds.close();
     laned.transcriptLanes.close();

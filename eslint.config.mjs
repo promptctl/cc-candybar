@@ -5,7 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
-import { mayImport, mayLoadRendererModule, withoutExtension, zoneOf } from "./scripts/import-zones.mjs";
+import { mayImport, mayLoadRendererModule, NO_ZONE, withoutExtension, ZONE_IMPORTS, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -270,13 +270,29 @@ const HOST_NAMED_IMPORTS = [
   },
 ];
 
-const ZONE_MESSAGE = {
-  renderer: "Renderer code consumes the shared contract and owns its drawing state.",
-  start: "Renderer construction accepts the shared data contract.",
-  "renderer-process": "The renderer process starts the core from the shared contract.",
-  shared: "Shared code loads in both processes and imports neither side.",
-  rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
+// [LAW:one-source-of-truth] Why an edge is refused, by what it reaches: what
+// the zone it imports holds decides it, whichever zone imports it.
+const REFUSAL = {
+  renderer: "The renderer is reached only through its start (src/renderer/main.ts).",
+  start: "Renderer construction is the host's and the renderer process's: shared code loads in both and imports neither side.",
+  "renderer-process": "The renderer process is an entry of its own, which only the CLI starts.",
+  rest: "Host code stays out of the renderer and shared code, which consume the shared contract.",
+  root: "The CLI's entry dispatches to every process, and nothing imports it.",
+  lib: "scripts/lib is what the tools and the tests share, and the app imports nothing from it.",
+  tools: "A tool runs by hand: the app and scripts/lib import nothing from one, and what it shares lives in scripts/lib.",
+  test: "The test suite runs under Jest: code that runs outside it imports nothing from test/, and what a tool and a test share lives in scripts/lib.",
+  [NO_ZONE]: "A path no row of scripts/import-zones.mjs names is in no zone: give its root a row there, saying which side of Jest it runs on.",
+  "outside the repo": "A module outside the repo is in no zone.",
 };
+// [LAW:no-silent-failure] Every zone an edge can be refused into has its
+// reason, or the config refuses to load.
+const unexplained = [...Object.keys(ZONE_IMPORTS), NO_ZONE, "outside the repo"].filter(
+  (to) =>
+    Object.values(ZONE_IMPORTS).some((allowed) => !allowed.includes(to)) &&
+    !(to in REFUSAL),
+);
+if (unexplained.length > 0)
+  throw new Error(`eslint.config.mjs: no refusal message for imports of ${unexplained.join(", ")}`);
 
 // A module's key is its repo-relative path without its extension, so
 // `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
@@ -322,6 +338,12 @@ const importDirection = {
       };
     }
     const fromZone = zoneOf(from);
+    if (fromZone === NO_ZONE) {
+      return {
+        Program: (node) =>
+          context.report({ node, message: `${from}: ${REFUSAL[NO_ZONE]} [LAW:one-way-deps]` }),
+      };
+    }
     const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
     const check = (node, source) => {
       if (source === null) {
@@ -345,7 +367,7 @@ const importDirection = {
       if (!mayImport(fromZone, toZone)) {
         context.report({
           node,
-          message: `${fromZone} ${from} imports ${toZone} ${to}. ${ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
+          message: `${fromZone} ${from} imports ${toZone} ${to}. ${REFUSAL[toZone]} [LAW:one-way-deps]`,
         });
       }
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
@@ -384,6 +406,10 @@ const importDirection = {
     };
   },
 };
+
+// The one import-direction rule: src's config runs it, and so does the tools'
+// (eslint.tools.config.mjs). [LAW:single-enforcer]
+export const zonesPlugin = { rules: { "import-direction": importDirection } };
 
 // [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
 // arrives in its inputs, so a renderer that opened one would read a disk its
@@ -572,7 +598,7 @@ export default [
   },
   {
     files: ["src/**/*.{ts,mts}"],
-    plugins: { zones: { rules: { "import-direction": importDirection } } },
+    plugins: { zones: zonesPlugin },
     rules: { "zones/import-direction": "error" },
   },
   // `no-restricted-properties` is its own rule, so the per-file replacement of

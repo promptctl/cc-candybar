@@ -1,6 +1,6 @@
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { reaction } from "mobx";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
 // the `today` aggregate is a fold over daemon-owned per-session records, NOT a
 // per-render whole-tree scan. These tests pin that contract.
@@ -38,7 +38,7 @@ import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf, failed } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { todayInfo, todayNow } from "./helpers/today";
 import { usageFold } from "./helpers/usage-fold";
 

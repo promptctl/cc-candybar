@@ -1,5 +1,5 @@
 // The stages of a draw, timed in-process through the tests' in-process rig
-// (test/helpers/prepared-config.ts): load a config, compile and bind it, draw
+// (scripts/lib/draw-fixtures/prepared-config.ts): load a config, compile and bind it, draw
 // it.
 //
 // This is NOT the cost of a tick. It has no render cache, no session state, no
@@ -17,7 +17,7 @@ import {
   prepareConfig,
   renderEffective,
   type PreparedConfig,
-} from "../../../test/helpers/prepared-config.js";
+} from "../../lib/draw-fixtures/prepared-config.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
 import { homeLayer, loadSnapshot } from "../../../src/config/dsl-loader.js";
 import {
@@ -30,7 +30,7 @@ import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.j
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
 import { instantOf } from "../../../src/utils/instant.js";
-import { REPO } from "../environment.js";
+import { REPO } from "../../lib/repo.cjs";
 import { removeTree, scratchDir } from "../fixtures.js";
 import { repeat } from "../measure.js";
 import { measured, type Benchmark } from "../types.js";

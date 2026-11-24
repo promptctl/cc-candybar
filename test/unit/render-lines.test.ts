@@ -9,7 +9,7 @@ import {
   keptRenders,
   owedLandings,
   retriedRender,
-} from "../helpers/daemon-log";
+} from "../../scripts/lib/daemon/log";
 
 const event = (fields: string): string =>
   `2026-11-02T00:00:00.000Z [info] render sid=s took=1ms ${fields}`;

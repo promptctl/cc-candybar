@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   clockOver,
   rethrowing,
@@ -6,7 +6,7 @@ import {
   type ReportThrow,
 } from "../src/time";
 import fs from "node:fs";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -24,7 +24,7 @@ import { GitService } from "../src/daemon/cache/git-service";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { untilHeard } from "./helpers/reload-signal";
 
 class StubGitService extends GitService {

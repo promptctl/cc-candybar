@@ -8,7 +8,7 @@ import {
   runsFor,
   shell,
 } from "../../src/proc/spawner-fake";
-import { fakeLauncher, turns } from "../helpers/fake-launcher";
+import { fakeLauncher, turns } from "../../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] What a launch promises its caller, proved on the

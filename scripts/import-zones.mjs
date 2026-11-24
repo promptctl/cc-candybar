@@ -1,7 +1,13 @@
 // [LAW:one-way-deps] ESLint and the production bundle use this ownership table.
-// Unlisted application modules belong to the host. More specific entries win.
+// Application modules no narrower row names belong to the host. More specific
+// entries win. A path no row names is in no zone, so nothing may import it:
+// a new root says which side of Jest it runs on before anything reaches it.
 // The CLI dispatches to every process. The renderer process constructs its
-// core using the shared contract and has no host dependencies.
+// core using the shared contract and has no host dependencies. The test suite
+// is Jest's alone: what runs outside Jest (src, and the tools in scripts/,
+// site/ and proto-looks/) imports nothing from it. What a tool and a test
+// share lives in scripts/lib/, which imports only the app and itself, so it
+// never loads a tool's entry. The tests may import the tools they test.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -36,19 +42,43 @@ const ZONE_ROWS = {
   "src/claude-input/typing.ts": "shared",
   "src/claude-input/prompt-screen.ts": "shared",
   "src/help-text.ts": "shared",
+  // The package's manifest is data that imports nothing, so every side reads it.
+  "package.json": "shared",
+  "src/": "rest",
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "renderer-process",
+  "test/": "test",
+  // The nightly audits run under Jest, over the suite's helpers.
+  "audits/": "test",
+  "scripts/lib/": "lib",
+  "scripts/": "tools",
+  "site/": "tools",
+  "proto-looks/": "tools",
 };
 const rendererDependencies = ["renderer", "start", "shared"];
-const ZONE_IMPORTS = {
+// Every zone of the app in src, which its root and everything outside src may
+// import.
+const APP = ["renderer", "start", "shared", "rest", "root", "renderer-process"];
+export const ZONE_IMPORTS = {
   renderer: rendererDependencies,
   start: rendererDependencies,
   shared: ["shared"],
   rest: ["rest", "start", "shared"],
   "renderer-process": rendererDependencies,
-  root: ["renderer", "start", "shared", "rest", "root", "renderer-process"],
+  root: APP,
+  lib: [...APP, "lib"],
+  tools: [...APP, "lib", "tools"],
+  test: [...APP, "lib", "tools", "test"],
 };
+// The zone of a path no row names: no zone imports it.
+export const NO_ZONE = "unlisted";
+
+// The directories of code that runs outside Jest beside the app: the tools,
+// and what they share with the tests. eslint.tools.config.mjs lints them.
+export const OUTSIDE_JEST_ROOTS = Object.entries(ZONE_ROWS)
+  .filter(([, zone]) => zone === "tools" || zone === "lib")
+  .map(([row]) => row);
 
 export const withoutExtension = (p) => p.replace(/\.(m?ts|m?js)$/, "");
 const ZONE_KEYS = Object.entries(ZONE_ROWS)
@@ -61,7 +91,7 @@ export const zoneOf = (file) => {
   const key = withoutExtension(file).replaceAll("\\", "/");
   return ZONE_KEYS.find(({ row }) =>
     row.endsWith("/") ? `${key}/`.startsWith(row) : key === row,
-  )?.zone ?? "rest";
+  )?.zone ?? NO_ZONE;
 };
 
 export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);

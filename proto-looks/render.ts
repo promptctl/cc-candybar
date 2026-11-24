@@ -1,10 +1,10 @@
 // The bundled bar under the page's themes, closed and with its menus open, for
 // every trial row of the colour model's tables and as the bar ships — drawn
-// through the bar's own path (test/helpers/session-bar) under session picks of
+// through the bar's own path (scripts/lib/draw-fixtures/session-bar) under session picks of
 // the variation and shade, exactly as a click would make them. Writes
 // proto-looks/out/renders.json. Harness for brandon-menus-sjhy.4fi.
 //
-//   node --require ./scripts/version-stamp.cjs --import tsx proto-looks/render.ts
+//   node --require ./scripts/lib/version-stamp.cjs --import tsx proto-looks/render.ts
 import fs from "node:fs";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
@@ -13,7 +13,7 @@ import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES, type ShadeName } from "../src
 import type { Frame } from "../src/render/frame";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { instantOf } from "../src/utils/instant";
-import { sessionBar, type Payload, type SessionRender } from "../test/helpers/session-bar";
+import { sessionBar, type Payload, type SessionRender } from "../scripts/lib/draw-fixtures/session-bar";
 import { THEMES } from "./axes.mjs";
 
 const OUT = "proto-looks/out";

@@ -7,7 +7,7 @@
 // incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
 // file — the optimization changes cost, never output.
 
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import {
   mkdtempSync,
   mkdirSync,
@@ -18,7 +18,7 @@ import {
   symlinkSync,
   utimesSync,
 } from "node:fs";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,7 +38,7 @@ import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { usageFold } from "./helpers/usage-fold";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 

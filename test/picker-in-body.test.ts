@@ -1,12 +1,12 @@
 // brandon-menu-ia-q30.jl1: the two template arguments the `◀ label ▶` picker
 // is built from — a carousel whose label fires an action of the author's, and a
 // picker that is a row of a disclosure body and so draws no ✕ of its own.
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -20,7 +20,7 @@ import { instantOf } from "../src/utils/instant";
 import { contrastRatio } from "@promptctl/rich-js";
 import { truecolorOf } from "./helpers/frame";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const OPTS = {
   endcaps: "plain" as const,

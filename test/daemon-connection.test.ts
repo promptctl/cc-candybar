@@ -11,7 +11,7 @@ import {
   handleConnection,
   type ConnectionDaemon,
 } from "../src/daemon/connection";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { clockOver, systemTimers } from "../src/time";
 import { NOTHING_TO_SETTLE } from "../src/daemon/statusline-answer";
 import type { Subscriber } from "../src/daemon/frame-feed";
@@ -38,7 +38,7 @@ import { renderFailed } from "../src/daemon/foundations/render-answers";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";
 import { openedOn, type Opened } from "./helpers/opened-connection";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

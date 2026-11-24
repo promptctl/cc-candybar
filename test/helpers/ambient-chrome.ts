@@ -35,7 +35,7 @@ import {
   VERB_STEP_STATE,
 } from "../../src/click/wire";
 import { effectsOf } from "./click";
-import { parseAndValidate } from "./parse-and-validate";
+import { parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 // [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
 // for both consumers below. Every arm is under a namespace the loader reserves,

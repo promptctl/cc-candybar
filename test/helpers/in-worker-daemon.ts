@@ -6,7 +6,7 @@
 
 import { systemRegion } from "../../src/utils/region";
 import { inProcessRenderer } from "../../src/in-process-renderer";
-import { HOST } from "./host";
+import { HOST } from "../../scripts/lib/host";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -36,12 +36,12 @@ import {
   sendOne,
   type Request,
 } from "../../src/daemon/foundations/protocol";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { daemonClock } from "../../src/host";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
-import type { DaemonEndpoint } from "./daemon-wire";
-import type { StartBarDaemon } from "./drive-bar";
+import type { DaemonEndpoint } from "../../scripts/lib/daemon/wire";
+import type { StartBarDaemon } from "../../scripts/lib/drive-bar";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<
@@ -169,9 +169,12 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
   Object.assign(process.env, placed);
 }
 
-// A bar on a daemon in this worker (test/helpers/drive-bar.ts).
-export const startBarDaemon: StartBarDaemon = async (env) => {
-  const daemon = startDaemon(env);
+// A bar on a daemon in this worker (scripts/lib/drive-bar.ts).
+// The daemon runs in this worker, whose environment it swaps to the one it
+// is given, so the bar's isolated env lands over the worker's own, which
+// test/setup.ts already isolated from the developer's.
+export const startBarDaemon: StartBarDaemon = async ({ env }) => {
+  const daemon = startDaemon({ ...process.env, ...env });
   return { target: daemon, stop: daemon.stop };
 };
 

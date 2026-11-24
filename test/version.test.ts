@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { withStamp } from "../scripts/version-stamp.cjs";
+import { withStamp } from "../scripts/lib/version-stamp.cjs";
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
@@ -55,7 +55,7 @@ describe("PACKAGE_VERSION", () => {
 });
 
 test("the stamp's preload keeps what NODE_OPTIONS already held", () => {
-  const stamp = require.resolve("../scripts/version-stamp.cjs");
+  const stamp = require.resolve("../scripts/lib/version-stamp.cjs");
   const [kept, preload, ...rest] = withStamp("--trace-warnings").split(" ");
   expect([kept, rest]).toEqual(["--trace-warnings", []]);
   expect(fileURLToPath(preload!.replace(/^--import=/, ""))).toBe(stamp);

@@ -10,7 +10,7 @@ import {
 import { Holds } from "../../src/utils/holds";
 import { failed, ok, type Outcome } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
-import { systemTimekeeper } from "../helpers/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { heldClock } from "../helpers/held-clock";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its

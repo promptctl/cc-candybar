@@ -21,10 +21,11 @@
 //      from the file, so the next reload falls back to the bundled default.
 
 import type { ColorCompatibility } from "../src/themes/policy";
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { locations } from "../src/daemon/paths";
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, boldUrls } from "./helpers/frame";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
@@ -32,7 +33,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import JSON5 from "json5";
 import { getThemePalette } from "@promptctl/rich-js";
-import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -65,7 +66,7 @@ import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";

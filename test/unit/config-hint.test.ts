@@ -5,7 +5,7 @@
 // (brandon-config-nuq6). The Rust client's config_env_hint test holds the
 // same table.
 import path from "node:path";
-import { hostOf } from "../helpers/host";
+import { hostOf } from "../../scripts/lib/host";
 import {
   CONFIG_ENV,
   detectConfigEnv,

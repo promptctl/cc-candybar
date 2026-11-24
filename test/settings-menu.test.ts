@@ -23,7 +23,7 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -41,7 +41,7 @@ import {
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
 import { isReservedName, SETTINGS_NS } from "../src/config/reserved-names";
-import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { menuStateKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";

@@ -2,9 +2,9 @@ import path from "node:path";
 import {
   parseClientHints,
   type ClientHints,
-} from "../../src/daemon/foundations/protocol";
-import type { ViewFacts } from "../../src/renderer-interface/request-context";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+} from "../../../src/daemon/foundations/protocol";
+import type { ViewFacts } from "../../../src/renderer-interface/request-context";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 
 // The request a view is opened with and declares at (brandon-unfiled-3248.
 // 8ro6, step 4): session `sessionId` in `cwd`, its client reporting `hints`.

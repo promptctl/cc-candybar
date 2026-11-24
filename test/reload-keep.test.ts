@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
@@ -11,13 +12,13 @@ import {
 } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
 import { type Timekeeper } from "../src/time";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { heldClock } from "./helpers/held-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 

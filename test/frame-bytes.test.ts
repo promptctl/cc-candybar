@@ -10,11 +10,11 @@
 // reach is asserted too: a config that stops drawing a blank row, a wrapped
 // row, a ColorBlend, a moving effect or a fade fails here, not silently.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { ColorDepth, Style, type ColorSpec } from "@promptctl/rich-js";
-import { selectionFor } from "./helpers/selection";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -31,7 +31,7 @@ import { SessionEffects } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import type { BuildLineOptions } from "../src/render/strip";
 import type { Instant } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");

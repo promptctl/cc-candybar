@@ -49,12 +49,18 @@ export function daemonWorld(): World<ReportingClock> {
 // [LAW:single-enforcer] The one place src reads the process's environment, home
 // and temporary directory (besides the preload's own main, which runs apart
 // from the rest). The eslint config keeps every other file from naming them.
+export const machineHost = (): Host => ({
+  env: process.env,
+  home: os.homedir(),
+  tmp: os.tmpdir(),
+});
+
 // The launcher holds the live `process.env`, not a copy, and reads it at each
 // launch, so a variable the process sets after this still reaches the
 // children it launches, apart from the repository-scoped ones.
 function worldOver<C extends Timekeeper>(clock: C): World<C> {
   return {
-    host: { env: process.env, home: os.homedir(), tmp: os.tmpdir() },
+    host: machineHost(),
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
   };

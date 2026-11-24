@@ -9,7 +9,7 @@ import {
   clickLaunchVia,
 } from "../src/daemon/foundations/click-launch";
 import { hangs } from "../src/proc/spawner-fake";
-import { fakeLauncher } from "./helpers/fake-launcher";
+import { fakeLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
 
 describe("clickLaunch", () => {

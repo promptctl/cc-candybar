@@ -6,7 +6,7 @@
 
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
-import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
   eventRenderer,
@@ -15,12 +15,13 @@ import {
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
-import { TEST_SESSION } from "./helpers/payload-session";
-import { withTranscriptLanes } from "./helpers/payload-owners";
+import { TEST_SESSION } from "../scripts/lib/draw-fixtures/payload-session";
+import { withTranscriptLanes } from "../scripts/lib/draw-fixtures/payload-owners";
 import { observable, reaction, runInAction, type IObservableValue } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { valueOf } from "../src/utils/logfmt";
-import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
+import { HOST, hostOf } from "../scripts/lib/host";
+import { WORLD, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
@@ -55,7 +56,7 @@ import type { DaemonFacts } from "../src/facts/world-state";
 import { restamp } from "../src/facts/fact";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
-import { segmentErrorsOf } from "./helpers/draw-payload";
+import { segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
 import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -68,9 +69,9 @@ import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { heardRequest } from "./helpers/click";
-import { viewFacts } from "./helpers/view-facts";
+import { viewFacts } from "../scripts/lib/draw-fixtures/view-facts";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
@@ -80,7 +81,7 @@ import {
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
 import { NOTHING_READ } from "../src/dsl/view-source";
@@ -214,8 +215,9 @@ function rig(): Rig {
   // would share it with the storage folders these cases count: the trigger
   // hears nothing here, as in every rig.
   const fileEvents = handDelivery();
-  const providers = withTranscriptLanes(
-    createPayloadProviders({
+  const providers = withTranscriptLanes({
+    environment: TEST_ENVIRONMENT,
+    ...createPayloadProviders({
       clock: systemTimekeeper,
       launcher: world.launcher,
       host,
@@ -228,7 +230,7 @@ function rig(): Rig {
         clock: systemTimekeeper,
       }),
     }),
-  );
+  });
   const sessionState = new SessionState();
   const warnings = observable.box<DaemonFacts["fileEvents"]>([], { deep: false });
   const reloads = new ReloadSignal();

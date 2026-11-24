@@ -1,16 +1,13 @@
-// The readiness contract of test/helpers/spawn-isolated-daemon.ts against real
+// The readiness contract of scripts/lib/daemon/isolated.ts against real
 // exits. The report's wording is held as a value in
 // test/spawn-isolated-daemon.test.ts, which says why no case here times anything.
 
 import fs from "node:fs";
 import path from "node:path";
 
-import { waitForExit } from "../../helpers/daemon-wire";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  type IsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { waitForExit } from "../../../scripts/lib/daemon/wire";
+import { type IsolatedDaemonEnv } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 
 // An isolated env whose socket parent is open to its group and world, which the
 // daemon refuses before it binds anything

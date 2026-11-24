@@ -11,7 +11,7 @@ import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
 import { REFRESH_LANES } from "../src/facts/world-state";
 import { sessionRig, settledRequest } from "./helpers/session-rig";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 
 let dir: string;
 let cleanups: Array<() => void>;

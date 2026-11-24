@@ -18,7 +18,7 @@ import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 (HAS_TMUX ? test : test.skip)(
   "an upgraded host restores its old status layout while drawing the ordinary statusline",

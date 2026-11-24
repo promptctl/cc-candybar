@@ -11,7 +11,7 @@ import type { Frame } from "../src/render/frame";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";
-import { sessionBar } from "./helpers/session-bar";
+import { sessionBar } from "../scripts/lib/draw-fixtures/session-bar";
 
 function menu() {
   const bar = sessionBar(`{}`, 400);

@@ -34,14 +34,15 @@
 
 import { buildRig } from "./helpers/rig";
 import { locations } from "../src/daemon/paths";
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher } from "../scripts/lib/draw-fixtures/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
@@ -67,7 +68,7 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";

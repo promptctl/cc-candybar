@@ -4,7 +4,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/renderer/render-cache";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
-import { holdsWithin, nameOf, type Condition, type What } from "./until";
+import { holdsWithin, nameOf, type Condition, type What } from "../../scripts/lib/until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
 // reloads, in place of polling an entry's fields against a wall-clock

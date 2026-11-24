@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hostOf, worldOf } from "./helpers/host";
+import { hostOf } from "../scripts/lib/host";
+import { worldOf } from "./helpers/host";
 import { __test__, runRecordHostBundle } from "../src/install";
 import {
   readHostBundle,

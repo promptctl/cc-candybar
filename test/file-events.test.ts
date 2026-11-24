@@ -1,4 +1,4 @@
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +18,7 @@ import {
   collectDiagnostics,
 } from "../src/render/diagnostics";
 import { fakeWatches } from "./helpers/fake-watches";
-import { until } from "./helpers/until";
+import { until } from "../scripts/lib/until";
 
 // [LAW:behavior-not-structure] The daemon's one owner of file-event delivery
 // through what it shows: what it reads, what it tells its subscribers, the

@@ -11,7 +11,7 @@ import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 const exec = promisify(execFile);
 const BUNDLE = path.resolve("dist/index.mjs");

@@ -11,6 +11,7 @@ import path from "node:path";
 import { serveBar, type BarWeb, type View } from "../../../scripts/bar-web/server";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
+import { WORKER_SHELL } from "../../helpers/session-environment";
 
 jest.setTimeout(30_000);
 
@@ -22,7 +23,7 @@ describe("bar-web", () => {
 
   const serve = (): Promise<BarWeb> =>
     serveBar(
-      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false },
+      { port: 0, assets: ASSETS, width: 120, rows: 40, config: null, cwd: process.cwd(), ssh: false, shell: WORKER_SHELL },
       startBarDaemon,
     );
 

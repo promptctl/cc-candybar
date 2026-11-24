@@ -14,7 +14,7 @@ import { prFactOf } from "../src/renderer/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, PrState, PullRequest } from "../src/segments/git";
@@ -41,8 +41,9 @@ import {
   requestPayload,
   settled,
   type FixtureOwners,
-} from "./helpers/payload-owners";
-import { systemTimekeeper } from "./helpers/system-clock";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 type LogEntry = { level: string; msg: string };
 
@@ -52,7 +53,7 @@ function depsWith(
   overrides: Partial<FixtureOwners> = {},
 ): FixtureOwners {
   return {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(async () => gitOutcome),
     usageStore: fakeUsage({
       usage: async () => ABSENT,

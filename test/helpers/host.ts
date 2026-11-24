@@ -1,35 +1,16 @@
-import os from "node:os";
 import { locations } from "../../src/daemon/paths";
 import type { Host, World } from "../../src/host";
+import { HOST } from "../../scripts/lib/host";
 import { systemOneShotLauncher } from "../../src/proc/system-launcher";
 import type { LaunchOwner, TestableLauncher } from "../../src/proc/launch";
 import { systemProbe } from "../../src/daemon/process-fingerprint";
-import { systemTimekeeper } from "./system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 
 // A test file's environment (test/helpers/quarantine-environment.cjs) hands
 // its runtime this hook and runs what it is given after the file's last hook.
 // Only a test file's runtime loads this module.
 declare global {
   function releaseTestFixture(release: () => Promise<void>): void;
-}
-
-// [LAW:effects-at-boundaries] The machine a test runs on, as src is handed it:
-// this worker's own environment, home and temporary directory. A test that
-// means to be isolated builds its own with `hostOf`, naming only the variables
-// it cares about, instead of writing `process.env`.
-export const HOST: Host = {
-  env: process.env,
-  home: os.homedir(),
-  tmp: os.tmpdir(),
-};
-
-// A host over the environment a test states. Its home and temporary directory
-// are the test's unless it names them.
-export function hostOf(
-  env: NodeJS.ProcessEnv,
-  rest: Partial<Pick<Host, "home" | "tmp">> = {},
-): Host {
-  return { env, home: rest.home ?? HOST.home, tmp: rest.tmp ?? HOST.tmp };
 }
 
 // [LAW:no-ambient-temporal-coupling] This module's runtime is one test

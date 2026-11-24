@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { hostOf } from "../../helpers/host";
+import { hostOf } from "../../../scripts/lib/host";
 import { readFileSync } from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
@@ -7,18 +7,13 @@ import { leasePathFor, sessionStatePath } from "../../../src/daemon/paths";
 import { readLease } from "../../../src/daemon/socket-lease";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { click, render, drawnLink } from "../../helpers/daemon-e2e";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  spawnIsolatedDaemon,
-  type IsolatedDaemonHandle,
-  type RunningDaemon,
-} from "../../helpers/spawn-isolated-daemon";
+import { type IsolatedDaemonHandle, type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
 import {
   sendDaemonRequest,
   waitForExit,
   type ExitResult,
-} from "../../helpers/daemon-wire";
+} from "../../../scripts/lib/daemon/wire";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight

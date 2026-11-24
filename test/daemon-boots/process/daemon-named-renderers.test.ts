@@ -12,19 +12,8 @@ import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { WORKTREE_MODEL } from "../../fixtures/named-renderer-payload";
-import {
-  click,
-  findUrl,
-  frameRequest,
-  hookData,
-  observePane,
-  renderBody,
-  renderRequest,
-  saidOf,
-  sendClick,
-  urlWriting,
-  urlsOfAnsi,
-} from "../../helpers/daemon-e2e";
+import { click, findUrl, frameRequest, hookData, observePane, renderBody, renderRequest, urlWriting, urlsOfAnsi } from "../../helpers/daemon-e2e";
+import { saidOf, sendClick } from "../../../scripts/lib/daemon/requests";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_REDO,
@@ -43,8 +32,8 @@ import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
 } from "../../../src/config/loader/edit-mode";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
-import { until } from "../../helpers/until";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
+import { until } from "../../../scripts/lib/until";
 import { readProbe, readsOf, type Read } from "../../helpers/daemon-read-probe";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
@@ -52,12 +41,8 @@ import {
   repoConfigs,
   repoConfigsPath,
 } from "../../../src/daemon/config-discovery/repo-configs";
-import {
-  prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-  spawnIsolatedDaemon,
-  type RunningDaemon,
-} from "../../helpers/spawn-isolated-daemon";
+import { type RunningDaemon } from "../../../scripts/lib/daemon/isolated";
+import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv, spawnIsolatedDaemon } from "../../helpers/spawn-isolated-daemon";
 
 const BUNDLE = path.resolve("dist/index.mjs");
 const builtDaemon = (env: NodeJS.ProcessEnv) => ({

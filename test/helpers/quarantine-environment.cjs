@@ -20,8 +20,8 @@
 
 const path = require("node:path");
 const { TestEnvironment } = require("jest-environment-node");
-const { caseName } = require("./test-records.cjs");
-const { QUARANTINE_FILE, markError, quarantined, readQuarantine } = require("./quarantine.cjs");
+const { caseName } = require("../../scripts/lib/test-records.cjs");
+const { QUARANTINE_FILE, markError, quarantined, readQuarantine } = require("../../scripts/lib/quarantine.cjs");
 
 /** The describe titles of a test from the outside in: the root block is the one with no parent. */
 function caseNameOf(test) {

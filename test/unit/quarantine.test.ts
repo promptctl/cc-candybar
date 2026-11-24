@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 
-const quarantine = createRequire(__filename)("../helpers/quarantine.cjs");
+const quarantine = createRequire(__filename)("../../scripts/lib/quarantine.cjs");
 
 const line =
   "2026-11-02 candybar-testing-ihvy.hcl test/a.test.ts › outer › the case";

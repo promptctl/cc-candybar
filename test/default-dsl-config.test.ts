@@ -8,11 +8,11 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
-import { globalsFor, selectionFor } from "./helpers/selection";
+import { globalsFor, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -31,7 +31,7 @@ import {
   mergeWithDefault,
   unauthored,
 } from "../src/config/dsl-loader";
-import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -52,7 +52,7 @@ import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { buildRig, type RigFrame } from "./helpers/rig";
-import { samplePayload } from "./helpers/sample-payload";
+import { samplePayload } from "../scripts/lib/draw-fixtures/sample-payload";
 import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";
@@ -63,7 +63,7 @@ import { POLLED } from "../src/config/settings-menu";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 

@@ -4,7 +4,7 @@
 // own journaled write — and the flash on the rendered bar.
 
 import { linkUrls } from "./helpers/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   ANIMATION_SPEED_NAMES,
   listResolvablePaletteNames,
@@ -37,7 +37,7 @@ import {
   litAt,
 } from "../src/config/menu-timeout";
 import { MenuIdle } from "../src/renderer/menu-idle";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { textOf, type Frame, type Row } from "../src/render/frame";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 

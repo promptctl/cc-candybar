@@ -6,7 +6,7 @@
 //   pnpm bar --config my.json5 ▸             a config of your own (a copy: clicks never touch it)
 //   pnpm bar ✎ "▸#2"                         `text#n` clicks the n-th link reading `text` (from 1)
 //
-// The bar itself — isolated daemon, render, click — is test/helpers/drive-bar.ts.
+// The bar itself — isolated daemon, render, click — is scripts/lib/drive-bar.ts.
 
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -15,8 +15,10 @@ import {
   describeLink,
   linksOf,
   printable,
+  realBarDaemon,
   startBar,
-} from "../test/helpers/drive-bar";
+} from "./lib/drive-bar";
+import { shellEnvironment } from "./lib/shell";
 
 // `text#n` → the n-th link reading `text`; a bare `text` is the first.
 function parseStep(step: string): [string, number] {
@@ -45,13 +47,17 @@ async function main(): Promise<void> {
     },
     allowPositionals: true,
   });
-  const bar = await startBar({
-    width: cells("width", values.width),
-    rows: cells("rows", values.rows),
-    config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
-    cwd: path.resolve(invokedIn, values.cwd),
-    ssh: values.ssh,
-  });
+  const bar = await startBar(
+    {
+      width: cells("width", values.width),
+      rows: cells("rows", values.rows),
+      config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
+      cwd: path.resolve(invokedIn, values.cwd),
+      ssh: values.ssh,
+      shell: shellEnvironment(process.env),
+    },
+    realBarDaemon,
+  );
   try {
     let out = await bar.render();
     console.log(`--- closed\n${printable(out)}`);

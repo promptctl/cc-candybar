@@ -7,7 +7,7 @@
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import { RESERVED_NAMESPACES } from "../../src/config/reserved-names";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import { parseAndValidate } from "../helpers/parse-and-validate";
+import { parseAndValidate } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

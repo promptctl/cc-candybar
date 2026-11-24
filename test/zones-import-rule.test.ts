@@ -4,39 +4,12 @@
 // config over source text placed at zone paths, from the repo root and from a
 // subdirectory, as an editor whose working directory is `src/` runs it.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const ROOT = path.resolve(__dirname, "..");
-
-// ESM config, so ESLint runs in a node of its own, once per working
-// directory, as an editor or runner started there runs it.
-const SCRIPT = `
-import { ESLint } from "eslint";
-const [root, cwd, casesJson] = process.argv.slice(1);
-// The probes are files the project does not hold, which the typed rules
-// cannot read; those rules have their own fixture (promise-lint-rule.test.ts).
-const eslint = new ESLint({
-  cwd,
-  overrideConfig: {
-    languageOptions: { parserOptions: { projectService: false } },
-    rules: {
-      "@typescript-eslint/no-floating-promises": "off",
-      "@typescript-eslint/no-misused-promises": "off",
-    },
-  },
-});
-const out = {};
-for (const [name, c] of Object.entries(JSON.parse(casesJson))) {
-  const [result] = await eslint.lintText(c.code, { filePath: root + "/" + c.file });
-  out[name] = result.messages
-    .filter((m) => m.ruleId === "zones/import-direction")
-    .map((m) => m.message);
-}
-console.log(JSON.stringify(out));
-`;
+import { REPO } from "../scripts/lib/repo.cjs";
+import { lintCases, UNTYPED } from "./helpers/lint-cases";
 
 const IN_RENDERER = "src/renderer/probe.ts";
 const IN_START = "src/renderer/main.ts";
@@ -58,7 +31,7 @@ const REFUSED = {
   rendererToRestTypeOnly: { file: IN_RENDERER, code: typeImp("../daemon/x") },
   rendererToAbsoluteHostType: {
     file: IN_RENDERER,
-    code: typeImp(path.join(ROOT, "src/host")),
+    code: typeImp(path.join(REPO, "src/host")),
   },
   rendererToHostIdentity: {
     file: IN_RENDERER,
@@ -138,6 +111,18 @@ const REFUSED = {
     file: IN_FOUNDATIONS,
     code: `export { x } from "../draw-bar";\n`,
   },
+  // The test suite runs under Jest, and src runs outside it; what src shares
+  // with a tool, a tool takes from src.
+  restToTest: { file: IN_REST, code: imp("../../test/helpers/x") },
+  sharedToTest: { file: IN_SHARED, code: imp("../../test/helpers/x") },
+  rendererToTestRequire: {
+    file: IN_RENDERER,
+    code: `export const x = require("../../test/helpers/x");\n`,
+  },
+  restToLib: { file: IN_REST, code: imp("../../scripts/lib/x") },
+  restToTools: { file: IN_REST, code: imp("../../scripts/drive-bar") },
+  // A path no row of the table names is in no zone.
+  restToUnlisted: { file: IN_REST, code: imp("../../docs/design/probes/p6") },
 };
 
 const ALLOWED = {
@@ -175,20 +160,17 @@ describe("the zones import rule", () => {
   let found: Record<"root" | "src" | "link", Record<string, string[]>>;
 
   beforeAll(() => {
-    const lintFrom = (cwd: string, root = ROOT) =>
-      JSON.parse(
-        execFileSync(
-          process.execPath,
-          [
-            "--input-type=module",
-            "-e",
-            SCRIPT,
-            root,
-            cwd,
-            JSON.stringify({ ...REFUSED, ...ALLOWED }),
-          ],
-          { cwd, encoding: "utf8" },
-        ),
+    // As an editor or runner started in `cwd` lints the checkout at `root`.
+    const lintFrom = (cwd: string, root = REPO) =>
+      Object.fromEntries(
+        Object.entries(
+          lintCases({ ...REFUSED, ...ALLOWED }, UNTYPED, { cwd, root }),
+        ).map(([name, messages]) => [
+          name,
+          messages
+            .filter((m) => m.ruleId === "zones/import-direction")
+            .map((m) => m.message),
+        ]),
       );
     // A checkout reached through a symlink, as an editor opened on a linked
     // path lints it.
@@ -196,11 +178,11 @@ describe("the zones import rule", () => {
       fs.mkdtempSync(path.join(os.tmpdir(), "zones-")),
       "repo",
     );
-    fs.symlinkSync(ROOT, link);
+    fs.symlinkSync(REPO, link);
     try {
       found = {
-        root: lintFrom(ROOT),
-        src: lintFrom(path.join(ROOT, "src")),
+        root: lintFrom(REPO),
+        src: lintFrom(path.join(REPO, "src")),
         link: lintFrom(link, link),
       };
     } finally {

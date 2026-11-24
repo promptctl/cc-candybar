@@ -2,10 +2,11 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
-import { HOST, locs } from "./helpers/host";
-import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
+import { HOST } from "../scripts/lib/host";
+import { locs } from "./helpers/host";
+import { unscriptedLauncher, unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
 import {
   compileInputOf,
@@ -22,7 +23,7 @@ import { pluginLoadLine } from "../src/renderer/render-cache";
 import { SessionState } from "../src/renderer/session-state";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { loadDiscovered } from "./helpers/config-host";
 

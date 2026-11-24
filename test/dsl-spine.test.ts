@@ -10,7 +10,7 @@ import { ansiOf, textOf } from "../src/render/frame";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
 import { buildRig } from "./helpers/rig";

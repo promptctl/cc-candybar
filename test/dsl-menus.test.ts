@@ -27,7 +27,7 @@
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { picked, selectionFor } from "./helpers/selection";
+import { picked, selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { buildRig } from "./helpers/rig";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
@@ -37,7 +37,7 @@ import {
   transposePalette,
 } from "@promptctl/rich-js";
 import type { Palette, Style } from "@promptctl/rich-js";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";

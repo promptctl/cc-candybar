@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HOST } from "./helpers/host";
+import { HOST } from "../scripts/lib/host";
 import { heldClock } from "./helpers/held-clock";
 import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
@@ -42,7 +42,7 @@ import {
 import { locations, stateDir } from "../src/daemon/paths";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { presence } from "../src/utils/presence";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { clockOver, systemTimers } from "../src/time";
 import { withRegularTextFile } from "../src/utils/regular-text";
 import { ConfigText } from "../src/daemon/config-discovery/config-text";

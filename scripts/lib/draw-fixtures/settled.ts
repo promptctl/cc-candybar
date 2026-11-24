@@ -1,6 +1,6 @@
 import { when } from "mobx";
-import { awaits, spelled } from "../../src/facts/awaited";
-import { UNREAD_RUN, type WorldState } from "../../src/facts/world-state";
+import { awaits, spelled } from "../../../src/facts/awaited";
+import { UNREAD_RUN, type WorldState } from "../../../src/facts/world-state";
 
 // Whether a world state still holds a fact a draw waits for: some built-in,
 // some source, or some run the view subscribes to, never answered. The two

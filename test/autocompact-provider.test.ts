@@ -4,7 +4,7 @@ import path from "node:path";
 import { autorun } from "mobx";
 import { AutoCompactProvider } from "../src/daemon/cache/autocompact";
 import { ok } from "../src/utils/outcome";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // [LAW:behavior-not-structure] The owner of the auto-compact window
 // (brandon-unfiled-3248.8ro6, step 1): every refresh asks, the file is read

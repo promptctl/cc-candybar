@@ -10,7 +10,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { EMPTY_DEFAULT, parseAndPlace } from "../helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndPlace } from "../../scripts/lib/draw-fixtures/parse-and-validate";
 import { unresolvedReads } from "../helpers/synthesis-reads";
 
 const AUTHORED = `{

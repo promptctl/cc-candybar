@@ -7,7 +7,7 @@ import { reportingClock } from "../../../src/daemon/task-throws";
 import type { RequestId } from "../../../src/renderer-interface/interface";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { hostOf } from "../../helpers/host";
+import { hostOf } from "../../../scripts/lib/host";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -15,7 +15,7 @@ import { PassThrough } from "node:stream";
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { daemonClock } from "../../../src/host";
-import { systemTimekeeper } from "../../helpers/system-clock";
+import { systemTimekeeper } from "../../../scripts/lib/system-clock";
 import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
 import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
 import {
@@ -24,7 +24,7 @@ import {
 } from "../../../src/utils/event-hold";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { hearingEvents } from "../../helpers/renderers";
-import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
+import { fakeLauncher, type FakeLauncher } from "../../../scripts/lib/draw-fixtures/fake-launcher";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { logLines } from "../../../src/daemon/log";
@@ -49,7 +49,7 @@ import {
   refusedClick,
   drawnLink,
 } from "../../helpers/daemon-e2e";
-import { renderLines } from "../../helpers/daemon-log";
+import { renderLines } from "../../../scripts/lib/daemon/log";
 import { linkUrls } from "../../helpers/frame";
 import {
   startDaemon,
@@ -58,7 +58,7 @@ import {
 import { heldClock } from "../../helpers/held-clock";
 import { openedOn } from "../../helpers/opened-connection";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

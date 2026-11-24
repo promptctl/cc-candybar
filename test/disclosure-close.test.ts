@@ -20,11 +20,11 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cells.
 
-import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload, segmentErrorsOf } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, type Row } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -51,7 +51,7 @@ import {
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());

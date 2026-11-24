@@ -7,13 +7,13 @@
 // on the finished resolution, so nothing is re-resolved under it: an installed
 // theme or a preset is a `sessionPick`, which the resolution reads, never an
 // `over` field, or its theme default and the preset's globals would not follow.
-import type { DslConfig } from "../../src/config/dsl-types";
+import type { DslConfig } from "../../../src/config/dsl-types";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
-} from "../../src/config/effective-globals";
-import type { DrawSelection } from "../../src/dsl/render";
-import type { Selections } from "../../src/dsl/view-source";
+} from "../../../src/config/effective-globals";
+import type { DrawSelection } from "../../../src/dsl/render";
+import type { Selections } from "../../../src/dsl/view-source";
 
 export type RenderSelection = DrawSelection & Selections;
 
@@ -22,7 +22,7 @@ export type RenderSelection = DrawSelection & Selections;
 // build, read the one way the bar reads it rather than spelled field by field.
 // The daemon reads which preset roots are authored from the user's own layer.
 // A config handed here alone has none, so it authors none; a draw of a
-// discovered load reads its user file's (test/helpers/prepared-config.ts).
+// discovered load reads its user file's (scripts/lib/draw-fixtures/prepared-config.ts).
 export const globalsFor = (
   config: DslConfig,
   sessionPick: (key: string) => string | null = () => null,

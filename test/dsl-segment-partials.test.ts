@@ -6,14 +6,14 @@
 // function (a computed name) is a separate, upstream-blocked follow-up
 // (candybar-templates-zh8b.ph5) and is not exercised here.
 
-import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { EMPTY_DEFAULT } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { SessionState } from "../src/renderer/session-state";
 
-import { validateConfig } from "./helpers/parse-and-validate";
+import { validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -24,7 +24,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 const OPTS = {
   endcaps: "powerline" as const,

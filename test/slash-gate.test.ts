@@ -6,12 +6,12 @@
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -19,7 +19,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
@@ -37,9 +37,10 @@ import {
   fakeUsage,
   requestPayload,
   type FixtureOwners,
-} from "./helpers/payload-owners";
-import { systemTimekeeper } from "./helpers/system-clock";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const SID = sessionIdOf("slash-gate");
 const OPTS = {
@@ -71,7 +72,7 @@ async function bar(
     DEFAULT_DSL_CONFIG,
   );
   const deps = {
-    ...absentOwners(),
+    ...absentOwners(TEST_ENVIRONMENT),
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
       usage: async () => ABSENT,

@@ -11,8 +11,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { missingRuns, renderSummary, summarise } = require("../test/helpers/test-records.cjs");
-const { readQuarantine } = require("../test/helpers/quarantine.cjs");
+const { missingRuns, renderSummary, summarise } = require("./lib/test-records.cjs");
+const { readQuarantine } = require("./lib/quarantine.cjs");
 
 const runsAt = process.argv.indexOf("--runs");
 const runs = runsAt === -1 ? [] : (process.argv[runsAt + 1] ?? "").split(",").filter(Boolean);

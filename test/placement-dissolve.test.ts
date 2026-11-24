@@ -6,11 +6,11 @@
 // until the dissolve is over, then closes up in one step. A write to the
 // session's state, the width or the palette ends every dissolve in flight.
 
-import { drawPayload } from "./helpers/draw-payload";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
@@ -22,8 +22,8 @@ import type { RenderedLine } from "../src/dsl/node-registry";
 import { SessionEffects } from "../src/render/effect";
 import { decideEffectName, type EffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
-import { parseAndValidate } from "./helpers/parse-and-validate";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S_ID = sessionIdOf("s");
 

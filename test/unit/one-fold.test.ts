@@ -14,7 +14,7 @@ import { listResolvablePaletteNames } from "../../src/themes/policy";
 import {
   parseAndValidate,
   validateConfig,
-} from "../helpers/parse-and-validate";
+} from "../../scripts/lib/draw-fixtures/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

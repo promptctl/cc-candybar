@@ -11,7 +11,7 @@ import { decodeAnsi } from "@promptctl/rich-js";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { textOf } from "../../../src/render/frame";
 import { frameRequest, hookData, renderBody } from "../../helpers/daemon-e2e";
-import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { sendDaemonRequest } from "../../../scripts/lib/daemon/wire";
 import {
   startDaemon,
   type InWorkerDaemon,

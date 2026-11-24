@@ -32,12 +32,12 @@ import {
   verbContextWith,
   CLICK_VERBS,
 } from "./helpers/click";
-import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
+import { EMPTY_DEFAULT, parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { type Timekeeper } from "../src/time";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";
 import { heldClock } from "./helpers/held-clock";

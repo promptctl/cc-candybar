@@ -24,7 +24,7 @@ import {
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");

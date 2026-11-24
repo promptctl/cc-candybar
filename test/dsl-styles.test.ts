@@ -12,11 +12,11 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
-import { selectionFor } from "./helpers/selection";
+import { selectionFor } from "../scripts/lib/draw-fixtures/selection";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { ownValidators } from "./helpers/ambient-chrome";
-import { parseAndValidate, validateConfig } from "./helpers/parse-and-validate";
+import { parseAndValidate, validateConfig } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { buildRig } from "./helpers/rig";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {

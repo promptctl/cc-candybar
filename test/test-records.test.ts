@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createRequire } from "node:module";
 
-const records = createRequire(__filename)("./helpers/test-records.cjs");
+const records = createRequire(__filename)("../scripts/lib/test-records.cjs");
 
 const ROOT = "/repo";
 // The shape jest gives a reporter. A file with no test arrives as a failed
@@ -91,7 +91,7 @@ describe("test records", () => {
 });
 
 describe("the quarantine in the records", () => {
-  const entries = createRequire(__filename)("./helpers/quarantine.cjs").parseQuarantine(
+  const entries = createRequire(__filename)("../scripts/lib/quarantine.cjs").parseQuarantine(
     [
       "2026-11-02 abc-1.x test/a.test.ts › a › b",
       "2026-11-01 abc-2.y test/gone.test.ts › a case no run holds",
@@ -197,7 +197,7 @@ describe("the quarantine in the records", () => {
   });
 
   it("shows a line dated in the future as red and says so", () => {
-    const future = createRequire(__filename)("./helpers/quarantine.cjs").parseQuarantine(
+    const future = createRequire(__filename)("../scripts/lib/quarantine.cjs").parseQuarantine(
       "2062-11-02 abc-4.w test/a.test.ts › a › b",
     );
     const text = records.renderSummary(records.summarise([], future, NOW));

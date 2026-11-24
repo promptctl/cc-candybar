@@ -33,6 +33,9 @@ const config = entry[1];
 // with: named and resolved the way it names and resolves it, from its own install.
 const fromAnalyzer = createRequire(fileURLToPath(import.meta.resolve(ANALYZER)));
 const presetPath = fromAnalyzer.resolve(`conventional-changelog-${config.preset.toLowerCase()}`);
+// [LAW:one-way-deps] exception: a package module resolved from the analyzer's
+// own install, never a repo module, so it has no zone to be checked against.
+// eslint-disable-next-line zones/import-direction
 const preset = await import(pathToFileURL(presetPath).href);
 const presetTypes = config.presetConfig?.types ?? preset.DEFAULT_COMMIT_TYPES;
 if (!presetTypes) {

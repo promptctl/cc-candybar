@@ -27,7 +27,7 @@ import { drawnChars, same, seams } from "./helpers/seams";
 import {
   prepareConfig,
   renderEffective,
-} from "./helpers/prepared-config";
+} from "../scripts/lib/draw-fixtures/prepared-config";
 import {
   listResolvablePaletteNames,
   type ColorCompatibility,

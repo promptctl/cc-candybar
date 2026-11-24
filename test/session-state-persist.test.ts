@@ -19,8 +19,8 @@ import {
   EPHEMERAL_HISTORY_STORAGE,
   HeldStores,
 } from "../src/daemon/held-stores";
-import { throughout, until } from "./helpers/until";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { throughout, until } from "../scripts/lib/until";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");

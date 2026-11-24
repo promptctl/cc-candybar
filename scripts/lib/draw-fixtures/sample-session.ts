@@ -1,16 +1,16 @@
 // A sample Claude Code session with populated git, transcript, and rate-limit data.
-import type { ClientHints } from "../../src/daemon/foundations/protocol.js";
-import type { SessionId } from "../../src/daemon/foundations/session-id.js";
-import type { Lanes } from "../../src/daemon/readings.js";
-import type { DaySums } from "../../src/daemon/cache/session-usage-store.js";
-import { oneDay } from "../../src/daemon/foundations/today-facts.js";
-import type { CheckedHookData } from "../../src/renderer-interface/request-context.js";
-import type { GitInfo } from "../../src/segments/git.js";
-import type { TranscriptUsage } from "../../src/segments/session.js";
-import type { MetricsFold } from "../../src/segments/metrics.js";
-import type { AutoCompactWindow } from "../../src/segments/autocompact.js";
-import type { Instant } from "../../src/utils/instant.js";
-import { ABSENT, ok } from "../../src/utils/outcome.js";
+import type { ClientHints } from "../../../src/daemon/foundations/protocol.js";
+import type { SessionId } from "../../../src/daemon/foundations/session-id.js";
+import type { Lanes } from "../../../src/daemon/readings.js";
+import type { DaySums } from "../../../src/daemon/cache/session-usage-store.js";
+import { oneDay } from "../../../src/daemon/foundations/today-facts.js";
+import type { CheckedHookData } from "../../../src/renderer-interface/request-context.js";
+import type { GitInfo } from "../../../src/segments/git.js";
+import type { TranscriptUsage } from "../../../src/segments/session.js";
+import type { MetricsFold } from "../../../src/segments/metrics.js";
+import type { AutoCompactWindow } from "../../../src/segments/autocompact.js";
+import type { Instant } from "../../../src/utils/instant.js";
+import { ABSENT, ok } from "../../../src/utils/outcome.js";
 
 // The hints the fixture's client sends: in tmux pane `%0`, and `ssh: true` for
 // the same reason `tmux.session` is populated — this fixture deliberately

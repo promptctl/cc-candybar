@@ -2,9 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { isConnectable } from "../../helpers/daemon-wire";
+import { isConnectable } from "../../../scripts/lib/daemon/wire";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 // [LAW:behavior-not-structure] The unit tests in test/daemon-acquire.test.ts call resetSpawnBackoff()
 // directly — they pin its arithmetic but not its WIRING. This spawns a real

@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { TranscriptFold } from "../src/utils/transcript-fold";
 import type { ParsedEntry } from "../src/utils/claude";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 let dir: string;
 let tick = 0;

@@ -29,7 +29,7 @@ import {
   drawnLink,
   urlWriting,
 } from "../../helpers/daemon-e2e";
-import { logLines, renderLines } from "../../helpers/daemon-log";
+import { logLines, renderLines } from "../../../scripts/lib/daemon/log";
 import {
   startDaemon,
   type InWorkerDaemon,
@@ -38,7 +38,7 @@ import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 
 jest.setTimeout(30_000);
 

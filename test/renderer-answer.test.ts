@@ -13,7 +13,7 @@
 import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf } from "../scripts/lib/draw-fixtures/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
   sessionIdOf,
@@ -58,7 +58,7 @@ import {
   type CheckedRenderRequest,
   type SessionContext,
 } from "../src/renderer-interface/request-context";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import type { Instant, Tick } from "../src/utils/instant";
 import {
   AT,
@@ -71,7 +71,7 @@ import {
 import { ok } from "../src/utils/outcome";
 import { locs } from "./helpers/host";
 import type { Locations } from "../src/config/loader/chain-places";
-import { fakeTmux } from "./helpers/payload-owners";
+import { fakeTmux } from "../scripts/lib/draw-fixtures/payload-owners";
 import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
 import type {
   MainRendererParts,

@@ -3,13 +3,13 @@ import {
   type SessionId,
 } from "../src/daemon/foundations/session-id";
 import { textOf } from "../src/render/frame";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 // [LAW:behavior-not-structure] The gate for brandon-activity-ue7: what the bar
 // SAYS Claude is doing, for a given transcript. Every test writes real JSONL and
 // reads either the provider's record, the payload the daemon would send, or the
 // rendered cell — never the fold's internal state.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import type { Frame } from "../src/render/frame";
 import {
   mkdtempSync,
@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
+import { globalsFor } from "../scripts/lib/draw-fixtures/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { entryActivity } from "../src/utils/transcript-activity";
 import { userEntryOf, type ClaudeHookData } from "../src/utils/claude";
@@ -30,7 +30,7 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
   DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
@@ -48,8 +48,9 @@ import {
   fakeUsage,
   requestPayload,
   type FixtureOwners,
-} from "./helpers/payload-owners";
-import { systemTimekeeper } from "./helpers/system-clock";
+} from "../scripts/lib/draw-fixtures/payload-owners";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -527,7 +528,7 @@ describe("the fold reports what is happening now", () => {
 describe("the payload projection", () => {
   const payloadFor = async (info: ActivityInfo) => {
     const deps = {
-      ...absentOwners(),
+      ...absentOwners(TEST_ENVIRONMENT),
       gitProvider: fakeGit(async () => ABSENT),
       usageStore: fakeUsage({
         usage: async () => ABSENT,

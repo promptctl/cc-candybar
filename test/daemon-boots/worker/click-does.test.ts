@@ -17,11 +17,12 @@ import {
   startBar,
   type Bar,
   type DrawnLink,
-} from "../../helpers/drive-bar";
+} from "../../../scripts/lib/drive-bar";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { startBarDaemon } from "../../helpers/in-worker-daemon";
 import { doesOf, longNumbersSaid } from "../../helpers/click-words";
 import { jestTmpDir } from "../../helpers/jest-tmp";
+import { WORKER_SHELL } from "../../helpers/session-environment";
 
 jest.setTimeout(60_000);
 
@@ -155,6 +156,7 @@ describe.each([
         config: config(),
         cwd: checkout(),
         ssh: false,
+        shell: WORKER_SHELL,
       },
       startBarDaemon,
     );

@@ -1,6 +1,6 @@
 import { Period } from "../../src/utils/period";
 import { type Monotonic } from "../../src/time";
-import { systemTimekeeper } from "../helpers/system-clock";
+import { systemTimekeeper } from "../../scripts/lib/system-clock";
 import { heldClock } from "../helpers/held-clock";
 
 afterEach(() => {

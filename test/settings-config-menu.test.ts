@@ -16,9 +16,9 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload } from "../scripts/lib/draw-fixtures/draw-payload";
 import { locs } from "./helpers/host";
-import { unscriptedRuns } from "./helpers/fake-launcher";
+import { unscriptedRuns } from "../scripts/lib/draw-fixtures/fake-launcher";
 import { NO_PROJECT } from "./helpers/no-project";
 import { textOf, type Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -51,7 +51,7 @@ import {
   effectsOf,
   recordRender,
 } from "./helpers/click";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../scripts/lib/draw-fixtures/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf, type Instant } from "../src/utils/instant";
 import {
@@ -67,7 +67,7 @@ import { LANE_HELP } from "../src/help-text";
 import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { layerFlags } from "../src/config/layer-role";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";

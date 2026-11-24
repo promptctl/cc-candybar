@@ -1,7 +1,7 @@
 // A bar driven the way a user drives one: render it, click what it drew,
-// render again — against an isolated daemon, a real one unless a test hands in
-// another start. `pnpm bar` (scripts/drive-bar.ts) is its command line;
-// test/drive-bar.test.ts holds it to its promises.
+// render again — against an isolated daemon its caller says how to start.
+// `pnpm bar` (scripts/drive-bar.ts) is its command line;
+// test/daemon-boots/worker/drive-bar.test.ts holds it to its promises.
 //
 // [LAW:effects-at-boundaries] The daemon is the subject and a black box: an
 // isolated daemon (its own socket, XDG dirs, Claude config dir, parent
@@ -30,20 +30,25 @@
 // its action, so it is sent again, and what became of it is the answer it gets.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { cellLen } from "@promptctl/rich-js";
 
 import { PARENT_PID_ENV } from "../../src/daemon/parent-watchdog";
-import { BAR_SESSION_ID, hookData } from "../../scripts/lib/hook-data";
-import { withStamp } from "../../scripts/version-stamp.cjs";
+import { sessionStatePath } from "../../src/daemon/paths";
+import { hostOf } from "./host";
+import { BAR_SESSION_ID, barHook } from "./hook-data";
+import { withStamp } from "./version-stamp.cjs";
 import { textOf, type Frame } from "../../src/render/frame";
-import { frameRequest, saidOf, sendClick } from "./daemon-e2e";
-import type { DaemonTarget } from "./daemon-wire";
+import { renderFrame, saidOf, sendClick } from "./daemon/requests";
+import { REPLY_BUDGET_MS, type DaemonTarget } from "./daemon/wire";
 import {
   prepareIsolatedDaemonEnv,
-  spawnDaemonWithEnv,
-} from "./spawn-isolated-daemon";
+  startDaemonWithEnv,
+  type IsolatedDaemonEnv,
+} from "./daemon/isolated";
+import type { AcquireSlot } from "./daemon/process";
+import { reportedEnvironment } from "./session-env";
+import type { ShellEnvironment } from "./shell";
 import {
   describeLink as describeWith,
   effectsOf,
@@ -52,9 +57,9 @@ import {
   type DrawnLink,
 } from "../../src/click/read";
 import { isBarLink } from "../../src/click/wire";
+import { failAfter } from "./fail-after";
 
 const SESSION_ID = BAR_SESSION_ID;
-const REPLY_BUDGET_MS = 10_000;
 /** The terminal the client reports: columns, and rows. */
 export interface TerminalSize {
   readonly width: number;
@@ -68,6 +73,8 @@ export interface BarOptions extends TerminalSize {
   readonly cwd: string;
   /** Whether the client reports an ssh session (the host segment shows over ssh). */
   readonly ssh: boolean;
+  /** The environment the daemon runs in, and the session reports its PATH from. */
+  readonly shell: ShellEnvironment;
 }
 
 /** A click on a URL the last render did not draw: the page is showing an older render. */
@@ -83,7 +90,7 @@ export interface Clicked {
 }
 
 /** The stored session state: each session's keys and values. */
-export type StoredSessions = Record<string, Record<string, string>>;
+type StoredSessions = Record<string, Record<string, string>>;
 
 /** One Claude Code session's view of the bar: what it renders and clicks. */
 export interface BarSession {
@@ -121,30 +128,35 @@ export interface Bar extends BarSession {
 }
 
 /** The daemon a bar draws on, and how it goes. */
-export interface BarDaemon {
+interface BarDaemon {
   readonly target: DaemonTarget;
   stop(): void | Promise<void>;
 }
 
-/** How a bar gets its daemon, from the env that isolates it. */
-export type StartBarDaemon = (env: NodeJS.ProcessEnv) => Promise<BarDaemon>;
+/** How a bar gets its daemon, from the isolated env it runs in. */
+export type StartBarDaemon = (isolated: IsolatedDaemonEnv) => Promise<BarDaemon>;
 
-/** What `pnpm bar` runs: a real daemon that dies with this process. */
-const spawnedBarDaemon: StartBarDaemon = async (env) => {
-  const daemon = await spawnDaemonWithEnv({
-    ...env,
-    [PARENT_PID_ENV]: String(process.pid),
-    NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
-  });
+// A hand-run tool's daemon takes no place under the test suite's ceiling: one
+// per run, and it dies with the tool.
+const outsideThePool: AcquireSlot = async () => ({ release: () => {} });
+
+/** A real daemon that dies with this process: the one a hand-run tool draws on. */
+export const realBarDaemon: StartBarDaemon = async ({ env }) => {
+  const daemon = await startDaemonWithEnv(
+    {
+      ...env,
+      [PARENT_PID_ENV]: String(process.pid),
+      NODE_OPTIONS: withStamp(env.NODE_OPTIONS),
+    },
+    outsideThePool,
+  );
   return {
-    target: env.CC_CANDYBAR_SOCKET!,
+    target: daemon.sockPath,
     stop: async () => {
       await daemon.stop();
     },
   };
 };
-
-export { hookData };
 
 export { linksOf, type DrawnLink };
 
@@ -155,36 +167,43 @@ export function describeLink(link: DrawnLink): string {
 
 export async function startBar(
   opts: BarOptions,
-  startDaemon: StartBarDaemon = spawnedBarDaemon,
+  startDaemon: StartBarDaemon,
 ): Promise<Bar> {
-  const daemonEnv = prepareIsolatedDaemonEnv("ccb-bar");
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bar-"));
-  const removeDirs = (): void => {
-    daemonEnv.removeTmpDirs();
-    fs.rmSync(scratch, { recursive: true, force: true });
-  };
+  const daemonEnv = prepareIsolatedDaemonEnv("ccb-bar", opts.shell);
+  // What the bar itself writes, under the daemon's temporary root, so the one
+  // removal that takes the daemon's directories takes these too.
+  const scratch = path.join(daemonEnv.root, "bar");
   const configPath = path.join(scratch, "config.json5");
   const claudeConfigDir = path.join(scratch, "claude");
-  const env = {
-    ...daemonEnv.env,
-    // An empty Claude Code config dir, so the daemon reads none of the host's
-    // Claude Code settings or transcripts.
-    CLAUDE_CONFIG_DIR: claudeConfigDir,
+  const isolated: IsolatedDaemonEnv = {
+    ...daemonEnv,
+    env: {
+      ...daemonEnv.env,
+      // An empty Claude Code config dir, so the daemon reads none of the
+      // host's Claude Code settings or transcripts.
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+    },
   };
+  // [LAW:one-source-of-truth] The environment the bar's client reports: where
+  // its tools live, and the same empty Claude Code config dir it reports as
+  // `claudeConfigDir`, so the two name one directory.
+  const sessionEnv = reportedEnvironment(opts.shell.PATH, claudeConfigDir);
   let daemon: BarDaemon;
   try {
+    fs.mkdirSync(claudeConfigDir, { recursive: true });
     fs.writeFileSync(
       configPath,
       opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
     );
-    fs.mkdirSync(claudeConfigDir);
-    daemon = await startDaemon(env);
+    daemon = await startDaemon(isolated);
   } catch (e) {
-    removeDirs();
-    throw e;
+    failAfter(e, daemonEnv.removeTmpDirs);
   }
   let size: TerminalSize = { width: opts.width, rows: opts.rows };
-  const storedPath = path.join(daemonEnv.stateDir, "session-state.json");
+  // [LAW:one-source-of-truth] The file the daemon keeps, named by the daemon's
+  // own path, so a read of it cannot look somewhere the daemon never writes
+  // and find nothing. Absent is the empty store, as the daemon reads it.
+  const storedPath = sessionStatePath(hostOf(isolated.env));
   const stored = (): StoredSessions =>
     fs.existsSync(storedPath)
       ? (JSON.parse(fs.readFileSync(storedPath, "utf8")) as StoredSessions)
@@ -193,11 +212,12 @@ export async function startBar(
   const sessionOf = (sessionId: string): BarSession => {
     let last: Pick<Frame, "rows"> = { rows: [] };
     const render = async (): Promise<Frame> => {
-      const frame = await frameRequest(
+      const frame = await renderFrame(
         daemon.target,
         {
+          env: sessionEnv,
           hookData: {
-            ...hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
+            ...barHook(opts.cwd, path.join(scratch, "transcript.jsonl")),
             session_id: sessionId,
           },
           args: ["cc-candybar", "--config", configPath],
@@ -273,12 +293,18 @@ export async function startBar(
     restart: async (rewrite = (stored) => stored) => {
       await daemon.stop();
       fs.writeFileSync(storedPath, JSON.stringify(rewrite(stored())));
-      daemon = await startDaemon(env);
+      daemon = await startDaemon(isolated);
     },
     stored,
+    // A stop that fails has still killed the daemon and seen it exit, so its
+    // directories go either way.
     stop: async () => {
-      await daemon.stop();
-      removeDirs();
+      try {
+        await daemon.stop();
+      } catch (e) {
+        failAfter(e, daemonEnv.removeTmpDirs);
+      }
+      daemonEnv.removeTmpDirs();
     },
   };
 }

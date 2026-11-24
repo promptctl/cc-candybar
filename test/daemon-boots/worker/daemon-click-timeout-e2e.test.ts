@@ -25,14 +25,15 @@ import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-dead
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import { urlHandlePlan } from "../../../src/install/index";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { clickBody, click, linkTo, render } from "../../helpers/daemon-e2e";
-import { clickEventOf, loggedWhen, logLines } from "../../helpers/daemon-log";
+import { clickBody } from "../../../scripts/lib/daemon/requests";
+import { click, linkTo, render } from "../../helpers/daemon-e2e";
+import { clickEventOf, loggedWhen, logLines } from "../../../scripts/lib/daemon/log";
 import { heldClock } from "../../helpers/held-clock";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { openedOn } from "../../helpers/opened-connection";
 import { hearingEvents, holdable } from "../../helpers/renderers";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
-import { until } from "../../helpers/until";
+import { until } from "../../../scripts/lib/until";
 import { fieldsOf } from "../../../src/utils/logfmt";
 
 jest.setTimeout(30_000);

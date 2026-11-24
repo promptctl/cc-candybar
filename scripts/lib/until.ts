@@ -1,5 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
+
 export type Condition = () => boolean | Promise<boolean>;
 
 // What was waited on, for the failure. A thunk is read only when the wait
@@ -9,7 +11,7 @@ export type What = string | (() => string);
 // [LAW:one-source-of-truth] The tick is the watcher debounce: a probe that
 // writes (the idempotent rewrite a watcher test repeats until delivery)
 // lands one write per delivery window, not five.
-const TICK_MS = 50;
+const TICK_MS = DEBOUNCE_MS;
 
 export const nameOf = (what: What): string =>
   typeof what === "string" ? what : what();

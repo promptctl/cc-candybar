@@ -9,8 +9,8 @@ import type { LaunchCategory } from "../src/proc/launcher";
 import type { LaunchStatsHandle } from "../src/proc/stats-handle";
 import type { TmuxHint } from "../src/tmux-hint";
 import { laneOutcome } from "../src/utils/reading";
-import { until } from "./helpers/until";
-import { systemTimekeeper } from "./helpers/system-clock";
+import { until } from "../scripts/lib/until";
+import { systemTimekeeper } from "../scripts/lib/system-clock";
 
 // [LAW:behavior-not-structure] A stub `tmux` on PATH answers every invocation
 // with its own arguments, so the session name a lookup returns IS the server
