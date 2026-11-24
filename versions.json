@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-954",
+      "ref": "refs/pull/954/merge",
+      "sha": "f938b5c1b1d836c0c79d52ae4090976c53e2893f",
+      "timestamp": "2026-11-24T19:55:26.424Z",
+      "commits": [
+        {
+          "sha": "f938b5c1b1d836c0c79d52ae4090976c53e2893f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:54:29-07:00",
+          "message": "Merge 93d724adaf8236dbbf1545e4bed3426ffe45aa74 into 820f215c895c2a8bb6f38f94d32868578070bf7b\n"
+        },
+        {
+          "sha": "93d724adaf8236dbbf1545e4bed3426ffe45aa74",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T12:47:17-07:00",
+          "message": "fix(click): a cycle's link carries its step, so N clicks without a redraw land N steps (candybar-host-renderer-x96a.d7h)\n\nA cycle's link (a `{{ action }}` cycle, a persist-cycle, a menu's disclosure\ntoggle) named the member the click would land, read from the draw, so a link\nthe terminal kept from before a click wrote that member again and five clicks\nlanded one step. The link now carries the cycle's members and the click steps\nto the successor of what the key shows when it lands, as a stepper does: the\nnew `cycle-state` and `cycle-config` verbs, resolved by the one cycle rule the\ndraw picks its display with. A link means the same thing on every draw (§7).\n\nTests read what a link lands now through one helper that folds the session's\npicks by the handler's own rule, and identify a menu's opener by its click.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "820f215c895c2a8bb6f38f94d32868578070bf7b",
