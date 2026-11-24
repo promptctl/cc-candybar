@@ -6,6 +6,8 @@ import { type SessionId } from "../daemon/foundations/session-id";
 import { layerRoleOf, type LayerRole } from "../config/layer-role";
 import { isPlainObject } from "../config/loader/validate-core";
 import type { Asked } from "../utils/outcome";
+import { isSettingKey } from "../config/session-key";
+import { kept, type Kept } from "../daemon/foundations/stored-file";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
@@ -79,3 +81,44 @@ export const holdsNothing = ({ past, future }: SessionHistory): boolean =>
   past.length + future.length === 0;
 
 export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
+
+// [LAW:types-are-the-program] A session change that outlives the renderer is
+// a change to a SETTING key, since a placement's draft lives and dies with its
+// edit. A key that is not a setting in this build names nothing a
+// render reads, so undoing it would spend a click restoring nothing. Those
+// changes alone leave, each named in what was dropped, and the keys they
+// named come back with what stays; every other change, and every other
+// session, stays undoable. A step left empty leaves too.
+// [LAW:single-enforcer] What outlives the renderer: the history it hands the
+// host, and what a load keeps of a file an older build wrote.
+export function withoutRetiredChanges(
+  history: SessionHistory,
+): Asked<Kept<SessionHistory>> {
+  const retired = new Set<string>();
+  const keep = (change: Change): boolean => {
+    if (change.kind === "layer" || isSettingKey(change.key)) return true;
+    retired.add(change.key);
+    return false;
+  };
+  const steps = (list: readonly Step[]): Step[] =>
+    list.map((step) => step.filter(keep)).filter((step) => step.length > 0);
+  const stripped = { past: steps(history.past), future: steps(history.future) };
+  const why = "its changes are to a key that is not a setting in this build";
+  // A session left holding nothing is refused, so it takes no place in the
+  // bound.
+  if (holdsNothing(stripped))
+    return {
+      kind: "failed",
+      reason:
+        retired.size > 0
+          ? `holds only changes to ${quoted(retired)}, not a setting in this build`
+          : "holds nothing to undo or redo",
+    };
+  return kept(
+    stripped,
+    [...retired].map((key) => ({ part: key, why })),
+  );
+}
+
+const quoted = (keys: Iterable<string>): string =>
+  [...keys].map((k) => `"${k}"`).join(", ");

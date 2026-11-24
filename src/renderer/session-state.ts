@@ -25,8 +25,9 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state";
-import { newestOf } from "../daemon/foundations/stored-file";
+import { toNewest } from "../utils/recency";
 import { StoredMoves } from "./stored-moves";
+import { withoutRetiredKeys } from "../renderer-interface/stored-state";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
 // landed, each key it touched that `records` admits — its value before the
@@ -211,11 +212,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // drops the session idle longest. What it holds is unchanged, so no reader
   // is told, and the host hears only its place.
   heard(sessionId: SessionId): void {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined || newestOf(this.sessions) === sessionId) return;
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, session);
-    this.moved.heard(sessionId);
+    if (toNewest(this.sessions, sessionId)) this.moved.heard(sessionId);
   }
 
   // What the host has not yet been told: each session that moved, as it now
@@ -235,9 +232,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     );
   }
 
+  // [LAW:single-enforcer] What the host keeps of a session is what a load of
+  // its file keeps, so the file never holds a pick only this renderer reads
+  // (edit mode's own), and a load that drops one is reading an older build's.
   private valuesOf(sessionId: SessionId): Record<string, string> | null {
     const session = this.sessions.get(sessionId);
-    return session === undefined ? null : Object.fromEntries(session.values);
+    if (session === undefined) return null;
+    const outlives = withoutRetiredKeys(Object.fromEntries(session.values));
+    return outlives.kind === "ok" ? outlives.value.value : null;
   }
 
   // Move-to-end: re-inserting at the tail makes this the most recently

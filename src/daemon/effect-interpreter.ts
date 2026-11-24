@@ -30,6 +30,8 @@ import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
 import { asError, resolvedTarget } from "../utils/atomic-write.js";
 import { directoryEntries } from "../utils/directory-entry.js";
+import type { Unread } from "./state-file.js";
+import type { StoreReport } from "./foundations/stored-file.js";
 
 const said = (read: Read | "object"): string =>
   read === "object"
@@ -43,11 +45,12 @@ const said = (read: Read | "object"): string =>
 export type ApproveRepo = Extract<Act, { kind: "approve-repo" }>;
 
 // The trust book a turn's answers land in, and where what each did is said
-// once they have.
+// once they have: the log's lines, and a book set aside as every store's is.
 export interface TrustBook {
   readonly stateDir: string;
   readonly answers: readonly ApproveRepo[];
   readonly said: (line: string) => void;
+  readonly reported: (report: StoreReport) => void;
 }
 
 // [LAW:single-enforcer] Where a change naming an origin's layer lands, and
@@ -118,7 +121,7 @@ export function performChanges(
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
   let retire: FileRetirement | null = null;
-  let setAside: FileRetirement | null = null;
+  let setAside: Unread | null = null;
   let answered: readonly string[] = [];
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
@@ -198,7 +201,7 @@ export function performChanges(
     };
   }
   const landed = writeRevisions(
-    { setAside, rewrites: rewrites.values(), retire },
+    { setAside: setAside?.file ?? null, rewrites: rewrites.values(), retire },
     write,
   );
   if (landed.kind === "failed") {
@@ -220,7 +223,19 @@ export function performChanges(
     };
   }
   for (const line of answered) book?.said(line);
-  return landed;
+  // [LAW:no-silent-failure] Once the answer has landed the book reads again,
+  // so its unread notice is gone: the report says where the old one went.
+  if (setAside !== null && landed.setAside !== null)
+    book?.reported({
+      store: "Repository config answers",
+      file: setAside.file,
+      found: {
+        kind: "set-aside",
+        reason: setAside.reason,
+        to: landed.setAside.to,
+      },
+    });
+  return { kind: "ok", files: landed.files };
 }
 
 // The rewrite of the exclude file of `file`'s repository that names it, or

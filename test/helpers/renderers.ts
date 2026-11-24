@@ -84,6 +84,7 @@ export const NO_ACTS: HostWorld = {
   configs: NO_CONFIGS,
   closing: () => false,
   acknowledgeDisplayed: () => {},
+  reported: () => {},
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },

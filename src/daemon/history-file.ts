@@ -11,61 +11,19 @@ import {
   type SessionFileStorage,
 } from "./session-state-file";
 import {
-  type Change,
-  type Step,
   type SessionHistory,
-  holdsNothing,
   parseSessionHistory,
+  withoutRetiredChanges,
 } from "../renderer-interface/history-storage";
-import type { Asked } from "../utils/outcome";
-import { kept, type Kept } from "./foundations/stored-file";
-import { isSettingKey } from "../config/session-key";
-
-// [LAW:types-are-the-program] A session change is a change to a SETTING key —
-// the only kind this history records, since a placement's draft lives and dies
-// with its edit. A key that is not a setting in this build names nothing a
-// render reads, so undoing it would spend a click restoring nothing. Those
-// changes alone leave, each named in what the load dropped, and the keys they
-// named come back with what stays; every other change, and every other
-// session, stays undoable. A step left empty leaves too.
-function withoutRetiredKeys(
-  history: SessionHistory,
-): Asked<Kept<SessionHistory>> {
-  const retired = new Set<string>();
-  const keep = (change: Change): boolean => {
-    if (change.kind === "layer" || isSettingKey(change.key)) return true;
-    retired.add(change.key);
-    return false;
-  };
-  const steps = (list: readonly Step[]): Step[] =>
-    list.map((step) => step.filter(keep)).filter((step) => step.length > 0);
-  const stripped = { past: steps(history.past), future: steps(history.future) };
-  const why = "its changes are to a key that is not a setting in this build";
-  // A session left holding nothing is refused, so it takes no place in the
-  // bound.
-  if (holdsNothing(stripped))
-    return {
-      kind: "failed",
-      reason:
-        retired.size > 0
-          ? `holds only changes to ${quoted(retired)}, not a setting in this build`
-          : "holds nothing to undo or redo",
-    };
-  return kept(
-    stripped,
-    [...retired].map((key) => ({ part: key, why })),
-  );
-}
-
-const quoted = (keys: Iterable<string>): string =>
-  [...keys].map((k) => `"${k}"`).join(", ");
 
 // [LAW:parse-dont-validate] The history file's sessions: each history parsed
 // and stripped of the changes to keys this build has no setting for.
 const HISTORY_FILE: Pick<SessionFileKind<SessionHistory>, "parse"> = {
   parse: (value) => {
     const parsed = parseSessionHistory(value);
-    return parsed.kind === "failed" ? parsed : withoutRetiredKeys(parsed.value);
+    return parsed.kind === "failed"
+      ? parsed
+      : withoutRetiredChanges(parsed.value);
   },
 };
 

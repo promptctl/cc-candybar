@@ -221,6 +221,7 @@ class LandingAtOnce extends ConfigWrites {
           (e): e is ApproveRepo => e.kind === "approve-repo",
         ),
         said: () => {},
+        reported: () => {},
       },
       this.places,
     );
@@ -397,6 +398,7 @@ export function actingWorld(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     acknowledgeDisplayed: () => {},
+    reported: () => {},
     unheard,
   };
 }

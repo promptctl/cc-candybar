@@ -53,9 +53,13 @@ test("a session-state file that does not read is kept beside itself, and the bar
   expect(fs.readFileSync(path.join(path.dirname(file), aside!), "utf8")).toBe(
     "{ not json",
   );
-  const page = pages.find((p) => p.includes("this store started empty"));
-  expect(page).toContain("could not be read");
-  expect(page?.replace(/\s/g, "")).toContain(aside);
+  // The viewer wraps a long path, so the text is compared without its spaces.
+  const unspaced = pages.map((p) => p.replace(/\s/g, ""));
+  const page = unspaced.find((p) =>
+    p.includes("thestorestartedagainfromempty"),
+  );
+  expect(page).toContain("Sessionpickscouldnotberead");
+  expect(page).toContain(aside);
 });
 
 test("a file that can be neither read nor set aside stands on the bar as saving nothing", async () => {

@@ -1,13 +1,12 @@
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { FileRetirement } from "../../src/daemon/file-rewrites";
-import type {
-  Dropped,
-  SessionFileStorage,
-} from "../../src/daemon/session-state-file";
+import type { SessionFileStorage } from "../../src/daemon/session-state-file";
+import type { Dropped } from "../../src/daemon/foundations/stored-file";
 
-// What a per-session file in memory reads as: its sessions and what the load
-// dropped of them, or a read that failed.
+// What a per-session file in memory reads as: none, its sessions and what
+// the load dropped of them, or a read that failed.
 export type HeldRead<V> =
+  | { readonly kind: "absent" }
   | {
       readonly kind: "ok";
       readonly sessions: ReadonlyMap<SessionId, V>;
@@ -18,7 +17,7 @@ export type HeldRead<V> =
 // A per-session file in memory: what it reads as, every save, every set-aside
 // and every flush. A set-aside that fails throws `refuseAside`.
 export function heldStorage<V>(
-  read: HeldRead<V> = { kind: "ok", sessions: new Map() },
+  read: HeldRead<V> = { kind: "absent" },
   options: {
     readonly file?: string;
     readonly refuseAside?: Error;
@@ -34,18 +33,23 @@ export function heldStorage<V>(
     file,
     observe: () => ({
       result:
-        read.kind === "ok"
-          ? {
+        read.kind === "failed"
+          ? { kind: "failed", reason: read.reason, file }
+          : {
               kind: "ok",
-              value: { sessions: read.sessions, dropped: read.dropped ?? [] },
-            }
-          : { kind: "failed", reason: read.reason, file },
+              value:
+                read.kind === "ok"
+                  ? { sessions: read.sessions, dropped: read.dropped ?? [] }
+                  : { sessions: new Map(), dropped: [] },
+            },
       paths: [file],
-      source: file,
+      source: read.kind === "absent" ? null : file,
     }),
-    setAside: (aside) => {
+    setAside: () => {
       if (options.refuseAside !== undefined) throw options.refuseAside;
+      const aside = { from: file, to: `${file}.unread-${asides.length}` };
       asides.push(aside);
+      return aside;
     },
     save: (snapshot) => {
       options.save?.(snapshot);

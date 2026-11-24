@@ -78,10 +78,16 @@ describe("a stored JSON document", () => {
     fs.writeFileSync(file, "junk");
     const planned = stateFile([file], [], numbers).plan((ns) => [...ns, 1]);
     expect(writeStatePlan(planned)).toEqual({ kind: "ok", value: [1] });
-    const aside = planned.kind === "ok" ? planned.value.setAside : null;
-    expect(aside?.from).toBe(file);
-    expect(aside?.to.startsWith(`${file}.unread-`)).toBe(true);
-    expect(fs.readFileSync(aside!.to, "utf8")).toBe("junk");
+    expect(planned.kind === "ok" && planned.value.setAside).toMatchObject({
+      file,
+    });
+    const kept = fs
+      .readdirSync(path.dirname(file))
+      .filter((name) => name.startsWith(`${path.basename(file)}.unread-`));
+    expect(kept).toHaveLength(1);
+    expect(
+      fs.readFileSync(path.join(path.dirname(file), kept[0]!), "utf8"),
+    ).toBe("junk");
     expect(stateFile([file], [], numbers).read()).toEqual({
       kind: "ok",
       value: [1],

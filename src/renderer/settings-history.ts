@@ -40,6 +40,7 @@ import {
   type Step,
   type SessionHistory,
   holdsNothing,
+  withoutRetiredChanges,
 } from "../renderer-interface/history-storage";
 import { isUndoStepKey } from "../config/session-key";
 import {
@@ -54,7 +55,7 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { digestOf } from "../utils/plain.js";
-import { newestOf } from "../daemon/foundations/stored-file.js";
+import { toNewest } from "../utils/recency.js";
 import { StoredMoves } from "./stored-moves.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -167,17 +168,12 @@ export class SettingsHistory {
   }
 
   // A request from the session: it moves to the newest end, so the bounds
-  // drop the session idle longest. `replace` with the order alone moved
-  // reports only the map's keys, which no reader observes, since every read
-  // goes through a session's own entry.
+  // drop the session idle longest. [LAW:carrying-cost] It runs on every
+  // request, so it moves the one entry in place: only that session's readers
+  // hear of it, and they find what they read before.
   heard(sessionId: SessionId): void {
-    const history = this.state.get(sessionId);
-    if (history === undefined || newestOf(this.state) === sessionId) return;
-    const next = new Map(this.state);
-    next.delete(sessionId);
-    next.set(sessionId, history);
-    this.state = next;
-    this.moved.heard(sessionId);
+    if (runInAction(() => toNewest(this.held, sessionId)))
+      this.moved.heard(sessionId);
   }
 
   // What the host has not yet been told: each session whose history moved, as
@@ -192,9 +188,18 @@ export class SettingsHistory {
               kind: "put",
               store: "settings-history",
               key,
-              value: this.state.get(key) ?? null,
+              value: this.outliving(key),
             },
     );
+  }
+
+  // [LAW:single-enforcer] What the host keeps of a session's history is what
+  // a load of its file keeps, so the file never holds a draft's step.
+  private outliving(sessionId: SessionId): SessionHistory | null {
+    const history = this.state.get(sessionId);
+    if (history === undefined) return null;
+    const outlives = withoutRetiredChanges(history);
+    return outlives.kind === "ok" ? outlives.value.value : null;
   }
 
   depth(sessionId: SessionId): HistoryDepth {

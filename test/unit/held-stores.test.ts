@@ -95,6 +95,6 @@ test("a boot read before the load is refused", () => {
     heldClock(new Date(1_000_000)),
   );
   expect(() => stores.current()).toThrow(
-    "session-state is read before its load",
+    "Session picks is read before its load",
   );
 });

@@ -2,6 +2,7 @@
 // turn share a batch and its reverse-order restoration. Each rewrite carries
 // the bytes its plan observed.
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import {
   asError,
   filePermissions,
@@ -36,6 +37,18 @@ export const writeConfigFile: WriteConfigFile = (file, text, mode) =>
     ? fs.rmSync(resolvedTarget(file), { force: true })
     : writeAtomic(file, text, mode);
 
+// [LAW:single-enforcer] The one set-aside of a stored file that did not read,
+// for every store that keeps one. What goes is the file its bytes sit in, a
+// link's target, which is the file a write through the link would replace,
+// and it goes to an unsearched name beside itself. So the link stays a link,
+// and the next write creates a fresh target. Returns where the bytes went.
+export function setAside(file: string): FileRetirement {
+  const from = resolvedTarget(file);
+  const to = `${from}.unread-${randomUUID()}`;
+  fs.renameSync(from, to);
+  return { from, to };
+}
+
 interface RestoreFailure {
   readonly file: string;
   readonly error: Error;
@@ -44,7 +57,12 @@ interface RestoreFailure {
 // [LAW:types-are-the-program] A failed publication with failed restorations
 // carries the specific paths that need to be observed again.
 export type RevisionWrite =
-  | { readonly kind: "ok"; readonly files: readonly string[] }
+  | {
+      readonly kind: "ok";
+      readonly files: readonly string[];
+      // Where the batch set an unread file aside, if it did.
+      readonly setAside: FileRetirement | null;
+    }
   | { readonly kind: "failed"; readonly error: Error }
   | {
       readonly kind: "incomplete";
@@ -55,13 +73,13 @@ export type RevisionWrite =
 // One turn's batch: a state file that did not read, set aside before anything
 // is written, the rewrites, and a superseded file retired after them.
 export interface Revisions {
-  readonly setAside: FileRetirement | null;
+  readonly setAside: string | null;
   readonly rewrites: Iterable<FileRewrite>;
   readonly retire: FileRetirement | null;
 }
 
 export function writeRevisions(
-  { setAside, rewrites, retire }: Revisions,
+  { setAside: unread, rewrites, retire }: Revisions,
   write: WriteConfigFile = writeConfigFile,
 ): RevisionWrite {
   const written: Array<
@@ -69,12 +87,9 @@ export function writeRevisions(
   > = [];
   // [LAW:no-ambient-temporal-coupling] The set-aside lands first, so no
   // rewrite can touch the bytes it keeps, and it is undone last.
-  let asideNow: FileRetirement | null = null;
+  let aside: FileRetirement | null = null;
   try {
-    if (setAside !== null) {
-      fs.renameSync(setAside.from, setAside.to);
-      asideNow = setAside;
-    }
+    if (unread !== null) aside = setAside(unread);
     for (const rewrite of rewrites) {
       // [LAW:effects-at-boundaries] A removed file loses its mode with its
       // directory entry. Capture it before unlink so restoration can stage
@@ -87,7 +102,7 @@ export function writeRevisions(
       written.push({ ...rewrite, removedMode });
     }
     const files = [
-      ...(setAside === null ? [] : [setAside.to]),
+      ...(aside === null ? [] : [aside.to]),
       ...written.map(({ file }) => file),
     ];
     if (retire !== null) {
@@ -96,7 +111,7 @@ export function writeRevisions(
       fs.renameSync(retire.from, retire.to);
       files.push(retire.from, retire.to);
     }
-    return { kind: "ok", files };
+    return { kind: "ok", files, setAside: aside };
   } catch (cause) {
     const error = asError(cause);
     // [LAW:no-silent-failure] Try every restore and name each failure.
@@ -110,11 +125,11 @@ export function writeRevisions(
         failed.push({ file, error: asError(rollback) });
       }
     }
-    if (asideNow !== null)
+    if (aside !== null)
       try {
-        fs.renameSync(asideNow.to, asideNow.from);
+        fs.renameSync(aside.to, aside.from);
       } catch (rollback) {
-        failed.push({ file: asideNow.from, error: asError(rollback) });
+        failed.push({ file: aside.from, error: asError(rollback) });
       }
     const [first, ...remaining] = failed;
     return first === undefined

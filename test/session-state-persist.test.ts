@@ -18,7 +18,8 @@ import {
   type SessionPicks,
 } from "../src/daemon/session-state-file";
 import { HeldStores } from "../src/daemon/held-stores";
-import { loadText, ORDER_PERIOD_MS } from "../src/daemon/held-file";
+import { ORDER_PERIOD_MS } from "../src/daemon/held-file";
+import { reportText } from "../src/daemon/foundations/stored-file";
 import type { Timekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
 import { throughout, until } from "../scripts/lib/until";
@@ -61,7 +62,7 @@ describe("the session state's file", () => {
       write(state);
       stores.take(state.drain());
     };
-    return { state, turn, stores, said: loadText(file, load!.report) };
+    return { state, turn, stores, said: reportText(load!) };
   };
   // What the file reads as, as a load finds it.
   const readOf = (
@@ -583,7 +584,7 @@ describe("the session state's file", () => {
     const { state, said, stores } = daemonOver(storage());
     expect(state.get(S1, "theme")).toBe("nord");
     expect(said).toBe(
-      `${file}: the load dropped what this build does not read: menus.edit_default_insertSeg (no menu is keyed that way in this build) in "s1"; a session (its value has a "theme" that is not a string) in "s2"; a session (its value holds no picks) in "s3"`,
+      `Session picks (${file}): the load dropped what this build does not read: menus.edit_default_insertSeg (no menu is keyed that way in this build) in "s1"; a session (its value has a "theme" that is not a string) in "s2"; a session (its value holds no picks) in "s3"`,
     );
     await stores.close();
   });
@@ -610,7 +611,7 @@ describe("the session state's file", () => {
       expect(onDisk()).toEqual({ s2: { theme: "dracula" } });
       expect(said).toMatch(reason);
       expect(said).toContain(
-        `it is kept as ${join(dir, aside!)}, and this store started empty`,
+        `it is kept as ${join(dir, aside!)}, and the store started again from empty`,
       );
     },
   );

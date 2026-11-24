@@ -30,7 +30,7 @@ import { kept } from "./foundations/stored-file.js";
 import type { Asked } from "../utils/outcome.js";
 import type { Timekeeper } from "../time.js";
 import { HeldFile } from "./held-file.js";
-import type { StoreLoad } from "./held-stores.js";
+import type { StoreReport } from "./foundations/stored-file.js";
 
 // [LAW:carrying-cost] As many sessions as the host holds requests of.
 const MAX_SESSIONS = 256;
@@ -93,18 +93,24 @@ export class SessionBook {
   >();
 
   constructor(
-    private readonly storage: SessionFileStorage<DurableContext>,
+    storage: SessionFileStorage<DurableContext>,
     clock: Pick<Timekeeper, "after">,
   ) {
-    this.book = new HeldFile("session-book", storage, clock, MAX_SESSIONS);
+    this.book = new HeldFile(
+      "Session book",
+      storage,
+      clock,
+      MAX_SESSIONS,
+      sameDurable,
+    );
   }
 
   // Read once the daemon serves. A session heard before it is newer than
   // anything the file holds of it, so it stays, and the file's come first.
-  load(): StoreLoad {
+  load(): StoreReport {
     const { report, evicted } = this.book.load();
     this.forget(evicted);
-    return { file: this.storage.file, report };
+    return report;
   }
 
   // The session's newest request: what it says the session is, saved when
@@ -116,14 +122,8 @@ export class SessionBook {
   ): void {
     const session = req.hookData.session_id;
     this.environments.set(session, environment);
-    const durable = durableOf(req);
-    const held = this.book.get(session);
     this.forget(
-      this.book.take([
-        held !== undefined && sameDurable(held, durable)
-          ? { kind: "heard", key: session }
-          : { kind: "put", key: session, value: durable },
-      ]),
+      this.book.take([{ kind: "put", key: session, value: durableOf(req) }]),
     );
   }
 

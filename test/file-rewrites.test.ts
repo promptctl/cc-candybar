@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { writeConfigFile, writeRevisions } from "../src/daemon/file-rewrites";
+import {
+  setAside,
+  writeConfigFile,
+  writeRevisions,
+} from "../src/daemon/file-rewrites";
 
 let dir: string;
 let umask: number;
@@ -56,45 +60,69 @@ test("replacements keep permissions and new files take the umask", () => {
     ],
     retire: null,
   });
-  expect(result).toEqual({ kind: "ok", files: [existing, fresh] });
+  expect(result).toEqual({
+    kind: "ok",
+    files: [existing, fresh],
+    setAside: null,
+  });
   expect(fs.readFileSync(existing, "utf8")).toBe("after");
   expect(fs.statSync(existing).mode & 0o777).toBe(0o600);
   expect(fs.readFileSync(fresh, "utf8")).toBe("new");
   expect(fs.statSync(fresh).mode & 0o777).toBe(0o644);
 });
 
-// A state file that did not read is renamed aside before its new bytes are
+// A state file that did not read is set aside before its new bytes are
 // written at its name, so no write ever replaces what could not be read.
 test("a set-aside lands before the rewrite, and a failed batch puts it back", () => {
   const book = path.join(dir, "book.json");
-  const aside = `${book}.unread-x`;
+  const unread = () =>
+    fs.readdirSync(dir).filter((name) => name.startsWith("book.json.unread-"));
   fs.writeFileSync(book, "{ not json");
-  const seen: Array<string | null> = [];
+  const seen: string[][] = [];
   const refused = new Error("the disk refused");
   const result = writeRevisions(
     {
-      setAside: { from: book, to: aside },
+      setAside: book,
       rewrites: [{ file: book, was: null, will: "{}\n" }],
       retire: null,
     },
     (file, text, mode) => {
-      seen.push(fs.existsSync(aside) ? fs.readFileSync(aside, "utf8") : null);
+      seen.push(unread());
       if (text !== null) throw refused;
       writeConfigFile(file, text, mode);
     },
   );
-  expect(seen[0]).toBe("{ not json");
+  expect(seen[0]).toHaveLength(1);
   expect(result).toEqual({ kind: "failed", error: refused });
   expect(fs.readFileSync(book, "utf8")).toBe("{ not json");
-  expect(fs.existsSync(aside)).toBe(false);
+  expect(unread()).toEqual([]);
 
-  expect(
-    writeRevisions({
-      setAside: { from: book, to: aside },
-      rewrites: [{ file: book, was: null, will: "{}\n" }],
-      retire: null,
-    }),
-  ).toEqual({ kind: "ok", files: [aside, book] });
+  const landed = writeRevisions({
+    setAside: book,
+    rewrites: [{ file: book, was: null, will: "{}\n" }],
+    retire: null,
+  });
+  const aside = path.join(dir, unread()[0]!);
+  expect(landed).toEqual({
+    kind: "ok",
+    files: [aside, book],
+    setAside: { from: book, to: aside },
+  });
   expect(fs.readFileSync(aside, "utf8")).toBe("{ not json");
   expect(fs.readFileSync(book, "utf8")).toBe("{}\n");
+});
+
+// [LAW:single-enforcer] A link is written where it points, so the bytes a
+// set-aside keeps are its target's, and the link stays a link.
+test("a set-aside of a link moves its target and leaves the link", () => {
+  const target = path.join(dir, "real.json");
+  const link = path.join(dir, "book.json");
+  fs.writeFileSync(target, "{ not json");
+  fs.symlinkSync(target, link);
+  const { from, to } = setAside(link);
+  expect(from).toBe(target);
+  expect(to.startsWith(`${target}.unread-`)).toBe(true);
+  expect(fs.readFileSync(to, "utf8")).toBe("{ not json");
+  expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  expect(fs.existsSync(target)).toBe(false);
 });

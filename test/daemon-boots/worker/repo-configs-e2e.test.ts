@@ -239,7 +239,7 @@ describe("a repository's config waits for the user's one answer", () => {
       answerUrl(asked!.rendered, "approved"),
       ANSWER_REPLY_MS,
     );
-    await renderUntil(
+    const approved = await renderUntil(
       daemon,
       "repo-unread",
       project,
@@ -253,6 +253,13 @@ describe("a repository's config waits for the user's one answer", () => {
       "{ not json",
     );
     expect(JSON.parse(fs.readFileSync(book, "utf8"))).toBeTruthy();
+    // The book reads again, so the bar says where the old one went. The
+    // viewer wraps a long path, so the text is compared without its spaces.
+    const after = await readDiagnostics(daemon, "repo-unread", project, approved);
+    const unspaced = (text: string) => text.replace(/\s+/g, "");
+    expect(unspaced(after.map((p) => p.text).join(""))).toContain(
+      unspaced(`it is kept as ${path.join(path.dirname(book), aside!)}`),
+    );
   });
 
   test("decline: the user's config draws, nothing runs, and nothing asks again", async () => {

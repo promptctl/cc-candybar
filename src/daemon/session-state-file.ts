@@ -12,8 +12,8 @@ import {
   type SessionPicks,
 } from "../renderer-interface/stored-state";
 import { stateFile, type StateObservation } from "./state-file";
-import type { FileRetirement } from "./file-rewrites";
-import type { DroppedPart, Kept } from "./foundations/stored-file";
+import { setAside, type FileRetirement } from "./file-rewrites";
+import type { Dropped, Kept } from "./foundations/stored-file";
 export type { SessionPicks } from "../renderer-interface/stored-state";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
@@ -25,10 +25,6 @@ export interface SessionFileKind<V> {
   readonly name: string;
   readonly record: (value: V) => unknown;
   readonly parse: (value: unknown) => Asked<Kept<V>>;
-}
-
-export interface Dropped extends DroppedPart {
-  readonly session: string;
 }
 
 // What a per-session file's load holds: its sessions, oldest first, and what
@@ -51,8 +47,9 @@ export interface SessionFileStorage<V> {
   readonly file: string;
   // The file's read, by the rule every state file keeps (state-file.ts).
   observe(): StateObservation<Loaded<V>>;
-  // Renames a file that did not read out of the way of every write.
-  setAside(aside: FileRetirement): void;
+  // Sets a file that did not read aside (`setAside` in file-rewrites.ts),
+  // and says where it went.
+  setAside(): FileRetirement;
   // The sessions as they stand, oldest first. The storage keeps its own copy
   // until the write behind lands, so the owner may go on changing its map;
   // the file keeps their order.
@@ -66,7 +63,9 @@ export interface SessionFileStorage<V> {
 export const ephemeralSessionFile = <V>(): SessionFileStorage<V> => ({
   file: "(kept nowhere)",
   observe: () => ({ result: ok(nothingLoaded<V>()), paths: [], source: null }),
-  setAside: () => {},
+  setAside: () => {
+    throw new Error("a file kept nowhere always reads");
+  },
   save: () => {},
   flush: async () => {},
 });
@@ -124,7 +123,7 @@ export function sessionFileOnDisk<V>(
   return {
     file: filePath,
     observe: file.observe,
-    setAside: ({ from, to }) => fs.renameSync(from, to),
+    setAside: () => setAside(filePath),
   };
 }
 
@@ -172,8 +171,8 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     return this.disk.observe();
   }
 
-  setAside(aside: FileRetirement): void {
-    this.disk.setAside(aside);
+  setAside(): FileRetirement {
+    return this.disk.setAside();
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {

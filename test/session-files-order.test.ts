@@ -21,12 +21,11 @@ import {
   ephemeralSessionFile,
 } from "../src/daemon/session-state-file";
 import { fileHistoryStorage } from "../src/daemon/history-file";
+import { HeldStores, type ProfileStorage } from "../src/daemon/held-stores";
 import {
-  HeldStores,
-  type ProfileStorage,
-  type StoreLoad,
-} from "../src/daemon/held-stores";
-import { loadText } from "../src/daemon/held-file";
+  reportText,
+  type StoreReport,
+} from "../src/daemon/foundations/stored-file";
 import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
@@ -69,14 +68,18 @@ const writtenByHand = (record: Readonly<Record<string, unknown>>): void =>
   fs.writeFileSync(file, JSON.stringify(record));
 
 // What the bar says of the file's load.
-const saidOf = (loads: readonly StoreLoad[]): string[] =>
-  loads.flatMap(({ file: at, report }) =>
-    at === file ? [loadText(at, report) ?? ""] : [],
+const saidOf = (loads: readonly StoreReport[]): string[] =>
+  loads.flatMap((report) =>
+    report.file === file ? [reportText(report) ?? ""] : [],
   );
 
-const droppedKey = (loads: readonly StoreLoad[], key: string) =>
+const droppedKey = (
+  loads: readonly StoreReport[],
+  store: string,
+  key: string,
+) =>
   expect(saidOf(loads)).toEqual([
-    `${file}: the load dropped what this build does not read: a session (session id is ${JSON.stringify(key)}, an array index, which is never a session id) in ${JSON.stringify(key)}`,
+    `${store} (${file}): the load dropped what this build does not read: a session (session id is ${JSON.stringify(key)}, an array index, which is never a session id) in ${JSON.stringify(key)}`,
   ]);
 
 // The host's held stores over the file, loaded as the daemon serves.
@@ -153,7 +156,7 @@ describe("the session book's file", () => {
     });
     const { book, loads } = bookOver();
     expect(known(book, sessionIdOf("a"))).toBe(true);
-    droppedKey(loads, "7");
+    droppedKey(loads, "Session book", "7");
     await book.close();
   });
 });
@@ -200,7 +203,7 @@ describe("the session state's file", () => {
     writtenByHand({ a: { theme: "nord" }, "7": { theme: "dracula" } });
     const { state, loads } = daemonOver(6);
     expect(state.get(sessionIdOf("a"), "theme")).toBe("nord");
-    droppedKey(loads, "7");
+    droppedKey(loads, "Session picks", "7");
   });
 });
 
@@ -262,7 +265,7 @@ describe("the settings history's file", () => {
     const { history, loads } = daemonOver();
     expect(history.depth(real).undo).toBe(1);
     expect(saidOf(loads)).toEqual([
-      `${file}: the load dropped what this build does not read: a session (its value holds only changes to "look", not a setting in this build) in "retired-0", "retired-1", "retired-2" and 29 more`,
+      `Settings history (${file}): the load dropped what this build does not read: a session (its value holds only changes to "look", not a setting in this build) in "retired-0", "retired-1", "retired-2" and 29 more`,
     ]);
   });
 
@@ -274,6 +277,6 @@ describe("the settings history's file", () => {
     writtenByHand({ a: step, "7": step });
     const { history, loads } = daemonOver();
     expect(history.depth(sessionIdOf("a")).undo).toBe(1);
-    droppedKey(loads, "7");
+    droppedKey(loads, "Settings history", "7");
   });
 });

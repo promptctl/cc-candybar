@@ -8,7 +8,7 @@ export function writeStatePlan<T>(planned: Asked<Planned<T>>): Asked<T> {
   if (planned.kind === "failed") return planned;
   const { setAside, rewrite, retire, value } = planned.value;
   const written = writeRevisions({
-    setAside,
+    setAside: setAside?.file ?? null,
     rewrites: rewrite === null ? [] : [rewrite],
     retire,
   });

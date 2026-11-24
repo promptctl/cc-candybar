@@ -23,6 +23,7 @@ import {
 } from "../src/daemon/config-discovery/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import { readTextIfPresent } from "../src/utils/regular-text.js";
+import type { StoreReport } from "../src/daemon/foundations/stored-file.js";
 import type {
   ConfigChange,
   EffectId,
@@ -242,7 +243,7 @@ describe("performChanges with the trust book", () => {
     const said: string[] = [];
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+      { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
     );
     expect(outcome).toMatchObject({ kind: "ok" });
     expect(read(user)).toContain("dawn");
@@ -264,6 +265,7 @@ describe("performChanges with the trust book", () => {
       stateDir: state,
       answers: [answer(dir)],
       said: (line) => said.push(line),
+      reported: () => {},
     });
     if (outcome.kind !== "ok") throw new Error(JSON.stringify(outcome));
     const archive = outcome.files[2]!;
@@ -288,7 +290,7 @@ describe("performChanges with the trust book", () => {
       const said: string[] = [];
       const outcome = perform(
         [change(user, USER, USER.replace("dusk", "dawn"))],
-        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
       );
       expect(outcome).toMatchObject({ kind: "failed", reason: expect.stringContaining(old) });
       expect(read(user)).toBe(USER);
@@ -312,7 +314,7 @@ describe("performChanges with the trust book", () => {
       const said: string[] = [];
       const outcome = perform(
         [change(user, USER, USER.replace("dusk", "dawn"))],
-        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l), reported: () => {} },
       );
       expect(outcome).toMatchObject({ kind: "failed" });
       expect(outcome.kind === "failed" && outcome.reason).toMatch(
@@ -325,13 +327,66 @@ describe("performChanges with the trust book", () => {
     }
   });
 
+  // [LAW:no-silent-failure] Once the answer lands the book reads again and
+  // its unread notice is gone, so the report says where the old book went.
+  test("an answer over a book that does not read sets it aside, and says where it went", () => {
+    const state = path.join(dir, "state");
+    const book = repoConfigsPath(state);
+    fs.mkdirSync(path.dirname(book), { recursive: true });
+    fs.writeFileSync(book, "{ not json");
+    const reported: StoreReport[] = [];
+    const outcome = perform([], {
+      stateDir: state,
+      answers: [answer(dir)],
+      said: () => {},
+      reported: (r) => reported.push(r),
+    });
+    expect(outcome).toMatchObject({ kind: "ok" });
+    expect(repoConfigs(state).read()).toEqual({ kind: "ok", value: { [dir]: "approved" } });
+    const to = expect.stringMatching(new RegExp(`^${book}\\.unread-`));
+    expect(reported).toEqual([
+      {
+        store: "Repository config answers",
+        file: book,
+        found: { kind: "set-aside", reason: expect.stringContaining(`${book} is not JSON`), to },
+      },
+    ]);
+    const kept = reported[0]!.found.kind === "set-aside" ? reported[0]!.found.to : "";
+    expect(read(kept)).toBe("{ not json");
+  });
+
+  // A symlinked book is written where it points, so its set-aside is of the
+  // target: the link stays a link, and the unread bytes are never written over.
+  test("an answer over a symlinked book that does not read keeps the target's bytes and the link", () => {
+    const state = path.join(dir, "state");
+    const book = repoConfigsPath(state);
+    const target = path.join(dir, "dotfiles", "repo-configs.json");
+    fs.mkdirSync(path.dirname(book), { recursive: true });
+    fs.mkdirSync(path.dirname(target));
+    fs.writeFileSync(target, "{ not json");
+    fs.symlinkSync(target, book);
+    const reported: StoreReport[] = [];
+    const outcome = perform([], {
+      stateDir: state,
+      answers: [answer(dir)],
+      said: () => {},
+      reported: (r) => reported.push(r),
+    });
+    expect(outcome).toMatchObject({ kind: "ok" });
+    expect(fs.lstatSync(book).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(read(target))).toEqual({ [dir]: "approved" });
+    const found = reported[0]!.found;
+    expect(found).toMatchObject({ kind: "set-aside", to: expect.stringMatching(new RegExp(`^${target}\\.unread-`)) });
+    expect(read(found.kind === "set-aside" ? found.to : "")).toBe("{ not json");
+  });
+
   test("an answer for a repository its origin does not ask about is refused, and nothing is written", () => {
     const state = path.join(dir, "state");
     const asked = answer(dir);
     repos.set(dir, path.join(dir, "elsewhere"));
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [asked], said: () => {} },
+      { stateDir: state, answers: [asked], said: () => {}, reported: () => {} },
     );
     expect(outcome).toEqual({
       kind: "refused",
@@ -346,7 +401,7 @@ describe("performChanges with the trust book", () => {
     const asked = answer(dir);
     chains.delete(dir);
     expect(
-      perform([], { stateDir: state, answers: [asked], said: () => {} }),
+      perform([], { stateDir: state, answers: [asked], said: () => {}, reported: () => {} }),
     ).toMatchObject({ kind: "refused" });
     expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
   });
@@ -356,7 +411,7 @@ describe("performChanges with the trust book", () => {
     fs.writeFileSync(user, USER.replace("dusk", "noon"));
     const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
-      { stateDir: state, answers: [answer(dir)], said: () => {} },
+      { stateDir: state, answers: [answer(dir)], said: () => {}, reported: () => {} },
     );
     expect(outcome.kind).toBe("refused");
     expect(fs.existsSync(repoConfigsPath(state))).toBe(false);

@@ -2,9 +2,9 @@
 // [LAW:one-type-per-behavior] Every such file holds to one policy — absent is
 // the store's empty value, anything else must read, and nothing is written
 // over a file that does not: a write planned from a read that failed sets the
-// file aside beside itself first and starts from the empty value — so the
-// policy is this one store, and each file supplies its locations, empty value
-// and parser.
+// file aside first (`setAside` in file-rewrites.ts) and starts from the empty
+// value — so the policy is this one store, and each file supplies its
+// locations, empty value and parser.
 //
 // [LAW:effects-at-boundaries] The parsers are pure; the file is read and
 // planned here and published by the shared file writer.
@@ -18,7 +18,8 @@ import { ok, type Asked, type Ok } from "../utils/outcome.js";
 import { readTextIfPresent } from "../utils/regular-text.js";
 
 // [LAW:types-are-the-program] A failure names the location that did not read,
-// so a write planned from it knows what to set aside.
+// so a write planned from it knows what to set aside. Its reason starts with
+// that location, as the reader's and the parse's reasons do.
 export interface Unread {
   readonly kind: "failed";
   readonly reason: string;
@@ -40,8 +41,8 @@ export interface StateFile<T> {
 }
 
 export interface Planned<T> {
-  // A file that did not read, renamed aside before anything is written.
-  readonly setAside: FileRetirement | null;
+  // A file that did not read, set aside before anything is written.
+  readonly setAside: Unread | null;
   readonly rewrite: FileRewrite | null;
   readonly retire: FileRetirement | null;
   readonly value: T;
@@ -49,29 +50,17 @@ export interface Planned<T> {
 
 // [LAW:single-enforcer] What any write planned from an observation starts
 // from. A file that read, or none, is the value it holds. One that did not is
-// renamed aside under a name no reader searches, and the write starts from
-// empty, so no store ever writes over bytes it could not read, and none has
-// to wait for a person to repair the file before it saves again.
+// set aside, and the write starts from empty, so no store ever writes over
+// bytes it could not read, and none has to wait for a person to repair the
+// file before it saves again.
 export function writeBase<T>(
   observed: StateObservation<T>,
   empty: T,
-): { readonly current: T; readonly setAside: SetAside | null } {
+): { readonly current: T; readonly setAside: Unread | null } {
   const { result } = observed;
   return result.kind === "ok"
     ? { current: result.value, setAside: null }
-    : {
-        current: empty,
-        setAside: {
-          from: result.file,
-          to: `${result.file}.unread-${randomUUID()}`,
-          reason: result.reason,
-        },
-      };
-}
-
-// A file that did not read, the name it is kept under, and why it did not.
-export interface SetAside extends FileRetirement {
-  readonly reason: string;
+    : { current: empty, setAside: result };
 }
 
 // [LAW:one-source-of-truth] How every state file spells what it holds.

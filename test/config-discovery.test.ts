@@ -1055,6 +1055,7 @@ test("the two renderers and an answer written through the host read each book re
         },
       ],
       said: () => {},
+      reported: () => {},
     },
     worker,
   );

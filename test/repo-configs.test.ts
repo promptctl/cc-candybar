@@ -400,9 +400,16 @@ describe("the book in the state directory", () => {
         kind: "ok",
         value: { [other()]: "declined" },
       });
-      const aside = planned.kind === "ok" ? planned.value.setAside : null;
-      expect(aside?.from).toBe(loose());
-      expect(fs.readFileSync(aside!.to, "utf8")).toBe(before);
+      expect(planned.kind === "ok" && planned.value.setAside).toMatchObject({
+        file: loose(),
+      });
+      const kept = fs
+        .readdirSync(path.dirname(loose()))
+        .filter((name) => name.startsWith(`${path.basename(loose())}.unread-`));
+      expect(kept).toHaveLength(1);
+      expect(
+        fs.readFileSync(path.join(path.dirname(loose()), kept[0]!), "utf8"),
+      ).toBe(before);
       expect(fs.existsSync(loose())).toBe(false);
       expect(store.read()).toEqual({
         kind: "ok",

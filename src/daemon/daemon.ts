@@ -66,13 +66,13 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
+import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
-  HeldStores,
-  type ProfileStorage,
-  type StoreLoad,
-} from "./held-stores.js";
-import { loadText } from "./held-file.js";
-import type { StoreUnsavedWarning } from "./foundations/stored-file.js";
+  reportLine,
+  reportText,
+  type StoreReport,
+  type StoreUnsavedWarning,
+} from "./foundations/stored-file.js";
 import {
   environmentOutput,
   isEnvironmentOutput,
@@ -325,9 +325,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     (text, more, at) => joinedEvent(null, `${text}${recurrence(more)}`, at),
     restateOnceBuilt,
   );
-  // [LAW:nothing-unseen] What each per-session file's load found that the
-  // store does not hold: a file kept aside, what this build dropped. An event,
-  // since once the store saves, those bytes are no longer what the file holds.
+  // [LAW:nothing-unseen] What a store found of its file that it does not
+  // hold: a file kept aside, what this build dropped. An event, since once the
+  // store saves, those bytes are no longer what the file holds.
   const storeLoads = new RecurringEvents<{ file: string; text: string }>(
     clock,
     "store-load",
@@ -337,12 +337,15 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   );
   // A file nothing is saved to stands for as long as this daemon runs.
   const unsaved = new Map<string, StoreUnsavedWarning>();
-  const loaded = (loads: readonly StoreLoad[]): void => {
-    for (const { file, report } of loads) {
-      const text = loadText(file, report);
+  // [LAW:single-enforcer] Every store's report reaches the log and the bar
+  // here, whichever store made it and whenever.
+  const storeReported = (reports: readonly StoreReport[]): void => {
+    for (const report of reports) {
+      const { file, found } = report;
+      const text = reportText(report);
+      log(text === null ? "info" : "warn", reportLine(report));
       if (text === null) continue;
-      log("warn", text);
-      if (report.kind === "refused")
+      if (found.kind === "refused")
         unsaved.set(file, { kind: "store-unsaved", file, message: text });
       else storeLoads.occur({ file, text });
     }
@@ -874,6 +877,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         writeConfigFile: inputs.writeConfigFile,
         closing: cancelling,
         acknowledgeDisplayed,
+        reported: storeReported,
         unheard: (text, fromEnvironment) => {
           // The unacknowledged text is included in the next warning.
           const prior = actFailed.event();
@@ -951,7 +955,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       target = connectRenderer(
         prepareRenderer(name, binding, canonicalEntry(name, binding)),
       );
-      loaded(target.stores.load());
+      storeReported(target.stores.load());
       target.link.serve();
       renderers.set(name, target);
       if (phase.kind === "armed") target.link.arm();
@@ -1117,7 +1121,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const starting: DaemonPhase = { kind: "starting" };
     phase = starting;
     try {
-      loaded([...primary.stores.load(), sessionBook.load()]);
+      storeReported([...primary.stores.load(), sessionBook.load()]);
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");

@@ -16,6 +16,10 @@ export interface DroppedPart {
   readonly why: string;
 }
 
+export interface Dropped extends DroppedPart {
+  readonly session: string;
+}
+
 // A session's value as a load keeps it, and what of it the load gave up.
 export interface Kept<V> {
   readonly value: V;
@@ -27,6 +31,33 @@ export const kept = <V>(
   dropped: readonly DroppedPart[] = [],
 ): Asked<Kept<V>> => ({ kind: "ok", value: { value, dropped } });
 
+// [LAW:types-are-the-program] What a store found of its file: none, a file
+// that read (and what of it this build dropped), or one that did not, set
+// aside under `to`, or left where it is because setting it aside failed.
+export type Found =
+  | { readonly kind: "absent" }
+  | {
+      readonly kind: "read";
+      readonly sessions: number;
+      readonly dropped: readonly Dropped[];
+    }
+  | { readonly kind: "set-aside"; readonly reason: string; readonly to: string }
+  | {
+      readonly kind: "refused";
+      readonly reason: string;
+      readonly error: string;
+    };
+
+// [LAW:one-type-per-behavior] One report for every store that keeps a file:
+// the per-session stores at their load, the repository answers when a write
+// sets their book aside.
+export interface StoreReport {
+  // The store, as the bar names it.
+  readonly store: string;
+  readonly file: string;
+  readonly found: Found;
+}
+
 // [LAW:no-silent-failure] A per-session file that did not read and could not
 // be set aside: nothing is saved to it while this daemon runs, so it stands
 // on every bar for as long, about its file.
@@ -36,9 +67,57 @@ export interface StoreUnsavedWarning {
   readonly message: string;
 }
 
-// The newest entry of a map whose insertion order is recency.
-export function newestOf<K>(map: ReadonlyMap<K, unknown>): K | undefined {
-  let newest: K | undefined;
-  for (const key of map.keys()) newest = key;
-  return newest;
+// [LAW:one-source-of-truth] What the bar says of a store's file, or null for
+// one with nothing to say: a file kept aside, one nothing is saved to, and
+// what a load dropped, grouped by what and why so a renamed key dropped from
+// every session is one line. An unread reason already names its file.
+export function reportText({ store, file, found }: StoreReport): string | null {
+  switch (found.kind) {
+    case "absent":
+      return null;
+    case "set-aside":
+      return `${store} ${unreadText(found.reason, `it is kept as ${found.to}, and the store started again from empty`)}`;
+    case "refused":
+      return `${store} ${unreadText(found.reason, `it stays where it is, since setting it aside failed (${found.error}), and nothing is saved to it until the daemon starts again`)}`;
+    case "read":
+      return found.dropped.length === 0
+        ? null
+        : `${store} (${file}): the load dropped what this build does not read: ${droppedText(found.dropped)}`;
+  }
+}
+
+// [LAW:nothing-unseen] The log's line for every report, so a store that
+// found nothing is told apart from one that never looked.
+export function reportLine(report: StoreReport): string {
+  const { store, file, found } = report;
+  switch (found.kind) {
+    case "absent":
+      return `${store}: no file at ${file}, holding nothing`;
+    case "read":
+      return `${store}: read ${file}, sessions=${found.sessions} dropped=${found.dropped.length}`;
+    case "set-aside":
+    case "refused":
+      return reportText(report)!;
+  }
+}
+
+const SHOWN_SESSIONS = 3;
+
+function droppedText(dropped: readonly Dropped[]): string {
+  const groups = new Map<string, string[]>();
+  for (const { session, part, why } of dropped) {
+    const what = part === null ? `a session (${why})` : `${part} (${why})`;
+    const sessions = groups.get(what);
+    if (sessions === undefined) groups.set(what, [session]);
+    else sessions.push(session);
+  }
+  return [...groups]
+    .map(([what, sessions]) => {
+      const shown = sessions
+        .slice(0, SHOWN_SESSIONS)
+        .map((s) => JSON.stringify(s));
+      const more = sessions.length - shown.length;
+      return `${what} in ${shown.join(", ")}${more > 0 ? ` and ${more} more` : ""}`;
+    })
+    .join("; ");
 }

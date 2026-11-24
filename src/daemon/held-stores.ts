@@ -11,18 +11,13 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import type { Timekeeper } from "../time.js";
-import { HeldFile, type HeldChange, type LoadReport } from "./held-file.js";
+import { HeldFile, type HeldChange } from "./held-file.js";
+import type { StoreReport } from "./foundations/stored-file.js";
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
   readonly session: SessionFileStorage<SessionPicks>;
   readonly history: SessionFileStorage<SessionHistory>;
-}
-
-// What one of the profile's files said as it loaded.
-export interface StoreLoad {
-  readonly file: string;
-  readonly report: LoadReport;
 }
 
 export class HeldStores {
@@ -36,18 +31,15 @@ export class HeldStores {
     private readonly storage: ProfileStorage,
     clock: Pick<Timekeeper, "after">,
   ) {
-    this.sessions = new HeldFile("session-state", storage.session, clock);
-    this.history = new HeldFile("settings-history", storage.history, clock);
+    this.sessions = new HeldFile("Session picks", storage.session, clock);
+    this.history = new HeldFile("Settings history", storage.history, clock);
   }
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
   // daemon that won the socket reads what the one before it flushed in its
   // close.
-  load(): readonly StoreLoad[] {
-    return [
-      { file: this.storage.session.file, report: this.sessions.load().report },
-      { file: this.storage.history.file, report: this.history.load().report },
-    ];
+  load(): readonly StoreReport[] {
+    return [this.sessions.load().report, this.history.load().report];
   }
 
   // What a renderer built now is built from.
