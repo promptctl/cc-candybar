@@ -89621,12 +89621,17 @@ function encodeFeed(frame2, publish, source) {
     displayedEvents: frame2.displayedEvents
   });
   const bar = publish(frame2.bar, source);
-  const resp = answer2(bar, hitMapOf(bar));
   const statusline = answer2(
     frame2.handoff === null ? bar : publish(frame2.handoff, source),
     void 0
   );
-  return { resp, statusline };
+  let resp;
+  return {
+    statusline,
+    get resp() {
+      return resp ??= answer2(bar, hitMapOf(bar));
+    }
+  };
 }
 var FrameFeeds = class {
   constructor(deps) {
@@ -89709,7 +89714,9 @@ var FrameFeeds = class {
       writes: /* @__PURE__ */ new Set(),
       owner: sub2.owner === null ? null : this.held(sub2.owner)
     };
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.set(sub2, follower);
+    this.ownerMoved(sessionId2, owned, watched);
     this.handover(sessionId2, watched, sub2, follower);
     this.deps.log(
       "info",
@@ -89742,18 +89749,31 @@ var FrameFeeds = class {
   // session's pointer, and the renderer is handed the change like any change
   // of who watches. A pane that does not follow the session is refused.
   pointerOf(sessionId2, pane) {
-    const reporting = [
-      ...this.watched.get(sessionId2)?.followers.values() ?? []
-    ].filter((follower) => follower.owner?.id === pane.id);
-    if (reporting.length === 0)
+    const watched = this.watched.get(sessionId2);
+    const reporting = [...watched?.followers.values() ?? []].filter(
+      (follower) => follower.owner?.id === pane.id
+    );
+    if (watched === void 0 || reporting.length === 0)
       return {
         kind: "refused",
         reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId2)}`
       };
+    const owned = ownerOf(watched)?.id ?? null;
     const admitted = this.held(pane);
     for (const follower of reporting) follower.owner = admitted;
+    this.ownerMoved(sessionId2, owned, watched);
     this.announce();
     return { kind: "ok" };
+  }
+  // [LAW:nothing-unseen] Who holds a session's pointer is said when it changes
+  // hands, not on each report, which move at the pointer's speed.
+  ownerMoved(sessionId2, before, watched) {
+    const after = watched === void 0 ? null : ownerOf(watched)?.id ?? null;
+    if (after !== before)
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId2)} pointer owner=${JSON.stringify(after)} was=${JSON.stringify(before)}`
+      );
   }
   // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
   // its world state read.
@@ -89945,7 +89965,9 @@ var FrameFeeds = class {
     const watched = this.watched.get(sessionId2);
     const follower = watched?.followers.get(sub2);
     if (watched === void 0 || follower === void 0) return;
+    const owned = ownerOf(watched)?.id ?? null;
     watched.followers.delete(sub2);
+    this.ownerMoved(sessionId2, owned, watched);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId2);
       this.deps.log(

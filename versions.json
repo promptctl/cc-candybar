@@ -4,15 +4,22 @@
     {
       "version": "pr-950",
       "ref": "refs/pull/950/merge",
-      "sha": "9c605816054388a3283deb101bf9ccdf8890e76d",
-      "timestamp": "2026-11-24T15:11:58.625Z",
+      "sha": "f4bcf956ee3b5e1b33e807416edbf8a4f1b74c9f",
+      "timestamp": "2026-11-24T15:28:33.503Z",
       "commits": [
         {
-          "sha": "9c605816054388a3283deb101bf9ccdf8890e76d",
+          "sha": "f4bcf956ee3b5e1b33e807416edbf8a4f1b74c9f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T15:10:45Z",
-          "message": "Merge 2bdded7ba7929903d30d7b9f07c4326c8084393d into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+          "timestamp": "2026-11-24T15:27:15Z",
+          "message": "Merge ca65e918c858363bb23057596f898e3cfec3330f into cc29c9c7d98d4b9ec78f048aed6ee8dc99719b7c\n"
+        },
+        {
+          "sha": "ca65e918c858363bb23057596f898e3cfec3330f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T08:27:00-07:00",
+          "message": "fix(bar-pane): review pass 3 — a pane reports only while the host holds its stream, a frame no pane follows is encoded once, and a missed press from long ago no longer counts against tmux\n"
         },
         {
           "sha": "2bdded7ba7929903d30d7b9f07c4326c8084393d",
