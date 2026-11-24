@@ -4,15 +4,29 @@
     {
       "version": "pr-948",
       "ref": "refs/pull/948/merge",
-      "sha": "a043066ed04fb09df4f00b8641a3090535faee63",
-      "timestamp": "2026-11-24T13:01:34.749Z",
+      "sha": "f48a1f060bf5a1963022297f1011cc73b13e740f",
+      "timestamp": "2026-11-24T13:10:24.373Z",
       "commits": [
         {
-          "sha": "a043066ed04fb09df4f00b8641a3090535faee63",
+          "sha": "f48a1f060bf5a1963022297f1011cc73b13e740f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-24T13:00:28Z",
-          "message": "Merge 6a3dcd816c535b5781af659e4daf6d3ca6d40f87 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+          "timestamp": "2026-11-24T13:09:19Z",
+          "message": "Merge 545e7556cab67d4ab75c79b5366599aca0873940 into 8d393e9d29d58d830eb3fdb1a8fedf51d811d3c2\n"
+        },
+        {
+          "sha": "545e7556cab67d4ab75c79b5366599aca0873940",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:08:55-07:00",
+          "message": "merge main\n"
+        },
+        {
+          "sha": "f2b1e88c75c839f2c29e313913422fb1233cfe3e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-24T06:08:55-07:00",
+          "message": "test(host): a cold-start test waits for the host's answer and the node line, not the socket or the file alone\n"
         },
         {
           "sha": "6a3dcd816c535b5781af659e4daf6d3ca6d40f87",
