@@ -912,6 +912,44 @@ describe("feed delivery", () => {
     ]);
     expect(logged).toContainEqual(expect.stringContaining("encoding broke"));
   });
+
+  // The pane's answer is built when a pane is first offered it, which is in
+  // the turn that drew the frame: a failure there is that frame's, and the
+  // next session still presents.
+  test("a failure building the pane's answer is the frame's, and the next session still presents", () => {
+    const publish = publishingFrames(TEST_SIGNER);
+    let first = true;
+    // The first body published is the bar of the first frame: the statusline's
+    // answer is of its handoff and never reads it.
+    const { feeds, took, settled } = rig((body, source) => {
+      const published = publish(body, source);
+      if (!first) return published;
+      first = false;
+      return {
+        ...published,
+        get rows(): never {
+          throw new Error("the bar would not encode");
+        },
+      };
+    });
+    const bad = subscriber("pane");
+    const good = subscriber("pane");
+    feeds.subscribe(S, bad.sub);
+    feeds.subscribe(T, good.sub);
+    const failed = frame(S, "bad");
+    const drawn = frame(T, "good");
+
+    took([failed, drawn]);
+    expect(JSON.parse(bad.sent[0]!)).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+    });
+    expect(good.sent).toHaveLength(1);
+    expect(settled).toEqual([
+      [failed, false],
+      [drawn, true],
+    ]);
+  });
 });
 
 describe("a subscription's lane", () => {

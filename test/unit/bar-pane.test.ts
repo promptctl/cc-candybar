@@ -229,7 +229,12 @@ describe("bar-pane pointer report", () => {
   it("sends nothing while no stream is held, whether the pane follows no session or its lane is off", async () => {
     const { sent, send } = sends();
     const failures: string[] = [];
-    await reportPointer(null, send, () => facts, (m) => failures.push(m));
+    await reportPointer(
+      null,
+      send,
+      () => facts,
+      (m) => failures.push(m),
+    );
     await reportPointer(
       { sessionId: "s", wire: { attached: false } },
       send,
@@ -243,7 +248,12 @@ describe("bar-pane pointer report", () => {
   it("sends the facts as they stand while the stream is held, and says a failure it meets", async () => {
     const { sent, send } = sends();
     const followed = { sessionId: "s", wire: { attached: true } };
-    await reportPointer(followed, send, () => facts, () => {});
+    await reportPointer(
+      followed,
+      send,
+      () => facts,
+      () => {},
+    );
     expect(sent).toEqual(["s"]);
     const failures: string[] = [];
     await reportPointer(

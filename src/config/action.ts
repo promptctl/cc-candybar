@@ -352,8 +352,11 @@ export function runDeclaration(a: RunAction): string {
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 
 // [LAW:one-source-of-truth] The actions one action fires or answers with: a
-// `do`'s members, and the target of each gesture it binds. Every walk of the
-// action graph asks this, so a new reference field is listed once.
+// `do`'s members, and the target of each gesture it binds. Every walk that
+// asks which actions an action reaches (what is unused, what a click reads, a
+// plugin's names, what wants edit mode) asks this, so a new reference field is
+// listed once. A walk that rewrites a field (`mapActionNames`) or checks one
+// by its own rule (the loader's `do` and `on` checks) goes field by field.
 export const actionMembers = (a: ActionDecl): readonly string[] => [
   ...("do" in a ? a.do : []),
   ...Object.values(a.on ?? {}),

@@ -522,6 +522,11 @@ export class FrameFeeds<Req> {
           renderer,
           session,
         });
+        // [LAW:no-silent-failure] The answers this frame is about to be offered
+        // are built here, where a failure is this frame's, not a later
+        // subscriber's or another session's.
+        for (const { lane } of watched.followers.keys())
+          answerOf(encoded, lane);
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.
