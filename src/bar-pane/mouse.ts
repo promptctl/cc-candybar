@@ -32,7 +32,8 @@ export type MouseEvent =
   | { readonly kind: "release" | "wheel"; readonly at: Cell };
 
 // The report's button number: bits 0-1 the button (3 is none), 4 shift, 8 alt,
-// 16 ctrl, 32 motion, 64 wheel.
+// 16 ctrl, 32 motion, 64 wheel, 128 the buttons past the wheel (the side
+// buttons), which no gesture names.
 const MODIFIER_BIT: Readonly<Record<Modifier, number>> = {
   shift: 4,
   alt: 8,
@@ -40,6 +41,7 @@ const MODIFIER_BIT: Readonly<Record<Modifier, number>> = {
 };
 const MOTION_BIT = 32;
 const WHEEL_BIT = 64;
+const SIDE_BUTTON_BIT = 128;
 
 // Built from ESC, not written as a literal: a regular expression that names a
 // control character is what no-control-regex refuses.
@@ -64,6 +66,9 @@ function eventOf(
   if ((code & WHEEL_BIT) !== 0) return { kind: "wheel", at };
   if ((code & MOTION_BIT) !== 0) return { kind: "motion", at };
   if (final === "m") return { kind: "release", at };
+  // [LAW:parse-dont-validate] A side button's press is no gesture: it is read
+  // as nothing, not as the button its low bits would spell.
+  if ((code & SIDE_BUTTON_BIT) !== 0) return undefined;
   // [LAW:one-source-of-truth] The terminal numbers the buttons in the order
   // the gestures name them, so no second table says which is which.
   const button: Button | undefined = BUTTONS[code & 3];

@@ -134,4 +134,33 @@ describe("an action's other gestures", () => {
       why,
     );
   });
+
+  // [LAW:no-silent-failure] One load names every fault in an action, whichever
+  // of its parts they are in.
+  test("names a fault in the gestures and one in the action itself together", () => {
+    const actions =
+      "open: { set: 'panel', to: 'open', on: { hold: 'close' }, layer: 'nowhere' }, close: { set: 'panel', to: 'closed' },";
+    const thrown = (() => {
+      try {
+        load(config(actions, '{{ action "open" "go" }}'));
+      } catch (e) {
+        return e as Error;
+      }
+      throw new Error("expected a load error");
+    })();
+    expect(thrown.message).toContain("ends in a button");
+    expect(thrown.message).toMatch(/layer/);
+  });
+
+  // The toggle is minted for a file that reaches it, by whichever binding.
+  test("a gesture that targets edit.toggle is demand enough for edit mode", () => {
+    expect(() =>
+      load(
+        config(
+          "open: { set: 'panel', to: 'open', on: { 'alt+left': 'edit.toggle' } },",
+          '{{ action "open" "go" }}',
+        ),
+      ),
+    ).not.toThrow();
+  });
 });

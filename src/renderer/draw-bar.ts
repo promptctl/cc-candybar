@@ -605,8 +605,9 @@ export function drawRender(
   );
   // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
   // unless the surface of the pane that owns the pointer (a link's, with none)
-  // delivers its gesture itself. Hover, the frame's links and the idle clock
-  // all read this one value.
+  // delivers its gesture itself. Hover, the frame's links and whether the idle
+  // clock runs all read this one value; the idle close resets the session's
+  // own, which is what a lane that does not deliver the gesture reads.
   const mode = modeInForce(
     sessionState.get(sessionId, CLICK_MODE_KEY),
     surfaceOf(pointer),

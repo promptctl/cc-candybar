@@ -8,6 +8,7 @@ import {
   HOVER,
   PLAIN_CLICK,
   type Delivered,
+  type GestureName,
 } from "../click/gesture.js";
 import { LIST_PANES_FORMAT } from "../daemon/pane-visibility.js";
 
@@ -19,10 +20,16 @@ import { LIST_PANES_FORMAT } from "../daemon/pane-visibility.js";
 export const BAR_PANE_FORMAT = `${LIST_PANES_FORMAT} #{mouse}`;
 const MOUSE_FIELD = LIST_PANES_FORMAT.split(" ").length;
 
+// The gestures tmux's own default bindings take before a pane sees them: its
+// pane menu is on alt+right (`M-MouseDown3Pane`, checked against tmux 3.8's
+// root key table). A terminal may keep a modifier click for its own selection
+// too, which the pane cannot know.
+const TAKEN_BY_TMUX: readonly GestureName[] = ["alt+right"];
+
 // What tmux delivers to a pane follows its `mouse` option: on, every button
-// and modifier it reports and the pointer's motion; off, tmux hands the pane
-// nothing, and the terminal opens its links on the plain click as it does for
-// the statusline.
+// and modifier it does not bind itself and the pointer's motion; off, tmux
+// hands the pane nothing, and the terminal opens its links on the plain click
+// as it does for the statusline.
 export function deliveredIn(
   listPanes: string,
   own: string,
@@ -31,5 +38,7 @@ export function deliveredIn(
     .split("\n")
     .map((row) => row.trim().split(" "))
     .find(([id]) => id === own);
-  return line?.[MOUSE_FIELD] === "1" ? [...ALL_GESTURES, HOVER] : [PLAIN_CLICK];
+  return line?.[MOUSE_FIELD] === "1"
+    ? [...ALL_GESTURES.filter((g) => !TAKEN_BY_TMUX.includes(g)), HOVER]
+    : [PLAIN_CLICK];
 }

@@ -976,11 +976,13 @@ or an alt+click without a second region beside it:
   as the region's own click does. A target that takes its value from the
   template (`from`, `int`) is allowed only when the declaring action takes one
   too: both are given the region's displayed value.
-- **The tmux bar pane delivers every gesture; the statusline delivers the
-  plain click.** Over SSH too: the pane needs no handler on the remote
-  machine, because each gesture's link is signed like the plain click's and
-  a forged or altered one runs nothing. A press leaves keyboard focus where
-  it was.
+- **The tmux bar pane delivers the gestures tmux forwards to it; the statusline
+  delivers the plain click.** tmux's own default binding takes `alt+right` for
+  its pane menu, so the pane never sees it, and a terminal may keep a modifier
+  click (often `shift`) for its own selection. Over SSH too: the pane needs no
+  handler on the remote machine, because each gesture's link is signed like
+  the plain click's and a forged or altered one runs nothing. A press leaves
+  keyboard focus where it was.
 - **Hover is a value, not an action.** `.hover` is the name of the action under
   the pointer, or empty. Every region bound to that action is hovered
   together, and a region with no named action is never hovered. The pane

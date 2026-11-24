@@ -29,7 +29,7 @@ import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
-  actionBindsTemplateValue,
+  bindsTemplateValue,
   runDeclaration,
   type ResolvedActionDecl,
 } from "../config/action.js";
@@ -473,14 +473,11 @@ export function compileActions(
       out,
     );
     // [LAW:one-source-of-truth] The loader and the compiled entry share a
-    // binding rule. A compound action uses the same result as its actual head.
+    // binding rule: a compound action is bound as its head is.
     out.set(name, {
       ...compiled,
       on: action.on ?? {},
-      bindsTemplateValue:
-        compiled.kind === "do"
-          ? compiled.head.bindsTemplateValue
-          : actionBindsTemplateValue(action),
+      bindsTemplateValue: bindsTemplateValue(actions, action),
     });
   }
   return out;

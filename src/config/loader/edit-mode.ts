@@ -33,7 +33,7 @@ import type {
   RawDslConfig,
   VariableDecl,
 } from "../dsl-types.js";
-import type { ActionDecl } from "../action.js";
+import { actionMembers, type ActionDecl } from "../action.js";
 import {
   DISCLOSURE_CLOSED,
   disclosureCycleAction,
@@ -109,12 +109,13 @@ function referencesEditToggle(template: string): boolean {
   }
 }
 
-// A file also wants edit mode when one of its `do` actions fires `edit.toggle`
-// — a click that reaches the toggle without a template naming it.
+// A file also wants edit mode when one of its actions fires `edit.toggle`, in
+// a `do` or as a gesture's target — a click that reaches the toggle without a
+// template naming it.
 function fileWantsEditMode(out: Readonly<RawDslConfig>): boolean {
   if (
-    Object.values(out.actions ?? {}).some(
-      (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION),
+    Object.values(out.actions ?? {}).some((a) =>
+      actionMembers(a).includes(EDIT_TOGGLE_ACTION),
     )
   ) {
     return true;

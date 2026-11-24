@@ -224,11 +224,12 @@ const eventOf = (kind: unknown): "render" | "click" | "request" =>
 
 // [LAW:single-enforcer] The checkpoint's one refusal: the request is
 // answered, never streamed, and the connection stays up.
+const refusal = (code: "BAD_REQUEST" | "VERSION_MISMATCH", error: string) =>
+  stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION });
 const refuse = (
   code: "BAD_REQUEST" | "VERSION_MISMATCH",
   error: string,
-): HandledRequest =>
-  replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+): HandledRequest => replied(refusal(code, error));
 
 // [LAW:parse-dont-validate] A pane's report of its pointer, read once into
 // what the feed holds. The report is untrusted JSON: the id names the pane, the
@@ -421,21 +422,16 @@ export async function replyTo(
   }
 
   if (req.kind === "pointer") {
-    const refused = (error: string) =>
-      stay({
-        ok: false,
-        error,
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION,
-      });
     const session = parseSessionId(req.sessionId);
-    if (!session.ok) return refused(`pointer's sessionId ${session.problem}`);
+    if (!session.ok)
+      return refusal("BAD_REQUEST", `pointer's sessionId ${session.problem}`);
     const owner = parseOwner(req.owner);
-    if (owner.kind !== "ok") return refused(`pointer's ${owner.reason}`);
+    if (owner.kind !== "ok")
+      return refusal("BAD_REQUEST", `pointer's ${owner.reason}`);
     const admitted = frameFeeds.pointerOf(session.id, owner.value);
     return admitted.kind === "ok"
       ? stay({ ok: true, output: "" })
-      : refused(admitted.reason);
+      : refusal("BAD_REQUEST", admitted.reason);
   }
 
   if (req.kind === "stats") {

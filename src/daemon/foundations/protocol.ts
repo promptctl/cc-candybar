@@ -466,8 +466,9 @@ export interface SubscribeRequest {
   kind: "subscribe";
   sessionId: string;
   lane: Lane;
-  // The pane lane's owner, which draws the bar and sees the pointer over it
-  // (`PointerRequest`): the newest to subscribe owns the session's pointer.
+  // The pane lane's pane, which draws the bar and sees the pointer over it
+  // (`PointerRequest`): the pane that spoke last, by subscribing or reporting,
+  // holds the session's pointer.
   owner?: OwnerFacts;
 }
 
@@ -482,8 +483,9 @@ export interface OwnerFacts {
   hover: string | null;
 }
 
-// A change of the owner's facts. The host accepts it only from the session's
-// live owner: a stream that was replaced, or has ended, owns nothing.
+// A change of a pane's facts. The host accepts it from any pane following the
+// session, which then holds the session's pointer: a pane that has ended
+// follows nothing, and is refused.
 export interface PointerRequest {
   v: number;
   kind: "pointer";

@@ -46,9 +46,9 @@ import type {
 // A subscriber holds the ANSI answer for its own display.
 type Delivered = (delivered: boolean) => void;
 
-// [LAW:one-source-of-truth] The pane that draws the pane lane and sees the
+// [LAW:one-source-of-truth] A pane that draws the pane lane and sees the
 // pointer over it: its id, and what it last said of the pointer. Held by the
-// feed for as long as the owner's subscription stands.
+// feed for as long as the pane's subscription stands.
 export interface PaneOwner {
   readonly id: string;
   readonly pointer: PanePointer;
@@ -56,8 +56,9 @@ export interface PaneOwner {
 
 export interface Subscriber {
   readonly lane: Lane;
-  // Declared by a pane-lane subscriber that owns the session's pointer.
-  readonly owner?: PaneOwner;
+  // The pane a pane-lane subscriber is, or null for a subscriber that sees no
+  // pointer.
+  readonly owner: PaneOwner | null;
   // The writer reports completion or replacement for each offered chunk.
   readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
@@ -107,9 +108,16 @@ interface Follower {
   // [LAW:single-enforcer] The transport bounds its outstanding writes. Each
   // carries at most one candidate, replaced when the latest draw is identical.
   readonly writes: Set<PendingWrite>;
-  // What the follower's pane last said of the pointer: set where the
-  // subscription declared an owner, and moved by its reports.
-  readonly owner: { readonly id: string; pointer: PanePointer } | null;
+  // What the follower's pane last said of the pointer, where the subscription
+  // declared a pane.
+  owner: HeldPointer | null;
+}
+
+// A pane's facts of its pointer as the feed holds them, and `said`: where its
+// last word came in the order of the feed's panes' words, which is what makes
+// one pane's pointer the session's.
+interface HeldPointer extends PaneOwner {
+  readonly said: number;
 }
 
 interface Watched {
@@ -122,17 +130,16 @@ interface Watched {
   pushed: number;
 }
 
-// [LAW:one-source-of-truth] The session's pointer owner is derived from who
-// follows it, never stored beside them: the newest follower to have declared
-// one, so a stream that reconnects over its old one takes over, and when the
-// newest ends the one before it owns the pointer again.
-function ownerOf(watched: Watched): {
-  readonly lane: Lane;
-  readonly owner: NonNullable<Follower["owner"]>;
-} | null {
-  let found: ReturnType<typeof ownerOf> = null;
-  for (const [sub, { owner }] of watched.followers)
-    if (owner !== null) found = { lane: sub.lane, owner };
+// [LAW:one-source-of-truth] The session's pointer is the one the pane that
+// spoke last holds: the pointer is where the user last moved it, and a pane
+// that opens or reconnects speaks for itself once. It is derived from who
+// follows the session, never stored beside them, so when that pane ends the
+// one that spoke before it owns the pointer again.
+function ownerOf(watched: Watched): HeldPointer | null {
+  let found: HeldPointer | null = null;
+  for (const { owner } of watched.followers.values())
+    if (owner !== null && (found === null || owner.said > found.said))
+      found = owner;
   return found;
 }
 
@@ -227,6 +234,7 @@ export class FrameFeeds<Req> {
   // what it holds is unknown (a delivery failed).
   private handed: string | null = JSON.stringify({});
   private frameDemands = 0;
+  private panesSaid = 0;
   private pushed = 0;
   private refused = 0;
   private lookups = 0;
@@ -292,7 +300,7 @@ export class FrameFeeds<Req> {
     const follower: Follower = {
       confirmed: null,
       writes: new Set(),
-      owner: sub.owner === undefined ? null : { ...sub.owner },
+      owner: sub.owner === null ? null : this.held(sub.owner),
     };
     watched.followers.set(sub, follower);
     this.handover(sessionId, watched, sub, follower);
@@ -330,29 +338,32 @@ export class FrameFeeds<Req> {
     });
   }
 
-  // [LAW:single-enforcer] The one admission of a pane's report of its
-  // pointer: only the session's live owner may change what is held, and the
-  // renderer is handed the change like any change of who watches.
+  // [LAW:single-enforcer] A pane's facts of its pointer, as a subscribe and
+  // each report admit them: its latest, and the latest word of any pane.
+  private held(pane: PaneOwner): HeldPointer {
+    return { ...pane, said: ++this.panesSaid };
+  }
+
+  // A pane's report of its pointer: held for the pane, which then owns the
+  // session's pointer, and the renderer is handed the change like any change
+  // of who watches. A pane that does not follow the session is refused.
   pointerOf(
     sessionId: SessionId,
-    owner: PaneOwner,
+    pane: PaneOwner,
   ):
     | { readonly kind: "ok" }
     | { readonly kind: "refused"; readonly reason: string } {
-    const watched = this.watched.get(sessionId);
-    const held =
-      watched === undefined ? null : (ownerOf(watched)?.owner ?? null);
-    if (held === null)
+    const reporting = [
+      ...(this.watched.get(sessionId)?.followers.values() ?? []),
+    ].filter((follower) => follower.owner?.id === pane.id);
+    if (reporting.length === 0)
       return {
         kind: "refused",
-        reason: `no pane owns the pointer of session ${JSON.stringify(sessionId)}`,
+        reason: `no pane ${JSON.stringify(pane.id)} follows session ${JSON.stringify(sessionId)}`,
       };
-    if (held.id !== owner.id)
-      return {
-        kind: "refused",
-        reason: `pane ${JSON.stringify(owner.id)} does not own the pointer of session ${JSON.stringify(sessionId)}: a newer pane does`,
-      };
-    held.pointer = owner.pointer;
+    // A stream that reconnects over its old one holds the pane's facts twice.
+    const admitted = this.held(pane);
+    for (const follower of reporting) follower.owner = admitted;
     this.announce();
     return { kind: "ok" };
   }
@@ -383,7 +394,7 @@ export class FrameFeeds<Req> {
 
   private seen(sessionId: SessionId, watched: Watched): SessionViewers {
     const lanes: Partial<Record<Lane, LaneViewers>> = {};
-    const owner = ownerOf(watched)?.owner ?? null;
+    const owner = ownerOf(watched);
     for (const [sub, follower] of watched.followers) {
       const seen = lanes[sub.lane];
       lanes[sub.lane] = {

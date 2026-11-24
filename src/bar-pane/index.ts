@@ -35,6 +35,7 @@ import {
 } from "../daemon/pane-visibility";
 import { DRAWING, RESTORED, paint, paintedLines } from "./paint";
 import { readMouse } from "./mouse";
+import { singleFlight } from "./single-flight";
 import { touchOf } from "./hit-test";
 import { BAR_PANE_FORMAT, deliveredIn } from "./pointer";
 import type { Delivered } from "../click/gesture";
@@ -221,6 +222,7 @@ async function drawBarPane(
   let following: {
     readonly sessionId: string;
     readonly said: { latest: string | null; hits: HitMap | null };
+    readonly say: (line: string) => void;
     readonly follower: FrameFollower;
   } | null = null;
   // [LAW:one-source-of-truth] What this pane says of its pointer: who it is,
@@ -237,32 +239,14 @@ async function drawBarPane(
   // [LAW:no-ambient-temporal-coupling] One report at a time, of the facts and
   // the session as they stand when it is sent: changes that arrive while one is
   // in flight are the one report after it, so the host never ends on an older
-  // one and a burst is not a queue of identical requests.
-  let reporting: Promise<void> | null = null;
-  let reportDue = false;
-  const report = (): void => {
-    reportDue = true;
-    reporting ??= (async () => {
-      try {
-        while (reportDue) {
-          reportDue = false;
-          if (following === null) continue;
-          const sent = await tryPointerViaDaemon(
-            world,
-            following.sessionId,
-            facts(),
-          );
-          if (sent.kind !== "ok")
-            process.stderr.write(
-              `cc-candybar bar-pane: pointer report failed: ${describeFailure(sent)}\n`,
-            );
-        }
-      } finally {
-        reporting = null;
-      }
-    })();
-    void reporting.catch(die);
-  };
+  // one and a burst is not a queue of identical requests. With no session
+  // followed there is nobody to tell: the facts ride the subscribe that comes.
+  const report = singleFlight(async () => {
+    if (following === null) return;
+    const sent = await tryPointerViaDaemon(world, following.sessionId, facts());
+    if (sent.kind !== "ok")
+      fail(`pointer report failed: ${describeFailure(sent)}`);
+  }, die);
 
   // What the loop last learned of the pane's session, shown until its follower
   // says something.
@@ -270,9 +254,19 @@ async function drawBarPane(
   // [LAW:one-source-of-truth] What the pane shows is derived, never set: a
   // lookup that fails beside a live follower cannot cover its frames.
   const text = (): string => following?.said.latest ?? status;
+  // [LAW:no-silent-failure] A failure to reach the daemon is said as the
+  // follower's own faults are: it is what the pane paints until the next frame
+  // replaces it, never a line written over the bar.
+  const fail = (message: string): void => {
+    const line = `cc-candybar bar-pane: ${message}`;
+    if (following === null) {
+      status = line;
+      redraw();
+    } else following.say(line);
+  };
 
-  // What the pane last painted. Anything that disturbs the pane — a resize, a
-  // line written to its stderr — makes the next draw paint the frame whole.
+  // What the pane last painted. A resize disturbs the pane, and makes the next
+  // draw paint the frame whole.
   let painted = "";
   const resizeAnswered = tmuxPatience(world.clock);
   // The pane's height follows the frame's, except while the bar pane is the
@@ -298,22 +292,7 @@ async function drawBarPane(
   // [LAW:no-ambient-temporal-coupling] One draw at a time: a frame arriving
   // while one is drawn is drawn after it, the newest only, so no frame is
   // written over a newer one and no two resizes race.
-  let drawing: Promise<void> | null = null;
-  let stale = false;
-  const redraw = (): void => {
-    stale = true;
-    drawing ??= (async () => {
-      try {
-        while (stale) {
-          stale = false;
-          await drawOnce();
-        }
-      } finally {
-        drawing = null;
-      }
-    })();
-    void drawing.catch(die);
-  };
+  const redraw = singleFlight(drawOnce, die);
   process.stdout.on("resize", () => {
     painted = "";
     redraw();
@@ -330,11 +309,7 @@ async function drawBarPane(
     pressing = pressing.then(async () => {
       if (link !== undefined) {
         const sent = await tryClickViaDaemon(world, link);
-        if (sent.kind !== "ok")
-          process.stderr.write(
-            `cc-candybar bar-pane: click failed: ${describeFailure(sent)}
-`,
-          );
+        if (sent.kind !== "ok") fail(`click failed: ${describeFailure(sent)}`);
       }
       focusAnswered(
         await runTmuxAsync(world.launcher, tmux, "bar-pane.tmux", [
@@ -399,6 +374,7 @@ async function drawBarPane(
     following = {
       sessionId,
       said,
+      say,
       follower: followFrames(world, socketPath(world.host), sessionId, "pane", {
         frame: (resp) => {
           const outcome = renderOutcomeOf(resp);

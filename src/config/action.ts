@@ -418,3 +418,14 @@ export function actionBindsTemplateValue(a: ActionDecl): boolean {
     ("save" in a && a.layer === "ask")
   );
 }
+
+// [LAW:one-source-of-truth] Whether a click on an action is bound a template
+// value: a `do` is bound through its head, whose display the click carries.
+// The loader's gesture check and the compiled entry both ask this.
+export function bindsTemplateValue(
+  actions: Readonly<Record<string, ActionDecl>>,
+  a: ActionDecl,
+): boolean {
+  const head = "do" in a ? actions[a.do[0]] : a;
+  return head !== undefined && actionBindsTemplateValue(head);
+}

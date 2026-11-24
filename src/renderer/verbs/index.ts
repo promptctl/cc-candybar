@@ -1507,22 +1507,20 @@ export function closeIdleMenus(
     const modeOpen = modeIsOpen(
       clickModeOf(c.sessionState.get(sid, CLICK_MODE_KEY)),
     );
-    c.menu.choose(
-      sid,
-      [
-        ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-        ...(modeOpen
-          ? [
-              { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
-              { key: HOVER_KEY, value: NO_HOVER },
-            ]
-          : []),
-      ],
-      () => menuContext(c, sid, sessionConfig(c)),
-    );
+    // [LAW:nothing-unseen] What the choice closes is what the log names.
+    const closed = [
+      ...roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      ...(modeOpen
+        ? [
+            { key: CLICK_MODE_KEY, value: DEFAULT_CLICK_MODE },
+            { key: HOVER_KEY, value: NO_HOVER },
+          ]
+        : []),
+    ];
+    c.menu.choose(sid, closed, () => menuContext(c, sid, sessionConfig(c)));
     c.log(
       "info",
-      `menu-idle: closed=${[...roots.map(({ key }) => key), ...(modeOpen ? [CLICK_MODE_KEY] : [])].join(",") || "-"} ` +
+      `menu-idle: closed=${closed.map(({ key }) => key).join(",") || "-"} ` +
         `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
     );
   });

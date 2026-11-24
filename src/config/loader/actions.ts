@@ -142,12 +142,12 @@ function validateActionDecl(
   // [LAW:single-enforcer] The layer an action writes and the gestures it
   // answers are read here, once, for every arm: the arm parses the rest.
   const { layer, on: rawOn, ...rest } = raw;
+  // [LAW:no-silent-failure] Both are read before either failure returns, so an
+  // action wrong in its `on:` and its arm reports both at once.
   const on = rawOn === undefined ? {} : validateGestures(ctx, path, rawOn);
-  if (on === null) return null;
   const parsed = armParsed(ctx, path, key, layer, rest, home);
-  return parsed === null || Object.keys(on).length === 0
-    ? parsed
-    : { ...parsed, on };
+  if (on === null || parsed === null) return null;
+  return Object.keys(on).length === 0 ? parsed : { ...parsed, on };
 }
 
 // [LAW:parse-dont-validate] An action's `on:` as canonical gestures, each

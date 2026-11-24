@@ -40,14 +40,17 @@ describe("what a surface delivers", () => {
     });
   });
 
-  it("follows tmux's mouse option: every gesture and hover while it is on, the plain click while off", () => {
+  it("follows tmux's mouse option: every gesture tmux forwards and hover while it is on, the plain click while off", () => {
     // tmux's `#{mouse}` after the daemon's six fields, on the pane's own line.
     const listed = (own: string, mouse: string): string =>
       `%3 $1 1 1 0 1 1\n${own} $1 1 1 0 0 ${mouse}\n`;
+    // tmux's default binding opens its pane menu on alt+right: the pane never
+    // sees it, so it is not claimed.
     expect(deliveredIn(listed("%4", "1"), "%4")).toEqual([
-      ...ALL_GESTURES,
+      ...ALL_GESTURES.filter((g) => g !== "alt+right"),
       "hover",
     ]);
+    expect(deliveredIn(listed("%4", "1"), "%4")).toContain("alt+left");
     expect(deliveredIn(listed("%4", "0"), "%4")).toEqual(["left"]);
     expect(deliveredIn("", "%4")).toEqual(["left"]);
   });
@@ -113,6 +116,15 @@ describe("mouse reports", () => {
     expect(readMouse(report(64, 1, 1)).events.map((e) => e.kind)).toEqual([
       "wheel",
     ]);
+  });
+
+  // SGR codes 128 and up are the buttons past the wheel: read through the low
+  // bits they would run a region's click.
+  it("reads a side button's press as nothing, not as the button its low bits spell", () => {
+    expect(readMouse(report(128, 1, 1) + report(129, 1, 1)).events).toEqual([]);
+    expect(
+      readMouse(report(128, 1, 1) + report(0, 2, 1)).events.map((e) => e.kind),
+    ).toEqual(["press"]);
   });
 
   it("keeps the start of a report that has not all arrived", () => {

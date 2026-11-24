@@ -127,6 +127,7 @@ function subscriber(
   const refusals: Refusal[] = [];
   const sub: Subscriber = {
     lane,
+    owner: null,
     frame: (json, done) => {
       sent.push(json);
       write(done);
@@ -386,17 +387,43 @@ describe("the owner of a session's pointer", () => {
     expect(lanes.statusline).not.toHaveProperty("pointer");
   });
 
-  test("is the newest pane to subscribe, and the one it replaced loses its say", () => {
+  test("is the pane that spoke last, so the pointer follows the user from one pane to another", () => {
     const r = rig();
-    const first = paneOwnedBy(owned("first"));
-    r.feeds.subscribe(S, first.sub);
+    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    r.feeds.subscribe(S, paneOwnedBy(owned("first")).sub);
     r.feeds.subscribe(S, paneOwnedBy(owned("second", "x")).sub);
-    expect(r.feeds.pointerOf(S, owned("first", "stale"))).toMatchObject({
-      kind: "refused",
-    });
-    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("x");
-    expect(r.feeds.pointerOf(S, owned("second", "y"))).toEqual({ kind: "ok" });
-    expect(r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover).toBe("y");
+    expect(hover()).toBe("x");
+    // The pane the user moved into speaks, and a report is never refused for
+    // coming from a pane that did not speak last.
+    expect(r.feeds.pointerOf(S, owned("first", "y"))).toEqual({ kind: "ok" });
+    expect(hover()).toBe("y");
+    expect(r.feeds.pointerOf(S, owned("second", "z"))).toEqual({ kind: "ok" });
+    expect(hover()).toBe("z");
+  });
+
+  test("keeps a pane's facts while another owns, for the pane it returns to", () => {
+    const r = rig();
+    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    r.feeds.subscribe(S, paneOwnedBy(owned("a")).sub);
+    const leaveB = r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-first")).sub);
+    r.feeds.pointerOf(S, owned("a", "a-last"));
+    r.feeds.pointerOf(S, owned("b", "b-last"));
+    r.feeds.pointerOf(S, owned("a", "a-latest"));
+    leaveB();
+    expect(hover()).toBe("a-latest");
+  });
+
+  // A pane's stream reconnecting says its facts once more, and the next word
+  // from the pane the user is moving in is the pointer again.
+  test("is not held by a pane whose stream reconnects while the user is in another", () => {
+    const r = rig();
+    const hover = () => r.feeds.viewers()[S]!.lanes.pane?.pointer?.hover;
+    r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-old")).sub);
+    r.feeds.subscribe(S, paneOwnedBy(owned("b", "b-over")).sub);
+    r.feeds.subscribe(S, paneOwnedBy(owned("a", "a-restated")).sub);
+    expect(hover()).toBe("a-restated");
+    expect(r.feeds.pointerOf(S, owned("b", "b-moved"))).toEqual({ kind: "ok" });
+    expect(hover()).toBe("b-moved");
   });
 
   test("returns to the pane it replaced when the newer one leaves", () => {
@@ -431,7 +458,7 @@ describe("the owner of a session's pointer", () => {
     expect(r.feeds.viewers()[S]!.lanes.pane).not.toHaveProperty("pointer");
     expect(r.feeds.pointerOf(S, owned("a", "late"))).toMatchObject({
       kind: "refused",
-      reason: expect.stringContaining("no pane owns the pointer"),
+      reason: expect.stringContaining('no pane "a" follows session'),
     });
   });
 

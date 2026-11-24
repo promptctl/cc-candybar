@@ -4,6 +4,7 @@
 
 import { parseArgs, placementFrom, tmuxPatience } from "../../src/bar-pane";
 import { paint } from "../../src/bar-pane/paint";
+import { singleFlight } from "../../src/bar-pane/single-flight";
 import type { TmuxRun } from "../../src/proc/tmux";
 import type { Monotonic } from "../../src/time";
 
@@ -133,6 +134,64 @@ describe("bar-pane tmux patience", () => {
     expect(() => patience(missed)).not.toThrow();
     now = 10_001;
     expect(() => patience(missed)).toThrow(/tmux has not answered for 5 s/);
+  });
+});
+
+// The pane's draw and its report of the pointer each go through it.
+describe("bar-pane single flight", () => {
+  const never = (e: unknown): never => {
+    throw e;
+  };
+  const settled = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  // A report made while the pane follows no session has nothing to send and
+  // returns at once: the run must still end, or no later report is sent.
+  it("runs again after a run whose work ended without waiting", async () => {
+    let runs = 0;
+    const flight = singleFlight(async () => {
+      runs += 1;
+    }, never);
+    flight();
+    await settled();
+    flight();
+    await settled();
+    expect(runs).toBe(2);
+  });
+
+  it("makes the requests that come during a run the one run after it, reading the state then", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const seen: number[] = [];
+    let state = 0;
+    const flight = singleFlight(async () => {
+      seen.push(state);
+      if (seen.length === 1) await gate;
+    }, never);
+    flight();
+    state = 1;
+    flight();
+    state = 2;
+    flight();
+    expect(seen).toEqual([0]);
+    release();
+    await settled();
+    expect(seen).toEqual([0, 2]);
+  });
+
+  it("hands a failed run to the failure handler", async () => {
+    const failures: unknown[] = [];
+    const flight = singleFlight(
+      async () => {
+        throw new Error("boom");
+      },
+      (e) => {
+        failures.push(e);
+        return undefined as never;
+      },
+    );
+    flight();
+    await settled();
+    expect(failures).toEqual([new Error("boom")]);
   });
 });
 

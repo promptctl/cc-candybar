@@ -725,7 +725,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect(refused).toMatchObject({
         ok: false,
         code: "BAD_REQUEST",
-        error: expect.stringMatching(/does not own the pointer/),
+        error: expect.stringMatching(/no pane "another-pane" follows session/),
       });
       const reported = await sendDaemonRequest(
         sockPath,

@@ -32,7 +32,11 @@ import {
   type SegmentNode,
   type VariableDecl,
 } from "../dsl-types.js";
-import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
+import {
+  actionBindsTemplateValue,
+  bindsTemplateValue,
+  type ActionDecl,
+} from "../action.js";
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
@@ -1331,16 +1335,6 @@ function valuesWritten(
     ];
   }
   return "int" in a ? ANY_INTEGER : null;
-}
-
-// [LAW:one-source-of-truth] The binding rule actionBindsTemplateValue states,
-// read through a `do` to its head, whose display the click is bound.
-function bindsTemplateValue(
-  actions: Readonly<Record<string, ActionDecl>>,
-  a: ActionDecl,
-): boolean {
-  const head = "do" in a ? actions[a.do[0]] : a;
-  return head !== undefined && actionBindsTemplateValue(head);
 }
 
 // A predicate naming the declarations a check is about: every one for a whole

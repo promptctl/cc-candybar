@@ -323,7 +323,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     expect(rt.ctx.sessionState.get(SID, CLICK_MODE_KEY)).toBe("click");
     expect(rt.ctx.sessionState.get(SID, HOVER_KEY)).toBe(NO_HOVER);
     expect(rt.logged).toContain(
-      `menu-idle: closed=${CLICK_MODE_KEY} idle=30.0s timeout=30s (session=${SID})`,
+      `menu-idle: closed=${CLICK_MODE_KEY},${HOVER_KEY} idle=30.0s timeout=30s (session=${SID})`,
     );
   });
 

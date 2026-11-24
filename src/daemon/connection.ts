@@ -533,7 +533,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     const push = newestWins(sock);
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
-      ...(owner !== null && { owner }),
+      owner,
       // [LAW:no-silent-failure] A frame that cannot be pushed (past the cap)
       // is pushed as the render failure naming why. Ending the stream
       // would cause subscribers to reconnect into the same failure.
