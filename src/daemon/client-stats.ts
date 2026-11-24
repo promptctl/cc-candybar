@@ -15,7 +15,7 @@ import {
   type StatsSnapshot,
 } from "./foundations/stats-snapshot";
 import {
-  approachingLimit,
+  nearLimit,
   chargeWords,
   mb,
   type ProcessMemory,
@@ -299,13 +299,12 @@ export function formatStats(s: StatsSnapshot): string {
 
 // [LAW:one-source-of-truth] A process's memory in one sentence: its charge
 // against the limit, what it said of itself beside it, and whether the charge
-// is near the limit.
-function memoryWords({ memory, limit }: ProcessMemory): string {
+// is past the daemon's line of near the limit.
+function memoryWords(process: ProcessMemory): string {
+  const { memory, limit } = process;
   if (memory.kind === "unmeasured") return `unmeasured (limit ${mb(limit)} MB)`;
   const { charge, usage } = memory;
-  const near =
-    charge.kind !== "unread" && approachingLimit(charge.bytes, limit);
-  return `${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${near ? ", approaching its limit" : ""}`;
+  return `${chargeWords(charge)} of limit ${mb(limit)} MB (${usageWords(usage)})${nearLimit(process) ? ", approaching its limit" : ""}`;
 }
 
 function rendererPanelLines({

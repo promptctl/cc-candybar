@@ -161,7 +161,7 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
     },
   ],
   bundle: "/opt/cc/dist/index.mjs",
-  host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1 },
+  host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, nearAt: 0 },
   renderers: [
     {
       name: MAIN_RENDERER,
@@ -390,7 +390,7 @@ describe("a stats reply", () => {
       missingFields(
         refs,
         measured({
-          charge: { kind: "stand-in", bytes: 1, unread: "x" },
+          charge: { kind: "stand-in", rss: 1, unread: "x" },
           usage: { kind: "read", sizes },
         }),
       ),
@@ -527,6 +527,7 @@ describe("formatStats", () => {
           usage: { kind: "read", sizes: { rss: 50 * MB, heapTotal: 30 * MB } },
         },
         limit: 512 * MB,
+        nearAt: 384 * MB,
       },
       renderers: [
         {
@@ -548,6 +549,7 @@ describe("formatStats", () => {
                 },
               },
               limit: 512 * MB,
+              nearAt: 384 * MB,
             },
           },
           mailbox: { holder: "render", heldMs: 12, queued: 2 },
@@ -682,6 +684,30 @@ describe("formatStats", () => {
     expect(out).toContain(`  ${"click.pbcopy refused".padEnd(width)} 3\n`);
   });
 
+  test("near the limit is judged on the daemon's line, not this build's", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const at = (nearAt: number) =>
+      formatStats({
+        ...snap,
+        host: {
+          pid: 1234,
+          memory: {
+            kind: "measured",
+            charge: { kind: "charged", measure: "rss", bytes: 40 * MB },
+            usage: { kind: "read", sizes: { rss: 40 * MB, heapTotal: 0 } },
+          },
+          limit: 512 * MB,
+          nearAt,
+        },
+      });
+    expect(at(32 * MB)).toContain(
+      "memory        rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB), approaching its limit\n",
+    );
+    expect(at(384 * MB)).toContain(
+      "memory        rss 40 MB of limit 512 MB (rss 40 MB, v8 heap 0 MB)\n",
+    );
+  });
+
   test("a renderer nothing could charge says so, and is never called near its limit", () => {
     const snap = RuntimeStats.referenceSnapshot();
     const why =
@@ -701,6 +727,7 @@ describe("formatStats", () => {
                 usage: { kind: "unread", why: "no ping has answered yet" },
               },
               limit: 512 * MB,
+              nearAt: 384 * MB,
             },
           },
           mailbox: { holder: null, heldMs: 0, queued: 0 },
@@ -782,7 +809,7 @@ describe("formatStats", () => {
       },
       clients: [],
       bundle: "/",
-      host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1 },
+      host: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, nearAt: 0 },
       renderers: [],
     });
     expect(out).toContain("hit rate      n/a");

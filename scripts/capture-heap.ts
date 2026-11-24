@@ -26,10 +26,12 @@
 //   pnpm build && node --require ./scripts/lib/version-stamp.cjs --import tsx \
 //     scripts/capture-heap.ts [--sessions N] [--turns T] [--config FILE] [--out DIR]
 //
-// Prints one JSON object: the footprint at each stage, the heap and footprint
-// after the snapshot, what the daemon says it holds, and the snapshot's path.
-// A stage's footprint is read without a collection first, so it includes
-// garbage V8 has not yet had reason to free. `collected.heapUsedMb` is read
+// Prints one JSON object: the footprint of the host and of each renderer
+// process at each stage, the host's heap and footprint after the snapshot,
+// what the daemon says it holds, and the snapshot's path. The snapshot is the
+// host's alone: the signal goes to the host, so a renderer's heap is read
+// only as its footprint and its panel. A stage's footprint is read without a
+// collection first, so it includes garbage V8 has not yet had reason to free. `collected.heapUsedMb` is read
 // after the snapshot, which V8 collects before taking; `collected.physFootprintMb`
 // is not a measurement of the daemon, because the snapshot's own buffers are
 // still charged to it. Size a budget from the load gate's "charge once
@@ -41,6 +43,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 
 import { startWorld, type Session } from "./bench/world.js";
+import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot.js";
 import { sleep } from "./bench/measure.js";
 import { BYTES_PER_MB, mb } from "../src/daemon/foundations/memory-limit.js";
 import { physFootprintsOf } from "../src/daemon/memory-report.js";
@@ -110,6 +113,19 @@ function footprint(pid: number): { physFootprintMb: number; table: string } {
   return { physFootprintMb: bytes / BYTES_PER_MB, table };
 }
 
+// Every process the daemon runs, each its own footprint: the host, and each
+// renderer its panel says runs in a process of its own.
+function footprints(stats: StatsSnapshot) {
+  return {
+    host: footprint(stats.pid),
+    renderers: stats.renderers.flatMap(({ name, process }) =>
+      process.kind === "process"
+        ? [{ name, pid: process.memory.pid, ...footprint(process.memory.pid) }]
+        : [],
+    ),
+  };
+}
+
 function endsWithBrace(file: string, size: number): boolean {
   const fd = fs.openSync(file, "r");
   try {
@@ -133,13 +149,15 @@ try {
   const sessions: Session[] = [];
   const read = async (n: number): Promise<void> => {
     const s = await world.stats();
-    const f = footprint(pid);
+    const { host, renderers } = footprints(s);
     stages.push({
       sessions: n,
-      physFootprintMb: f.physFootprintMb,
-      rssMb: mb(s.rssBytes),
-      heapUsedMb: mb(s.heapUsedBytes),
-      table: f.table,
+      host: {
+        ...host,
+        rssMb: mb(s.rssBytes),
+        heapUsedMb: mb(s.heapUsedBytes),
+      },
+      renderers,
     });
   };
   await read(0);
@@ -197,6 +215,7 @@ try {
     turns: TURNS,
     config: values.config ?? "(bundled default)",
     stages,
+    // The host's, whose heap the snapshot collected.
     collected: {
       heapUsedMb: mb(after.heapUsedBytes),
       physFootprintMb: footprint(pid).physFootprintMb,

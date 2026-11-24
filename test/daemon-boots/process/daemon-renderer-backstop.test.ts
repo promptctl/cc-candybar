@@ -108,15 +108,11 @@ test("a renderer past its memory limit is ended alone and started again, and eve
           writeLogNow: () => daemonLog.writeNow(),
         },
         {
-          memoryCharge: async (processes) =>
-            processes.map((process) => ({
-              process,
-              charge: {
-                kind: "charged",
-                measure: "phys_footprint",
-                bytes: process.pid === over ? limit + MB : 64 * MB,
-              },
-            })),
+          memoryCharge: async () => (process) => ({
+            kind: "charged",
+            measure: "phys_footprint",
+            bytes: process.pid === over ? limit + MB : 64 * MB,
+          }),
         },
       ),
   });

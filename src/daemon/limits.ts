@@ -16,7 +16,9 @@ import {
   type PostMortem,
   BYTES_PER_MB,
   breachWords,
+  judgedBytes,
   mb,
+  nearAtOf,
   usageWords,
   laterIdentity,
   measureOf,
@@ -134,31 +136,24 @@ const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 
 // [LAW:single-enforcer] THE charge a reading holds, from what the probe
-// answered and the reading before it. macOS RSS runs ~150 MB over
+// answered and the process's gap. macOS RSS runs ~150 MB over
 // phys_footprint, so judging raw RSS on one unread footprint killed two
 // daemons whose footprint never passed 435 MB of a 512 MB budget
 // (brandon-unfiled-3248.ptv0); the gap held at 148–153 MB minute to minute on
 // the live daemon, so RSS less the last one stands in for the footprint as
 // closely as it moves, and a runaway is judged at once. A process whose footprint
-// never read has no gap, and is judged on RSS.
-export function readCharge(
-  probed: MemoryCharge,
-  previous: MemoryReading,
-): ReadCharge {
-  if (probed.kind === "charged") return probed;
-  const gap = gapOf(previous);
-  return probed.kind === "unread"
-    ? { ...probed, gap }
-    : { ...probed, bytes: probed.bytes - gap, gap };
+// never read beside an RSS of its own has no gap, and is judged on RSS.
+export function readCharge(probed: MemoryCharge, gap: number): ReadCharge {
+  return probed.kind === "charged" ? probed : { ...probed, gap };
 }
 
-// How far a process's RSS ran over its charge at the last reading that
-// charged it beside an RSS of its own.
-function gapOf(previous: MemoryReading): number {
-  if (previous.kind === "unmeasured") return 0;
-  const { charge, usage } = previous;
-  if (charge.kind !== "charged") return charge.gap;
-  return usage.kind === "read" ? usage.sizes.rss - charge.bytes : 0;
+// How far a process's RSS ran over its charge at the latest reading that
+// measured both; a reading that did not carries the one before.
+function gapOf(reading: Measured, before: number): number {
+  const { charge, usage } = reading;
+  return charge.kind === "charged" && usage.kind === "read"
+    ? usage.sizes.rss - charge.bytes
+    : before;
 }
 
 function artifactFile(
@@ -256,10 +251,20 @@ interface Judged {
   readonly pid: number;
   readonly usage: OwnUsage;
   readonly writeHeap: (file: string) => Promise<void>;
-  readonly end: (why: string) => void;
+  // Ends the process, answering what the end stops: the daemon, and the
+  // backstop with it, or the process alone.
+  readonly end: (why: string) => Ended;
 }
 
+type Ended = "daemon" | "process";
+
 type Measured = Extract<MemoryReading, { kind: "measured" }>;
+
+// A process's latest reading, and the gap it carries to the next.
+interface Latest {
+  readonly reading: Measured;
+  readonly gap: number;
+}
 
 export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   const limit = deps.limitBytes;
@@ -269,7 +274,7 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   // key: the verdicts and the stats read it, never one of their own. A
   // restarted renderer is a new spawn, so it is unmeasured until the next
   // reading, and gaps no stand-in of the process it replaced.
-  let latest: ReadonlyMap<string, Measured> = new Map();
+  let latest: ReadonlyMap<string, Latest> = new Map();
   // [LAW:no-ambient-temporal-coupling] The reading in flight, shared: a
   // second caller while one is out waits on the same reading rather than
   // taking its own, so a breach is judged — and recorded — once.
@@ -308,7 +313,10 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
           `heap snapshot written: ${deps.writeHeapSnapshot(file)}`,
         );
       },
-      end: () => deps.shutdown(0),
+      end: () => {
+        deps.shutdown(0);
+        return "daemon";
+      },
     };
     const renderers = deps.renderers().map(
       (renderer): Judged => ({
@@ -324,50 +332,53 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
             `renderer ${renderer.name} heap snapshot written: ${file}`,
           );
         },
-        end: (why) => renderer.end(why),
+        end: (why) => {
+          renderer.end(why);
+          return "process";
+        },
       }),
     );
-    const read = (await deps.memoryCharge([host, ...renderers])).map(
-      ({ process, charge }) => {
-        const reading: Measured = {
-          kind: "measured",
-          charge: readCharge(
-            charge,
-            latest.get(process.key) ?? { kind: "unmeasured" },
-          ),
-          usage: process.usage,
-        };
-        return { process, reading };
-      },
-    );
+    // [LAW:dataflow-not-control-flow] The host first, by construction: its
+    // breach ends every renderer with it, so none is recorded for nothing.
+    const judged = [host, ...renderers];
+    const chargeOf = await deps.memoryCharge(judged);
+    const read = judged.map((process) => {
+      const before = latest.get(process.key)?.gap ?? 0;
+      const reading: Measured = {
+        kind: "measured",
+        charge: readCharge(chargeOf(process), before),
+        usage: process.usage,
+      };
+      return { process, reading, gap: gapOf(reading, before) };
+    });
     latest = new Map(
-      read.map(({ process, reading }) => [process.key, reading]),
+      read.map(({ process, reading, gap }) => [process.key, { reading, gap }]),
     );
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
     deps.log("info", eventLine("memory", readingFields(read, limit)));
-    if (disarmed) return false;
-    // The host first, as the probe hands it back: its breach ends every
-    // renderer with it.
-    // An unread charge has nothing to judge, and its line says why.
+    // An unread charge has nothing to judge, and its line says why. Each
+    // breach awaits seconds of writes, so the disarm is read before each.
     for (const { process, reading } of read) {
+      if (disarmed) return false;
       const { charge } = reading;
-      if (charge.kind === "unread" || charge.bytes <= limit) continue;
-      if (process.process.kind === "host") {
+      if (charge.kind === "unread" || judgedBytes(charge) <= limit) continue;
+      const ended = await breach(process, charge, reading.usage);
+      if (ended === "daemon") {
         triggered = true;
-        return breach(process, charge, reading.usage);
+        return true;
       }
-      await breach(process, charge, reading.usage);
     }
     return false;
   }
 
-  // A breached process's post-mortem, then its end. Resolves whether it ended.
+  // A breached process's post-mortem, then its end: what the end stopped, or
+  // nothing when the close came first.
   async function breach(
     judged: Judged,
     charge: JudgedCharge,
     usage: OwnUsage,
-  ): Promise<boolean> {
+  ): Promise<Ended | null> {
     const who = processWords(judged.process);
     const why = breachWords(charge, limit);
     deps.log(
@@ -400,14 +411,14 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
         );
       return disarmed;
     };
-    if (closedDuring()) return false;
+    if (closedDuring()) return null;
     await attempt(deps.log, `${who} heap snapshot`, () =>
       judged.writeHeap(
         artifactFile(deps.snapshotDir, "heapSnapshot", identity),
       ),
     );
     // A renderer's write can take seconds.
-    if (closedDuring()) return false;
+    if (closedDuring()) return null;
     await attempt(deps.log, "artifact rotation", async () => {
       // Each eviction its own attempt: a file that will not go is logged,
       // and every other evicts anyway.
@@ -422,12 +433,16 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
         }
       }
     });
-    judged.end(why);
-    return true;
+    return judged.end(why);
   }
 
   function memoryOf(key: string, pid: number): ProcessMemory {
-    return { pid, memory: latest.get(key) ?? { kind: "unmeasured" }, limit };
+    return {
+      pid,
+      memory: latest.get(key)?.reading ?? { kind: "unmeasured" },
+      limit,
+      nearAt: nearAtOf(limit),
+    };
   }
 
   // [LAW:no-ambient-temporal-coupling] A reading at once, then each next one
@@ -495,7 +510,7 @@ function readingFields(
         [`${at}.measure`, measureOf(charge)],
         ...(charge.kind === "unread"
           ? []
-          : ([[`${at}.charge`, `${mb(charge.bytes)}MB`]] as const)),
+          : ([[`${at}.charge`, `${mb(judgedBytes(charge))}MB`]] as const)),
         ...(usage.kind === "read"
           ? ([
               [`${at}.rss`, `${mb(usage.sizes.rss)}MB`],
@@ -542,19 +557,18 @@ function breachedOf(identity: string): BreachedProcess | null {
   return renderer === null ? null : { kind: "renderer", name: renderer };
 }
 
-// [LAW:one-source-of-truth] What rotation evicts: every breach past the
-// newest `keep` of its own process, so one renderer's repeated breaches never
-// evict another process's evidence.
+// [LAW:one-source-of-truth] What rotation evicts: the host's breaches past
+// its newest `keep`, and every other breach past the newest `keep` of them
+// together. So a renderer's breaches never evict the host's, and the
+// directory holds at most twice `keep` breaches however many names breach.
 function evicted(
   postMortems: readonly PostMortem[],
   keep: number,
 ): PostMortem[] {
-  const seen = new Map<string, number>();
+  const seen = { host: 0, other: 0 };
   return postMortems.filter(({ process }) => {
-    const name = processWords(process);
-    const newer = seen.get(name) ?? 0;
-    seen.set(name, newer + 1);
-    return newer >= keep;
+    const pool = process.kind === "host" ? "host" : "other";
+    return seen[pool]++ >= keep;
   });
 }
 
@@ -606,7 +620,8 @@ export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
 // and evict half of another — leaving a heap snapshot whose attribution is
 // gone. Newest first: the leading ISO timestamp orders the identities
 // lexically, what follows only tiebreaks same-instant writes. A file no breach
-// wrote is not ours, so it is no post-mortem.
+// wrote is not ours, so it is no post-mortem; one whose affixes are a
+// breach's is, though its identity names no process this build reads.
 // [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, and a
 // listing reads it whole.
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
@@ -623,24 +638,26 @@ export function postMortemsOf(files: readonly string[]): PostMortem[] {
   // directory listed them in: the memory report, the one a person reads
   // first, leads.
   const kinds = Object.keys(BREACH_ARTIFACTS) as BreachArtifact[];
-  return [...byIdentity]
-    .sort(([a], [b]) => (laterIdentity(a, b) ? -1 : 1))
-    .flatMap(([identity, found]) => {
-      const process = breachedOf(identity);
-      return process === null
-        ? []
-        : [
-            {
-              identity,
-              process,
-              artifacts: Object.fromEntries(
-                kinds.flatMap((k) =>
-                  found[k] === undefined ? [] : [[k, found[k]]],
-                ),
-              ),
-            },
-          ];
-    });
+  return (
+    [...byIdentity]
+      // An identity with no stamp has no when, so it is the oldest.
+      .sort(([a], [b]) =>
+        STAMP.test(a) !== STAMP.test(b)
+          ? STAMP.test(a)
+            ? -1
+            : 1
+          : laterIdentity(a, b)
+            ? -1
+            : 1,
+      )
+      .map(([identity, found]) => ({
+        identity,
+        process: breachedOf(identity) ?? { kind: "unnamed" },
+        artifacts: Object.fromEntries(
+          kinds.flatMap((k) => (found[k] === undefined ? [] : [[k, found[k]]])),
+        ),
+      }))
+  );
 }
 
 // Default real-fs deps for the daemon. Test code constructs its own.

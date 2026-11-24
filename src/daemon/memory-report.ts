@@ -110,20 +110,19 @@ export interface ReadProcess {
   readonly usage: OwnUsage;
 }
 
-// Reads each process's charge, handing each process back beside its own, in
-// the order given.
+// Reads each process's charge.
 // [LAW:no-ambient-temporal-coupling] On macOS, footprint's measure of all of
 // them at one moment, by one call. A charge read off an RSS (Linux's, or a
 // stand-in) is as old as its process's own last read of itself (OwnUsage): a
 // renderer's is its latest ping's.
-export type ChargeProbe = <P extends ReadProcess>(
-  processes: readonly P[],
-) => Promise<ReadonlyArray<Charged<P>>>;
+export type ChargeProbe = (
+  processes: readonly ReadProcess[],
+) => Promise<Charges>;
 
-export interface Charged<P> {
-  readonly process: P;
-  readonly charge: MemoryCharge;
-}
+// [LAW:types-are-the-program] Each process's charge as one reading read it,
+// asked of the process: total, so a reader judges whichever process it holds
+// in whichever order it chooses.
+export type Charges = (process: ReadProcess) => MemoryCharge;
 
 // [LAW:dataflow-not-control-flow] The platform is the discriminator, chosen
 // once: the backstop asks the probe it was handed, never which platform runs.
@@ -140,18 +139,11 @@ export function chargeProbe(
           category: "limits.charge",
         }),
       )
-    : async (processes) =>
-        processes.map((process) => ({
-          process,
-          charge:
-            process.usage.kind === "read"
-              ? {
-                  kind: "charged",
-                  measure: "rss",
-                  bytes: process.usage.sizes.rss,
-                }
-              : { kind: "unread", unread: process.usage.why },
-        }));
+    : async () =>
+        ({ usage }) =>
+          usage.kind === "read"
+            ? { kind: "charged", measure: "rss", bytes: usage.sizes.rss }
+            : { kind: "unread", unread: usage.why };
 }
 
 // `footprint --noCategories -f bytes` prints each process's auxiliary data as
@@ -176,19 +168,17 @@ export function footprintCharge(
     // [LAW:no-silent-failure] A process the call printed no footprint for
     // (one that ended between the read and the call), or every process when
     // the call failed, stands in on its own RSS, saying why.
-    return processes.map((process) => {
-      const bytes = printed.byPid.get(process.pid);
+    return ({ pid, usage }) => {
+      const bytes = printed.byPid.get(pid);
       const unread = result.ok
-        ? `footprint printed no phys_footprint for pid ${process.pid}${unnamed.join("")}`
+        ? `footprint printed no phys_footprint for pid ${pid}${unnamed.join("")}`
         : `footprint ${failureText(result)}`;
-      const charge: MemoryCharge =
-        bytes !== undefined
-          ? { kind: "charged", measure: "phys_footprint", bytes }
-          : process.usage.kind === "read"
-            ? { kind: "stand-in", bytes: process.usage.sizes.rss, unread }
-            : { kind: "unread", unread: `${unread}, and ${process.usage.why}` };
-      return { process, charge };
-    });
+      return bytes !== undefined
+        ? { kind: "charged", measure: "phys_footprint", bytes }
+        : usage.kind === "read"
+          ? { kind: "stand-in", rss: usage.sizes.rss, unread }
+          : { kind: "unread", unread: `${unread}, and ${usage.why}` };
+    };
   };
 }
 

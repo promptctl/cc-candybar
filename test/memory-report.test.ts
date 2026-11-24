@@ -18,7 +18,9 @@ import {
   memoryReport,
   physFootprintsOf,
   platformProbes,
+  type ChargeProbe,
   type MemoryProbe,
+  type ReadProcess,
 } from "../src/daemon/memory-report";
 import type { LaunchResult } from "../src/proc/launcher";
 import type { OwnUsage } from "../src/daemon/foundations/memory-limit";
@@ -140,6 +142,11 @@ describe("the memory charge", () => {
     kind: "read",
     sizes: { rss, heapTotal: 0 },
   });
+  // Each process's charge, as one reading of them all answers it.
+  const chargesOf = async (
+    probe: ChargeProbe,
+    processes: readonly ReadProcess[],
+  ) => processes.map(await probe(processes));
   const ran = (stdout: string): LaunchResult => ({
     ok: true,
     stdout,
@@ -177,18 +184,16 @@ describe("the memory charge", () => {
     const probe = footprintCharge(async () =>
       ran(`${footprintOf(77, 1000)}\n${unnamed}`),
     );
-    expect(
-      (
-        await probe([
-          { pid: 77, usage: rssOf(4) },
-          { pid: 78, usage: rssOf(5) },
-        ])
-      ).map(({ charge }) => charge),
-    ).toEqual([
+    await expect(
+      chargesOf(probe, [
+        { pid: 77, usage: rssOf(4) },
+        { pid: 78, usage: rssOf(5) },
+      ]),
+    ).resolves.toEqual([
       { kind: "charged", measure: "phys_footprint", bytes: 1000 },
       {
         kind: "stand-in",
-        bytes: 5,
+        rss: 5,
         unread: `footprint printed no phys_footprint for pid 78; its section ${JSON.stringify(header)} names no pid`,
       },
     ]);
@@ -196,16 +201,14 @@ describe("the memory charge", () => {
 
   test("a process that has said no RSS of itself, and that footprint missed, is unread, saying both", async () => {
     const probe = footprintCharge(async () => ran(footprintOf(77, 1000)));
-    expect(
-      (
-        await probe([
-          {
-            pid: 78,
-            usage: { kind: "unread", why: "no ping has answered yet" },
-          },
-        ])
-      ).map(({ charge }) => charge),
-    ).toEqual([
+    await expect(
+      chargesOf(probe, [
+        {
+          pid: 78,
+          usage: { kind: "unread", why: "no ping has answered yet" },
+        },
+      ]),
+    ).resolves.toEqual([
       {
         kind: "unread",
         unread:
@@ -223,35 +226,28 @@ describe("the memory charge", () => {
     });
     const host = { pid: 77, usage: rssOf(1) };
     const renderer = { pid: 78, usage: rssOf(1) };
-    expect(await probe([host, renderer])).toEqual([
-      {
-        process: host,
-        charge: { kind: "charged", measure: "phys_footprint", bytes: 1000 },
-      },
-      {
-        process: renderer,
-        charge: { kind: "charged", measure: "phys_footprint", bytes: 2000 },
-      },
+    // Asked in the other order, each is still its own.
+    await expect(chargesOf(probe, [renderer, host])).resolves.toEqual([
+      { kind: "charged", measure: "phys_footprint", bytes: 2000 },
+      { kind: "charged", measure: "phys_footprint", bytes: 1000 },
     ]);
     expect(asked).toEqual([
-      ["-p", "77", "-p", "78", "--noCategories", "-f", "bytes"],
+      ["-p", "78", "-p", "77", "--noCategories", "-f", "bytes"],
     ]);
   });
 
   test("a process footprint printed nothing for stands in on its own RSS, and no other does", async () => {
     const probe = footprintCharge(async () => ran(footprintOf(77, 1000)));
-    expect(
-      (
-        await probe([
-          { pid: 77, usage: rssOf(4) },
-          { pid: 78, usage: rssOf(5) },
-        ])
-      ).map(({ charge }) => charge),
-    ).toEqual([
+    await expect(
+      chargesOf(probe, [
+        { pid: 77, usage: rssOf(4) },
+        { pid: 78, usage: rssOf(5) },
+      ]),
+    ).resolves.toEqual([
       { kind: "charged", measure: "phys_footprint", bytes: 1000 },
       {
         kind: "stand-in",
-        bytes: 5,
+        rss: 5,
         unread: "footprint printed no phys_footprint for pid 78",
       },
     ]);
@@ -266,69 +262,52 @@ describe("the memory charge", () => {
       exitCode: null,
       signal: "SIGTERM",
     }));
-    expect(
-      (
-        await failed([
-          { pid: 77, usage: rssOf(5) },
-          { pid: 78, usage: rssOf(6) },
-        ])
-      ).map(({ charge }) => charge),
-    ).toEqual([
+    await expect(
+      chargesOf(failed, [
+        { pid: 77, usage: rssOf(5) },
+        { pid: 78, usage: rssOf(6) },
+      ]),
+    ).resolves.toEqual([
       {
         kind: "stand-in",
-        bytes: 5,
+        rss: 5,
         unread: "footprint timeout: footprint: hung",
       },
       {
         kind: "stand-in",
-        bytes: 6,
+        rss: 6,
         unread: "footprint timeout: footprint: hung",
       },
     ]);
   });
 
   test("off macOS, each process's RSS is its charge", async () => {
-    expect(
-      (
-        await chargeProbe(
-          processLauncher,
-          "linux",
-        )([
-          { pid: 1, usage: rssOf(42) },
-          { pid: 2, usage: rssOf(43) },
-        ])
-      ).map(({ charge }) => charge),
-    ).toEqual([
+    await expect(
+      chargesOf(chargeProbe(processLauncher, "linux"), [
+        { pid: 1, usage: rssOf(42) },
+        { pid: 2, usage: rssOf(43) },
+      ]),
+    ).resolves.toEqual([
       { kind: "charged", measure: "rss", bytes: 42 },
       { kind: "charged", measure: "rss", bytes: 43 },
     ]);
-    expect(
-      await chargeProbe(
-        processLauncher,
-        "linux",
-      )([
+    await expect(
+      chargesOf(chargeProbe(processLauncher, "linux"), [
         { pid: 1, usage: { kind: "unread", why: "no ping has answered yet" } },
       ]),
-    ).toMatchObject([
-      { charge: { kind: "unread", unread: "no ping has answered yet" } },
+    ).resolves.toEqual([
+      { kind: "unread", unread: "no ping has answered yet" },
     ]);
   });
 
   (os.platform() === "darwin" ? test : test.skip)(
     "on this Mac, footprint answers for this process and its parent, each its own",
     async () => {
-      const charged = await chargeProbe(
-        processLauncher,
-        "darwin",
-      )([
+      const charged = await chargesOf(chargeProbe(processLauncher, "darwin"), [
         { pid: process.pid, usage: rssOf(process.memoryUsage().rss) },
         { pid: process.ppid, usage: rssOf(1) },
       ]);
-      expect(charged.map(({ process: { pid } }) => pid)).toEqual([
-        process.pid,
-        process.ppid,
-      ]);
-      const bytes = charged.map(({ charge }) =>
+      const bytes = charged.map((charge) =>
         charge.kind === "charged" && charge.measure === "phys_footprint"
           ? charge.bytes
           : charge,

@@ -242,7 +242,7 @@ export class RuntimeStats {
       },
       {
         kind: "measured",
-        charge: { kind: "stand-in", bytes: 0, gap: 0, unread: "" },
+        charge: { kind: "stand-in", rss: 0, gap: 0, unread: "" },
         usage: { kind: "unread", why: "" },
       },
       {
@@ -260,13 +260,13 @@ export class RuntimeStats {
       ...measured.map(
         (memory): StatsSnapshot => ({
           ...base,
-          host: { pid: 0, memory, limit: 0 },
+          host: { pid: 0, memory, limit: 0, nearAt: 0 },
           renderers: [
             {
               ...panel,
               process: {
                 kind: "process",
-                memory: { pid: 0, memory, limit: 0 },
+                memory: { pid: 0, memory, limit: 0, nearAt: 0 },
               },
             },
           ],
@@ -391,7 +391,7 @@ export class RuntimeStats {
       ],
       bundle: "/",
       sourceDigest: null,
-      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
+      host: { pid: 0, memory: { kind: "unmeasured" }, limit: 0, nearAt: 0 },
       // [LAW:one-source-of-truth] One panel, which every panel is read as:
       // the arms a reader descends into, so a field of theirs is checked.
       renderers: [
@@ -399,7 +399,12 @@ export class RuntimeStats {
           name: MAIN_RENDERER,
           process: {
             kind: "process",
-            memory: { pid: 0, memory: { kind: "unmeasured" }, limit: 0 },
+            memory: {
+              pid: 0,
+              memory: { kind: "unmeasured" },
+              limit: 0,
+              nearAt: 0,
+            },
           },
           mailbox: { holder: null, heldMs: 0, queued: 0 },
           stats: { kind: "ok", value: RENDERER_STATS_REFERENCE },

@@ -53,7 +53,8 @@ import {
   RendererDown,
   type Failure,
 } from "./foundations/verb-error";
-import { elapsedMs, sleep, spanMs } from "../time.js";
+import { elapsedMs, spanMs } from "../time.js";
+import { waitWithin } from "../utils/reading.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import type { ClickArrival } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
@@ -465,6 +466,7 @@ export async function replyTo(
           },
           limits,
           clock,
+          parts.closing,
         ),
       ),
     );
@@ -718,7 +720,8 @@ export async function rendererPanel(
     readonly mailbox: MailboxStats;
   },
   limits: Pick<DaemonParts["limits"], "renderer">,
-  clock: Pick<DaemonParts["clock"], "after">,
+  clock: Pick<DaemonParts["clock"], "after" | "failed">,
+  closing: AbortSignal,
 ): Promise<RendererPanel> {
   return {
     name,
@@ -730,38 +733,42 @@ export async function rendererPanel(
             kind: "failed",
             reason: `not asked: it is not running: ${state.why}`,
           }
-        : await askedWithin(name, ask, clock),
+        : await askedWithin(name, ask, clock, closing),
   };
 }
 
+// [LAW:single-enforcer] The one bounded wait, so a reply the close ends
+// stops waiting with it.
 async function askedWithin(
   name: RendererName,
   ask: () => Promise<RendererStats>,
-  clock: Pick<DaemonParts["clock"], "after">,
+  clock: Pick<DaemonParts["clock"], "after" | "failed">,
+  closing: AbortSignal,
 ): Promise<Asked<RendererStats>> {
-  const waited = new AbortController();
   try {
-    return await Promise.race([
-      ask().then((value) => ({ kind: "ok", value }) as const),
-      sleep(
-        clock,
-        `renderer ${name} stats wait`,
-        RENDERER_STATS_WAIT_MS,
-        waited.signal,
-      ).then(
-        () =>
-          ({
-            kind: "failed",
-            reason: `no answer within ${RENDERER_STATS_WAIT_MS} ms`,
-          }) as const,
-      ),
-    ]);
+    const waited = await waitWithin(
+      `renderer ${name} stats wait`,
+      ask,
+      RENDERER_STATS_WAIT_MS,
+      clock,
+      closing,
+    );
+    switch (waited.end) {
+      case "answered":
+        return { kind: "ok", value: waited.value };
+      case "deadline":
+        return {
+          kind: "failed",
+          reason: `no answer within ${RENDERER_STATS_WAIT_MS} ms`,
+        };
+      case "closed":
+        return { kind: "failed", reason: "the daemon closed" };
+    }
   } catch (thrown) {
     return { kind: "failed", reason: failureOf(thrown).detail };
-  } finally {
-    waited.abort();
   }
 }
+
 // Where a renderer's memory is, as its panel says it: a process of its own is
 // read against the limit as the backstop last read it.
 function memoryPanelOf(

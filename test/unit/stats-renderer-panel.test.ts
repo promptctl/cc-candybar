@@ -16,6 +16,7 @@ const memory: ProcessMemory = {
   pid: 4343,
   memory: { kind: "unmeasured" },
   limit: 512 * 1024 * 1024,
+  nearAt: 384 * 1024 * 1024,
 };
 const limits = { renderer: () => memory };
 // A renderer spawned and not yet read.
@@ -46,6 +47,7 @@ describe("a renderer's stats panel", () => {
       },
       limits,
       heldClock(new Date(0)),
+      new AbortController().signal,
     );
     expect(asked).toBe(0);
     expect(panel).toEqual({
@@ -70,6 +72,7 @@ describe("a renderer's stats panel", () => {
       },
       limits,
       clock,
+      new AbortController().signal,
     );
     clock.advance(RENDERER_STATS_WAIT_MS);
     await expect(panel).resolves.toEqual({
@@ -95,8 +98,25 @@ describe("a renderer's stats panel", () => {
       },
       limits,
       clock,
+      new AbortController().signal,
     );
     expect(panel.stats).toEqual({ kind: "ok", value: stats });
+    expect(clock.pending()).toBe(0);
+  });
+
+  test("one the close interrupts fails its panel at once", async () => {
+    const clock = heldClock(new Date(0));
+    const closing = new AbortController();
+    const panel = rendererPanel(
+      { name, ask: () => new Promise(() => {}), process: spawned, mailbox },
+      limits,
+      clock,
+      closing.signal,
+    );
+    closing.abort();
+    await expect(panel).resolves.toMatchObject({
+      stats: { kind: "failed", reason: "the daemon closed" },
+    });
     expect(clock.pending()).toBe(0);
   });
 });

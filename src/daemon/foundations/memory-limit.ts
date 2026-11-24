@@ -24,8 +24,9 @@ export function laterIdentity(a: string, b: string): boolean {
 
 export interface PostMortem {
   readonly identity: string;
-  // The process whose breach it records.
-  readonly process: BreachedProcess;
+  // The process whose breach it records: `unnamed` when its identity names
+  // none this build reads, whose files are a breach's all the same.
+  readonly process: BreachedProcess | { readonly kind: "unnamed" };
   readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
 }
 
@@ -43,14 +44,24 @@ export interface ProcessMemory {
   readonly pid: number;
   readonly memory: MemoryReading;
   readonly limit: number;
+  // [LAW:one-source-of-truth] The charge past which the daemon calls the
+  // process near its limit, so a reader of any build judges near on the
+  // daemon's own line.
+  readonly nearAt: number;
 }
 
-// [LAW:single-enforcer] THE judgment of "near the limit": a charge is said to
-// be near it as it is read, and the render cache's share is sized under it.
+// [LAW:single-enforcer] THE line of "near the limit": the render cache's
+// share is sized under it, and a reading is said near past it.
 export const NEAR_LIMIT = 0.75;
 
-export function approachingLimit(bytes: number, limit: number): boolean {
-  return bytes > limit * NEAR_LIMIT;
+export const nearAtOf = (limit: number): number => limit * NEAR_LIMIT;
+
+export function nearLimit({ memory, nearAt }: ProcessMemory): boolean {
+  return (
+    memory.kind === "measured" &&
+    memory.charge.kind !== "unread" &&
+    judgedBytes(memory.charge) > nearAt
+  );
 }
 
 // [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
@@ -60,7 +71,7 @@ export function chargeWords(charge: ReadCharge): string {
     case "charged":
       return `${charge.measure} ${mb(charge.bytes)} MB`;
     case "stand-in":
-      return `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+      return `rss ${mb(charge.rss)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
     case "unread":
       return `unread (${charge.unread})`;
   }
@@ -117,7 +128,7 @@ export type MemoryCharge =
     }
   | {
       readonly kind: "stand-in";
-      readonly bytes: number;
+      readonly rss: number;
       readonly unread: string;
     }
   | { readonly kind: "unread"; readonly unread: string };
@@ -174,9 +185,9 @@ export interface MemorySizes {
 
 // [LAW:types-are-the-program] The charge as a reading holds it: the
 // platform's own, or RSS standing in less `gap` — how far RSS ran over the
-// platform's charge at the last reading it charged, carried through every
-// stand-in and unread reading since, 0 before any (and on Linux, whose charge
-// IS RSS). `bytes` is what the limit judges, and an unread charge has none.
+// platform's charge at the last reading that measured both, carried through
+// every reading since, 0 before any (and on Linux, whose charge IS RSS). An
+// unread charge has nothing to judge.
 export type ReadCharge =
   | JudgedCharge
   | {
@@ -185,12 +196,12 @@ export type ReadCharge =
       readonly unread: string;
     };
 
-// A charge the limit can judge: one with bytes.
+// A charge the limit can judge.
 export type JudgedCharge =
   | Extract<MemoryCharge, { kind: "charged" }>
-  | {
-      readonly kind: "stand-in";
-      readonly bytes: number;
-      readonly gap: number;
-      readonly unread: string;
-    };
+  | (Extract<MemoryCharge, { kind: "stand-in" }> & { readonly gap: number });
+
+// [LAW:single-enforcer] THE bytes the limit judges a charge on.
+export function judgedBytes(charge: JudgedCharge): number {
+  return charge.kind === "charged" ? charge.bytes : charge.rss - charge.gap;
+}
