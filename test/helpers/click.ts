@@ -364,10 +364,9 @@ export function landsAt(
 ): boolean {
   const wanted = typeof value === "string" ? (v: string) => v === value : value;
   const named = typeof key === "string" ? (k: string) => k === key : key;
-  if (named(e.args[1] ?? "") && wanted(e.args[2] ?? "")) return true;
-  const ring = steppedRing(config, e);
-  if (ring === undefined || !named(ring.key)) return false;
-  return "cycle" in ring.head && ring.head.cycle.some(wanted);
+  return landingsOf(config, e).some(
+    ({ key: at, member }) => named(at) && wanted(member),
+  );
 }
 
 // A rendered link as the daemon reads it; a test's links are always links.

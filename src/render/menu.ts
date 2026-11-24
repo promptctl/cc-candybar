@@ -122,7 +122,7 @@ function renderMenu(
   const binding = renderBinding(action, "menu");
   const open = readVar(binding.store, stateKey) === member;
 
-  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is two
+  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] / [LAW:decomposition] The disclosure click is two
   // writes that land as one: a step of the binary [closed, member] cycle, which
   // the click resolves from where the key stands when it lands (so N clicks
   // before a redraw open, then close, then open), AND a reset of the page cursor

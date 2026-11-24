@@ -1095,10 +1095,13 @@ export function realize(
     case "do": {
       // [LAW:single-enforcer] The members' effects, head first, concatenated.
       // Each member is the link it would be alone: a write the template binds,
-      // or a step the click resolves against the state it finds, so none reads
-      // the state an earlier member leaves. Nothing here makes them one
-      // transaction — the daemon's dispatch joins adjacent session writes into
-      // one batch, for this producer and every other.
+      // or a step the click resolves against the state it finds. A run of
+      // adjacent state writes (set and cycle steps) resolves against the state
+      // the click found, so none reads what an earlier member of the run
+      // leaves; a step after any other kind of member reads what that left.
+      // Nothing here makes them one transaction — the daemon's dispatch joins
+      // adjacent session writes into one batch, for this producer and every
+      // other.
       const head = realize(c.head, display, boundValue, binding, sessionId);
       return {
         effects: [

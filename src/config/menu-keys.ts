@@ -58,7 +58,7 @@ import {
 export const PAGE_HOLDING_CURRENT = "-1";
 
 // [LAW:one-source-of-truth] The page cursor's value for the list's first page:
-// what a trigger resets it to on every open, and what its state variable
+// what a menu's trigger resets it to on every open, and what its state variable
 // declares as its default.
 export const FIRST_PAGE = "0";
 

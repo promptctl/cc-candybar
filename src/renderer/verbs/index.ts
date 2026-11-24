@@ -786,7 +786,7 @@ const stepConfig: VerbHandler = (args, ctx) => {
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key}${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
   );
 };
 
@@ -836,7 +836,9 @@ function ringHeld(
   config: DslConfig,
   head: ActionDecl,
 ): OptionRing | undefined {
-  const options = optionsOf(config, head);
+  // A structural insert lists options too, but holds no value.
+  const options =
+    "from" in head || "cycle" in head ? optionsOf(config, head) : undefined;
   if (options === undefined) return undefined;
   const pick = (k: string) => ctx.sessionState.get(ctx.session, k);
   if ("set" in head)
@@ -1051,8 +1053,8 @@ const ringConfig: VerbHandler = (args, ctx) => {
   // holds what it chose, so the pick stops shadowing the file: the bar follows
   // the file, and the next click, finding no pick, steps from what this one
   // wrote. The release lands with the click, whose consequence applies once the
-  // write has reloaded. A write that is no step (a persist `to`) leaves a pick
-  // standing: it repeats the same write however many times it is clicked.
+  // write has reloaded. A write that is no ring step (a persist `to`) leaves a
+  // pick standing: it repeats the same write however many times it is clicked.
   for (const picked of resetLayers(ring.key).sessionKeys)
     ctx.sessionState.clear(ctx.session, picked);
   // [LAW:dataflow-not-control-flow] exception: the page turn is optional on
@@ -1538,12 +1540,13 @@ const SESSION_HANDLERS: Record<
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic,
 };
 
-// The verb a step's failure is reported under: the verbs of the writes a run of
-// state writes holds, else the step's own.
-const stepVerb = (step: Exclude<ClickStep, { kind: "invalid" }>): string =>
-  step.kind === "state-writes"
-    ? [...new Set(step.writes.map((w) => w.verb))].join("+")
-    : step.verb;
+// A failure as the bar reports it: under its step's verb. A run of state writes
+// has no one verb, and each write it holds names its own in the refusal.
+const reported = (
+  step: Exclude<ClickStep, { kind: "invalid" }>,
+  message: string,
+): string =>
+  step.kind === "state-writes" ? message : `${step.verb}: ${message}`;
 
 // [LAW:no-silent-failure] Every admitted step runs in order even if an earlier
 // one failed. The host has turned malformed steps into error entries.
@@ -1585,7 +1588,7 @@ function foldEffects<Step extends Exclude<ClickStep, { kind: "invalid" }>>(
         throw e;
       }
       if (failure.kind === "threw") operational = true;
-      errors.push(`${stepVerb(step)}: ${failure.message}`);
+      errors.push(reported(step, failure.message));
     }
   }
   if (errors.length > 0) {
