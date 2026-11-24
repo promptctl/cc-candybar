@@ -38,6 +38,18 @@
 
 import { sharedMenuStateKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
+import {
+  CLICK_MODE_KEY,
+  CLICK_MODES,
+  DEFAULT_CLICK_MODE,
+  HOVER_CLEAR,
+  HOVER_KEY,
+  HOVER_REGION,
+  MODE_GESTURE,
+  NO_HOVER,
+  SURFACE_VAR,
+  type ClickMode,
+} from "./click-mode.js";
 import type { ActionDecl } from "./action.js";
 import {
   walkNodes,
@@ -397,6 +409,36 @@ const DIAGNOSTICS_INDICATOR =
   `{{ end }}`;
 
 const FPS_SEG = `${SETTINGS_NS}fps`;
+
+// [LAW:one-source-of-truth] The click mode's control (src/config/click-mode.ts):
+// a glyph per mode, cycled by a click, and shown only where the surface lacks
+// a gesture the mode stands for: a pane with a working mouse delivers both
+// hover and alt+click itself, so there is nothing for the toggle to do.
+const CLICK_MODE_CYCLE = `${CLICK_MODE_KEY}.cycle`;
+const CLICK_MODE_TOGGLE = `${CLICK_MODE_KEY}.toggle`;
+const CLICK_MODE_GLYPHS: Readonly<Record<ClickMode, string>> = {
+  click: "☝",
+  hover: "⌖",
+  alt: "⌥",
+};
+const SURFACE_HAS = (gesture: string): string =>
+  `(has ${templateLiteral(gesture)} (splitList " " .${SURFACE_VAR}))`;
+// The gestures a mode other than the default stands for, which the plain click
+// every surface has cannot stand in for.
+const MODE_GESTURES = CLICK_MODES.filter((m) => m !== DEFAULT_CLICK_MODE).map(
+  (m) => MODE_GESTURE[m],
+);
+const CLICK_MODE_WHEN = `{{ not (and ${MODE_GESTURES.map(SURFACE_HAS).join(" ")}) }}`;
+
+// [LAW:dataflow-not-control-flow] What keeps a control working in every mode:
+// its click under each mode's gesture is its own, declared as data on the
+// action, so the draw has no exemption to remember and a mode change cannot
+// strand the control that ends it.
+const worksInEveryMode = (
+  action: string,
+): { readonly on: Readonly<Record<string, string>> } => ({
+  on: Object.fromEntries(MODE_GESTURES.map((gesture) => [gesture, action])),
+});
 export const POLLED = "polled";
 const AT_MOST = "≤";
 const FPS_UNIT = " fps";
@@ -807,6 +849,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
           children: [
             disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
             seg(FPS_SEG),
+            seg(CLICK_MODE_KEY),
           ],
         }
       : node;
@@ -875,11 +918,32 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         key: DIAGNOSTICS_VIEWING,
         default: "0",
       },
+      [CLICK_MODE_KEY]: {
+        kind: "state",
+        key: CLICK_MODE_KEY,
+        default: DEFAULT_CLICK_MODE,
+      },
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      [DIAGNOSTICS_VIEWING]: {
+        set: DIAGNOSTICS_VIEWING,
+        int: true,
+        ...worksInEveryMode(DIAGNOSTICS_VIEWING),
+      },
+      [SETTINGS_ANCHOR]: {
+        do: [DOOR_TOGGLE, ...DOOR_DISARMS],
+        ...worksInEveryMode(SETTINGS_ANCHOR),
+      },
+      [CLICK_MODE_CYCLE]: { set: CLICK_MODE_KEY, cycle: [...CLICK_MODES] },
+      // A click in hover mode makes its region the hovered one, and stepping
+      // the mode puts the hovered region away.
+      [HOVER_REGION]: { set: HOVER_KEY, from: "regions" },
+      [HOVER_CLEAR]: { set: HOVER_KEY, to: NO_HOVER },
+      [CLICK_MODE_TOGGLE]: {
+        do: [CLICK_MODE_CYCLE, HOVER_CLEAR],
+        ...worksInEveryMode(CLICK_MODE_TOGGLE),
+      },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       ...AUTOCOMPACT.actions,
@@ -921,6 +985,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
           DIAGNOSTICS_INDICATOR,
       },
       [FPS_SEG]: { template: FRAME_RATE },
+      [CLICK_MODE_KEY]: {
+        template: `{{ action "${CLICK_MODE_TOGGLE}" ${CLICK_MODES.map((m) => templateLiteral(CLICK_MODE_GLYPHS[m])).join(" ")} }}`,
+        when: CLICK_MODE_WHEN,
+      },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template, when: COMMANDS.when },
       [AUTOCOMPACT_SEG]: {

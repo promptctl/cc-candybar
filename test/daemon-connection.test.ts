@@ -53,6 +53,7 @@ const SUBSCRIBED: HandledRequest = {
   kind: "subscribe",
   sessionId: sessionIdOf("a-session"),
   lane: "statusline",
+  owner: null,
 };
 const ANSWER: Response = { ok: true, output: "the answer" };
 

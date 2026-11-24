@@ -854,7 +854,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     };
   };
   const feeds: Feeds = new Feeds({
-    draw: (sessionId, fps, readings, following, laneFeeds, prepare) =>
+    draw: (sessionId, fps, readings, following, laneFeeds, pointer, prepare) =>
       renderFrame(
         parts,
         sessionId,
@@ -862,6 +862,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
         readings,
         following,
         laneFeeds,
+        pointer,
         prepare,
       ),
     pin,

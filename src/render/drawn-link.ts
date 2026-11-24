@@ -9,6 +9,7 @@ import {
   type EvaluatedRun,
 } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { GestureName } from "../click/gesture.js";
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 
 export interface DrawnRun {
@@ -34,16 +35,33 @@ export interface DrawnAction {
   readonly kind: "action";
   readonly effects: readonly DrawnEffect[];
   readonly description?: string;
+  // A region a template bound by name carries it, and what its other gestures
+  // run: what the pane's hit map and its hover read. A region drawn from
+  // effects alone has neither, so it is never hovered and answers a click only.
+  readonly region?: Region;
+}
+
+// The action a region is bound to and what each of its other gestures runs.
+export interface Region {
+  readonly name: string;
+  readonly gestures: Readonly<Record<GestureName, readonly DrawnEffect[]>>;
+  // What a click means in hover mode (src/config/click-mode.ts): the region's
+  // `hover` binding, or the write that makes it the hovered region. Only the
+  // draw's click-mode step reads it, and a frame it has been through carries
+  // none, the same absence a region with no binding for a mode shows.
+  readonly hover?: readonly DrawnEffect[];
 }
 
 export function actionTarget(
   effects: readonly DrawnEffect[],
   description?: string,
+  region?: Region,
 ): DrawnAction {
   return {
     kind: "action",
     effects,
     ...(description === undefined ? {} : { description }),
+    ...(region === undefined ? {} : { region }),
   };
 }
 

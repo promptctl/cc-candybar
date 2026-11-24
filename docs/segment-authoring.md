@@ -114,7 +114,7 @@ The fixture for this example supplies the numbers below. The rendered rows
 are shown without ANSI colour escapes.
 
 ```render
- 🍫   polled  ⇄ tester@tester-box  ~/c/cc-candybar/src  ⎇ main +2/-1 SU? ▸ 
+ 🍫   polled  ☝  ⇄ tester@tester-box  ~/c/cc-candybar/src  ⎇ main +2/-1 SU? ▸ 
  ✱ Opus 4.8 󰶼  ◔ 48,487 (24%)  September · 35% spent 
 ```
 
@@ -650,7 +650,7 @@ want in your order:
 ```
 
 ```render
- 🍫   polled  ⎇ main SU? (1 stashed) ▸ 
+ 🍫   polled  ☝  ⎇ main SU? (1 stashed) ▸ 
 ```
 
 Start every session expanded — redeclare the state variable with the other
@@ -666,7 +666,7 @@ default. The arrow still collapses it for the session that clicks:
 ```
 
 ```render
- 🍫   polled  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
+ 🍫   polled  ☝  (git) cc-candybar [rebase] abc1234 SU? ⎇ main [origin/main +2/-1] (1 stashed) ◷ 13m ◂ 
 ```
 
 Hide one fact — override its piece with an empty body. A piece is shared, so
@@ -680,7 +680,7 @@ the fact leaves both forms:
 ```
 
 ```render
- 🍫   polled  ⎇ main +2/-1 ▸ 
+ 🍫   polled  ☝  ⎇ main +2/-1 ▸ 
 ```
 
 Hide a fact from one copy only — each optional piece also reads a setting of
@@ -699,7 +699,7 @@ it does not):
 ```
 
 ```render
- 🍫   polled  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
+ 🍫   polled  ☝  ⎇ main +2/-1 SU? ▸  ⎇ main ▸ 
 ```
 
 Recolour one fact — override its colour variable (any palette name or hex),
@@ -714,7 +714,7 @@ or re-spell it by overriding its piece:
 ```
 
 ```render
- 🍫   polled  on main +2/-1 SU? ▸ 
+ 🍫   polled  ☝  on main +2/-1 SU? ▸ 
 ```
 
 ## One segment, many placements: settings
@@ -756,7 +756,7 @@ as `.settings.<name>`:
 ```
 
 ```render
- 🍫   polled  Opus 4.8  ◆ Opus 
+ 🍫   polled  ☝  Opus 4.8  ◆ Opus 
 ```
 
 The segment's `when`, `bg:` and `fg:` read the same `.settings` as its

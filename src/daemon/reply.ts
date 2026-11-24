@@ -24,10 +24,14 @@ import {
   URL_FRAME_VERSIONS,
   awaitsVerdict,
   type Inbound,
+  type OwnerFacts,
   type Request,
   type Response,
   type SubscribeRequest,
 } from "./foundations/protocol";
+import { parseDelivered } from "../click/gesture.js";
+import type { PaneOwner } from "./frame-feed.js";
+import type { Asked } from "../utils/outcome.js";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
 import { type LinkSigner } from "../click/link-signer.js";
@@ -95,7 +99,13 @@ export interface Reply {
 // and a slow click that lands is never told as failed.
 export type HandledRequest =
   | ({ kind: "reply" } & Reply)
-  | { kind: "subscribe"; sessionId: SessionId; lane: Lane }
+  | {
+      kind: "subscribe";
+      sessionId: SessionId;
+      lane: Lane;
+      // Set when the subscriber is the pane that owns the session's pointer.
+      owner: PaneOwner | null;
+    }
   | {
       kind: "url";
       // Whether the frame's writer reads `verdict`.
@@ -199,6 +209,7 @@ const REPLY_EVENTS: Readonly<
   render: "render",
   [SESSION_RENDER_KIND]: "render",
   "pane-session": "request",
+  pointer: "request",
   shutdown: "request",
   stats: "request",
   click: "click",
@@ -213,11 +224,41 @@ const eventOf = (kind: unknown): "render" | "click" | "request" =>
 
 // [LAW:single-enforcer] The checkpoint's one refusal: the request is
 // answered, never streamed, and the connection stays up.
+const refusal = (code: "BAD_REQUEST" | "VERSION_MISMATCH", error: string) =>
+  stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION });
 const refuse = (
   code: "BAD_REQUEST" | "VERSION_MISMATCH",
   error: string,
-): HandledRequest =>
-  replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+): HandledRequest => replied(refusal(code, error));
+
+// [LAW:parse-dont-validate] A pane's report of its pointer, read once into
+// what the feed holds. The report is untrusted JSON: the id names the pane, the
+// gestures are what it delivers, and `hover` is the action under the pointer
+// or null.
+function parseOwner(raw: unknown): Asked<PaneOwner> {
+  const bad = (reason: string): Asked<PaneOwner> => ({
+    kind: "failed",
+    reason,
+  });
+  if (typeof raw !== "object" || raw === null)
+    return bad("owner is an object of id, gestures and hover");
+  const { id, gestures, hover } = raw as Partial<
+    Record<keyof OwnerFacts, unknown>
+  >;
+  if (typeof id !== "string" || id === "")
+    return bad("owner.id is a non-empty string");
+  if (!Array.isArray(gestures))
+    return bad("owner.gestures is a list of the gestures delivered");
+  if (hover !== null && typeof hover !== "string")
+    return bad("owner.hover is the hovered action's name, or null");
+  const delivered = parseDelivered(gestures);
+  if (delivered.kind !== "ok")
+    return bad(`owner.gestures: ${delivered.reason}`);
+  return {
+    kind: "ok",
+    value: { id, pointer: { gestures: delivered.value, hover } },
+  };
+}
 
 // A subscribe past the connection's checkpoint: the subscription it opens, or
 // the reply refusing it.
@@ -242,7 +283,23 @@ function subscription(req: SubscribeRequest): HandledRequest {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
     );
-  return { kind: "subscribe", sessionId: sessionId.id, lane };
+  if (req.owner === undefined)
+    return { kind: "subscribe", sessionId: sessionId.id, lane, owner: null };
+  // Only the pane lane has a pointer to own.
+  if (lane !== "pane")
+    return refuse(
+      "BAD_REQUEST",
+      `only the pane lane has an owner: got ${lane}`,
+    );
+  const owner = parseOwner(req.owner);
+  if (owner.kind !== "ok")
+    return refuse("BAD_REQUEST", `subscribe's ${owner.reason}`);
+  return {
+    kind: "subscribe",
+    sessionId: sessionId.id,
+    lane,
+    owner: owner.value,
+  };
 }
 
 export async function handleRequest(
@@ -362,6 +419,19 @@ export async function replyTo(
           tmux.pane === pane,
       ),
     });
+  }
+
+  if (req.kind === "pointer") {
+    const session = parseSessionId(req.sessionId);
+    if (!session.ok)
+      return refusal("BAD_REQUEST", `pointer's sessionId ${session.problem}`);
+    const owner = parseOwner(req.owner);
+    if (owner.kind !== "ok")
+      return refusal("BAD_REQUEST", `pointer's ${owner.reason}`);
+    const admitted = frameFeeds.pointerOf(session.id, owner.value);
+    return admitted.kind === "ok"
+      ? stay({ ok: true, output: "" })
+      : refusal("BAD_REQUEST", admitted.reason);
   }
 
   if (req.kind === "stats") {

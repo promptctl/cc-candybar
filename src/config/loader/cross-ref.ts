@@ -32,7 +32,11 @@ import {
   type SegmentNode,
   type VariableDecl,
 } from "../dsl-types.js";
-import { actionBindsTemplateValue, type ActionDecl } from "../action.js";
+import {
+  actionBindsTemplateValue,
+  bindsTemplateValue,
+  type ActionDecl,
+} from "../action.js";
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
@@ -1436,6 +1440,31 @@ export function validateDeclarations(
         });
       }
     });
+  }
+  // [LAW:no-silent-failure] A gesture's target resolves against the merged
+  // action table, as a `do` member does. A target that takes its value from
+  // the template is refused: the gesture's link is drawn beside the region's
+  // own and binds no display of its own, so it would write the region's.
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    for (const [gesture, member] of Object.entries(a.on ?? {})) {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member)
+        ? cfg.actions[member]!
+        : undefined;
+      const problem =
+        target === undefined
+          ? `references unknown action "${member}"`
+          : bindsTemplateValue(cfg.actions, target) &&
+              !bindsTemplateValue(cfg.actions, a)
+            ? `"${member}" takes its value from the template, and ${name} binds none to give it`
+            : undefined;
+      if (problem !== undefined) {
+        ctx.issues.push({
+          path: `actions.${name}.on.${gesture}`,
+          message: `actions.${name} on ${gesture}: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "on", gesture]),
+        });
+      }
+    }
   }
   // [LAW:types-are-the-program] A `run` refreshes only declared sources:
   // superseding — pending from the click until the program exits — is built

@@ -390,6 +390,7 @@ describe("a connection to a daemon built in this worker", () => {
         kind: "subscribe",
         sessionId,
         lane: "pane",
+        owner: null,
       });
       const peerClosed = once(daemonEnd, "close");
       leaving.client.destroy();

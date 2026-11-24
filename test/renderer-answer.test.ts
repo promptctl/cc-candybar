@@ -51,6 +51,7 @@ import { renderWidth } from "../src/renderer/render-payload";
 import { parseFrame, textOf } from "../src/render/frame";
 import { MAX_VIEWER_ROWS } from "../src/render/diagnostics";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { CLICK_MODE_KEY } from "../src/config/click-mode";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import {
   heardContextOf,
@@ -152,8 +153,17 @@ function renderer(
       verbs,
     }),
     feeds: new Feeds({
-      draw: (session, fps, readings, following, lanes, prepare) =>
-        renderFrame(parts, session, fps, readings, following, lanes, prepare),
+      draw: (session, fps, readings, following, lanes, pointer, prepare) =>
+        renderFrame(
+          parts,
+          session,
+          fps,
+          readings,
+          following,
+          lanes,
+          pointer,
+          prepare,
+        ),
       pin: (session) => rig.cache.pin(session),
       log: (level, message) => logged.push(`${level} ${message}`),
       periods: FEED_PERIODS,
@@ -1044,6 +1054,7 @@ describe("a draw", () => {
         setup,
         ANSWERING,
         UNFOLLOWED_FEEDS,
+        null,
       );
       return { drawn, candidate };
     };
@@ -1060,6 +1071,27 @@ describe("a draw", () => {
       parts.renderCache.presentations.diagnostics(SESSION, "request"),
     ).toBe(warned);
     expect(recorded).toHaveLength(deliveries);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] A click mode left on is open state as a
+  // menu is, so the draw reports it to the idle clock, which ends it.
+  test.each([
+    ["click", false],
+    ["hover", true],
+    ["alt", true],
+  ])("a session in click mode %s draws a menu shown: %s", async (mode, shown) => {
+    const { r, parts, rig } = renderer();
+    await request({ r, rig });
+    rig.sessionState.set(SESSION, CLICK_MODE_KEY, mode);
+    using setup = setUpRender(parts, checked(), READ, []);
+    const { candidate } = drawRender(
+      parts,
+      setup,
+      ANSWERING,
+      UNFOLLOWED_FEEDS,
+      null,
+    );
+    expect(candidate.frame.menu.shown).toBe(shown);
   });
 });
 
@@ -1157,6 +1189,7 @@ describe("a feed's frame", () => {
       READ,
       new Set(["pane"]),
       UNFOLLOWED_FEEDS,
+      null,
       () => {
         throw new Error("a failed draw requested a receipt");
       },
@@ -1341,6 +1374,7 @@ describe("a feed's frame", () => {
         { at, tick: 0 as Tick },
         new Set(),
         UNFOLLOWED_FEEDS,
+        null,
         (candidate) => {
           candidates.push(candidate);
           return parts.mint();
@@ -2062,7 +2096,13 @@ test("diagnostics use the requesting client's rows or its own default ceiling", 
     [{}, MAX_VIEWER_ROWS],
   ] as const) {
     using setup = setUpRender(t.parts, current, READ, [], terminal);
-    const { drawn } = drawRender(t.parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+    const { drawn } = drawRender(
+      t.parts,
+      setup,
+      ANSWERING,
+      UNFOLLOWED_FEEDS,
+      null,
+    );
     expect(drawn.geometry.rows).toBe(rows);
   }
 });

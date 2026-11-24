@@ -13,6 +13,7 @@ import {
 import { SESSION_KEY_TO_SETTING } from "./setting-projections.js";
 import { CONFIRM_KEY_SUFFIX } from "./confirm-step.js";
 import { DIAGNOSTICS_VIEWING } from "./door.js";
+import { CLICK_MODE_KEY, HOVER_KEY } from "./click-mode.js";
 
 // [LAW:types-are-the-program]
 // - edit: edit mode's own, living only in an open edit and ending with it —
@@ -25,6 +26,9 @@ import { DIAGNOSTICS_VIEWING } from "./door.js";
 //   own and no menu's;
 // - record: the bar's own account of a click that failed, which no edit
 //   shapes, so none holds it and Back never restores it;
+// - pointer: what a click means on a surface that cannot deliver more than
+//   the plain one (src/config/click-mode.ts): the user's own, so no edit
+//   holds it, Back never restores it and undo never steps it;
 // - menu: a menu, disclosure or page cursor the bar mints;
 // - plain: a key a config authors.
 export type SessionKeyKind =
@@ -33,6 +37,7 @@ export type SessionKeyKind =
   | { readonly kind: "confirm" }
   | { readonly kind: "viewer" }
   | { readonly kind: "record" }
+  | { readonly kind: "pointer" }
   | { readonly kind: "menu" }
   | { readonly kind: "plain" };
 
@@ -54,6 +59,7 @@ export function sessionKeyKind(key: string): SessionKeyKind {
   if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
   if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
   if (key === CLICK_ERROR_KEY) return { kind: "record" };
+  if (key === CLICK_MODE_KEY || key === HOVER_KEY) return { kind: "pointer" };
   // The rest of the bar's namespaces hold disclosures only: a group's open
   // member (`groups.`) and the settings menu's own disclosures and tabs
   // (`candybar.`). Every other bar-owned key above has its own kind.
@@ -78,8 +84,10 @@ export const isPlacementDraftKey = (key: string): boolean => {
 // record of a failed click, which says what happened to a click and belongs to
 // no edit. Cancel would erase it before it was read, and no answer could mark
 // it, since an answer marks the stored record.
-export const isHeldByEdit = (key: string): boolean =>
-  sessionKeyKind(key).kind !== "record";
+export const isHeldByEdit = (key: string): boolean => {
+  const { kind } = sessionKeyKind(key);
+  return kind !== "record" && kind !== "pointer";
+};
 
 // What an undo step holds: the settings, and a placement's unsaved values,
 // which are the edit's own settings. Every other key is navigation or the

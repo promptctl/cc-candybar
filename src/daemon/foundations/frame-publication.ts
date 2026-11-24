@@ -1,5 +1,5 @@
 import type { FrameSource, LinkSigner } from "../../click/link-signer.js";
-import { publishedHref } from "../../render/drawn-link.js";
+import { actionTarget, publishedHref } from "../../render/drawn-link.js";
 import { isBarLink } from "../../click/wire.js";
 import { parseFrame, type Frame, type WireFrame } from "../../render/frame.js";
 
@@ -29,9 +29,28 @@ export function publishingFrames(
             typeof link !== "string" && link.kind !== "href"
               ? source
               : undefined;
+          const published = (url: string): string =>
+            isBarLink(url) ? signer.signLink(url, issuer) : url;
           return {
             ...run,
-            link: isBarLink(href) ? signer.signLink(href, issuer) : href,
+            link: published(href),
+            ...(typeof link !== "string" &&
+              link.kind === "action" &&
+              link.region !== undefined && {
+                region: {
+                  name: link.region.name,
+                  gestures: Object.fromEntries(
+                    Object.entries(link.region.gestures).map(
+                      ([gesture, effects]) => [
+                        gesture,
+                        published(
+                          publishedHref(actionTarget(effects), signer.sign),
+                        ),
+                      ],
+                    ),
+                  ),
+                },
+              }),
           };
         }),
       })),

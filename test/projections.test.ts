@@ -234,6 +234,10 @@ test("the config load line names the load's projections", () => {
       }`),
       ),
     ).toEqual([
+      // What every config declares of the pointer: the gestures its surface
+      // delivers and the action it is on.
+      "surface",
+      "hover",
       // The settings door's indicator reads the draw's diagnostics.
       "diagnostics.label",
       "diagnostics.fg",
@@ -248,6 +252,8 @@ test("the config load line names the load's projections", () => {
     // The bundled default's: what its stored instants say relative to now
     // (brandon-unfiled-3248.8ro6 step 3).
     expect(named(line("{}"))).toEqual([
+      "surface",
+      "hover",
       "diagnostics.label",
       "diagnostics.fg",
       "diagnostics.bg",

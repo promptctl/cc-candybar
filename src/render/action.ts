@@ -29,7 +29,7 @@ import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
-  actionBindsTemplateValue,
+  bindsTemplateValue,
   runDeclaration,
   type ResolvedActionDecl,
 } from "../config/action.js";
@@ -66,6 +66,8 @@ import {
   VERB_UNDO,
   VERB_SLASH,
 } from "../click/wire.js";
+import { HOVER, type GestureName } from "../click/gesture.js";
+import { HOVER_REGION } from "../config/click-mode.js";
 import {
   actionTarget,
   type DrawnEffect,
@@ -280,6 +282,9 @@ type CompiledActionShape =
 
 export type CompiledActionDecl = CompiledActionShape & {
   readonly bindsTemplateValue: boolean;
+  // The gestures the action answers besides its plain click, each as the
+  // name of the action it runs.
+  readonly on: Readonly<Record<GestureName, string>>;
 };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
@@ -468,13 +473,11 @@ export function compileActions(
       out,
     );
     // [LAW:one-source-of-truth] The loader and the compiled entry share a
-    // binding rule. A compound action uses the same result as its actual head.
+    // binding rule: a compound action is bound as its head is.
     out.set(name, {
       ...compiled,
-      bindsTemplateValue:
-        compiled.kind === "do"
-          ? compiled.head.bindsTemplateValue
-          : actionBindsTemplateValue(action),
+      on: action.on ?? {},
+      bindsTemplateValue: bindsTemplateValue(actions, action),
     });
   }
   return out;
@@ -1189,7 +1192,38 @@ export function renderAction(
     store,
     sessionId,
   );
-  return linkOver(display, actionTarget(effects), active);
+  // [LAW:one-source-of-truth] A gesture's effects are realized by the same
+  // fold as the click's, against the same state, so each link delivers what
+  // the frame drew for it.
+  const realized = Object.fromEntries(
+    Object.entries(declared.on).map(([gesture, target]) => [
+      gesture,
+      realize(
+        runtime.compiled.get(target)!,
+        display.plain,
+        boundValue,
+        store,
+        sessionId,
+      ).effects,
+    ]),
+  );
+  // Hover is no gesture a pane presses: it is what a click means in hover
+  // mode, so the region's published gestures never carry it. A region binding
+  // none makes itself the hovered one.
+  const { [HOVER]: hoverBinding, ...gestures } = realized;
+  const hover =
+    hoverBinding ??
+    realize(runtime.compiled.get(HOVER_REGION)!, name, name, store, sessionId)
+      .effects;
+  // [LAW:one-source-of-truth] The region carries what a click means in every
+  // mode, and nothing here reads the mode or the surface: those are one
+  // draw's, and a cell is drawn once for every lane that shows it. The one
+  // step that picks a link by them is src/render/click-mode-frame.ts.
+  return linkOver(
+    display,
+    actionTarget(effects, undefined, { name, gestures, hover }),
+    active,
+  );
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

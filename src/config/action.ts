@@ -31,6 +31,7 @@
 // constant), and an inline array is its own domain, needing no registration
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
+import type { GestureName } from "../click/gesture.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import {
   DEFAULT_WRITE_LAYER,
@@ -214,7 +215,14 @@ export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
 interface Writes {
   readonly layer?: LayerRole;
 }
-export type ActionDecl =
+// [LAW:one-source-of-truth] The other gestures an action answers, as the
+// gesture's canonical name (src/click/gesture.ts) and the declared action each
+// runs. The action's own effects stay its plain click.
+export interface Gestures {
+  readonly on?: Readonly<Record<GestureName, string>>;
+}
+export type ActionDecl = ActionArm & Gestures;
+type ActionArm =
   | { readonly set: string; readonly to: string }
   | { readonly set: string; readonly from: OptionDomain }
   | {
@@ -343,6 +351,17 @@ export function runDeclaration(a: RunAction): string {
 
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 
+// [LAW:one-source-of-truth] The actions one action fires or answers with: a
+// `do`'s members, and the target of each gesture it binds. Every walk that
+// asks which actions an action reaches (what is unused, what a click reads, a
+// plugin's names, what wants edit mode) asks this, so a new reference field is
+// listed once. A walk that rewrites a field (`mapActionNames`) or checks one
+// by its own rule (the loader's `do` and `on` checks) goes field by field.
+export const actionMembers = (a: ActionDecl): readonly string[] => [
+  ...("do" in a ? a.do : []),
+  ...Object.values(a.on ?? {}),
+];
+
 // [LAW:one-source-of-truth] The templates an action's own text holds, by
 // field: `copy`'s and `open`'s text, a preset delete's `name`, and a `run`'s
 // program, arguments and environment values, each evaluated where the action
@@ -401,4 +420,15 @@ export function actionBindsTemplateValue(a: ActionDecl): boolean {
     "insertSegmentFrom" in a ||
     ("save" in a && a.layer === "ask")
   );
+}
+
+// [LAW:one-source-of-truth] Whether a click on an action is bound a template
+// value: a `do` is bound through its head, whose display the click carries.
+// The loader's gesture check and the compiled entry both ask this.
+export function bindsTemplateValue(
+  actions: Readonly<Record<string, ActionDecl>>,
+  a: ActionDecl,
+): boolean {
+  const head = "do" in a ? actions[a.do[0]] : a;
+  return head !== undefined && actionBindsTemplateValue(head);
 }

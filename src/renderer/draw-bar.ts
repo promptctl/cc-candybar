@@ -63,6 +63,15 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
+import type { PanePointer } from "../click/gesture.js";
+import { pointerFacts, surfaceOf } from "../render/pointer-facts.js";
+import { inClickMode } from "../render/click-mode-frame.js";
+import {
+  CLICK_MODE_KEY,
+  HOVER_KEY,
+  modeInForce,
+  modeIsOpen,
+} from "../config/click-mode.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { TurnTime } from "./turn-time.js";
 import {
@@ -137,6 +146,8 @@ export function renderFrame(
   // of late, as the feed knows them.
   following: ReadonlySet<Lane>,
   feeds: LaneFeeds,
+  // What the pane that owns the session's pointer says of it, if one does.
+  pointer: PanePointer | null,
   prepare: PrepareDelivery,
 ): FeedDraw | null {
   const facts: RequestFacts = [];
@@ -144,7 +155,7 @@ export function renderFrame(
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
     const { drawn, evaluated, cellBreaks, lanes, candidate, eventsShown } =
-      drawRender(parts, setup, { by: "feed", fps }, feeds);
+      drawRender(parts, setup, { by: "feed", fps }, feeds, pointer);
     const bar = drawn.body;
     const { frame: statusline } = statuslineOf(
       setup,
@@ -403,6 +414,9 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
+  // The pointer of the pane that owns the session's, which only a fed bar has:
+  // the request path draws for no pointer of its own.
+  pointer: PanePointer | null,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -589,10 +603,20 @@ export function drawRender(
         })),
     ],
   );
+  // [LAW:one-source-of-truth] The mode this draw is in, once: the session's,
+  // unless the surface of the pane that owns the pointer (a link's, with none)
+  // delivers its gesture itself. Hover, the frame's links and whether the idle
+  // clock runs all read this one value; the idle close resets the session's
+  // own, which is what a lane that does not deliver the gesture reads.
+  const mode = modeInForce(
+    sessionState.get(sessionId, CLICK_MODE_KEY),
+    surfaceOf(pointer),
+  );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
     feeds,
+    ...pointerFacts(pointer, mode, sessionState.get(sessionId, HOVER_KEY)),
     ...instantFacts(document.builtins, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
@@ -644,7 +668,7 @@ export function drawRender(
   // [LAW:one-source-of-truth] Template term.cols and the physical strip use
   // the same width, including a client whose request waited through a resize.
   const {
-    frame,
+    frame: drawnFrame,
     waited,
     memory,
     warnings: drawnWarnings,
@@ -661,6 +685,10 @@ export function drawRender(
   // the frame reaches its client, so a draw that throws, or an answer that
   // never arrives, leaves the shown frame's copies.
   const copies = diagnosticCopies(diagnostics);
+  // [LAW:single-enforcer] The one place the click mode picks the links a frame
+  // shows: a cell is drawn once, so no cell reads the mode
+  // (src/render/click-mode-frame.ts).
+  const frame = inClickMode(drawnFrame, mode);
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -810,7 +838,10 @@ export function drawRender(
         copies,
         menu: {
           tick: readings.tick,
-          shown: frame.rows.some((row) => row.kind === "menu"),
+          // [LAW:no-ambient-temporal-coupling] A click mode the user left on
+          // is open state as a menu is: the same idle period ends it.
+          shown:
+            frame.rows.some((row) => row.kind === "menu") || modeIsOpen(mode),
           timeoutS: effective.menuTimeout,
         },
       },
@@ -980,6 +1011,7 @@ export function answerRequest(
     setup,
     ANSWERING,
     feeds.feedsOf(sessionId, time.tick),
+    null,
   );
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands

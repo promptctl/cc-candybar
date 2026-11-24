@@ -9,6 +9,7 @@ import {
   encodeFrame,
   makeFrameReader,
   parseResponse,
+  type OwnerFacts,
   type Response,
   type SubscribeRequest,
 } from "./foundations/protocol";
@@ -50,6 +51,9 @@ export function openFrameStream(
   lane: Lane,
   onFrame: (resp: Response) => void,
   onEnd: (end: StreamEnd) => void,
+  // A pane that owns the session's pointer says so as it subscribes, with what
+  // it knows of it now.
+  owner?: OwnerFacts,
 ): FrameStream {
   let end: StreamEnd | null = null;
   const finish = (why: StreamEnd): void => {
@@ -64,6 +68,7 @@ export function openFrameStream(
     kind: "subscribe",
     sessionId,
     lane,
+    ...(owner !== undefined && { owner }),
   };
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(

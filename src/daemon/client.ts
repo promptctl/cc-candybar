@@ -20,6 +20,7 @@ import {
   ENVIRONMENT_NEEDED,
   UNKNOWN_REQUEST_KIND,
   type ClientHints,
+  type OwnerFacts,
   type Response,
 } from "./foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline";
@@ -140,6 +141,21 @@ export function trySessionInPane(
     () => ({ kind: "pane-session", socket, pane }),
     CLICK_BUDGETS,
     (resp) => ("paneSession" in resp ? resp.paneSession : undefined),
+  );
+}
+
+// A bar pane's pointer, restated to the host (PointerRequest): the host takes
+// it only from the session's live owner, and says why when it does not.
+export function tryPointerViaDaemon(
+  world: ClientWorld,
+  sessionId: string,
+  owner: OwnerFacts,
+): Promise<ClientOutcome> {
+  return requestOutcome(
+    world,
+    () => ({ kind: "pointer", sessionId, owner }),
+    CLICK_BUDGETS,
+    projectOutput,
   );
 }
 

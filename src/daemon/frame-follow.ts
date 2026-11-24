@@ -10,7 +10,11 @@ import {
   type FrameStream,
   type StreamEnd,
 } from "./client-frames";
-import { PROTOCOL_VERSION, type Response } from "./foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type OwnerFacts,
+  type Response,
+} from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
 
 export const RECONNECT_FIRST_MS = 250;
@@ -105,6 +109,10 @@ export interface FrameFollow {
   readonly fault: (reason: string, retryMs: number) => void;
   readonly exit: (reason: string) => void;
   readonly beforeReconnect?: () => Promise<void>;
+  // The pointer a pane that owns the session's declares at each opening, as it
+  // stands then: a stream that reconnects restates it, so the host never holds
+  // what the pane no longer says.
+  readonly owner?: () => OwnerFacts;
 }
 
 export interface FrameFollower {
@@ -167,6 +175,7 @@ export function followFrames(
           }
         }
       },
+      follow.owner?.(),
     );
   };
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 import type { RenderHookData } from "../../utils/claude";
 import type { StatsSnapshot } from "./stats-snapshot";
+import type { HitMap } from "../../render/hit-map.js";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { RecordingCommand } from "./recording-command.js";
 import type { TmuxHint } from "../../tmux-hint";
@@ -465,6 +466,31 @@ export interface SubscribeRequest {
   kind: "subscribe";
   sessionId: string;
   lane: Lane;
+  // The pane lane's pane, which draws the bar and sees the pointer over it
+  // (`PointerRequest`): the pane that spoke last, by subscribing or reporting,
+  // holds the session's pointer.
+  owner?: OwnerFacts;
+}
+
+// [LAW:one-source-of-truth] What a bar pane says of its pointer, whole: who it
+// is (an id it made), the gestures its terminal delivers (`hover` among them),
+// and the action the pointer last stood on. Sent with the subscribe and
+// again, whole, whenever one changes, so the host holds exactly the pane's
+// latest and a stream that reconnects restates it.
+export interface OwnerFacts {
+  id: string;
+  gestures: string[];
+  hover: string | null;
+}
+
+// A change of a pane's facts. The host accepts it from any pane following the
+// session, which then holds the session's pointer: a pane that has ended
+// follows nothing, and is refused.
+export interface PointerRequest {
+  v: number;
+  kind: "pointer";
+  sessionId: string;
+  owner: OwnerFacts;
 }
 
 // Which session last rendered from a tmux pane: the session of the daemon's
@@ -483,6 +509,7 @@ export type Request =
   | SessionRenderRequest
   | SubscribeRequest
   | PaneSessionRequest
+  | PointerRequest
   | ShutdownRequest
   | StatsRequest
   | ClickRequest
@@ -490,7 +517,8 @@ export type Request =
   | DebugRequest;
 
 export type Response =
-  | { ok: true; output: string }
+  // A frame pushed to the pane lane also carries where a pointer can act on it.
+  | { ok: true; output: string; hits?: HitMap }
   | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }

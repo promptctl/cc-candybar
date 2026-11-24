@@ -619,6 +619,7 @@ describe("the daemon is a value", () => {
     const refused = jest.fn();
     const unsubscribe = daemon.subscribe(VALUE_REFUSED, {
       lane: "statusline",
+      owner: null,
       frame: () => {},
       refused,
       drawing: () => true,
@@ -752,6 +753,7 @@ describe("the daemon is a value", () => {
     const refused = jest.fn();
     daemon.subscribe(VALUE_CLOSE, {
       lane: "statusline",
+      owner: null,
       frame: () => {},
       refused,
       drawing: () => true,

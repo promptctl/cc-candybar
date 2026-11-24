@@ -38,6 +38,7 @@ import type {
 } from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
+import type { PanePointer } from "../click/gesture";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
@@ -305,6 +306,8 @@ export interface SessionViewers {
 export interface LaneViewers {
   readonly subscribers: number;
   readonly drawing: boolean;
+  // Only the pane lane has an owner, and only while one is subscribed.
+  readonly pointer?: PanePointer;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.

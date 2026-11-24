@@ -2,6 +2,11 @@ import type {
   ConfigSnapshot,
   PluginFile,
 } from "../../src/config/config-snapshot";
+import {
+  CLICK_MODE_KEY,
+  HOVER_KEY,
+  NO_HOVER,
+} from "../../src/config/click-mode";
 import { DISCLOSURE_OPEN } from "../../src/config/disclosure";
 import { SETTINGS_ANCHOR } from "../../src/config/door";
 import {
@@ -418,6 +423,22 @@ test("the output check sees the evaluated run environment in ordinary and pane f
     expect(problem).toMatch(/run action supplies environment/);
     expect(problem).not.toContain(ACTION_SECRET);
   }
+});
+
+test("boot admits the click mode and refuses a hovered region's name", () => {
+  const withPicks = (picks: Record<string, string>) => ({
+    ...BOOT,
+    stored: { sessions: { [SESSION]: picks }, history: {} },
+  });
+  expect(
+    recordingBootProblem(
+      withPicks({ [CLICK_MODE_KEY]: "alt", [HOVER_KEY]: NO_HOVER }),
+    ),
+  ).toBeNull();
+  // A region's name is config text, which a recording must not carry.
+  expect(recordingBootProblem(withPicks({ [HOVER_KEY]: SECRET }))).toMatch(
+    /saved renderer state contains values of unknown origin/,
+  );
 });
 
 test("boot preserves built-in state and layer history and refuses unsupported historical text", () => {

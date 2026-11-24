@@ -28,6 +28,30 @@ class LinkProof {
         ? Object.freeze({
             ...target,
             effects: Object.freeze(target.effects.map(capture)),
+            ...(target.region === undefined
+              ? {}
+              : {
+                  region: Object.freeze({
+                    name: target.region.name,
+                    ...(target.region.hover === undefined
+                      ? {}
+                      : {
+                          hover: Object.freeze(
+                            target.region.hover.map(capture),
+                          ),
+                        }),
+                    gestures: Object.freeze(
+                      Object.fromEntries(
+                        Object.entries(target.region.gestures).map(
+                          ([gesture, effects]) => [
+                            gesture,
+                            Object.freeze(effects.map(capture)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  }),
+                }),
           })
         : Object.freeze({ ...target });
     // [LAW:one-source-of-truth] Style.equals compares links and ignores meta.
