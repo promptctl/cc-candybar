@@ -35,9 +35,10 @@ import type { Timekeeper } from "../../time";
 //   - Renaming a wire field.
 //
 // The 452-corpse precedent (kz8.5) makes this discipline load-bearing: every
-// bump forces every running statusbar through VERSION_MISMATCH until its
-// session restarts, because the spiral-breaker contract refuses to kick on a
-// permanent error. A bump for an additive change taxes every user with
+// bump forces every running statusbar through VERSION_MISMATCH until the host
+// moves to the install's new bundle (the binary watch's next sample after the
+// install rewrites its record), because the spiral-breaker contract refuses to
+// kick on a permanent error. A bump for an additive change taxes every user with
 // blank-statusbar minutes for a feature their session doesn't even use.
 // Don't bump for growth.
 export const PROTOCOL_VERSION = 3;

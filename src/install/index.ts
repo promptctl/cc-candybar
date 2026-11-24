@@ -38,6 +38,8 @@ import {
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
 import { stageExecutable } from "./stage-executable.js";
+import { recordIfInstall, statusLineRunsBundle } from "./record";
+import { recordHostBundle } from "../daemon/host-bundle";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 // The forwarder binary's name in a darwin platform package's `bin/`, as
@@ -592,7 +594,20 @@ export async function runInstall(
     );
   }
 
-  updateClaudeSettings(staged.binPath, argsToInstall, force, world.host);
+  // [LAW:one-source-of-truth] The install knows which bundle it staged, and
+  // whether it wrote the statusline command that runs it, so a command it wrote
+  // needs no reading back. A customized command it kept is read once, for
+  // whether it runs the staged entry: that setup is the install too, and
+  // `--force` would destroy the command that makes it so.
+  const statusLineRunsStaged =
+    updateClaudeSettings(staged.binPath, argsToInstall, force, world.host) ||
+    statusLineRunsBundle(
+      readClaudeSettings(userSettingsPath(world.host)).statusLine,
+      staged.distPath,
+    );
+  process.stdout.write(
+    recordStagedBundleIfRun(statusLineRunsStaged, staged.distPath, world.host),
+  );
 
   process.stdout.write(installSuccessMessage());
 
@@ -612,6 +627,52 @@ export async function runInstall(
   process[report.stream].write(report.text);
 }
 
+// The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
+// the Claude Code they launch from it reads.
+function userSettingsPath(host: Host): string {
+  return claudeSettingsPath(
+    claudeConfigDir(detectClaudeConfigDir(host.env, process.cwd()), host.home),
+  );
+}
+
+function recordedMessage(bundle: string): string {
+  return `Recorded ${bundle} as the host's bundle\n`;
+}
+
+// The install's record: the staged bundle, when the statusline command runs
+// it. Returns what the install says about it.
+function recordStagedBundleIfRun(
+  statusLineRunsIt: boolean,
+  stagedBundle: string,
+  host: Host,
+): string {
+  if (!statusLineRunsIt) {
+    return `Host bundle not recorded: the statusLine is customized and does not run the staged bundle. Re-run with --force to make the staged bundle the install.\n`;
+  }
+  recordHostBundle(host, stagedBundle);
+  return recordedMessage(stagedBundle);
+}
+
+// The checkout's install step: a build is complete without staging, so this
+// is what makes a checkout whose statusline command names it the host's code
+// (src/install/record.ts).
+export function runRecordHostBundle(bundle: string, world: World): void {
+  const recording = recordIfInstall(
+    bundle,
+    readClaudeSettings(userSettingsPath(world.host)).statusLine,
+    world.host,
+  );
+  process.stdout.write(
+    recording.kind === "recorded"
+      ? recordedMessage(recording.bundle)
+      : `Host bundle not recorded: ${bundle} is not the install. ${
+          recording.named === null
+            ? "There is no statusLine command, or it names no bundle this can read (an absolute path to a bin/cc-candybar entry, bare or single-quoted)."
+            : `The statusLine command runs ${recording.named}.`
+        }\n`,
+  );
+}
+
 // One value spliced at one key path of settings.json.
 type SettingsEdit = readonly [keyPath: readonly string[], value: unknown];
 
@@ -621,17 +682,8 @@ function updateClaudeSettings(
   force: boolean,
   host: Host,
   overridePath?: string,
-): void {
-  // The CLI runs in the user's own shell, so its CLAUDE_CONFIG_DIR is the one
-  // the Claude Code they launch from it reads.
-  const target =
-    overridePath ??
-    claudeSettingsPath(
-      claudeConfigDir(
-        detectClaudeConfigDir(host.env, process.cwd()),
-        host.home,
-      ),
-    );
+): boolean {
+  const target = overridePath ?? userSettingsPath(host);
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   const statusLine = readClaudeSettings(target).statusLine;
@@ -659,7 +711,7 @@ function updateClaudeSettings(
         `  Current: ${existing}\n` +
         `  To overwrite, re-run with --force.\n`,
     );
-    return;
+    return false;
   }
 
   // [LAW:one-source-of-truth] Splices, not a rewrite, so every byte install
@@ -684,6 +736,7 @@ function updateClaudeSettings(
     ),
   );
   process.stdout.write(`Updated ${target}\n`);
+  return true;
 }
 
 // Exports for testing
@@ -697,4 +750,5 @@ export const __test__ = {
   stageFile,
   stagedEntryKind,
   installSuccessMessage,
+  recordStagedBundleIfRun,
 };

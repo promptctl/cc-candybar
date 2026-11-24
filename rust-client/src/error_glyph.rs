@@ -11,7 +11,7 @@
 // TS module, so scripts/check-protocol.mjs diffs the mirrored values and
 // fails prepublishOnly on drift.
 
-use crate::PermanentCause;
+use crate::{HostBundleRefusal, PermanentCause};
 use std::ffi::OsStr;
 
 const FG: &str = "\x1b[38;2;255;255;255m";
@@ -46,6 +46,20 @@ pub fn format_timeout_glyph(saved_frame: Option<&str>, xdg_state_home: Option<&O
 // can be arbitrarily long. The glyph must fit on a single statusline row, so
 // truncate to a budget that leaves room for the prefix at typical widths.
 const MAX_MESSAGE_LEN: usize = 60;
+
+// [LAW:one-type-per-behavior] Mirrors formatHostBundleGlyph in
+// src/render/error-glyph.ts byte for byte; check-protocol diffs the two words.
+// Fixed text, not the refusal's own reason, which goes to stderr.
+const HOST_BUNDLE_UNRECORDED: &str = "no host bundle recorded — run: cc-candybar install";
+const HOST_BUNDLE_UNUSABLE: &str = "recorded host bundle is unusable — run: cc-candybar install";
+
+pub fn format_host_bundle_glyph(refusal: &HostBundleRefusal) -> String {
+    let words = match refusal {
+        HostBundleRefusal::Unrecorded => HOST_BUNDLE_UNRECORDED,
+        HostBundleRefusal::Unusable(_) => HOST_BUNDLE_UNUSABLE,
+    };
+    format!("{BG}{FG}{PREFIX}{words}{RESET}\n")
+}
 
 pub fn format_permanent_glyph(cause: &PermanentCause) -> String {
     format!("{BG}{FG}{PREFIX}{}{RESET}\n", describe(cause))
@@ -166,6 +180,21 @@ mod tests {
 
     const OPEN: &str = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
     const TAIL: &str = "\x1b[0m\n";
+
+    // The bytes test/host-bundle-record.test.ts holds the Node client to.
+    #[test]
+    fn a_refused_host_start_names_the_install() {
+        assert_eq!(
+            format_host_bundle_glyph(&HostBundleRefusal::Unrecorded),
+            format!("{OPEN}⚠ cc-candybar: no host bundle recorded — run: cc-candybar install{TAIL}")
+        );
+        assert_eq!(
+            format_host_bundle_glyph(&HostBundleRefusal::Unusable("why".into())),
+            format!(
+                "{OPEN}⚠ cc-candybar: recorded host bundle is unusable — run: cc-candybar install{TAIL}"
+            )
+        );
+    }
 
     // [LAW:one-source-of-truth] Fixtures derive both versions from the
     // canonical PROTOCOL_VERSION constant rather than embedding the current

@@ -87,12 +87,18 @@ fn main() {
             }
             std::process::exit(0);
         }
-        RenderOutcome::Transient(_cause) => {
-            obtain_daemon_kick();
-            session_id
+        RenderOutcome::Transient(_cause) => match obtain_daemon_kick() {
+            KickOutcome::Kicked => session_id
                 .and_then(read_last_render)
-                .unwrap_or_else(error_glyph::format_waiting_glyph)
-        }
+                .unwrap_or_else(error_glyph::format_waiting_glyph),
+            // [LAW:no-silent-failure] Nothing is starting, so the waiting
+            // indicator or a cached frame would promise a host that never
+            // comes: the bar says what to run, and stderr says why.
+            KickOutcome::Refused(refusal) => {
+                eprintln!("cc-candybar: host not started: {refusal}");
+                error_glyph::format_host_bundle_glyph(&refusal)
+            }
+        },
         RenderOutcome::Busy => {
             let frame = session_id.and_then(read_last_render);
             let xdg_state_home = env::var_os("XDG_STATE_HOME");
@@ -970,7 +976,94 @@ enum LockOutcome {
     Error(String),
 }
 
-fn obtain_daemon_kick() {
+// [LAW:types-are-the-program] Mirrors KickOutcome in src/daemon/acquire.ts: a
+// kick ran its lock-and-spawn path, or the install's record gave it no bundle
+// to start a host from. The refusal carries why, for the bar and the log.
+pub enum KickOutcome {
+    Kicked,
+    Refused(HostBundleRefusal),
+}
+
+#[derive(Debug)]
+pub enum HostBundleRefusal {
+    Unrecorded,
+    Unusable(String),
+}
+
+impl std::fmt::Display for HostBundleRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HostBundleRefusal::Unrecorded => {
+                write!(f, "no host bundle is recorded: run `cc-candybar install`")
+            }
+            HostBundleRefusal::Unusable(why) => write!(f, "{why}"),
+        }
+    }
+}
+
+// [LAW:one-source-of-truth] The bundle the install runs the host from: one
+// line, an absolute path, in the state dir. Mirrors src/daemon/paths.ts
+// HOST_BUNDLE_FILE (diffed by check-protocol); the writer is the install alone
+// (src/install/record.ts). A client's own bundle never starts the host.
+const HOST_BUNDLE_FILE: &str = "host-bundle";
+
+fn host_bundle_path() -> PathBuf {
+    state_dir().join(HOST_BUNDLE_FILE)
+}
+
+// [LAW:parse-dont-validate] Mirrors readHostBundle in src/daemon/host-bundle.ts:
+// the crossing from the record's text to a bundle a spawn can run. Ok is an
+// absolute path that exists; the refusal says why there is none.
+fn read_host_bundle(record: &Path) -> Result<PathBuf, HostBundleRefusal> {
+    let text = match std::fs::read_to_string(record) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(HostBundleRefusal::Unrecorded)
+        }
+        Err(e) => {
+            return Err(HostBundleRefusal::Unusable(format!(
+                "{}: {e}",
+                record.display()
+            )))
+        }
+    };
+    let bundle = PathBuf::from(text.trim());
+    if !bundle.is_absolute() {
+        return Err(HostBundleRefusal::Unusable(format!(
+            "{} does not hold an absolute path",
+            record.display()
+        )));
+    }
+    // Only a missing file is "does not exist": `Path::exists` answers false to
+    // every stat failure, so an unsearchable directory would read as a wrong path.
+    match std::fs::metadata(&bundle) {
+        Ok(_) => Ok(bundle),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(HostBundleRefusal::Unusable(format!(
+                "{} names {}, which does not exist",
+                record.display(),
+                bundle.display()
+            )))
+        }
+        Err(e) => Err(HostBundleRefusal::Unusable(format!(
+            "{} names {}, which cannot be read: {e}",
+            record.display(),
+            bundle.display()
+        ))),
+    }
+}
+
+fn obtain_daemon_kick() -> KickOutcome {
+    match read_host_bundle(&host_bundle_path()) {
+        Ok(bundle) => {
+            kick_with(&bundle);
+            KickOutcome::Kicked
+        }
+        Err(refusal) => KickOutcome::Refused(refusal),
+    }
+}
+
+fn kick_with(bundle: &Path) {
     // Re-check first: a daemon may have come up between our render failure
     // and now. Cheap probe — if it's listening we have nothing to do.
     if can_connect(&socket_path(), Duration::from_millis(20)) {
@@ -982,7 +1075,7 @@ fn obtain_daemon_kick() {
             // Re-check connect — a daemon may have come up between our
             // first probe and our lock acquisition.
             if !can_connect(&socket_path(), Duration::from_millis(20)) {
-                spawn_daemon_rate_limited();
+                spawn_daemon_rate_limited(bundle);
             }
             // [LAW:one-type-per-behavior] Release by unlinking — Node uses
             // the same semantics so a Rust kick and a Node kick agree on
@@ -999,7 +1092,7 @@ fn obtain_daemon_kick() {
                     eprintln!(
                         "cc-candybar: spawn-lock held {age_ms}ms (likely crashed holder) — spawning unlocked"
                     );
-                    spawn_daemon_rate_limited();
+                    spawn_daemon_rate_limited(bundle);
                 }
             }
         }
@@ -1008,7 +1101,7 @@ fn obtain_daemon_kick() {
             // stop on availability — spawn.lock is an optimization, bind()
             // is load-bearing. Mirror Node's obtainDaemonKick behavior.
             eprintln!("cc-candybar: spawn-lock unavailable ({reason}) — spawning unlocked");
-            spawn_daemon_rate_limited();
+            spawn_daemon_rate_limited(bundle);
         }
     }
 }
@@ -1018,11 +1111,11 @@ fn obtain_daemon_kick() {
 // cooldownGatedSpawn in src/daemon/acquire.ts. On cooldown we do nothing: a
 // spawn was attempted within SPAWN_COOLDOWN_MS and is likely still booting, and
 // the kick is fire-and-forget so "already in flight" is a complete answer.
-fn spawn_daemon_rate_limited() {
+fn spawn_daemon_rate_limited(bundle: &Path) {
     if !claim_spawn_cooldown() {
         return;
     }
-    spawn_daemon_detached();
+    spawn_daemon_detached(bundle);
 }
 
 // [LAW:one-source-of-truth] Mirror of Node's claimSpawnCooldown. Returns true —
@@ -1242,13 +1335,11 @@ fn can_connect(sock: &Path, timeout: Duration) -> bool {
     connect_with_timeout(sock, timeout).is_ok()
 }
 
-fn spawn_daemon_detached() {
-    let script = match dist_index_path() {
-        Some(p) => p,
-        None => return,
-    };
+// [LAW:one-source-of-truth] `bundle` is the install's recorded bundle, never
+// the one beside this client (dist_index_path), which is a hint about the client.
+fn spawn_daemon_detached(bundle: &Path) {
     // [LAW:single-enforcer] All Command::new goes through launch.rs.
-    let _ = launch::spawn_node_detached_daemon(&script);
+    let _ = launch::spawn_node_detached_daemon(bundle);
 }
 
 #[cfg(test)]
@@ -1360,6 +1451,62 @@ mod tests {
             hint(Some("~alice/c.json5")),
             Some("/work/proj/~alice/c.json5".into())
         );
+    }
+
+    // A directory of the test's own under the system's temporary one, removed
+    // when the test's guard drops.
+    struct Scratch(PathBuf);
+    impl Scratch {
+        fn new(name: &str) -> Scratch {
+            let dir = std::env::temp_dir().join(format!(
+                "cc-candybar-host-bundle-{name}-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn the_recorded_bundle_that_exists_is_the_host_bundle() {
+        let scratch = Scratch::new("recorded");
+        let bundle = scratch.0.join("index.mjs");
+        std::fs::write(&bundle, "").unwrap();
+        let record = scratch.0.join("host-bundle");
+        std::fs::write(&record, format!("{}\n", bundle.display())).unwrap();
+        assert_eq!(read_host_bundle(&record).ok(), Some(bundle));
+    }
+
+    #[test]
+    fn no_record_is_unrecorded_and_says_to_run_the_install() {
+        let scratch = Scratch::new("absent");
+        let refusal = read_host_bundle(&scratch.0.join("host-bundle")).unwrap_err();
+        assert!(matches!(refusal, HostBundleRefusal::Unrecorded));
+        assert!(refusal.to_string().contains("cc-candybar install"));
+    }
+
+    #[test]
+    fn a_record_that_names_nothing_usable_is_refused_with_its_reason() {
+        let scratch = Scratch::new("unusable");
+        let record = scratch.0.join("host-bundle");
+        let gone = scratch.0.join("gone.mjs");
+        for (text, reason) in [
+            (format!("{}\n", gone.display()), "does not exist"),
+            ("dist/index.mjs\n".to_string(), "absolute path"),
+            (String::new(), "absolute path"),
+        ] {
+            std::fs::write(&record, text).unwrap();
+            match read_host_bundle(&record) {
+                Err(HostBundleRefusal::Unusable(why)) => assert!(why.contains(reason), "{why}"),
+                other => panic!("expected an unusable record, got {other:?}"),
+            }
+        }
     }
 
     #[test]

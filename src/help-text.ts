@@ -119,6 +119,11 @@ Subcommands:
                            ~/.claude/settings.json. Re-run to update.
   install-url-handler      Just stage the runtime and create + register the URL
                            handler app (macOS only).
+  record-host-bundle       Record this bundle as the one a cold host starts
+                           from, when the statusLine command in
+                           ~/.claude/settings.json names it. \`install\` does
+                           this; a checkout that is its own install runs it
+                           after a build (\`just deploy\`).
   url-handle URL           Send a cc-candybar:// link to the daemon as a
                            click. Terminal links use the URL handler app.
   plugin install SOURCE    Install a repository's plugins into

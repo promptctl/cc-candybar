@@ -11,6 +11,7 @@ import {
   leasePathFor,
   type DaemonPaths,
 } from "./paths";
+import { watchedFiles } from "./host-bundle";
 import { arbitrateSocket, readLease, writeLease } from "./socket-lease";
 import {
   makeOwnershipWatch,
@@ -23,7 +24,7 @@ import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
-import type { World } from "../host";
+import type { Host, World } from "../host";
 import { thrownText, type ReportingClock } from "./task-throws.js";
 import {
   createDaemon,
@@ -87,7 +88,7 @@ function serverLog(level: LogLevel, msg: string): void {
 
 // [LAW:one-source-of-truth] The daemon's one read of the running entry's identity:
 // `import.meta.url` stays in this shell, which a jest worker never loads.
-function runningBundle(): RunningBundle {
+function runningBundle(host: Host): RunningBundle {
   const path = fileURLToPath(import.meta.url);
   return {
     digest: bakedDigest(),
@@ -96,10 +97,8 @@ function runningBundle(): RunningBundle {
     // Watch the resolved entry point, not the bin shim — a build updates
     // dist/index.mjs but the bin/cc-candybar shim never changes — and argv[1]
     // beside it (global installs, symlinks). One target per path: run as
-    // `node dist/index.mjs`, both name one file.
-    targets: [
-      ...new Set([path, ...(process.argv[1] ? [process.argv[1]] : [])]),
-    ],
+    // `node dist/index.mjs`, both name one file. The install's record too.
+    targets: watchedFiles(host, path, process.argv[1] || undefined),
   };
 }
 
@@ -217,7 +216,7 @@ async function boot(): Promise<void> {
       cwd: paths.state,
       heapCapMb: heapCapMb(host.env),
     }),
-    bundle: runningBundle(),
+    bundle: runningBundle(world.host),
     host,
     paths,
     memoryLimitBytes: memoryLimit,

@@ -2,7 +2,8 @@
 //
 // [LAW:single-enforcer] One formatter per runtime. The Node entry in
 // src/index.ts calls formatPermanentGlyph, a failed feed frame takes its words
-// (src/render/frame.ts); nothing else builds this string.
+// (src/render/frame.ts); nothing else builds this string. The host-bundle glyph
+// below shares its envelope, so a change to one is a change to both.
 //
 // [LAW:one-type-per-behavior] The Rust mirror at rust-client/src/error_glyph.rs
 // must produce byte-identical output for the same logical cause — both
@@ -59,4 +60,20 @@ function describe(outcome: PermanentOutcome): string {
     case "malformed_response":
       return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
   }
+}
+
+// A client that finds no host starts one only from the bundle the install
+// recorded, so a missing or unusable record is what the bar shows: the one
+// repair is the install, and the wording names it. Fixed text, not the record's
+// own reason, so the Rust mirror says the same bytes; the reason goes to the
+// client's debug channel.
+const HOST_BUNDLE_UNRECORDED =
+  "no host bundle recorded — run: cc-candybar install";
+const HOST_BUNDLE_UNUSABLE =
+  "recorded host bundle is unusable — run: cc-candybar install";
+
+export function formatHostBundleGlyph(record: "absent" | "failed"): string {
+  const words =
+    record === "absent" ? HOST_BUNDLE_UNRECORDED : HOST_BUNDLE_UNUSABLE;
+  return `${OPEN}${PREFIX}${words}${ANSI_RESET}\n`;
 }

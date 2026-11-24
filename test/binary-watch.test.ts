@@ -28,6 +28,40 @@ const watch = (
     log: (level, msg) => lines.push([level, msg]),
   });
 
+// The install's record of the host's bundle is a target like the bundle: an
+// install that points it at other code changes no file this host runs.
+describe("the install's record of the host's bundle", () => {
+  test("a record first written under a running host ends it", () => {
+    const record = path.join(dir, "host-bundle");
+    watch([bundle, record]).arm();
+    fs.writeFileSync(record, `${bundle}\n`);
+    jest.advanceTimersByTime(60_000);
+    expect(exits).toBe(1);
+    expect(lines).toEqual([
+      ["info", `binary changed (${record}); shutting down`],
+    ]);
+  });
+
+  test("a record pointed at other code ends the host that boot read it from", () => {
+    const record = path.join(dir, "host-bundle");
+    fs.writeFileSync(record, `${bundle}\n`);
+    watch([bundle, record]).arm();
+    const later = new Date(fs.statSync(record).mtimeMs + 5_000);
+    fs.writeFileSync(record, "/elsewhere/dist/index.mjs\n");
+    fs.utimesSync(record, later, later);
+    jest.advanceTimersByTime(60_000);
+    expect(exits).toBe(1);
+  });
+
+  test("an untouched record keeps the host running", () => {
+    const record = path.join(dir, "host-bundle");
+    fs.writeFileSync(record, `${bundle}\n`);
+    watch([bundle, record]).arm();
+    jest.advanceTimersByTime(120_000);
+    expect(exits).toBe(0);
+  });
+});
+
 test("a closed watch samples no more", () => {
   const closing = watch();
   closing.arm();

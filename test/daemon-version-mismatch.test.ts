@@ -20,22 +20,21 @@ import { planOutcome } from "../src/outcome-plan";
 // [LAW:behavior-not-structure] These tests assert the contract — what a
 // version-mismatched client sees and how the daemon responds — not the
 // implementation. The shape of the daemon's handleRequest is free to change
-// as long as it preserves: (a) older client gets VERSION_MISMATCH with
-// daemonV present, (b) daemon does NOT initiate self-shutdown on older
-// clients, (c) the client's typed outcome carries clientV and daemonV.
+// as long as it preserves: (a) a mismatched client gets VERSION_MISMATCH with
+// daemonV present, (b) the client's typed outcome carries clientV and daemonV.
+// That the host stays up for a newer client is the real daemon's contract,
+// pinned in test/daemon-boots/process/daemon-shutdown.test.ts.
 
 // --- helper: minimal daemon-like server that mirrors handleRequest's
 // version-mismatch branch ---
 
 interface MismatchServer {
   sockPath: string;
-  shutdownObserved: { triggered: boolean };
   close: () => Promise<void>;
 }
 
 function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
   return new Promise((resolve) => {
-    const shutdownObserved = { triggered: false };
     const server = net.createServer((sock) => {
       const reader = makeFrameReader(
         (frame) => {
@@ -53,12 +52,6 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
             return "done";
           }
           if (req.v !== daemonV) {
-            // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
-            // asymmetry: only schedule shutdown when the client is *newer* —
-            // never when it is older (that path is the spiral-breaker).
-            if (req.v > daemonV) {
-              shutdownObserved.triggered = true;
-            }
             sock.write(
               encodeFrame({
                 ok: false,
@@ -88,7 +81,6 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
     server.listen(sockPath, () => {
       resolve({
         sockPath,
-        shutdownObserved,
         close: () =>
           new Promise((r) => {
             server.close(() => {
@@ -139,7 +131,7 @@ function sendRequest(
 }
 
 describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
-  test("older client receives VERSION_MISMATCH with daemonV; daemon does NOT trigger shutdown", async () => {
+  test("older client receives VERSION_MISMATCH with daemonV", async () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
@@ -153,22 +145,15 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(daemonV);
       }
-      // [LAW:types-are-the-program] The load-bearing assertion: shutdown is
-      // NOT triggered when the client is stale. Triggering would respawn a
-      // daemon at the same version, which the same client would mismatch
-      // again — the 452-corpse spiral.
-      expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
     }
   });
 
-  test("newer client receives VERSION_MISMATCH AND daemon triggers shutdown", async () => {
+  test("newer client receives VERSION_MISMATCH with daemonV", async () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
-      // Client claims a newer protocol version — meaning the daemon binary
-      // is stale relative to the freshly-installed client. Restart helps.
       const resp = await sendRequest(server.sockPath, {
         v: daemonV + 1,
         kind: "render",
@@ -178,7 +163,6 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         expect(resp.code).toBe("VERSION_MISMATCH");
         expect(resp.daemonV).toBe(daemonV);
       }
-      expect(server.shutdownObserved.triggered).toBe(true);
     } finally {
       await server.close();
     }
@@ -193,7 +177,6 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
         kind: "render",
       });
       expect(resp.ok).toBe(true);
-      expect(server.shutdownObserved.triggered).toBe(false);
     } finally {
       await server.close();
     }

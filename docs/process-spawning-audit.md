@@ -109,17 +109,15 @@ a new category here — that forces code review of the pattern.
 
 This module owns the "obtain a daemon" verb. Three previously-independent
 spawn sites (CLI render-miss, install path, Rust-client fallback) collapse
-onto one path. Two surfaces:
+onto one path, the kick:
 
 | Function | Use | Behavior |
 |---|---|---|
-| `obtainDaemon(opts)` (async) | Caller wants a daemon **now**, will wait | Tries connect → tries spawn-lock → spawns + polls socket until `spawnReadyTimeoutMs` (1500ms) or until total `totalTimeoutMs` (2000ms). Returns `{kind: "attached" | "started" | "failed"}`. |
 | `obtainDaemonKick()` (sync) | Fire-and-forget; we already lost this render | Tries spawn-lock once, spawns once, exits. Must be sync because `src/index.ts` and `src/install/index.ts` call it immediately before `process.exit()` — an async variant would never resume. |
 
 The **spawn lock** (`$XDG_STATE_HOME/cc-candybar/spawn.lock`) is an
 existence-as-lock file: `open(O_CREAT | O_EXCL)`. Held only for the spawn
-window (typically <10ms for `kick`; up to `spawnReadyTimeoutMs` for the wait
-path). Staleness reclaim at 10s. **Crucially, this is an optimization, not
+window (typically <10ms). Staleness reclaim at 10s. **Crucially, this is an optimization, not
 the singleton invariant**: the kernel's atomic `bind(socketPath)` is the load-
 bearing exclusion (`src/daemon/server.ts`).
 

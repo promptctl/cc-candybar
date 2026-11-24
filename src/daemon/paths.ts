@@ -208,6 +208,18 @@ export function spawnBackoffPath(host: Host): string {
   return path.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 
+// [LAW:one-source-of-truth] The bundle the install runs the host from: one
+// line, the absolute path of its `index.mjs`, written by the install and read
+// by every client that finds no host. Both runtimes name the same file, so the
+// filename is mirrored TS↔Rust (rust-client/src/main.rs HOST_BUNDLE_FILE) and
+// diffed by scripts/check-protocol.mjs. It lives in the state dir because it is
+// the machine user's fact, not a session's: a client's own bundle is a hint
+// about the client and never chooses the host's code.
+const HOST_BUNDLE_FILE = "host-bundle";
+export function hostBundlePath(host: Host): string {
+  return path.join(stateDir(host), HOST_BUNDLE_FILE);
+}
+
 // The daemon's own folder for testing its file watch: never the state
 // directory itself, where the log writes on every request.
 export function watchProbeDir(host: Host): string {

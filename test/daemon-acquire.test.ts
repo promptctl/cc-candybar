@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import { hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
+import { recordHostBundle } from "../src/daemon/host-bundle";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-
 
 // Each test creates its own isolated state root and hands the code under test
 // a Host that names it. CC_CANDYBAR_SOCKET isolates the socket so concurrent
@@ -16,6 +16,8 @@ interface TempState {
   readonly stateDir: string;
   readonly host: Host;
   readonly world: World;
+  // The bundle the state's record names.
+  readonly bundle: string;
 }
 
 async function withTempState<T>(
@@ -28,6 +30,11 @@ async function withTempState<T>(
     XDG_STATE_HOME: root,
     CC_CANDYBAR_SOCKET: sockPath,
   });
+  // A spawn starts only from the bundle the install recorded, so every state
+  // here has one; the cases about a missing record remove it.
+  const bundle = path.join(root, "index.mjs");
+  fs.writeFileSync(bundle, "");
+  recordHostBundle(host, bundle);
   // async/try-finally — not Promise.resolve(fn()).finally(...) — because a
   // synchronous throw from fn happens *before* Promise.resolve wraps it,
   // bypassing the finally and leaking temp dirs.
@@ -36,6 +43,7 @@ async function withTempState<T>(
       stateDir: path.join(root, "cc-candybar"),
       host,
       world: worldOf(host),
+      bundle,
     });
   } finally {
     try {
@@ -67,28 +75,25 @@ function closeServer(server: net.Server): Promise<void> {
 // diffs the constants' values. Pure over the age; no filesystem.
 describe("cooldownDecision (pure window arithmetic)", () => {
   test("absent record allows (first spawn)", async () => {
-    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(cooldownDecision(null, SPAWN_COOLDOWN_MS)).toEqual({
       kind: "allow",
     });
   });
 
   test("within [0, cooldownMs) denies", async () => {
-    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(cooldownDecision(0, SPAWN_COOLDOWN_MS)).toEqual({ kind: "deny" });
-    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1, SPAWN_COOLDOWN_MS)).toEqual(
-      { kind: "deny" },
-    );
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1, SPAWN_COOLDOWN_MS)).toEqual({
+      kind: "deny",
+    });
   });
 
   test("at and past cooldownMs allows (half-open window)", async () => {
-    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(cooldownDecision(SPAWN_COOLDOWN_MS, SPAWN_COOLDOWN_MS)).toEqual({
       kind: "allow",
     });
@@ -128,9 +133,7 @@ describe("cooldownDecision (pure window arithmetic)", () => {
   test("future-garbage boundary is independent of the cooldown window", async () => {
     const { cooldownDecision, STALE_LOCK_MS, SPAWN_BACKOFF_CAP_MS } =
       await import("../src/daemon/acquire");
-    expect(
-      cooldownDecision(-STALE_LOCK_MS - 1, SPAWN_BACKOFF_CAP_MS),
-    ).toEqual({
+    expect(cooldownDecision(-STALE_LOCK_MS - 1, SPAWN_BACKOFF_CAP_MS)).toEqual({
       kind: "allow-future-garbage",
       futureMs: STALE_LOCK_MS + 1,
     });
@@ -142,24 +145,25 @@ describe("cooldownDecision (pure window arithmetic)", () => {
 // Pure over the streak; no filesystem.
 describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
   test("streak zero is the base rate", async () => {
-    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(effectiveCooldownMs(0)).toBe(SPAWN_COOLDOWN_MS);
   });
 
   test("doubles per streak", async () => {
-    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(effectiveCooldownMs(1)).toBe(SPAWN_COOLDOWN_MS * 2);
     expect(effectiveCooldownMs(2)).toBe(SPAWN_COOLDOWN_MS * 4);
     expect(effectiveCooldownMs(3)).toBe(SPAWN_COOLDOWN_MS * 8);
   });
 
   test("caps at SPAWN_BACKOFF_CAP_MS and never exceeds it past the max streak", async () => {
-    const { effectiveCooldownMs, SPAWN_BACKOFF_CAP_MS, SPAWN_BACKOFF_MAX_STREAK } =
-      await import("../src/daemon/acquire");
+    const {
+      effectiveCooldownMs,
+      SPAWN_BACKOFF_CAP_MS,
+      SPAWN_BACKOFF_MAX_STREAK,
+    } = await import("../src/daemon/acquire");
     expect(effectiveCooldownMs(SPAWN_BACKOFF_MAX_STREAK)).toBe(
       SPAWN_BACKOFF_CAP_MS,
     );
@@ -170,9 +174,8 @@ describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
   });
 
   test("negative streak is treated as zero", async () => {
-    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
-      "../src/daemon/acquire"
-    );
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } =
+      await import("../src/daemon/acquire");
     expect(effectiveCooldownMs(-5)).toBe(SPAWN_COOLDOWN_MS);
   });
 });
@@ -184,7 +187,10 @@ describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
 // fail that test. Matches the fork-bomb-breaker.ts precedent this function's
 // doc comment cites.
 describe("readBackoffStreak (parsing-strictness contract)", () => {
-  function withPlantedFile<T>(content: string | null, fn: (path: string) => T): T {
+  function withPlantedFile<T>(
+    content: string | null,
+    fn: (path: string) => T,
+  ): T {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-backoff-"));
     const filePath = path.join(dir, "spawn.backoff");
     if (content !== null) fs.writeFileSync(filePath, content);
@@ -233,9 +239,8 @@ describe("readBackoffStreak (parsing-strictness contract)", () => {
   });
 
   test("oversize content clamps to SPAWN_BACKOFF_MAX_STREAK", async () => {
-    const { readBackoffStreak, SPAWN_BACKOFF_MAX_STREAK } = await import(
-      "../src/daemon/acquire"
-    );
+    const { readBackoffStreak, SPAWN_BACKOFF_MAX_STREAK } =
+      await import("../src/daemon/acquire");
     withPlantedFile("999", (filePath) => {
       expect(readBackoffStreak(filePath)).toBe(SPAWN_BACKOFF_MAX_STREAK);
     });
@@ -249,90 +254,71 @@ describe("readBackoffStreak (parsing-strictness contract)", () => {
   });
 });
 
-describe("obtainDaemon (bind-based singleton)", () => {
-  test("attaches when a daemon is already listening — no spawn", async () => {
-    await withTempState(async ({ stateDir, host, world }) => {
+describe("obtainDaemonKick starts the host only from the install's record", () => {
+  test("spawns the recorded bundle", async () => {
+    await withTempState(async ({ world, bundle }) => {
       jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { socketPath } = await import("../src/daemon/paths");
-
-      const server = await startFakeDaemon(socketPath(host));
-      try {
-        let spawned = 0;
-        const result = await obtainDaemon(world, {
-          spawn: () => {
-            spawned++;
-            return true;
-          },
-        });
-        expect(result).toEqual({ kind: "attached" });
-        expect(spawned).toBe(0);
-        // sanity: stateDir actually got created under our temp root
-        expect(stateDir).toContain("cc-candybar");
-      } finally {
-        await closeServer(server);
-      }
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const spawned: string[] = [];
+      const outcome = obtainDaemonKick(world, {
+        spawn: (at) => {
+          spawned.push(at);
+          return true;
+        },
+      });
+      expect(outcome).toEqual({ kind: "kicked" });
+      expect(spawned).toEqual([bundle]);
     });
   });
 
-  test("spawns exactly once across N concurrent callers", async () => {
-    await withTempState(async ({ host, world }) => {
+  test.each([
+    ["no record", (record: string) => fs.rmSync(record), "absent"],
+    [
+      "a record naming a bundle that is gone",
+      (_record: string, bundle: string) => fs.rmSync(bundle),
+      "failed",
+    ],
+    [
+      "a record that is not an absolute path",
+      (record: string) => fs.writeFileSync(record, "dist/index.mjs\n"),
+      "failed",
+    ],
+  ])("%s is refused with nothing spawned", async (_name, break_, kind) => {
+    await withTempState(async ({ host, world, bundle }) => {
       jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { socketPath } = await import("../src/daemon/paths");
-
-      let spawnCount = 0;
-      let fakeServer: net.Server | null = null;
-
-      const fakeSpawn = (): boolean => {
-        spawnCount++;
-        // Simulate the daemon coming up after a short delay — mirror the
-        // bind() that the real daemon does on startup.
-        setTimeout(() => {
-          if (fakeServer) return;
-          startFakeDaemon(socketPath(host))
-            .then((s) => {
-              fakeServer = s;
-            })
-            .catch(() => {});
-        }, 30);
-        return true;
-      };
-
-      // Fire 5 concurrent obtain calls — the spawn-lock should let exactly
-      // one of them trigger the spawn fn; the rest attach.
-      const results = await Promise.all(
-        Array.from({ length: 5 }, () =>
-          obtainDaemon(world, {
-            spawn: fakeSpawn,
-            spawnReadyTimeoutMs: 500,
-            totalTimeoutMs: 1000,
-          }),
-        ),
-      );
-
-      try {
-        expect(spawnCount).toBe(1);
-        const kinds = results.map((r) => r.kind).sort();
-        // One started, the rest attached. None failed.
-        expect(kinds.filter((k) => k === "started").length).toBe(1);
-        expect(kinds.filter((k) => k === "attached").length).toBe(4);
-        expect(kinds.filter((k) => k === "failed").length).toBe(0);
-      } finally {
-        if (fakeServer) await closeServer(fakeServer);
-      }
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { hostBundlePath, spawnLockPath, spawnCooldownPath } =
+        await import("../src/daemon/paths");
+      break_(hostBundlePath(host), bundle);
+      let spawned = 0;
+      const outcome = obtainDaemonKick(world, {
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+      });
+      expect(outcome.kind).toBe("refused");
+      expect(outcome.kind === "refused" && outcome.record.kind).toBe(kind);
+      expect(spawned).toBe(0);
+      // Refused before the lock and the rate bound: a refusal forks nothing,
+      // so it must not use up the window a real spawn needs, and the next
+      // tick says the same thing again.
+      expect(fs.existsSync(spawnLockPath(host))).toBe(false);
+      expect(fs.existsSync(spawnCooldownPath(host))).toBe(false);
     });
   });
+});
 
+describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
   test("reclaims a stale spawn.lock older than the staleness window", async () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath } = await import("../src/daemon/paths");
 
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-
-      // Plant a lock file that looks stale (mtime backdated 30s).
+      // A lock backdated past the staleness window is reclaimed, so the kick
+      // holds the lock and spawns, rather than reading it as contended and
+      // spawning unlocked once the crashed-holder override passes.
       fs.writeFileSync(
         spawnLockPath(host),
         JSON.stringify({ pid: 999999, ts: Date.now() - 30_000 }),
@@ -341,341 +327,23 @@ describe("obtainDaemon (bind-based singleton)", () => {
       fs.utimesSync(spawnLockPath(host), oldTime, oldTime);
 
       let spawned = 0;
-      let server: net.Server | null = null;
-      const { socketPath } = await import("../src/daemon/paths");
-      const fakeSpawn = (): boolean => {
-        spawned++;
-        startFakeDaemon(socketPath(host)).then((s) => {
-          server = s;
-        });
-        return true;
-      };
-
-      const result = await obtainDaemon(world, {
-        spawn: fakeSpawn,
-        spawnReadyTimeoutMs: 500,
-        totalTimeoutMs: 1500,
-      });
+      const stderr = jest.spyOn(process.stderr, "write").mockReturnValue(true);
       try {
-        expect(spawned).toBe(1);
-        expect(result.kind).toBe("started");
-      } finally {
-        if (server) await closeServer(server);
-      }
-    });
-  });
-
-  test("falls back to spawning past lockFallbackMs when lock is stuck (availability)", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnLockPath, socketPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
-
-      // Plant a fresh (non-stale) spawn.lock to simulate a crashed/stuck
-      // holder. The staleness reclaim won't fire because the file's mtime
-      // is current. Without the lock-fallback path, obtainDaemon would spin
-      // until totalTimeoutMs and return "timeout obtaining daemon".
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      fs.writeFileSync(
-        spawnLockPath(host),
-        JSON.stringify({ pid: 999999, ts: Date.now() }),
-      );
-
-      let spawned = 0;
-      let server: net.Server | null = null;
-      const result = await obtainDaemon(world, {
-        spawn: () => {
-          spawned++;
-          // Simulate a daemon coming up.
-          startFakeDaemon(socketPath(host))
-            .then((s) => {
-              server = s;
-            })
-            .catch(() => {});
-          return true;
-        },
-        totalTimeoutMs: 1500,
-        lockFallbackMs: 200, // give up on lock after 200ms
-        spawnReadyTimeoutMs: 1000,
-      });
-
-      try {
-        // The fallback path bypassed the stuck lock and spawned anyway.
-        expect(spawned).toBe(1);
-        expect(result.kind).toBe("started");
-      } finally {
-        if (server) await closeServer(server);
-      }
-    });
-  });
-
-  test("returns failed (not throws) when spawn fn throws synchronously", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-
-      const result = await obtainDaemon(world, {
-        spawn: () => {
-          throw new Error("simulated ENOENT for node binary");
-        },
-        totalTimeoutMs: 500,
-        spawnReadyTimeoutMs: 100,
-      });
-      expect(result.kind).toBe("failed");
-      if (result.kind === "failed") {
-        expect(result.reason).toMatch(/spawn threw/);
-        expect(result.reason).toMatch(/ENOENT/);
-      }
-    });
-  });
-
-  test("returns failed when spawn fn returns false", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-
-      const result = await obtainDaemon(world, {
-        spawn: () => false,
-        totalTimeoutMs: 500,
-        spawnReadyTimeoutMs: 100,
-      });
-      expect(result.kind).toBe("failed");
-    });
-  });
-
-  test("does not throw when state-dir setup fails — returns failed result", async () => {
-    await withTempState(async ({ stateDir, host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-
-      // Plant a *file* at the state-dir path. mkdirSync recursively will
-      // succeed for the parent but fail to make `cc-candybar` a directory.
-      // Forces the typed-failure path instead of propagating a throw.
-      const parent = path.dirname(stateDir);
-      fs.mkdirSync(parent, { recursive: true });
-      fs.writeFileSync(stateDir, "");
-
-      const result = await obtainDaemon(world, {
-        spawn: () => true,
-        totalTimeoutMs: 200,
-      });
-      expect(result.kind).toBe("failed");
-      if (result.kind === "failed") {
-        expect(result.reason).toMatch(/mkdir/);
-      }
-    });
-  });
-
-
-  test("surfaces unrecoverable spawn-lock errors as failed (not spinning timeout)", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { daemonDir } = await import("../src/daemon/paths");
-
-      // Create the state dir, then make it read-only so openSync("wx") on
-      // any file inside returns EACCES. This is the unrecoverable-error
-      // path: we must NOT treat it as contention and spin until the deadline.
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      // Mask off file-type bits; stat.mode includes them and chmodSync
-      // accepts permission bits only on some platforms.
-      const originalMode = fs.statSync(daemonDir(host)).mode & 0o7777;
-      fs.chmodSync(daemonDir(host), 0o555);
-      try {
-        const start = Date.now();
-        const result = await obtainDaemon(world, {
-          spawn: () => true,
-          totalTimeoutMs: 2000,
-        });
-        const elapsed = Date.now() - start;
-
-        expect(result.kind).toBe("failed");
-        if (result.kind === "failed") {
-          expect(result.reason).toMatch(/spawn-lock/);
-        }
-        // Should return promptly, not spin until totalTimeoutMs.
-        expect(elapsed).toBeLessThan(500);
-      } finally {
-        fs.chmodSync(daemonDir(host), originalMode);
-      }
-    });
-  });
-
-  // ─── spawn cooldown on the async path (ticket 2b3.3) ───────────────────────
-  // obtainDaemon respects the same global rate bound as the kick: when a spawn
-  // was recorded within SPAWN_COOLDOWN_MS, it must NOT add another process — it
-  // waits for the in-flight boot instead.
-
-  test("on cooldown, does not spawn — fails when no daemon binds in the window", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
-
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      // A spawn was recorded moments ago (fresh mtime) — an attempt is in flight.
-      fs.writeFileSync(spawnCooldownPath(host), `${process.pid} ${Date.now()}\n`);
-
-      let spawned = 0;
-      const result = await obtainDaemon(world, {
-        spawn: () => {
-          spawned++;
-          return true;
-        },
-        spawnReadyTimeoutMs: 200,
-        totalTimeoutMs: 400,
-      });
-      // The rate bound blocked the spawn; no daemon came up, so we time out the
-      // poll and report it as a cooldown failure (not a spawn failure).
-      expect(spawned).toBe(0);
-      expect(result.kind).toBe("failed");
-      if (result.kind === "failed") {
-        expect(result.reason).toMatch(/cooldown/);
-      }
-    });
-  });
-
-  test("on cooldown, attaches to the in-flight daemon without spawning", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath, socketPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
-
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      fs.writeFileSync(spawnCooldownPath(host), `${process.pid} ${Date.now()}\n`);
-
-      // The daemon someone else spawned finishes booting during our poll. It
-      // must appear AFTER obtainDaemon's initial fast-path probe AND its
-      // post-lock re-check (acquire.ts) — otherwise the test would attach at the
-      // top level instead of exercising the cooldown-poll branch. Those two
-      // checks are ~2 microtask ticks apart with no I/O between them (sub-ms), so
-      // a 150ms appearance lands deterministically in the cooldown-poll phase.
-      let server: net.Server | null = null;
-      setTimeout(() => {
-        startFakeDaemon(socketPath(host))
-          .then((s) => {
-            server = s;
-          })
-          .catch(() => {});
-      }, 150);
-
-      let spawned = 0;
-      const result = await obtainDaemon(world, {
-        spawn: () => {
-          spawned++;
-          return true;
-        },
-        spawnReadyTimeoutMs: 500,
-        totalTimeoutMs: 800,
-      });
-      try {
-        // We did NOT add a process — the in-flight daemon was attached to.
-        expect(spawned).toBe(0);
-        expect(result.kind).toBe("attached");
-      } finally {
-        if (server) await closeServer(server);
-      }
-    });
-  });
-
-  test("on cooldown via the lock-fallback path: no spawn, cooldown cause with no lock suffix", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath, spawnLockPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
-
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      // A fresh foreign spawn.lock we can't acquire → forces the lock-fallback
-      // path once contention exceeds lockFallbackMs.
-      fs.writeFileSync(
-        spawnLockPath(host),
-        JSON.stringify({ pid: 999999, ts: Date.now() }),
-      );
-      // And a fresh spawn-attempt record → the cooldown gate is active.
-      fs.writeFileSync(spawnCooldownPath(host), `${process.pid} ${Date.now()}\n`);
-
-      let spawned = 0;
-      const result = await obtainDaemon(world, {
-        spawn: () => {
-          spawned++;
-          return true;
-        },
-        lockFallbackMs: 50,
-        spawnReadyTimeoutMs: 150,
-        totalTimeoutMs: 600,
-      });
-      // The cooldown gate applies on the lock-fallback path too — no spawn.
-      expect(spawned).toBe(0);
-      expect(result.kind).toBe("failed");
-      if (result.kind === "failed") {
-        expect(result.reason).toMatch(/cooldown/);
-        // The failure names the cooldown cause, not the lock provenance.
-        expect(result.reason).not.toMatch(/lock-fallback/);
-      }
-    });
-  });
-
-  test("future-mtime cooldown file on the async path allows the spawn (started)", async () => {
-    await withTempState(async ({ host, world }) => {
-      jest.resetModules();
-      const { obtainDaemon } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath, socketPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
-
-      fs.mkdirSync(daemonDir(host), { recursive: true });
-      // A garbage record whose mtime is far in the future must NOT wedge the
-      // async path — the spawn is ALLOWED (the opposite of a fresh record).
-      fs.writeFileSync(spawnCooldownPath(host), "garbage\n");
-      const future = new Date(Date.now() + 3_600_000);
-      fs.utimesSync(spawnCooldownPath(host), future, future);
-
-      const stderrSpy = jest
-        .spyOn(process.stderr, "write")
-        .mockImplementation(() => true);
-      try {
-        let spawned = 0;
-        let server: net.Server | null = null;
-        const result = await obtainDaemon(world, {
+        obtainDaemonKick(world, {
           spawn: () => {
             spawned++;
-            startFakeDaemon(socketPath(host))
-              .then((s) => {
-                server = s;
-              })
-              .catch(() => {});
             return true;
           },
-          spawnReadyTimeoutMs: 500,
-          totalTimeoutMs: 800,
         });
-        try {
-          // Garbage cooldown ⇒ the spawn proceeded and the daemon came up.
-          expect(spawned).toBe(1);
-          expect(result.kind).toBe("started");
-          const warned = stderrSpy.mock.calls
-            .map((c) => String(c[0]))
-            .join("");
-          expect(warned).toMatch(/in the future/);
-        } finally {
-          if (server) await closeServer(server);
-        }
+        expect(spawned).toBe(1);
+        expect(stderr.mock.calls.join("")).not.toMatch(/spawning unlocked/);
       } finally {
-        stderrSpy.mockRestore();
+        stderr.mockRestore();
       }
+      expect(fs.existsSync(spawnLockPath(host))).toBe(false);
     });
   });
-});
 
-describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
   test("invokes spawn synchronously when lock is acquired", async () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
@@ -872,7 +540,8 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } =
+        await import("../src/daemon/paths");
 
       let spawned = 0;
       const spawn = (): boolean => {
@@ -902,7 +571,8 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } =
+        await import("../src/daemon/paths");
 
       // Suppress the expected "daemon spawn failed" stderr from the throwing
       // spawn so the test output stays clean.
@@ -940,9 +610,8 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnCooldownPath, daemonDir } = await import(
-        "../src/daemon/paths"
-      );
+      const { spawnCooldownPath, daemonDir } =
+        await import("../src/daemon/paths");
 
       fs.mkdirSync(daemonDir(host), { recursive: true });
       // Plant a cooldown record with an mtime far in the future (clock skew or a
@@ -966,9 +635,7 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
         // Availability over strictness: a garbage timestamp must not block.
         expect(spawned).toBe(1);
         // ...and it must be loud, not silent.
-        const warned = stderrSpy.mock.calls
-          .map((c) => String(c[0]))
-          .join("");
+        const warned = stderrSpy.mock.calls.map((c) => String(c[0])).join("");
         expect(warned).toMatch(/in the future/);
       } finally {
         stderrSpy.mockRestore();
@@ -1017,16 +684,16 @@ describe("daemon startup (bind-based singleton)", () => {
       // recovery still binds a working socket.
       fs.writeFileSync(socketPath(host), "");
 
-      const connectErr: NodeJS.ErrnoException = await new Promise(
-        (resolve) => {
-          const sock = net.connect(socketPath(host));
-          sock.once("connect", () => {
-            sock.destroy();
-            resolve(new Error("unexpected connect success") as NodeJS.ErrnoException);
-          });
-          sock.once("error", (e) => resolve(e as NodeJS.ErrnoException));
-        },
-      );
+      const connectErr: NodeJS.ErrnoException = await new Promise((resolve) => {
+        const sock = net.connect(socketPath(host));
+        sock.once("connect", () => {
+          sock.destroy();
+          resolve(
+            new Error("unexpected connect success") as NodeJS.ErrnoException,
+          );
+        });
+        sock.once("error", (e) => resolve(e as NodeJS.ErrnoException));
+      });
       expect(["ENOTSOCK", "ECONNREFUSED", "ENOENT"]).toContain(connectErr.code);
 
       // First bind attempt fails (EADDRINUSE).
@@ -1083,7 +750,8 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
     await withTempState(async ({ host, world }) => {
       jest.resetModules();
       const { obtainDaemonKick } = await import("../src/daemon/acquire");
-      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } =
+        await import("../src/daemon/paths");
 
       // A spawn that "succeeds" (a process forked) but the daemon never binds
       // — the fork-exhaustion scenario from the epic's incident report, where
@@ -1140,7 +808,8 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       jest.resetModules();
       const { obtainDaemonKick, resetSpawnBackoff, SPAWN_COOLDOWN_MS } =
         await import("../src/daemon/acquire");
-      const { spawnBackoffPath, spawnCooldownPath } = await import("../src/daemon/paths");
+      const { spawnBackoffPath, spawnCooldownPath } =
+        await import("../src/daemon/paths");
 
       let spawned = 0;
       const spawn = (): boolean => {

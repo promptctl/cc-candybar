@@ -39,6 +39,31 @@ impl Client {
         self.home.join(".local/state/cc-candybar")
     }
 
+    // What an install leaves: a bundle, and the state dir's record naming it.
+    fn install(&self) -> PathBuf {
+        let bundle = self.home.join("installed/dist/index.mjs");
+        fs::create_dir_all(bundle.parent().unwrap()).unwrap();
+        fs::write(&bundle, "").unwrap();
+        fs::create_dir_all(self.state()).unwrap();
+        fs::write(
+            self.state().join("host-bundle"),
+            format!("{}\n", bundle.display()),
+        )
+        .unwrap();
+        bundle
+    }
+
+    // A `node` on this client's PATH that records how it was started, in place
+    // of a daemon.
+    fn node_that_records_its_arguments(&self) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let node = self.home.join("node");
+        let log = self.home.join("node-args");
+        fs::write(&node, format!("#!/bin/sh\necho \"$@\" > {}\n", log.display())).unwrap();
+        fs::set_permissions(&node, fs::Permissions::from_mode(0o755)).unwrap();
+        log
+    }
+
     fn tick(&self, reply: Option<Value>, xdg_state_home: Option<&str>) -> String {
         let socket = self.home.join("host.sock");
         if let Some(reply) = reply {
@@ -106,6 +131,7 @@ fn timeout() -> Option<Value> {
 #[test]
 fn absent_daemon_uses_one_waiting_line_until_a_good_frame_is_available() {
     let client = Client::new();
+    client.install();
     assert_eq!(client.tick(None, None), WAIT);
     assert!(!client.cache().exists());
     assert_eq!(
@@ -119,6 +145,48 @@ fn absent_daemon_uses_one_waiting_line_until_a_good_frame_is_available() {
     );
     assert_eq!(client.tick(None, None), "ready\n");
     assert_eq!(fs::read_to_string(client.cache()).unwrap(), "ready\n");
+}
+
+// [LAW:one-source-of-truth] A client starts a host only from the bundle the
+// install recorded. This client's own bundle is `<exe>/../dist/index.mjs`, a
+// different file, and the host it starts must never be that one.
+#[test]
+fn a_cold_host_starts_from_the_recorded_bundle() {
+    let client = Client::new();
+    let bundle = client.install();
+    let log = client.node_that_records_its_arguments();
+    assert_eq!(client.tick(None, None), WAIT);
+
+    // node runs detached, after the client has exited: wait for the line it
+    // wrote. The file exists before its line does, so a read of the file alone
+    // can see it empty.
+    let started = (0..200)
+        .find_map(|_| {
+            fs::read_to_string(&log)
+                .ok()
+                .filter(|written| written.ends_with('\n'))
+                .or_else(|| {
+                    std::thread::sleep(Duration::from_millis(25));
+                    None
+                })
+        })
+        .expect("the client never started node");
+    assert_eq!(
+        started.trim_end().split(' ').rev().collect::<Vec<_>>()[..2],
+        ["daemon", bundle.to_str().unwrap()]
+    );
+}
+
+#[test]
+fn with_no_record_the_bar_names_the_install_and_nothing_is_started() {
+    let client = Client::new();
+    let log = client.node_that_records_its_arguments();
+    let shown = client.tick(None, None);
+    assert!(shown.contains("no host bundle recorded — run: cc-candybar install"));
+    assert!(!shown.contains("waiting for daemon"));
+    // A spawn records its attempt before it forks.
+    assert!(!client.state().join("spawn.cooldown").exists());
+    assert!(!log.exists());
 }
 
 #[test]

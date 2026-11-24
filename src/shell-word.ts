@@ -13,3 +13,15 @@ export function singleQuoted(s: string): string {
 export function shellWord(s: string): string {
   return SHELL_SAFE.test(s) ? s : singleQuoted(s);
 }
+
+// The inverse of `shellWord` for a command's first word: what a command this
+// quoter wrote starts with, back as the word it quoted. null for any other
+// quoting (double quotes, backslashes, expansions), whose word only a shell
+// can name.
+const FIRST_WORD = /^(?:'((?:[^']|'\\'')*)'|(\S+))(?:\s|$)/;
+export function firstShellWord(command: string): string | null {
+  const m = FIRST_WORD.exec(command.trimStart());
+  const [, quoted, bare] = m ?? [];
+  if (quoted !== undefined) return quoted.replaceAll(`'\\''`, "'");
+  return bare !== undefined && SHELL_SAFE.test(bare) ? bare : null;
+}
