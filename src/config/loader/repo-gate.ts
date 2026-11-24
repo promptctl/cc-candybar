@@ -14,6 +14,7 @@ import type { WorktreeLink } from "../../utils/git-root.js";
 import type { RepoQuestion } from "../config-snapshot.js";
 import type { Asked } from "../../utils/outcome.js";
 import { advisory, type Advisory } from "./diagnostics.js";
+import { unreadText } from "../../daemon/foundations/unread-file.js";
 
 export type RepoAnswer = "approved" | "declined";
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
@@ -30,9 +31,11 @@ declare const approved: unique symbol;
 // the session spells it. Only its plugin definitions may be opened.
 export type ApprovedRepo = string & { readonly [approved]: true };
 
-// [LAW:types-are-the-program] `unread` is not `awaiting`: a book that could
-// not be read takes no answer either, so the bar asks nothing it could not
-// record, and the unread notice speaks for every repository.
+// [LAW:types-are-the-program] `unread` is not `awaiting`: a directory whose
+// worktree link could not be read has no key an answer could be kept under,
+// so the bar asks nothing it could not record. A book that could not be read
+// is the empty book: nothing is approved, the bar asks, and the answer's
+// write sets the old book aside beside itself (src/daemon/state-file.ts).
 type RepoStanding = RepoQuestion["standing"];
 
 // A directory a session reaches: its real path, and whether it sits in a
@@ -71,10 +74,10 @@ interface Ruling {
 function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
   const key = answerDir(d);
   if (key === null) return { standing: "unread", under: d.dir };
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo = answerOf(answers.value, key);
+  const book = answers.kind === "ok" ? answers.value : {};
+  const repo = answerOf(book, key);
   if (repo !== null) return { standing: repo, under: key };
-  const legacy = answerOf(answers.value, d.dir);
+  const legacy = answerOf(book, d.dir);
   return legacy === null
     ? { standing: "awaiting", under: key }
     : { standing: legacy, under: d.dir };
@@ -151,7 +154,7 @@ export function repoUnreadNotice(gate: ProjectAccess): Advisory | null {
     ? null
     : advisory(
         ["repository-answers"],
-        `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`,
+        `Repository config answers ${unreadText(gate.unread, "no repository's config runs until it is answered again, and the next answer sets the unread book aside beside itself")}`,
       );
 }
 

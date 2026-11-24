@@ -1,8 +1,10 @@
 // A stored JSON document with a read and a guarded update.
 // [LAW:one-type-per-behavior] Every such file holds to one policy — absent is
 // the store's empty value, anything else must read, and nothing is written
-// over a file that does not — so the policy is this one store, and each file
-// supplies its locations, empty value and parser.
+// over a file that does not: a write planned from a read that failed sets the
+// file aside beside itself first and starts from the empty value — so the
+// policy is this one store, and each file supplies its locations, empty value
+// and parser.
 //
 // [LAW:effects-at-boundaries] The parsers are pure; the file is read and
 // planned here and published by the shared file writer.
@@ -12,11 +14,19 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { asError, linkChain } from "../utils/atomic-write.js";
 import type { FileRetirement, FileRewrite } from "./file-rewrites.js";
-import { ok, type Asked } from "../utils/outcome.js";
+import { ok, type Asked, type Ok } from "../utils/outcome.js";
 import { readTextIfPresent } from "../utils/regular-text.js";
 
+// [LAW:types-are-the-program] A failure names the location that did not read,
+// so a write planned from it knows what to set aside.
+export interface Unread {
+  readonly kind: "failed";
+  readonly reason: string;
+  readonly file: string;
+}
+
 export interface StateObservation<T> {
-  readonly result: Asked<T>;
+  readonly result: Ok<T> | Unread;
   readonly paths: readonly string[];
   // The location supplying the result, or null when neither file exists.
   readonly source: string | null;
@@ -30,9 +40,31 @@ export interface StateFile<T> {
 }
 
 export interface Planned<T> {
+  // A file that did not read, renamed aside before anything is written.
+  readonly setAside: FileRetirement | null;
   readonly rewrite: FileRewrite | null;
   readonly retire: FileRetirement | null;
   readonly value: T;
+}
+
+// [LAW:single-enforcer] What any write planned from an observation starts
+// from. A file that read, or none, is the value it holds. One that did not is
+// renamed aside under a name no reader searches, and the write starts from
+// empty, so no store ever writes over bytes it could not read, and none has
+// to wait for a person to repair the file before it saves again.
+export function writeBase<T>(
+  observed: StateObservation<T>,
+  empty: T,
+): { readonly current: T; readonly setAside: FileRetirement | null } {
+  return observed.result.kind === "ok"
+    ? { current: observed.result.value, setAside: null }
+    : {
+        current: empty,
+        setAside: {
+          from: observed.result.file,
+          to: `${observed.result.file}.unread-${randomUUID()}`,
+        },
+      };
 }
 
 // [LAW:one-source-of-truth] How every state file spells what it holds.
@@ -50,7 +82,10 @@ export function stateFile<T>(
 ): StateFile<T> {
   const [file, previous] = locations;
   const candidates = previous === undefined ? [file] : [file, previous];
-  const observe = () => {
+  // The observed bytes ride along for the plan's restore.
+  const observe = (): StateObservation<T> & {
+    readonly text: string | null;
+  } => {
     const paths: string[] = [];
     for (const candidate of candidates) {
       paths.push(candidate);
@@ -58,9 +93,10 @@ export function stateFile<T>(
       try {
         text = readText(candidate);
       } catch (e) {
-        const result: Asked<T> = {
+        const result: Unread = {
           kind: "failed",
           reason: asError(e).message,
+          file: candidate,
         };
         return { result, paths, source: candidate, text: null };
       }
@@ -75,23 +111,28 @@ export function stateFile<T>(
     return { result: ok(empty), paths, source: null, text: null };
   };
   const plan = (next: (current: T) => T): Asked<Planned<T>> => {
-    const { result: current, source, text } = observe();
-    if (current.kind === "failed") return current;
-    const value = next(current.value);
+    const observed = observe();
+    const { current, setAside } = writeBase(observed, empty);
+    const { source } = observed;
+    const text = observed.result.kind === "ok" ? observed.text : null;
+    const value = next(current);
     // [LAW:one-source-of-truth] The same observation supplies both the
-    // value and the precise bytes to restore if another write fails.
+    // value and the precise bytes to restore if another write fails. A file
+    // set aside is gone from its name before the write, so it restores as
+    // absent there and the set-aside is undone after it.
     const promote = source !== null && source !== file;
     const rewrite =
-      promote || value !== current.value
+      promote || setAside !== null || value !== current
         ? { file, was: source === file ? text : null, will: textOf(value) }
         : null;
     try {
-      const old = previousName(file, previous, source);
+      const old =
+        setAside === null ? previousName(file, previous, source) : null;
       const retire =
         old === null
           ? null
           : { from: old, to: `${old}.migrated-${randomUUID()}` };
-      return ok({ rewrite, retire, value });
+      return ok({ setAside, rewrite, retire, value });
     } catch (e) {
       return {
         kind: "failed",
@@ -100,7 +141,10 @@ export function stateFile<T>(
     }
   };
   return {
-    observe,
+    observe: () => {
+      const { text: _bytes, ...observed } = observe();
+      return observed;
+    },
     read: () => observe().result,
     plan,
   };
@@ -139,7 +183,7 @@ function documentAt<T>(
   file: string,
   text: string,
   parse: (doc: unknown) => Asked<T>,
-): Asked<T> {
+): Ok<T> | Unread {
   let doc: unknown;
   try {
     doc = JSON.parse(text);
@@ -147,10 +191,11 @@ function documentAt<T>(
     return {
       kind: "failed",
       reason: `${file} is not JSON: ${(e as Error).message}`,
+      file,
     };
   }
   const parsed = parse(doc);
   return parsed.kind === "ok"
     ? parsed
-    : { kind: "failed", reason: `${file} ${parsed.reason}` };
+    : { kind: "failed", reason: `${file} ${parsed.reason}`, file };
 }

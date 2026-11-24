@@ -118,6 +118,7 @@ export function performChanges(
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
   let retire: FileRetirement | null = null;
+  let setAside: FileRetirement | null = null;
   let answered: readonly string[] = [];
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
@@ -183,6 +184,7 @@ export function performChanges(
         };
       const { rewrite } = planned.value;
       retire = planned.value.retire;
+      setAside = planned.value.setAside;
       answered = planned.value.said;
       if (rewrite !== null) {
         const file = resolvedTarget(rewrite.file);
@@ -195,7 +197,10 @@ export function performChanges(
       reason: `config read failed: ${asError(e).message}`,
     };
   }
-  const landed = writeRevisions(rewrites.values(), retire, write);
+  const landed = writeRevisions(
+    { setAside, rewrites: rewrites.values(), retire },
+    write,
+  );
   if (landed.kind === "failed") {
     return {
       kind: "failed",

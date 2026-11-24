@@ -52,15 +52,29 @@ export type RevisionWrite =
       readonly unrestored: readonly [RestoreFailure, ...RestoreFailure[]];
     };
 
+// One turn's batch: a state file that did not read, set aside before anything
+// is written, the rewrites, and a superseded file retired after them.
+export interface Revisions {
+  readonly setAside: FileRetirement | null;
+  readonly rewrites: Iterable<FileRewrite>;
+  readonly retire: FileRetirement | null;
+}
+
 export function writeRevisions(
-  rewrites: Iterable<FileRewrite>,
-  retire: FileRetirement | null,
+  { setAside, rewrites, retire }: Revisions,
   write: WriteConfigFile = writeConfigFile,
 ): RevisionWrite {
   const written: Array<
     FileRewrite & { readonly removedMode: number | undefined }
   > = [];
+  // [LAW:no-ambient-temporal-coupling] The set-aside lands first, so no
+  // rewrite can touch the bytes it keeps, and it is undone last.
+  let asideNow: FileRetirement | null = null;
   try {
+    if (setAside !== null) {
+      fs.renameSync(setAside.from, setAside.to);
+      asideNow = setAside;
+    }
     for (const rewrite of rewrites) {
       // [LAW:effects-at-boundaries] A removed file loses its mode with its
       // directory entry. Capture it before unlink so restoration can stage
@@ -72,7 +86,10 @@ export function writeRevisions(
       write(rewrite.file, rewrite.will);
       written.push({ ...rewrite, removedMode });
     }
-    const files = written.map(({ file }) => file);
+    const files = [
+      ...(setAside === null ? [] : [setAside.to]),
+      ...written.map(({ file }) => file),
+    ];
     if (retire !== null) {
       // [LAW:single-enforcer] Retire the directory entry itself, even a
       // symlink. Nothing else can fail after this entry goes away.
@@ -93,6 +110,12 @@ export function writeRevisions(
         failed.push({ file, error: asError(rollback) });
       }
     }
+    if (asideNow !== null)
+      try {
+        fs.renameSync(asideNow.to, asideNow.from);
+      } catch (rollback) {
+        failed.push({ file: asideNow.from, error: asError(rollback) });
+      }
     const [first, ...remaining] = failed;
     return first === undefined
       ? { kind: "failed", error }
